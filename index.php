@@ -123,8 +123,9 @@ function h(?string $s): string
 
 // ── Pull data ────────────────────────────────────────────────────────────────
 $configured = OWM_API_KEY !== 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE' && OWM_API_KEY !== '';
-$current    = $configured ? fetch_json_cached(owm_url('weather'),  'owm_current')  : null;
-$forecast   = $configured ? fetch_json_cached(owm_url('forecast'), 'owm_forecast') : null;
+$owmCacheId = sprintf('%F_%F_%s', LAT, LON, UNITS);
+$current    = $configured ? fetch_json_cached(owm_url('weather'),  'owm_current_' . $owmCacheId)  : null;
+$forecast   = $configured ? fetch_json_cached(owm_url('forecast'), 'owm_forecast_' . $owmCacheId) : null;
 
 // Current conditions
 $cw = null;

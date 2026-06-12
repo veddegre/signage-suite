@@ -1,0 +1,19 @@
+# Runtime config & secrets (admin.php)
+config/
+
+# API response cache (boards recreate on load)
+cache/
+
+# Downloaded video files (php video.php fetch)
+videos/
+
+# Uploaded custom slide images
+slides/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local editor settings
+.idea/
+.vscode/

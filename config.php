@@ -48,3 +48,18 @@ function cfg_write(array $conf): bool
     if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
     return @rename($tmp, cfg_path());
 }
+
+/** Height reserved at the bottom for the weather alert ticker overlay. */
+const SIGNAGE_TICKER_H = 72;
+
+/** Bottom inset (px) when a board is framed in board.php / player.php (?safebottom=). */
+function signage_safe_bottom(): int
+{
+    return max(0, min(120, (int)($_GET['safebottom'] ?? 0)));
+}
+
+/** Usable board viewport height — 1080 minus any framed safe-bottom inset. */
+function signage_frame_height(): int
+{
+    return 1080 - signage_safe_bottom();
+}

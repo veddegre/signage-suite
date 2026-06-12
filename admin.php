@@ -13,8 +13,11 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/slides_lib.php';
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json';
+
+slide_background_ensure_assets();
 
 session_start();
 
@@ -23,7 +26,7 @@ session_start();
  *  — see README). */
 function protect_dirs(): void
 {
-    foreach (['/config', '/cache'] as $d) {
+    foreach (['/config', '/cache', '/slides'] as $d) {
         $dir = __DIR__ . $d;
         if (!is_dir($dir)) @mkdir($dir, 0775, true);
         $ht = $dir . '/.htaccess';
@@ -90,7 +93,7 @@ if (($_GET['logout'] ?? '') === '1') {
 $authed = !empty($_SESSION['auth']);
 
 // ── Save handler ─────────────────────────────────────────────────────────────
-$board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? ''));
+$board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));
 if ($board === '' || !isset($schema[$board])) $board = array_key_first($schema);
 
 if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
@@ -107,6 +110,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $raw = trim((string)($_POST[$name] ?? ''));
                 if ($raw === '') { unset($conf[$cfgKey]); break; }
                 $conf[$cfgKey] = str_contains($raw, '.') ? (float)$raw : (int)$raw;
+                break;
+            case 'password':
+                $raw = trim((string)($_POST[$name] ?? ''));
+                if ($raw !== '') $conf[$cfgKey] = $raw;   // blank = leave existing secret
                 break;
             case 'json':
                 $raw = trim((string)($_POST[$name] ?? ''));
@@ -162,7 +169,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 }
                 if ($outV === []) unset($conf[$cfgKey]); else $conf[$cfgKey] = $outV;
                 break;
-            default:    // text, password, select, textarea
+            default:    // text, select, textarea
                 $raw = trim((string)($_POST[$name] ?? ''));
                 if ($raw === '') unset($conf[$cfgKey]); else $conf[$cfgKey] = $raw;
         }
@@ -170,15 +177,18 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     $conf = array_filter($conf, fn($v) => $v !== null);
     if ($errors) {
         $flash = implode(' ', $errors); $flashOk = false;
-    } elseif (protect_dirs() === null && cfg_write($conf)) {
-        if (isset($_POST['clear_cache'])) {
-            foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) @unlink($cf);
-        }
-        $flash = $schema[$board]['title'] . ' saved.' . (isset($_POST['clear_cache']) ? ' Cache cleared.' : '');
-        cfg_reload();
-        $schema = admin_schema();   // pick up structural changes (e.g. new rotation screens)
     } else {
-        $flash = 'Could not write config/settings.json — check directory permissions.'; $flashOk = false;
+        protect_dirs();
+        if (cfg_write($conf)) {
+            if (isset($_POST['clear_cache'])) {
+                foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) @unlink($cf);
+            }
+            $flash = $schema[$board]['title'] . ' saved.' . (isset($_POST['clear_cache']) ? ' Cache cleared.' : '');
+            cfg_reload();
+            $schema = admin_schema();   // pick up structural changes (e.g. new rotation screens)
+        } else {
+            $flash = 'Could not write config/settings.json — check directory permissions.'; $flashOk = false;
+        }
     }
 }
 
@@ -186,6 +196,107 @@ if ($authed && ($_POST['action'] ?? '') === 'clearcache' && csrf_ok()) {
     $n = 0;
     foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) { @unlink($cf); $n++; }
     $flash = "Cleared $n cached file" . ($n === 1 ? '' : 's') . '.';
+}
+
+// ── Custom slides: upload / delete ──────────────────────────────────────────
+if ($authed && $board === 'slides' && csrf_ok()) {
+    $slideDir = slides_dir();
+    if (!is_dir($slideDir)) @mkdir($slideDir, 0775, true);
+    protect_dirs();
+
+    if (($_POST['action'] ?? '') === 'upload_slide' && isset($_FILES['slide'])) {
+        $f = $_FILES['slide'];
+        if (($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $flash = 'Upload failed — try again.'; $flashOk = false;
+        } elseif (($f['size'] ?? 0) > 15 * 1024 * 1024) {
+            $flash = 'Image must be under 15 MB.'; $flashOk = false;
+        } else {
+            $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']) ?: '';
+            $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+            if (!isset($extMap[$mime])) {
+                $flash = 'Only JPG, PNG, or WebP images are allowed.'; $flashOk = false;
+            } else {
+                $base = preg_replace('/[^a-zA-Z0-9._-]+/', '-', pathinfo($f['name'], PATHINFO_FILENAME));
+                $base = trim($base, '-._');
+                if ($base === '') $base = 'slide';
+                $name = $base . '.' . $extMap[$mime];
+                if (is_file($slideDir . '/' . $name)) {
+                    $name = $base . '-' . substr(bin2hex(random_bytes(3)), 0, 6) . '.' . $extMap[$mime];
+                }
+                if (@move_uploaded_file($f['tmp_name'], $slideDir . '/' . $name)) {
+                    if (slide_append_to_deck($name)) {
+                        $flash = 'Uploaded ' . $name . ' — set to Always; edit schedule below and Save.';
+                    } else {
+                        $flash = 'File saved but could not update settings.json.'; $flashOk = false;
+                    }
+                } else {
+                    $flash = 'Could not write to ' . slides_dir() . ' — check permissions.'; $flashOk = false;
+                }
+            }
+        }
+    }
+
+    if (($_POST['action'] ?? '') === 'delete_slide') {
+        $del = slide_safe_filename((string)($_POST['file'] ?? ''));
+        if ($del === null) {
+            $flash = 'Invalid filename.'; $flashOk = false;
+        } else {
+            $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+            $deck = $conf['slides.SLIDES'] ?? [];
+            if (is_array($deck)) {
+                $conf['slides.SLIDES'] = array_values(array_filter($deck, fn($s) =>
+                    !is_array($s) || ($s['file'] ?? '') !== $del));
+            }
+            cfg_write($conf);
+            cfg_reload();
+            @unlink($slideDir . '/' . $del);
+            $flash = 'Deleted ' . $del . '.';
+        }
+    }
+
+    if (($_POST['action'] ?? '') === 'create_slide' && isset($_FILES['slide_image'])) {
+        $f = $_FILES['slide_image'];
+        $title = trim((string)($_POST['creator_title'] ?? ''));
+        $slug  = trim((string)($_POST['creator_name'] ?? ''));
+        if ($slug === '' && $title !== '') {
+            $slug = $title;
+        }
+        if ($slug === '') {
+            $slug = 'slide';
+        }
+
+        if (($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $flash = 'Could not create slide — try again.'; $flashOk = false;
+        } elseif (($f['size'] ?? 0) > 8 * 1024 * 1024) {
+            $flash = 'Rendered slide must be under 8 MB.'; $flashOk = false;
+        } else {
+            $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']) ?: '';
+            if ($mime !== 'image/png') {
+                $flash = 'Slide must be a PNG image.'; $flashOk = false;
+            } else {
+                $info = @getimagesize($f['tmp_name']);
+                if (!$info || ($info[0] ?? 0) !== 1920 || ($info[1] ?? 0) !== 1080) {
+                    $flash = 'Slide must be exactly 1920×1080 pixels.'; $flashOk = false;
+                } else {
+                    $name = slide_unique_filename($slug, 'png', $slideDir);
+                    if (@move_uploaded_file($f['tmp_name'], $slideDir . '/' . $name)) {
+                        $caption = $title !== '' ? $title : trim((string)($_POST['creator_subtitle'] ?? ''));
+                        $extra = ['schedule' => 'always'];
+                        if ($caption !== '') {
+                            $extra['caption'] = $caption;
+                        }
+                        if (slide_append_to_deck($name, $extra)) {
+                            $flash = 'Created ' . $name . ' — set to Always; edit schedule below and Save.';
+                        } else {
+                            $flash = 'Slide saved but could not update settings.json.'; $flashOk = false;
+                        }
+                    } else {
+                        $flash = 'Could not write to ' . slides_dir() . ' — check permissions.'; $flashOk = false;
+                    }
+                }
+            }
+        }
+    }
 }
 
 // Current value resolution for form display: configured value or null
@@ -262,6 +373,44 @@ $tools = ($_GET['board'] ?? '') === 'tools';
   pre.raw { background:var(--harbor); border:1px solid var(--line); border-radius:10px;
             padding:18px; font-family:'IBM Plex Mono',monospace; font-size:13.5px;
             overflow:auto; max-height:480px; }
+  .upload-box { background:var(--harbor); border:1px solid var(--line); border-radius:12px;
+                padding:20px 22px; margin-bottom:24px; }
+  .upload-box h3 { font-family:'Big Shoulders Display'; font-size:22px; margin-bottom:12px; }
+  .upload-row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .upload-row input[type=file] { max-width:100%; color:var(--mist); font-size:14px; }
+  button.secondary { background:var(--harbor); border:1px solid var(--line); color:var(--snow);
+                     font-weight:600; font-size:15px; padding:10px 18px; border-radius:9px; cursor:pointer; }
+  .filelist { margin-top:16px; font-size:14px; color:var(--mist); }
+  .filelist li { display:flex; align-items:center; justify-content:space-between; gap:12px;
+                 padding:6px 0; border-bottom:1px solid var(--line); list-style:none; }
+  .filelist code { color:var(--snow); font-size:13px; }
+  .filelist form { margin:0; }
+  .filelist button { font-size:13px; padding:4px 10px; }
+  table.rows select { width:100%; min-width:90px; padding:8px 10px; font-size:15px;
+                       background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .creator-box { background:var(--harbor); border:1px solid var(--line); border-radius:12px;
+                  padding:20px 22px; margin-bottom:24px; }
+  .creator-box h3 { font-family:'Big Shoulders Display'; font-size:22px; margin-bottom:12px; }
+  .creator-grid { display:grid; grid-template-columns:1fr min(672px, 48vw); gap:28px; align-items:start; }
+  @media (max-width: 1100px) { .creator-grid { grid-template-columns:1fr; } }
+  .creator-fields label.l { margin-top:14px; }
+  .creator-fields label.l:first-child { margin-top:0; }
+  .creator-fields textarea { max-width:100%; min-height:88px; font-family:inherit; font-size:15px; resize:vertical; }
+  .bg-pick { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .bg-pick label { cursor:pointer; }
+  .bg-pick input { position:absolute; opacity:0; pointer-events:none; }
+  .bg-swatch { display:block; width:108px; height:62px; border-radius:8px; border:2px solid var(--line);
+               overflow:hidden; position:relative; background:#141f33 center/cover no-repeat; }
+  .bg-swatch img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+  .bg-pick input:checked + .bg-swatch { border-color:var(--beacon); box-shadow:0 0 0 1px var(--beacon); }
+  .bg-swatch span { position:absolute; left:8px; bottom:6px; z-index:1; font-size:11px; color:#edf2fb;
+                     text-shadow:0 1px 4px rgba(0,0,0,.8); letter-spacing:.3px; }
+  .align-row { display:flex; gap:16px; margin-top:8px; }
+  .align-row label { display:flex; align-items:center; gap:7px; font-size:15px; cursor:pointer; }
+  .preview-wrap { background:#000; border-radius:10px; border:1px solid var(--line); overflow:hidden;
+                  width:672px; max-width:100%; aspect-ratio:16/9; }
+  .preview-wrap canvas { width:100%; height:100%; display:block; }
+  .creator-actions { margin-top:18px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
 </style>
 </head>
 <body>
@@ -323,8 +472,93 @@ $tools = ($_GET['board'] ?? '') === 'tools';
       <h2><?= h($b['title']) ?></h2>
       <div class="sub">Saves to config/settings.json — blank fields use the board's built-in default.
         <a href="<?= h($b['file']) ?>" target="_blank">View board ↗</a></div>
-      <form method="post" id="boardform">
+
+      <?php if ($board === 'slides'): ?>
+      <div class="upload-box">
+        <h3>Upload a slide</h3>
+        <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=slides">
+          <input type="hidden" name="action" value="upload_slide">
+          <input type="hidden" name="board" value="slides">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
+          <button class="secondary" type="submit">Upload</button>
+        </form>
+        <div class="help" style="margin-top:10px">1920×1080 JPG/PNG recommended. New uploads default to <strong>Always</strong> — set birthday/weekday/range below.</div>
+        <?php $diskFiles = slides_list_files();
+        if ($diskFiles): ?>
+        <ul class="filelist">
+          <?php foreach ($diskFiles as $df): ?>
+            <li>
+              <code><?= h($df) ?></code>
+              <form method="post" action="?board=slides" onsubmit="return confirm('Delete <?= h($df) ?>?');">
+                <input type="hidden" name="action" value="delete_slide">
+                <input type="hidden" name="board" value="slides">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="file" value="<?= h($df) ?>">
+                <button class="secondary" type="submit">Delete</button>
+              </form>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+      </div>
+
+      <div class="creator-box">
+        <h3>Create a slide</h3>
+        <p class="help" style="margin-bottom:16px">Pick a background from <code>slide_backgrounds/</code>, add title and body text, preview at 1920×1080, then save as PNG into your slide deck.</p>
+        <div class="creator-grid">
+          <div class="creator-fields">
+            <label class="l">Background</label>
+            <div class="bg-pick" id="bgPick">
+              <?php foreach (slide_background_presets() as $id => $preset):
+                $bgUrl = slide_background_url($id); ?>
+                <label title="<?= h($preset['label']) ?>">
+                  <input type="radio" name="creator_bg" value="<?= h($id) ?>" <?= $id === 'lake_night' ? 'checked' : '' ?>>
+                  <div class="bg-swatch" data-bg="<?= h($id) ?>">
+                    <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
+                    <span><?= h($preset['label']) ?></span>
+                  </div>
+                </label>
+              <?php endforeach; ?>
+            </div>
+
+            <label class="l">Alignment</label>
+            <div class="align-row">
+              <label><input type="radio" name="creator_align" value="left" checked> Left</label>
+              <label><input type="radio" name="creator_align" value="center"> Center</label>
+            </div>
+
+            <label class="l" for="creator_title">Title</label>
+            <input type="text" id="creator_title" placeholder="Happy Birthday, Mom!">
+
+            <label class="l" for="creator_subtitle">Subtitle</label>
+            <input type="text" id="creator_subtitle" placeholder="March 15">
+
+            <label class="l" for="creator_body">Body</label>
+            <textarea id="creator_body" placeholder="Dinner at 6 — cake after."></textarea>
+
+            <label class="l" for="creator_footer">Footer (optional)</label>
+            <input type="text" id="creator_footer" placeholder="Love, the family">
+
+            <label class="l" for="creator_name">Filename</label>
+            <input type="text" id="creator_name" placeholder="mom-birthday (optional — .png added)">
+
+            <div class="creator-actions">
+              <button type="button" class="secondary" id="creatorRefresh">Refresh preview</button>
+              <button type="button" class="save" id="creatorSave">Create slide</button>
+            </div>
+          </div>
+          <div>
+            <label class="l">Preview</label>
+            <div class="preview-wrap"><canvas id="slidePreview" width="1920" height="1080"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <?php endif; ?>
+
+      <form method="post" id="boardform" action="?board=<?= h($board) ?>">
         <input type="hidden" name="action" value="save">
+        <input type="hidden" name="board" value="<?= h($board) ?>">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 
         <?php foreach ($b['fields'] as $f):
@@ -385,6 +619,13 @@ $tools = ($_GET['board'] ?? '') === 'tools';
                             <input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                                    name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
                                    <?= !empty($row[$c['key']]) ? 'checked' : '' ?>>
+                          <?php elseif (($c['type'] ?? '') === 'select'): ?>
+                            <select name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]">
+                              <option value=""></option>
+                              <?php foreach ($c['options'] as $o): ?>
+                                <option value="<?= h($o) ?>" <?= ($row[$c['key']] ?? '') === $o ? 'selected' : '' ?>><?= h($o) ?></option>
+                              <?php endforeach; ?>
+                            </select>
                           <?php else: ?>
                             <input type="text" name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
                                    value="<?= h((string)($row[$c['key']] ?? '')) ?>"
@@ -404,8 +645,10 @@ $tools = ($_GET['board'] ?? '') === 'tools';
               <label class="l"><?= h($f['label']) ?></label>
               <input type="<?= $f['type'] === 'password' ? 'password' : ($f['type'] === 'number' ? 'number' : 'text') ?>"
                      <?= $f['type'] === 'number' ? 'step="' . h($f['step'] ?? '1') . '"' : '' ?>
-                     name="<?= h($f['key']) ?>" value="<?= h($val !== null ? (string)$val : '') ?>"
-                     placeholder="(default)" autocomplete="off">
+                     name="<?= h($f['key']) ?>"
+                     <?php if ($f['type'] !== 'password'): ?>value="<?= h($val !== null ? (string)$val : '') ?>"<?php endif; ?>
+                     placeholder="<?= h($f['type'] === 'password' && $val !== null ? '(unchanged)' : '(default)') ?>"
+                     autocomplete="off">
               <?php if (!empty($f['help'])): ?><div class="help"><?= h($f['help']) ?></div><?php endif; ?>
             <?php endif; ?>
           </div>
@@ -432,17 +675,29 @@ function addRow(btn) {
     foreach ($schema as $bk => $bb) foreach ($bb['fields'] as $ff)
       if ($ff['type'] === 'rows') $colMap[$ff['key']] = array_map(fn($c) => ['key' => $c['key'],
         'wide' => !empty($c['wide']), 'ph' => $c['placeholder'] ?? '',
-        'check' => ($c['type'] ?? '') === 'check'], $ff['columns']);
+        'check' => ($c['type'] ?? '') === 'check',
+        'select' => ($c['type'] ?? '') === 'select',
+        'options' => $c['options'] ?? []], $ff['columns']);
     echo json_encode($colMap);
   ?>;
   (cols[field] || []).forEach(c => {
     const td = document.createElement('td');
     if (c.wide) td.className = 'wide';
-    const inp = document.createElement('input');
+    let inp = document.createElement('input');
     if (c.check) {
       inp.type = 'checkbox';
       inp.style.cssText = 'width:20px;height:20px;accent-color:var(--beacon);min-width:0';
       td.style.cssText = 'text-align:center;vertical-align:middle';
+    } else if (c.select) {
+      inp = document.createElement('select');
+      const blank = document.createElement('option');
+      blank.value = ''; blank.textContent = '';
+      inp.appendChild(blank);
+      (c.options || []).forEach(function (o) {
+        const opt = document.createElement('option');
+        opt.value = o; opt.textContent = o;
+        inp.appendChild(opt);
+      });
     } else {
       inp.type = 'text'; inp.placeholder = c.ph;
     }
@@ -455,6 +710,224 @@ function addRow(btn) {
   table.querySelector('tbody').appendChild(tr);
 }
 </script>
+<?php if ($authed && $board === 'slides'): ?>
+<script>
+(function () {
+  const canvas = document.getElementById('slidePreview');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = 1920, H = 1080;
+  const padX = 88, padTop = 100, padBottom = 120;
+  const BACKGROUNDS = <?php
+    $bgJs = slide_background_presets();
+    foreach ($bgJs as $id => &$bp) {
+        $bp['url'] = slide_background_url($id);
+    }
+    unset($bp);
+    echo json_encode($bgJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+  ?>;
+  const bgImageCache = {};
+
+  function loadBgImage(url) {
+    if (!url) return Promise.resolve(null);
+    if (bgImageCache[url]) return Promise.resolve(bgImageCache[url]);
+    return new Promise(function (resolve) {
+      const img = new Image();
+      img.onload = function () { bgImageCache[url] = img; resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = url;
+    });
+  }
+
+  async function preloadBackgrounds() {
+    await Promise.all(Object.keys(BACKGROUNDS).map(function (id) {
+      return loadBgImage(BACKGROUNDS[id].url);
+    }));
+  }
+
+  function linearGradient(c, bg) {
+    const rad = (bg.angle || 0) * Math.PI / 180;
+    const x0 = W / 2 - Math.cos(rad) * W / 2;
+    const y0 = H / 2 - Math.sin(rad) * H / 2;
+    const x1 = W / 2 + Math.cos(rad) * W / 2;
+    const y1 = H / 2 + Math.sin(rad) * H / 2;
+    const g = c.createLinearGradient(x0, y0, x1, y1);
+    (bg.stops || []).forEach(function (s) { g.addColorStop(s[0], s[1]); });
+    return g;
+  }
+
+  function radialGradient(c, bg) {
+    const g = c.createRadialGradient(
+      bg.cx * W, bg.cy * H, 0,
+      bg.cx * W, bg.cy * H, (bg.r || 1) * Math.max(W, H)
+    );
+    (bg.stops || []).forEach(function (s) { g.addColorStop(s[0], s[1]); });
+    return g;
+  }
+
+  function drawBackground(c, preset) {
+    if (preset.url && bgImageCache[preset.url]) {
+      c.drawImage(bgImageCache[preset.url], 0, 0, W, H);
+      return;
+    }
+    const bg = preset.bg || {};
+    c.fillStyle = bg.type === 'radial' ? radialGradient(c, bg) : linearGradient(c, bg);
+    c.fillRect(0, 0, W, H);
+    const accent = preset.accent;
+    if (!accent) return;
+    if (accent.type === 'bar') {
+      c.fillStyle = accent.color;
+      c.fillRect(0, 0, accent.width || 12, H);
+    } else if (accent.type === 'glow') {
+      const g = c.createRadialGradient(W * 0.85, H * 0.1, 0, W * 0.85, H * 0.1, W * 0.45);
+      g.addColorStop(0, accent.color);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.save();
+      c.globalAlpha = accent.opacity || 0.2;
+      c.fillStyle = g;
+      c.fillRect(0, 0, W, H);
+      c.restore();
+    }
+  }
+
+  function wrapLines(c, text, maxWidth) {
+    const words = text.replace(/\s+/g, ' ').trim().split(' ');
+    if (!words[0]) return [];
+    const lines = [];
+    let line = words[0];
+    for (let i = 1; i < words.length; i++) {
+      const test = line + ' ' + words[i];
+      if (c.measureText(test).width <= maxWidth) line = test;
+      else { lines.push(line); line = words[i]; }
+    }
+    lines.push(line);
+    return lines;
+  }
+
+  async function ensureFonts() {
+    await Promise.all([
+      document.fonts.load('600 88px "Big Shoulders Display"'),
+      document.fonts.load('500 42px "Big Shoulders Display"'),
+      document.fonts.load('400 30px "IBM Plex Sans"'),
+      document.fonts.load('400 24px "IBM Plex Sans"'),
+    ]);
+  }
+
+  function selectedPreset() {
+    const id = document.querySelector('input[name="creator_bg"]:checked');
+    return BACKGROUNDS[(id && id.value) || 'lake_night'] || BACKGROUNDS.lake_night;
+  }
+
+  function textAlign() {
+    const el = document.querySelector('input[name="creator_align"]:checked');
+    return (el && el.value) === 'center' ? 'center' : 'left';
+  }
+
+  async function renderPreview() {
+    await ensureFonts();
+    const preset = selectedPreset();
+    await loadBgImage(preset.url);
+    const align = textAlign();
+    const title = document.getElementById('creator_title').value.trim();
+    const subtitle = document.getElementById('creator_subtitle').value.trim();
+    const body = document.getElementById('creator_body').value.trim();
+    const footer = document.getElementById('creator_footer').value.trim();
+    const maxW = align === 'center' ? W - padX * 2 : 1240;
+    const x = align === 'center' ? W / 2 : padX;
+
+    ctx.clearRect(0, 0, W, H);
+    drawBackground(ctx, preset);
+    ctx.textAlign = align;
+    ctx.textBaseline = 'top';
+    let y = padTop;
+
+    function drawBlock(text, font, color, lineH, maxLines) {
+      if (!text) return;
+      ctx.font = font;
+      ctx.fillStyle = color;
+      let lines = wrapLines(ctx, text, maxW);
+      if (maxLines && lines.length > maxLines) {
+        lines = lines.slice(0, maxLines);
+        lines[maxLines - 1] = lines[maxLines - 1].replace(/\s+\S*$/, '') + '\u2026';
+      }
+      lines.forEach(function (ln) {
+        ctx.fillText(ln, x, y);
+        y += lineH;
+      });
+    }
+
+    drawBlock(title, '600 88px "Big Shoulders Display", sans-serif', preset.title, 94, 3);
+    if (title && subtitle) y += 8;
+    drawBlock(subtitle, '500 42px "Big Shoulders Display", sans-serif', preset.subtitle, 50);
+    if ((title || subtitle) && body) y += 20;
+    drawBlock(body, '400 30px "IBM Plex Sans", sans-serif', preset.body, 44, 8);
+
+    if (footer) {
+      ctx.font = '400 24px "IBM Plex Sans", sans-serif';
+      ctx.fillStyle = preset.footer || preset.body;
+      ctx.textAlign = align;
+      ctx.fillText(footer, x, H - padBottom);
+    }
+  }
+
+  document.querySelectorAll('input[name="creator_bg"], input[name="creator_align"]').forEach(function (el) {
+    el.addEventListener('change', renderPreview);
+  });
+
+  preloadBackgrounds().then(renderPreview);
+
+  document.getElementById('creatorRefresh').addEventListener('click', renderPreview);
+  ['creator_title', 'creator_subtitle', 'creator_body', 'creator_footer'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () {
+      clearTimeout(window._slidePreviewT);
+      window._slidePreviewT = setTimeout(renderPreview, 220);
+    });
+  });
+
+  document.getElementById('creatorSave').addEventListener('click', function () {
+    const btn = this;
+    const title = document.getElementById('creator_title').value.trim();
+    const body = document.getElementById('creator_body').value.trim();
+    if (!title && !body) {
+      alert('Add a title or body before creating a slide.');
+      return;
+    }
+    btn.disabled = true;
+    renderPreview().then(function () {
+      canvas.toBlob(function (blob) {
+        if (!blob) {
+          alert('Could not render slide.');
+          btn.disabled = false;
+          return;
+        }
+        const fd = new FormData();
+        fd.append('action', 'create_slide');
+        fd.append('board', 'slides');
+        fd.append('csrf', <?= json_encode(csrf_token()) ?>);
+        fd.append('creator_title', title);
+        fd.append('creator_subtitle', document.getElementById('creator_subtitle').value.trim());
+        fd.append('creator_name', document.getElementById('creator_name').value.trim());
+        fd.append('slide_image', blob, 'slide.png');
+        fetch('?board=slides', { method: 'POST', body: fd })
+          .then(function (res) {
+            if (res.ok) location.href = '?board=slides';
+            else {
+              alert('Save failed — check server permissions.');
+              btn.disabled = false;
+            }
+          })
+          .catch(function () {
+            alert('Save failed — network error.');
+            btn.disabled = false;
+          });
+      }, 'image/png');
+    }).catch(function () {
+      btn.disabled = false;
+    });
+  });
+})();
+</script>
+<?php endif; ?>
 <?php endif; ?>
 </body>
 </html>

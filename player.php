@@ -21,7 +21,11 @@ require_once __DIR__ . '/config.php';
 
 $SCREEN = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['screen'] ?? ''));
 if ($SCREEN === '') $SCREEN = 'main';
-$src = 'board.php' . ($SCREEN !== 'main' ? '?screen=' . rawurlencode($SCREEN) : '');
+// noticker=1 suppresses the ticker inside the iframe; player.php renders it here
+// at the viewport bottom so polling works in the top-level PWA document.
+$src = $SCREEN !== 'main'
+    ? 'board.php?screen=' . rawurlencode($SCREEN) . '&noticker=1'
+    : 'board.php?noticker=1';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -96,5 +100,6 @@ $src = 'board.php' . ($SCREEN !== 'main' ? '?screen=' . rawurlencode($SCREEN) : 
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 </script>
+<?php include __DIR__ . '/ticker.php'; ?>
 </body>
 </html>

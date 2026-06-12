@@ -55,7 +55,7 @@ function compass(float $deg): string {
 
 // ── NDBC buoy: realtime2 text format ────────────────────────────────────────
 $obs = null;
-$raw = cached_get('https://www.ndbc.noaa.gov/data/realtime2/' . NDBC_STATION . '.txt', 'ndbc');
+$raw = cached_get('https://www.ndbc.noaa.gov/data/realtime2/' . NDBC_STATION . '.txt', 'ndbc_' . NDBC_STATION);
 if ($raw !== null) {
     $lines = preg_split('/\R/', trim($raw));
     // line0 = column names, line1 = units, line2+ = newest-first observations.
@@ -105,7 +105,7 @@ $buoyOnline = $obs && $obsAgeMin !== null && $obsAgeMin < 240;   // >4h old = li
 // ── NWS active alerts for the beach point ───────────────────────────────────
 $alerts = [];
 $aRaw = cached_get(sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', LAT, LON),
-                   'nws_alerts', ['Accept: application/geo+json']);
+                   'nws_alerts_' . sprintf('%.4F_%.4F', LAT, LON), ['Accept: application/geo+json']);
 if ($aRaw !== null) {
     $aj = json_decode($aRaw, true);
     foreach (($aj['features'] ?? []) as $f) {

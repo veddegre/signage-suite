@@ -7,8 +7,8 @@
  * Setup:
  *   ICS_FEEDS — secret iCal URLs (Google Calendar: Settings → "Secret address
  *     in iCal format"). Add as many as you like; each gets a color.
- *   TRASH_WEEKDAY — pickup day. RECYCLE_ANCHOR — any date recycling was
- *     collected, used to compute the every-other-week cadence ('' to disable).
+ *   TRASH_WEEKDAY — pickup day (leave unset to hide — e.g. apartment). RECYCLE_ANCHOR —
+ *     any date recycling was collected, for every-other-week cadence ('' to disable).
  *   COUNTDOWNS — [label => YYYY-MM-DD].
  *
  * Recurring events: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), and YEARLY
@@ -22,8 +22,8 @@ define('ICS_FEEDS', cfg('family.ICS_FEEDS', [
 
 
 ]));
-define('TRASH_WEEKDAY', cfg('family.TRASH_WEEKDAY', 'Tuesday'));
-define('RECYCLE_ANCHOR', cfg('family.RECYCLE_ANCHOR', '2026-01-06'));
+define('TRASH_WEEKDAY', cfg('family.TRASH_WEEKDAY', ''));
+define('RECYCLE_ANCHOR', cfg('family.RECYCLE_ANCHOR', ''));
 define('COUNTDOWNS', cfg('family.COUNTDOWNS', [
 
 ]));
@@ -210,16 +210,20 @@ foreach ($events as $e) {
     if (isset($days[$key])) $days[$key][] = $e;
 }
 
-// ── Trash & recycling ────────────────────────────────────────────────────────
-$trashNext   = strtotime('this ' . TRASH_WEEKDAY, $winStart);
-if (date('l') === TRASH_WEEKDAY) $trashNext = $winStart;
-$daysToTrash = (int)floor(($trashNext - $winStart) / 86400);
+// ── Trash & recycling (optional — leave TRASH_WEEKDAY unset to hide) ─────────
+$showTrash = TRASH_WEEKDAY !== '';
+$trashLabel = '';
 $recycleWeek = false;
-if (RECYCLE_ANCHOR !== '') {
-    $weeks = (int)floor(($trashNext - strtotime(RECYCLE_ANCHOR)) / 604800);
-    $recycleWeek = $weeks % 2 === 0;
+if ($showTrash) {
+    $trashNext = strtotime('this ' . TRASH_WEEKDAY, $winStart);
+    if (date('l') === TRASH_WEEKDAY) $trashNext = $winStart;
+    $daysToTrash = (int)floor(($trashNext - $winStart) / 86400);
+    if (RECYCLE_ANCHOR !== '') {
+        $weeks = (int)floor(($trashNext - strtotime(RECYCLE_ANCHOR)) / 604800);
+        $recycleWeek = $weeks % 2 === 0;
+    }
+    $trashLabel = $daysToTrash === 0 ? 'TODAY' : ($daysToTrash === 1 ? 'TOMORROW' : date('l', $trashNext));
 }
-$trashLabel = $daysToTrash === 0 ? 'TODAY' : ($daysToTrash === 1 ? 'TOMORROW' : date('l', $trashNext));
 
 // Countdowns
 $counts = [];
@@ -323,10 +327,12 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
   </section>
 
   <section class="strip">
+    <?php if ($showTrash): ?>
     <div class="chip trash">
       <span class="k"><?= $recycleWeek ? 'Trash + Recycling' : 'Trash' ?></span>
       <span class="v"><?= h($trashLabel) ?></span>
     </div>
+    <?php endif; ?>
     <?php foreach (array_slice($counts, 0, 3) as $c): ?>
       <div class="chip">
         <span class="k"><?= h($c[0]) ?></span>

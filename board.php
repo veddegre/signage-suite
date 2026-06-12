@@ -30,6 +30,7 @@ $BUILTIN_PAGES = [
     ['url' => 'photo.php',           'dwell' => 60, 'from' => 14, 'to' => 23],
     ['url' => 'family.php',          'dwell' => 90, 'from' => 6,  'to' => 21],
     ['url' => 'homelab.php',         'dwell' => 45],
+    ['url' => 'traffic.php',         'dwell' => 90, 'from' => 6,  'to' => 20],
     // ['url' => 'signaltrace.php',  'dwell' => 45],
     // ['url' => 'rss.php?feed=ars', 'dwell' => 96],
     // ['url' => 'rotator.php',      'dwell' => 300, 'from' => 22, 'to' => 6],
@@ -56,12 +57,20 @@ define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that n
 <style>
   * { margin:0; padding:0; }
   html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; cursor:none; }
-  iframe { position:absolute; inset:0; width:1920px; height:1080px; border:0;
+  iframe { position:absolute; top:0; left:0; width:1920px; height:<?= 1080 - SIGNAGE_TICKER_H ?>px; border:0;
            opacity:0; transition:opacity <?= (int)FADE_MS ?>ms ease; }
   iframe.show { opacity:1; }
+  #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+           flex-direction:column; gap:16px; color:#8aa0c0; font-family:system-ui,sans-serif; }
+  #empty h1 { font-size:48px; color:#ffb347; }
+  #empty p { font-size:24px; }
 </style>
 </head>
 <body>
+<div id="empty">
+  <h1>No pages in rotation</h1>
+  <p>Add boards in admin.php → Rotation, or check hour windows and Skip flags.</p>
+</div>
 <iframe id="fA"></iframe>
 <iframe id="fB"></iframe>
 <script>
@@ -108,6 +117,10 @@ define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that n
     return order[0] ?? 0;
   }
 
+  if (PAGES.length === 0) {
+    document.getElementById('empty').style.display = 'flex';
+  }
+
   function rotate() {
     if (PAGES.length === 0) return;
     idx = nextPage();
@@ -128,7 +141,7 @@ define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that n
 
     f.onload = () => setTimeout(reveal, SETTLE);
     const sep = p.url.includes('?') ? '&' : '?';
-    f.src = p.url + sep + 'noticker=1&r=' + Date.now();   // cache-bust each cycle
+    f.src = p.url + sep + 'noticker=1&safebottom=<?= SIGNAGE_TICKER_H ?>&r=' + Date.now();
     setTimeout(reveal, HANG);                              // safety net for hung pages
   }
 

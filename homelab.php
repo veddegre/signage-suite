@@ -22,12 +22,7 @@ define('ADGUARD_URL', cfg('homelab.ADGUARD_URL', 'http://192.168.86.3'));
 define('ADGUARD_USER', cfg('homelab.ADGUARD_USER', 'admin'));
 define('ADGUARD_PASS', cfg('homelab.ADGUARD_PASS', 'PUT-PASSWORD-HERE'));
 
-define('SERVICES', cfg('homelab.SERVICES', [
-    'SignalTrace' => 'https://trysig.win',
-    'SurveyTrace' => 'http://192.168.86.49',
-    'Media'       => 'http://192.168.86.10:8096',
-    'Books'       => 'http://192.168.86.10:8083',
-]));
+define('SERVICES', cfg('homelab.SERVICES', []));
 define('LATENCY_TARGET', cfg('homelab.LATENCY_TARGET', 'https://1.1.1.1'));
 
 define('TIMEZONE', cfg('homelab.TIMEZONE', 'America/Detroit'));
@@ -111,7 +106,8 @@ $agBlocked = (int)($ag['num_blocked_filtering'] ?? 0);
 $agPct     = $agQueries > 0 ? round($agBlocked / $agQueries * 100, 1) : 0;
 
 // ── Service checks + WAN latency (cached together, run live each TTL) ───────
-$checks = cached_json('service_checks', function () {
+$checkKey = 'service_checks_' . md5(json_encode(SERVICES) . '|' . LATENCY_TARGET);
+$checks = cached_json($checkKey, function () {
     $out = ['services' => [], 'wan_ms' => null];
     foreach (SERVICES as $name => $url) {
         $r = http_get($url, [], null, false, 4);
@@ -264,12 +260,14 @@ $wanMs    = $checks['wan_ms'] ?? null;
 
   <section class="panel svc">
     <div class="k">Services</div>
-    <?php foreach ($services as $s): ?>
+    <?php if ($services): foreach ($services as $s): ?>
       <div class="svcrow">
         <span class="n"><span class="dot <?= $s['up'] ? 'ok' : 'bad' ?>"></span><?= h($s['name']) ?></span>
         <span class="ms"><?= $s['up'] ? $s['ms'] . ' ms' : 'DOWN' ?></span>
       </div>
-    <?php endforeach; ?>
+    <?php endforeach; else: ?>
+      <div class="notcfg">Add services in admin &rarr; Homelab &rarr; <strong>Service checks</strong> (name + URL per row).</div>
+    <?php endif; ?>
   </section>
 </div>
 <div class="stamp">Proxmox API &middot; AdGuard Home<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>

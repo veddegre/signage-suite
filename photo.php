@@ -63,7 +63,7 @@ $configured = OWM_API_KEY !== 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE' && OWM_API_KEY 
 if ($configured) {
     $raw = cached_get(sprintf(
         'https://api.openweathermap.org/data/2.5/forecast?lat=%F&lon=%F&units=imperial&appid=%s',
-        LAT, LON, OWM_API_KEY), 'owm_forecast_photo');
+        LAT, LON, OWM_API_KEY), 'owm_forecast_photo_' . sprintf('%F_%F', LAT, LON));
     $fj = $raw ? json_decode($raw, true) : null;
     if ($fj && isset($fj['list'])) {
         for ($d = 0; $d < 4; $d++) {
@@ -114,6 +114,12 @@ if ($evenings) {
 $aurora = ($kpMax !== null && $kpMax >= 6) || ($kpNow !== null && $kpNow >= 6);
 
 function tspan(array $w): string { return date('g:i', $w[0]) . '–' . date('g:i A', $w[1]); }
+
+$frameH = signage_frame_height();
+$compact = $frameH < 1080;
+$rowHead = $compact ? 88 : 96;
+$rowFoot = $compact ? 248 : 280;
+$padY = $compact ? 24 : 28;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -127,10 +133,11 @@ function tspan(array $w): string { return date('g:i', $w[0]) . '–' . date('g:i
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:1080px; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 1.2fr 1fr; grid-template-rows: 96px 1fr 280px;
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
+  .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $compact ? 20 : 24 ?>px;
+           grid-template-columns: 1.2fr 1fr; grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowFoot ?>px;
            grid-template-areas: "head head" "verdict moon" "windows windows"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
@@ -138,24 +145,26 @@ function tspan(array $w): string { return date('g:i', $w[0]) . '–' . date('g:i
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:56px; color:var(--mist); }
 
   .verdict { grid-area:verdict; background:var(--harbor); border:1px solid var(--hairline);
-             border-radius:14px; padding:40px 44px; display:flex; flex-direction:column; }
+             border-radius:14px; padding:<?= $compact ? '32px 36px' : '40px 44px' ?>; display:flex;
+             flex-direction:column; min-height:0; overflow:hidden; }
   .verdict .k { font-size:22px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .verdict .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:120px; line-height:1.05; }
-  .verdict .why { font-size:30px; color:var(--mist); margin-top:10px; }
-  .cloudbar { margin-top:34px; }
+  .verdict .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 108 : 120 ?>px; line-height:1.05; }
+  .verdict .why { font-size:<?= $compact ? 26 : 30 ?>px; color:var(--mist); margin-top:10px; }
+  .cloudbar { margin-top:<?= $compact ? 24 : 34 ?>px; }
   .cloudbar .lab { display:flex; justify-content:space-between; font-size:22px; color:var(--mist); margin-bottom:10px; }
   .cloudbar .track { height:22px; background:var(--lake-night); border:1px solid var(--hairline); border-radius:11px; overflow:hidden; }
   .cloudbar .fill { height:100%; background:var(--beacon); border-radius:11px; }
-  .nights { margin-top:auto; display:flex; gap:18px; border-top:1px solid var(--hairline); padding-top:24px; }
-  .night { flex:1; }
-  .night .d { font-family:'Big Shoulders Display'; font-weight:600; font-size:32px; letter-spacing:1px; text-transform:uppercase; }
-  .night .c { font-size:24px; color:var(--mist); text-transform:capitalize; }
-  .aurora { margin-top:18px; font-size:28px; font-weight:600; color:#7ee787; }
+  .nights { margin-top:auto; display:flex; gap:18px; border-top:1px solid var(--hairline); padding-top:<?= $compact ? 18 : 24 ?>px; }
+  .night { flex:1; min-width:0; }
+  .night .d { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px; letter-spacing:1px; text-transform:uppercase; }
+  .night .c { font-size:<?= $compact ? 21 : 24 ?>px; color:var(--mist); text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .aurora { margin-top:<?= $compact ? 12 : 18 ?>px; font-size:<?= $compact ? 24 : 28 ?>px; font-weight:600; color:#7ee787; }
 
   .moon { grid-area:moon; background:var(--harbor); border:1px solid var(--hairline);
-          border-radius:14px; padding:36px 40px; display:flex; flex-direction:column; align-items:center; }
+          border-radius:14px; padding:<?= $compact ? '28px 32px' : '36px 40px' ?>; display:flex;
+          flex-direction:column; align-items:center; min-height:0; overflow:hidden; }
   .moon .k { align-self:flex-start; font-size:22px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .moon svg { width:280px; height:280px; margin:18px 0 8px; }
+  .moon svg { width:<?= $compact ? 240 : 280 ?>px; height:<?= $compact ? 240 : 280 ?>px; margin:<?= $compact ? '12px 0 6px' : '18px 0 8px' ?>; }
   .moon .name { font-family:'Big Shoulders Display'; font-weight:700; font-size:54px; }
   .moon .pct { font-size:28px; color:var(--mist); margin-top:4px; }
   .kp { margin-top:auto; align-self:stretch; display:flex; justify-content:space-between;
@@ -165,14 +174,14 @@ function tspan(array $w): string { return date('g:i', $w[0]) . '–' . date('g:i
   .kp .kv { font-family:'Big Shoulders Display'; font-weight:700; font-size:58px; }
 
   .windows { grid-area:windows; display:grid; grid-template-columns:repeat(4,1fr); gap:24px; }
-  .win { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px; padding:26px 30px; }
+  .win { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px; padding:<?= $compact ? '20px 24px' : '26px 30px' ?>; }
   .win.prime { border-color:var(--beacon); }
   .win .k { font-size:20px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
-  .win .v { font-family:'Big Shoulders Display'; font-weight:700; font-size:56px; margin-top:8px;
+  .win .v { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 50 : 56 ?>px; margin-top:8px;
             font-variant-numeric:tabular-nums; }
   .win.prime .v { color:var(--beacon); }
-  .win .s { font-size:21px; color:var(--mist); margin-top:6px; }
-  .stamp { position:absolute; bottom:6px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
+  .win .s { font-size:<?= $compact ? 19 : 21 ?>px; color:var(--mist); margin-top:6px; }
+  .stamp { position:absolute; top:<?= $padY + 4 ?>px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
 </style>
 </head>
 <body>

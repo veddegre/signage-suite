@@ -114,7 +114,8 @@ if (SHUFFLE) shuffle($photos);
   <div class="layer" id="layerA"></div>
   <div class="layer" id="layerB"></div>
   <div class="caption" id="caption"></div>
-  <div class="brand"><b>VEDDERS</b>&nbsp;VISUALS</div>
+  <?php [$brandFirst, $brandRest] = array_pad(explode(' ', BRAND, 2), 2, ''); ?>
+  <div class="brand"><b><?= htmlspecialchars($brandFirst) ?></b><?= $brandRest !== '' ? '&nbsp;' . htmlspecialchars($brandRest) : '' ?></div>
   <div id="clock">--:--</div>
 
   <script>
