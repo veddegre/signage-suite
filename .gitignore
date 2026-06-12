@@ -10,6 +10,9 @@ videos/
 # Uploaded custom slide images
 slides/
 
+# Uploaded rotator photos
+photos/
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

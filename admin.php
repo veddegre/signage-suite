@@ -14,6 +14,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/slides_lib.php';
+require_once __DIR__ . '/rotator_lib.php';
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json';
 
@@ -26,7 +27,7 @@ session_start();
  *  — see README). */
 function protect_dirs(): void
 {
-    foreach (['/config', '/cache', '/slides'] as $d) {
+    foreach (['/config', '/cache', '/slides', '/photos'] as $d) {
         $dir = __DIR__ . $d;
         if (!is_dir($dir)) @mkdir($dir, 0775, true);
         $ht = $dir . '/.htaccess';
@@ -299,6 +300,49 @@ if ($authed && $board === 'slides' && csrf_ok()) {
     }
 }
 
+// ── Photo rotator: upload / delete ────────────────────────────────────────────
+if ($authed && $board === 'rotator' && csrf_ok()) {
+    $photoDir = rotator_photo_dir();
+    if (!is_dir($photoDir)) @mkdir($photoDir, 0775, true);
+    protect_dirs();
+
+    if (($_POST['action'] ?? '') === 'upload_photo' && isset($_FILES['photo'])) {
+        $uploaded = [];
+        $errors = [];
+        foreach (rotator_normalize_uploads($_FILES['photo']) as $f) {
+            if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+            $result = rotator_save_upload($f, $photoDir);
+            if ($result['ok']) {
+                $uploaded[] = $result['name'];
+            } else {
+                $errors[] = ($f['name'] ?? 'file') . ': ' . ($result['error'] ?? 'failed');
+            }
+        }
+        if ($uploaded) {
+            $flash = 'Uploaded ' . implode(', ', $uploaded) . '.';
+            if ($errors) {
+                $flash .= ' Some failed: ' . implode('; ', $errors);
+            }
+        } elseif ($errors) {
+            $flash = implode('; ', $errors);
+            $flashOk = false;
+        } else {
+            $flash = 'No files selected.'; $flashOk = false;
+        }
+    }
+
+    if (($_POST['action'] ?? '') === 'delete_photo') {
+        $del = (string)($_POST['file'] ?? '');
+        if (!rotator_delete_photo($del, $photoDir)) {
+            $flash = 'Could not delete photo.'; $flashOk = false;
+        } else {
+            $flash = 'Deleted ' . basename($del) . '.';
+        }
+    }
+}
+
 // Current value resolution for form display: configured value or null
 $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
 function current_val(array $rawConf, string $board, string $key)
@@ -553,6 +597,37 @@ $tools = ($_GET['board'] ?? '') === 'tools';
             <div class="preview-wrap"><canvas id="slidePreview" width="1920" height="1080"></canvas></div>
           </div>
         </div>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($board === 'rotator'): ?>
+      <div class="upload-box">
+        <h3>Upload photos</h3>
+        <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=rotator">
+          <input type="hidden" name="action" value="upload_photo">
+          <input type="hidden" name="board" value="rotator">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <input type="file" name="photo[]" accept="image/jpeg,image/png" multiple>
+          <button class="secondary" type="submit">Upload</button>
+        </form>
+        <div class="help" style="margin-top:10px">JPG or PNG, up to 25&nbsp;MB each. Photos are served through <code>rotator.php</code> — not directly from the web. EXIF camera/date captions appear when enabled below.</div>
+        <?php $photoFiles = rotator_list_photos();
+        if ($photoFiles): ?>
+        <ul class="filelist">
+          <?php foreach ($photoFiles as $pf): ?>
+            <li>
+              <code><?= h($pf) ?></code>
+              <form method="post" action="?board=rotator" onsubmit="return confirm('Delete <?= h($pf) ?>?');">
+                <input type="hidden" name="action" value="delete_photo">
+                <input type="hidden" name="board" value="rotator">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="file" value="<?= h($pf) ?>">
+                <button class="secondary" type="submit">Delete</button>
+              </form>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
       </div>
       <?php endif; ?>
 

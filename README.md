@@ -1,30 +1,44 @@
 # Home Signage Boards
 
-Thirteen self-contained PHP pages, all 1920×1080, all sharing the same dark-navy/amber design language. Drop them in one web directory with PHP 8+ and php-curl. Each page caches API responses in `./cache/` (created automatically — make sure the web user can write there) and falls back to stale cache on API failure, so a flaky API never blanks the wall.
+Fourteen self-contained PHP pages, all 1920×1080, all sharing the same dark-navy/amber design language. Drop them in one web directory with PHP 8+ and php-curl. Each page caches API responses in `./cache/` (created automatically — make sure the web user can write there) and falls back to stale cache on API failure, so a flaky API never blanks the wall.
 
-## Server requirements (Debian / Ubuntu / Raspberry Pi OS)
-PHP 8.1+ with curl, xml, and mbstring — on Ubuntu 24.04+ that's:
+## Quick start (Ubuntu / Debian / Raspberry Pi OS)
 
-    sudo apt install apache2 libapache2-mod-php php-curl php-xml php-mbstring ffmpeg
-    sudo chown -R www-data:www-data /var/www/html/boards/config /var/www/html/boards/cache /var/www/html/boards/videos
+**Server** — run once on the box that hosts the boards:
 
-(`ffmpeg` is for video.php duration readouts; install `yt-dlp` via `pipx` rather than apt — the repo version goes stale and YouTube breaks it.)
+    sudo bash setup-server.sh --with-ytdlp --with-video-cron
 
-**Important on Ubuntu's default Apache:** `/var/www` ships with `AllowOverride None`, which silently ignores the protective `.htaccess` files in `config/` and `cache/` — leaving your API tokens in `settings.json` downloadable. Add this to your site config (e.g. `/etc/apache2/conf-available/signage.conf`, then `a2enconf signage && systemctl reload apache2`):
+**Display** — run once on each Pi or kiosk PC (after the server is up):
 
-    <DirectoryMatch "/var/www/html/boards/(config|cache)/">
+    sudo bash setup-kiosk.sh "http://your-server/boards/board.php" [scale]
+
+Then open **admin.php** in a browser, create your admin password, and configure boards. See [Server setup](#setup-serversh--the-web-host) and [Kiosk setup](#setup-kiosksh--the-display-device) below for options.
+
+## Server requirements (manual install)
+
+If you prefer not to use `setup-server.sh`, you need PHP 8.1+ with curl, xml, mbstring, and gd — on Ubuntu 24.04+:
+
+    sudo apt install apache2 libapache2-mod-php php-curl php-xml php-mbstring php-gd ffmpeg
+    sudo mkdir -p /var/www/html/boards/{config,cache,videos,slides,photos}
+    sudo chown -R www-data:www-data /var/www/html/boards/config /var/www/html/boards/cache /var/www/html/boards/videos /var/www/html/boards/slides /var/www/html/boards/photos
+
+(`php-gd` powers the slide creator backgrounds. `ffmpeg` is for video.php duration readouts; install `yt-dlp` via `pipx` rather than apt — the repo version goes stale and YouTube breaks it.)
+
+**Important on Ubuntu's default Apache:** `/var/www` ships with `AllowOverride None`, which silently ignores the protective `.htaccess` files in `config/`, `cache/`, `slides/`, and `photos/` — leaving your API tokens in `settings.json` (and uploaded images) downloadable. Add this to your site config (e.g. `/etc/apache2/conf-available/signage.conf`, then `a2enconf signage && systemctl reload apache2`):
+
+    <DirectoryMatch "/var/www/html/boards/(config|cache|slides|photos)/">
         Require all denied
     </DirectoryMatch>
 
-(Adjust the path to wherever the boards live. On nginx: `location ~ ^/boards/(config|cache)/ { deny all; }`.) Verify after deploying: `curl -I http://server/boards/config/settings.json` should return 403.
+(Adjust the path to wherever the boards live. On nginx: `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }`.) Verify after deploying: `curl -I http://server/boards/config/settings.json` should return 403.
 
 ## Configuration: admin.php (start here)
-All settings are managed through **admin.php** — a web frontend covering every board. On first visit it asks you to create an admin password (stored as a hash in `config/admin.json`; delete that file to reset it). Settings save to `config/settings.json`; **the board PHP files are never modified**, so the web server only needs write access to `config/` and `cache/`.
+All settings are managed through **admin.php** — a web frontend covering every board. On first visit it asks you to create an admin password (stored as a hash in `config/admin.json`; delete that file to reset it). Settings save to `config/settings.json`; **the board PHP files are never modified**, so the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
 
-How it works: each board's old `const` values are now built-in defaults. A blank field in the admin means "use the default"; anything you enter overrides it. The Tools page can clear the API cache (handy after changing keys) and shows the raw JSON, which you can also edit by hand.
+How it works: each board's old `const` values are now built-in defaults. A blank field in the admin means "use the default"; anything you enter overrides it. Password and API-key fields are left blank on save to mean "unchanged" — the admin never echoes secrets back into the HTML. The Tools page can clear the API cache (handy after changing keys) and shows the raw JSON, which you can also edit by hand.
 
 Notes for the security-minded:
-- `config/settings.json` holds your API tokens. The admin drops a deny-all `.htaccess` into `config/` and `cache/` automatically (Apache). **On nginx add:** `location ~ ^/boards/(config|cache)/ { deny all; }` (adjust the path).
+- `config/settings.json` holds your API tokens. The admin drops a deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` automatically (Apache). **On nginx add:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }` (adjust the path).
 - Login is session-based with CSRF protection on all saves; failed logins are rate-dampened. It's built for your LAN — if you expose it further, put real auth (Cloudflare Access, VPN) in front.
 - `php video.php fetch` still runs from the CLI; the admin edits the video registry, the fetcher downloads what's in it.
 
@@ -52,17 +66,40 @@ Allendale weather, RainViewer animated radar, sunrise arc. Needs `OWM_API_KEY`.
 - **Setup:**
   - Proxmox: create an API token (Datacenter → Permissions → API Tokens) with a read-only role like **PVEAuditor**, then set `PVE_TOKEN_ID` / `PVE_TOKEN_SECRET`. `PVE_VERIFY_TLS=false` is the default for self-signed certs.
   - AdGuard: `ADGUARD_URL` / `ADGUARD_USER` / `ADGUARD_PASS` (same as web UI).
-  - Edit the `SERVICES` array to taste.
+  - Add rows under **Services** for each HTTP(S) endpoint you want pinged — the default is an empty list (nothing to check until you configure it).
 - Each panel degrades independently — an unreachable AdGuard doesn't take down the Proxmox panel.
 
 ## rotator.php — Vedders Visuals Photo Rotator
-- **Setup:** point `PHOTO_DIR` at a folder of JPG/PNG files. Photos can live outside the webroot; the page serves them itself (`?img=`) with filenames validated against the directory listing.
-- Reads camera model + capture month from EXIF for the caption (`SHOW_EXIF`), dedupes "SONY SONY" style Make/Model overlap, crossfades every `INTERVAL_SEC`, honors `prefers-reduced-motion`, and reloads every 6h to pick up new files.
+- **Upload:** admin → **Photo Rotator** — JPG/PNG up to 25 MB each (multiple files at once). Delete from the same page.
+- **Setup:** photos land in `./photos/` by default (configurable **Photo directory**). The board serves images via `?img=` — they are not directly downloadable from the web root. You can still point **Photo directory** at an absolute path outside the webroot and copy files there manually.
+- Reads camera model + capture month from EXIF for the caption (`SHOW_EXIF`), dedupes "SONY SONY" style Make/Model overlap, crossfades every `INTERVAL_SEC`, honors `prefers-reduced-motion`, and reloads every 6h to pick up new files. Brand overlay text is configurable via **Brand wordmark** in admin.
+
+## slides.php — Custom Slides
+Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule each one independently.
+
+- **Upload:** admin → **Custom Slides** → upload box. New files default to **Always** in the deck.
+- **Slide creator:** same page — pick a themed background from `slide_backgrounds/` (Lake Night, Beacon Bar, Harbor Glow, Celebration, Frost, Forest), enter title/subtitle/body/footer, preview at 1920×1080, and **Create slide** to save a PNG into `./slides/`.
+- **Scheduling (per slide in the deck table):**
+  - **always** — show whenever this board is in rotation
+  - **range** — inclusive `date_start` … `date_end` (`YYYY-MM-DD`)
+  - **yearly** — every `MM-DD` (birthdays, anniversaries)
+  - **weekly** — every Monday, Tuesday, …
+  - **Off** — bench without deleting
+- Each slide can set **Caption**, **Dwell (seconds)**, and image **fit** (`contain` / `cover`). The board reloads every 5 minutes so midnight and birthday boundaries pick up without restarting the kiosk.
+- **Rotation:** add `slides.php` to **admin → Rotation** with a dwell long enough for your active deck (e.g. three 12s slides → ~36–45s). Hour windows on the rotation entry are separate from per-slide schedules.
+- Uploaded images live in `./slides/` (web server must write there; blocked from direct HTTP access like `config/`).
+
+## traffic.php — Traffic Map
+Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with corridor markers and an I-96 highlight line. Defaults to the Allendale ↔ Grand Rapids area but center, zoom, and labels are all editable in admin.
+
+- **Setup:** free TomTom Developer key at [developer.tomtom.com](https://developer.tomtom.com/) (enable Traffic API) → admin → **Traffic Map** → paste key.
+- Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.
+- **Flow style** `relative0-dark` matches the dark basemap best. Map reloads on a configurable interval (default 5 min).
 
 ## family.php — Family Board
 - **Setup:**
   - `ICS_FEEDS`: secret iCal URLs (Google Calendar → Settings → calendar → *Secret address in iCal format*), one entry per calendar with a color.
-  - `TRASH_WEEKDAY` and `RECYCLE_ANCHOR` (any past date recycling was collected; drives the every-other-week cadence — set `''` to disable).
+  - `TRASH_WEEKDAY` and `RECYCLE_ANCHOR` (any past date recycling was collected; drives the every-other-week cadence). Leave trash day as **(default)** to hide the chip entirely — useful for apartments.
   - `COUNTDOWNS`: label → `YYYY-MM-DD`.
 - RRULE support: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), YEARLY, with INTERVAL/UNTIL/EXDATE. Exotic rules show only on their original date.
 
@@ -110,7 +147,8 @@ The "whole dashboard, pixel for pixel" companion to splunk.php: wraps Splunk's *
 ## ticker.php — Weather Alert Ticker (shared include)
 Every board includes this just before `</body>`. It renders **nothing** when there are no active NWS alerts; when alerts exist, a ticker overlays the bottom 72px of whichever board is on screen — amber for advisories, red with a blinking dot when anything Severe/Extreme is active.
 
-- **In the rotation shell (board.php)** the ticker renders once in the shell itself and is genuinely persistent across page transitions; framed boards are passed `?noticker=1` so they don't draw a second copy. Opened directly, each board still shows its own ticker — and because the scroll position is computed from the wall clock rather than page-load time, it stays seamless even under an external rotator like Anthias.
+- **In the rotation shell (board.php)** the ticker renders once in the shell itself and is genuinely persistent across page transitions; framed boards are passed `?noticker=1` and use a 72px safe-bottom inset so content isn't clipped. Opened directly, each board still shows its own ticker — and because the scroll position is computed from the wall clock rather than page-load time, it stays seamless even under an external rotator like Anthias.
+- **In player.php** the ticker runs in the outer PWA document (the iframe loads `board.php?noticker=1`); it polls a lightweight JSON endpoint so alerts appear and disappear without a full page reload.
 - **Setup:** set `TICKER_LAT`/`TICKER_LON` and put a contact email in `TICKER_UA`. One shared cache file means the NWS API is polled at most once per `TICKER_TTL` (5 min) no matter how many boards rotate.
 - `TICKER_MODE`: `'scroll'` (marquee) or `'static'` (one alert at a time, 9s each, also clock-phased).
 - `TICKER_MIN_SEVERITY`: hide alerts below `Minor`/`Moderate`/`Severe`.
@@ -126,7 +164,27 @@ Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's bo
 
 **Multiple displays:** define screens on the Rotation page (one row per display — e.g. `main` / Living Room, `garage` / Garage Bench); after saving, each screen gets its own page-list editor. Point each device at its URL: plain `board.php` is the `main` screen, `board.php?screen=garage` is the garage. Any number of devices can share one URL (they render independently; the shared server-side cache means ten screens cost the same API usage as one), and a screen with no pages of its own — or an unknown `?screen=` value — falls back to the main rotation, so a freshly provisioned kiosk always shows something.
 
-Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone` (set the dwell to the duration `php video.php fetch` reports).
+Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
+
+### setup-server.sh — the web host
+Onboards a fresh Ubuntu / Debian / Raspberry Pi OS machine as the signage **server** (Apache, PHP, permissions, hardening):
+
+    sudo bash setup-server.sh
+    sudo bash setup-server.sh --webroot /var/www/html/boards --with-ytdlp --with-video-cron
+    sudo bash setup-server.sh --clone https://github.com/you/signage-suite.git
+    sudo bash setup-server.sh --domain signage.lan          # dedicated vhost
+    sudo bash setup-server.sh --nginx                       # nginx snippet instead of Apache
+
+What it installs and configures:
+- Apache (or an nginx snippet), PHP 8.x with curl, xml, mbstring, and gd, plus ffmpeg
+- Optional **yt-dlp** via pipx (`--with-ytdlp`) and a weekly **`php video.php fetch`** cron (`--with-video-cron`)
+- Deploys board files to the web root, creates `config/`, `cache/`, `videos/`, and `slides/` owned by `www-data`
+- Blocks direct HTTP access to `config/`, `cache/`, and `slides/` (Apache `DirectoryMatch` or nginx `location`)
+- Generates `slide_backgrounds/` PNGs if missing
+
+Re-run safely after pulling updates (preserves your config and uploads):
+
+    sudo bash setup-server.sh --skip-apt --source /var/www/html/boards
 
 ### setup-kiosk.sh — the display device
 Turns a fresh Raspberry Pi OS Lite (Bookworm) install into the kiosk:
@@ -140,7 +198,7 @@ It installs cage (minimal Wayland compositor) + Chromium, creates a systemd serv
 After setup the Pi never needs touching for content: everything is managed on the server through admin.php. The Pi only needs occasional `apt full-upgrade`.
 
 ### player.php — PWA player (phones, tablets, testing)
-`board.php` is fixed at 1920×1080 by design; `player.php` wraps it in a stage that scales and letterboxes to fit **any** viewport, so you can test rotations on a laptop window, tablet, or phone. Same screen selection: `player.php?screen=garage`.
+`board.php` is fixed at 1920×1080 by design; `player.php` wraps it in a stage that scales and letterboxes to fit **any** viewport, so you can test rotations on a laptop window, tablet, or phone. Same screen selection: `player.php?screen=garage`. The alert ticker is rendered in the outer document (not inside the scaled iframe), with live polling so alerts appear without reloading the rotation.
 
 - **Install it:** open it in a mobile browser and Add to Home Screen / Install — it launches fullscreen landscape, requests a screen wake lock so the display stays on, and a tap toggles fullscreen in a normal tab. (Install and wake lock require HTTPS — put it behind your reverse proxy or Cloudflare Tunnel; plain HTTP still works fine as a regular page.)
 - The service worker is deliberately minimal: nothing dynamic is cached (boards are live data), it only provides installability plus an auto-retrying "server unreachable" screen when the network drops.
@@ -160,4 +218,5 @@ Every board works unchanged as an Anthias web asset (`lake.php`, `rss.php?feed=a
 
 ## General notes
 - Keep all files in one folder so they share `config/` and `cache/`.
+- Runtime directories created on first use: `config/` (settings + admin password hash), `cache/` (API responses), `videos/` (yt-dlp downloads), `slides/` (uploaded and creator-generated slide images), `photos/` (rotator uploads). `slide_backgrounds/` ships in the repo for the slide creator themes.
 - Every board shows a small diagnostic stamp bottom-right when an API call fails (HTTP code or curl error) while continuing to render from cache.

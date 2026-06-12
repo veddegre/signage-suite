@@ -1,0 +1,431 @@
+#!/usr/bin/env bash
+#
+# setup-server.sh — onboard a fresh Ubuntu / Debian / Raspberry Pi OS box as the
+# Home Signage Boards web server.
+#
+# Run once as root from the repo (or pass --source / --clone):
+#
+#     sudo bash setup-server.sh
+#     sudo bash setup-server.sh --webroot /var/www/html/boards --with-ytdlp --with-video-cron
+#     sudo bash setup-server.sh --clone https://github.com/you/signage-suite.git
+#
+# What it does:
+#   * Installs Apache + PHP 8.x (curl, xml, mbstring, gd) and ffmpeg
+#   * Optionally installs yt-dlp via pipx (recommended for video.php)
+#   * Deploys board files to the web root
+#   * Creates config/, cache/, videos/, slides/, photos/ with correct ownership
+#   * Blocks direct HTTP access to config/, cache/, slides/, and photos/
+#   * Generates slide_backgrounds/ PNGs (requires php-gd)
+#   * Optionally adds a weekly cron job for `php video.php fetch`
+#
+# Pair with setup-kiosk.sh on display devices — point each Pi at board.php.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+WEBROOT="/var/www/html/boards"
+SOURCE=""
+CLONE_URL=""
+DOMAIN=""
+WEB_USER="www-data"
+WEBSERVER="apache"
+SKIP_APT=0
+WITH_YTDLP=0
+WITH_VIDEO_CRON=0
+URL_BASE=""
+
+log()  { printf '==> %s\n' "$*"; }
+warn() { printf '!!> %s\n' "$*" >&2; }
+die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'
+  cat <<'EOF'
+
+Options:
+  -w, --webroot PATH       Install directory (default: /var/www/html/boards)
+  -s, --source PATH        Copy from this tree (default: script directory)
+      --clone URL          git clone into webroot parent, then install
+  -d, --domain NAME        Apache ServerName (optional, e.g. signage.lan)
+      --nginx              Write nginx snippet instead of Apache config
+      --skip-apt           Skip apt package installation (re-run / config only)
+      --with-ytdlp         Install yt-dlp via pipx (recommended for video.php)
+      --with-video-cron    Weekly cron: php video.php fetch (needs yt-dlp)
+      --url-base URL         Override printed base URL (default: auto-detect)
+  -h, --help               Show this help
+
+Examples:
+  sudo bash setup-server.sh
+  sudo bash setup-server.sh -w /var/www/signage --with-ytdlp --with-video-cron
+  sudo bash setup-server.sh --nginx --webroot /var/www/html/boards
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -w|--webroot)       WEBROOT="${2:?}"; shift 2 ;;
+    -s|--source)        SOURCE="${2:?}"; shift 2 ;;
+    --clone)            CLONE_URL="${2:?}"; shift 2 ;;
+    -d|--domain)        DOMAIN="${2:?}"; shift 2 ;;
+    --nginx)            WEBSERVER="nginx"; shift ;;
+    --skip-apt)         SKIP_APT=1; shift ;;
+    --with-ytdlp)       WITH_YTDLP=1; shift ;;
+    --with-video-cron)  WITH_VIDEO_CRON=1; shift ;;
+    --url-base)         URL_BASE="${2:?}"; shift 2 ;;
+    -h|--help)          usage; exit 0 ;;
+    *) die "Unknown option: $1 (try --help)" ;;
+  esac
+done
+
+[[ $EUID -eq 0 ]] || die "Run with sudo: sudo bash setup-server.sh"
+
+if [[ -n "$CLONE_URL" && -n "$SOURCE" ]]; then
+  die "Use either --source or --clone, not both"
+fi
+if [[ $WITH_VIDEO_CRON -eq 1 && $WITH_YTDLP -eq 0 ]]; then
+  warn "--with-video-cron requested without --with-ytdlp; cron will only work if yt-dlp is already installed"
+fi
+
+SOURCE="${SOURCE:-$SCRIPT_DIR}"
+WEBROOT="$(realpath -m "$WEBROOT")"
+
+detect_os() {
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck source=/dev/null
+    . /etc/os-release
+    case "${ID:-}${ID_LIKE:-}" in
+      *debian*|*ubuntu*|*raspbian*) return 0 ;;
+      *) warn "Untested OS (${PRETTY_NAME:-unknown}) — continuing anyway" ;;
+    esac
+  fi
+}
+
+install_packages() {
+  [[ $SKIP_APT -eq 1 ]] && { log "Skipping apt (--skip-apt)"; return; }
+
+  log "Updating apt indexes"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -q
+
+  log "Installing Apache, PHP, and ffmpeg"
+  apt-get install -y -q \
+    apache2 libapache2-mod-php \
+    php-cli php-curl php-xml php-mbstring php-gd \
+    ffmpeg \
+    rsync git curl
+
+  if [[ "$WEBSERVER" == "nginx" ]]; then
+    apt-get install -y -q nginx php-fpm
+  fi
+
+  if [[ $WITH_YTDLP -eq 1 ]]; then
+    log "Installing yt-dlp via pipx"
+    apt-get install -y -q pipx
+    pipx ensurepath || true
+    if ! command -v yt-dlp >/dev/null 2>&1; then
+      pipx install yt-dlp --force || pipx install yt-dlp
+    fi
+    # Make yt-dlp available to cron / www-data shells
+    if [[ -x /root/.local/bin/yt-dlp && ! -e /usr/local/bin/yt-dlp ]]; then
+      ln -sf /root/.local/bin/yt-dlp /usr/local/bin/yt-dlp
+    fi
+  fi
+}
+
+deploy_files() {
+  if [[ -n "$CLONE_URL" ]]; then
+    local parent dest
+    parent="$(dirname "$WEBROOT")"
+    dest="$(basename "$WEBROOT")"
+    mkdir -p "$parent"
+    if [[ -d "$WEBROOT/.git" ]]; then
+      log "Updating existing git checkout in $WEBROOT"
+      git -C "$WEBROOT" pull --ff-only
+    elif [[ -d "$WEBROOT" && -n "$(ls -A "$WEBROOT" 2>/dev/null)" ]]; then
+      die "$WEBROOT exists and is not empty — move it aside or pick another --webroot"
+    else
+      log "Cloning $CLONE_URL → $WEBROOT"
+      git clone "$CLONE_URL" "$WEBROOT"
+    fi
+    return
+  fi
+
+  [[ -d "$SOURCE" ]] || die "Source directory not found: $SOURCE"
+  if [[ ! -f "$SOURCE/config.php" || ! -f "$SOURCE/admin.php" ]]; then
+    die "Source does not look like the signage suite ($SOURCE)"
+  fi
+
+  log "Deploying files from $SOURCE → $WEBROOT"
+  mkdir -p "$WEBROOT"
+  rsync -a \
+    --exclude '.git/' \
+    --exclude '.DS_Store' \
+    --exclude 'config/' \
+    --exclude 'cache/' \
+    --exclude 'videos/' \
+    --exclude 'slides/' \
+    --exclude 'photos/' \
+    "$SOURCE/" "$WEBROOT/"
+}
+
+write_deny_htaccess() {
+  local dir="$1"
+  mkdir -p "$dir"
+  if [[ ! -f "$dir/.htaccess" ]]; then
+    printf 'Require all denied\n' > "$dir/.htaccess"
+  fi
+}
+
+setup_directories() {
+  log "Creating runtime directories"
+  for d in config cache videos slides photos; do
+    write_deny_htaccess "$WEBROOT/$d"
+  done
+
+  # slide_backgrounds/ ships in git; ensure it exists and is readable
+  mkdir -p "$WEBROOT/slide_backgrounds"
+
+  log "Setting ownership ($WEB_USER) on writable paths"
+  chown -R "$WEB_USER:$WEB_USER" \
+    "$WEBROOT/config" \
+    "$WEBROOT/cache" \
+    "$WEBROOT/videos" \
+    "$WEBROOT/slides" \
+    "$WEBROOT/photos"
+
+  chmod 775 "$WEBROOT/config" "$WEBROOT/cache" "$WEBROOT/videos" "$WEBROOT/slides" "$WEBROOT/photos"
+}
+
+setup_apache() {
+  [[ "$WEBSERVER" == "apache" ]] || return
+
+  local conf="/etc/apache2/conf-available/signage-boards.conf"
+  local escaped
+  escaped="$(printf '%s' "$WEBROOT" | sed 's/[\/&]/\\&/g')"
+
+  log "Writing Apache hardening config → $conf"
+  cat > "$conf" <<EOF
+# Home Signage Boards — generated by setup-server.sh
+# Blocks direct download of secrets, cache, uploaded slides, and rotator photos.
+# Verify: curl -I http://HOST$(url_path)/config/settings.json  → 403
+
+<Directory "$WEBROOT">
+    Options -Indexes +FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+
+<DirectoryMatch "^${escaped}/(config|cache|slides|photos)/">
+    Require all denied
+</DirectoryMatch>
+EOF
+
+  if [[ -n "$DOMAIN" ]]; then
+    local vhost="/etc/apache2/sites-available/signage.conf"
+    log "Writing Apache vhost → $vhost (ServerName $DOMAIN)"
+    cat > "$vhost" <<EOF
+<VirtualHost *:80>
+    ServerName $DOMAIN
+    DocumentRoot $WEBROOT
+
+    ErrorLog \${APACHE_LOG_DIR}/signage-error.log
+    CustomLog \${APACHE_LOG_DIR}/signage-access.log combined
+</VirtualHost>
+EOF
+    a2ensite signage.conf >/dev/null 2>&1 || true
+    a2dissite 000-default.conf >/dev/null 2>&1 || true
+  fi
+
+  a2enconf signage-boards >/dev/null
+  a2enmod rewrite >/dev/null 2>&1 || true
+
+  log "Testing Apache configuration"
+  apache2ctl configtest
+  systemctl enable apache2 >/dev/null 2>&1 || true
+  systemctl reload apache2
+}
+
+setup_nginx() {
+  [[ "$WEBSERVER" == "nginx" ]] || return
+
+  local snippet="/etc/nginx/snippets/signage-boards.conf"
+  local loc_path
+  loc_path="$(url_path)"
+
+  log "Writing nginx snippet → $snippet"
+  cat > "$snippet" <<EOF
+# Home Signage Boards — generated by setup-server.sh
+# Include inside your server { } block, then set root/index as needed.
+
+location ^~ ${loc_path}/config/ { deny all; return 403; }
+location ^~ ${loc_path}/cache/  { deny all; return 403; }
+location ^~ ${loc_path}/slides/ { deny all; return 403; }
+location ^~ ${loc_path}/photos/ { deny all; return 403; }
+
+location ${loc_path}/ {
+    alias $WEBROOT/;
+    index index.php board.php;
+    try_files \$uri \$uri/ =404;
+}
+
+location ~ ^${loc_path}/(.+\.php)$ {
+    alias $WEBROOT/\$1;
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/run/php/php-fpm.sock;
+}
+EOF
+
+  warn "nginx: add 'include snippets/signage-boards.conf;' to your server block"
+  warn "nginx: adjust fastcgi_pass if your PHP-FPM socket path differs"
+  nginx -t
+  systemctl enable nginx >/dev/null 2>&1 || true
+  systemctl reload nginx
+}
+
+url_path() {
+  # Web path when installed under Apache's default /var/www/html tree.
+  local html="/var/www/html"
+  html="$(realpath -m "$html")"
+  if [[ "$WEBROOT" == "$html" ]]; then
+    echo ""
+    return
+  fi
+  if [[ "$WEBROOT" == "$html/"* ]]; then
+    echo "/${WEBROOT#"$html/"}"
+    return
+  fi
+  echo ""
+}
+
+guess_url_base() {
+  if [[ -n "$URL_BASE" ]]; then
+    echo "$URL_BASE"
+    return
+  fi
+  local host path
+  host="$(hostname -f 2>/dev/null || hostname)"
+  path="$(url_path)"
+  if [[ -n "$DOMAIN" ]]; then
+    host="$DOMAIN"
+  fi
+  echo "http://${host}${path}"
+}
+
+post_install_php() {
+  log "Checking PHP"
+  php -v | head -1
+  for ext in curl xml mbstring gd; do
+    php -m | grep -qi "^${ext}$" || warn "PHP extension missing: $ext"
+  done
+
+  if php -m | grep -qi '^gd$'; then
+    log "Generating slide background PNGs (if missing)"
+    php -r "require '$WEBROOT/slides_lib.php'; slide_background_ensure_assets();" \
+      && chown -R root:"$WEB_USER" "$WEBROOT/slide_backgrounds" \
+      && chmod 755 "$WEBROOT/slide_backgrounds" \
+      && find "$WEBROOT/slide_backgrounds" -type f -exec chmod 644 {} \;
+  else
+    warn "php-gd not loaded — slide creator backgrounds will generate on first admin visit"
+  fi
+}
+
+setup_video_cron() {
+  [[ $WITH_VIDEO_CRON -eq 1 ]] || return
+
+  local cron_file="/etc/cron.d/signage-video-fetch"
+  local ytdlp
+  ytdlp="$(command -v yt-dlp || true)"
+  [[ -n "$ytdlp" ]] || warn "yt-dlp not found — skipping video fetch cron"
+
+  log "Installing weekly video fetch cron → $cron_file"
+  cat > "$cron_file" <<EOF
+# Home Signage Boards — refresh YouTube downloads (Mondays 04:15)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+15 4 * * 1 root cd $WEBROOT && /usr/bin/php video.php fetch >> /var/log/signage-video-fetch.log 2>&1
+EOF
+  chmod 644 "$cron_file"
+}
+
+verify_protection() {
+  [[ "$WEBSERVER" == "apache" ]] || return
+
+  local base path
+  base="$(guess_url_base)"
+  path="${base%/}/config/settings.json"
+  log "Verifying config/ is blocked (expect HTTP 403)"
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' "$path" 2>/dev/null || echo "000")"
+  case "$code" in
+    403) log "OK — config/settings.json returned 403" ;;
+    404) log "OK — config/settings.json returned 404 (directory empty)" ;;
+    000) warn "Could not curl $path — verify manually after DNS/firewall setup" ;;
+    *)   warn "Expected 403 for config/settings.json, got HTTP $code — check Apache config" ;;
+  esac
+}
+
+print_summary() {
+  local base board admin player
+  base="$(guess_url_base)"
+  board="${base%/}/board.php"
+  admin="${base%/}/admin.php"
+  player="${base%/}/player.php"
+
+  cat <<EOF
+
+============================================================
+Home Signage Boards — server setup complete
+============================================================
+Web root:     $WEBROOT
+Web server:   $WEBSERVER
+Base URL:     $base
+
+Next steps:
+  1. Open admin and create your password:
+       $admin
+  2. Configure boards (API keys, rotation, slides, etc.) in admin.
+  3. Preview the main rotation:
+       $board
+  4. Optional mobile / test player:
+       $player
+
+Kiosk displays (Pi / mini PC):
+  sudo bash setup-kiosk.sh "$board"
+
+Security checklist:
+  • config/settings.json holds API tokens — keep admin on your LAN or behind VPN
+  • Confirm blocked paths return 403:
+      curl -I ${base%/}/config/settings.json
+  • For HTTPS, put Caddy/nginx/Certbot or Cloudflare Tunnel in front
+
+Writable directories (owned by $WEB_USER):
+  config/  cache/  videos/  slides/  photos/
+
+Logs:
+  Apache:  /var/log/apache2/signage-*.log (if --domain set)
+  Video:   /var/log/signage-video-fetch.log (if --with-video-cron)
+
+Re-run this script safely after pulling updates:
+  sudo bash setup-server.sh --skip-apt --source $WEBROOT
+============================================================
+EOF
+}
+
+main() {
+  detect_os
+  install_packages
+  deploy_files
+  setup_directories
+  if [[ "$WEBSERVER" == "nginx" ]]; then
+    setup_nginx
+  else
+    setup_apache
+  fi
+  post_install_php
+  setup_video_cron
+  verify_protection
+  print_summary
+}
+
+main

@@ -12,6 +12,8 @@
  *   json   — raw JSON textarea with validation (for complex structures)
  */
 
+require_once __DIR__ . '/config.php';
+
 /** One pages-editor field per configured screen. */
 function rotation_page_fields(): array
 {
@@ -97,13 +99,17 @@ function admin_schema(): array
             ['key' => 'ADGUARD_USER', 'label' => 'AdGuard user', 'type' => 'text'],
             ['key' => 'ADGUARD_PASS', 'label' => 'AdGuard password', 'type' => 'password'],
             ['key' => 'SERVICES', 'label' => 'Service checks', 'type' => 'rows', 'keyed' => true, 'scalar' => true,
-             'columns' => [['key' => '_key', 'label' => 'Name'], ['key' => '_value', 'label' => 'URL']]],
+             'columns' => [
+                 ['key' => '_key', 'label' => 'Name'],
+                 ['key' => '_value', 'label' => 'URL'],
+             ],
              'help' => 'HTTP(S) endpoints to ping for up/down and response time. Leave empty for none.'],
             ['key' => 'LATENCY_TARGET', 'label' => 'WAN latency target', 'type' => 'text'],
             $tz, $ttl(),
         ]],
         'rotator' => ['title' => 'Photo Rotator', 'file' => 'rotator.php', 'fields' => [
-            ['key' => 'PHOTO_DIR', 'label' => 'Photo directory', 'type' => 'text', 'help' => 'Server path of JPG/PNG files'],
+            ['key' => 'PHOTO_DIR', 'label' => 'Photo directory', 'type' => 'text',
+             'help' => 'Default ./photos — must be writable by the web server. Upload in admin or copy files manually.'],
             ['key' => 'BRAND', 'label' => 'Brand wordmark', 'type' => 'text'],
             ['key' => 'INTERVAL_SEC', 'label' => 'Seconds per photo', 'type' => 'number'],
             ['key' => 'SHUFFLE', 'label' => 'Shuffle order', 'type' => 'bool', 'default' => true],
@@ -135,25 +141,32 @@ function admin_schema(): array
         ]],
         'family' => ['title' => 'Family Board', 'file' => 'family.php', 'fields' => [
             ['key' => 'ICS_FEEDS', 'label' => 'Calendar feeds (ICS)', 'type' => 'rows',
-             'columns' => [['key' => 'name', 'label' => 'Name'],
-                           ['key' => 'url', 'label' => 'Secret iCal URL', 'wide' => true],
-                           ['key' => 'color', 'label' => 'Color', 'placeholder' => '#ffb347']]],
+             'columns' => [
+                 ['key' => 'name', 'label' => 'Name'],
+                 ['key' => 'url', 'label' => 'Secret iCal URL', 'wide' => true],
+                 ['key' => 'color', 'label' => 'Color', 'placeholder' => '#ffb347'],
+             ]],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
              'help' => 'Leave as (default) to hide — e.g. apartment living'],
             ['key' => 'RECYCLE_ANCHOR', 'label' => 'Recycle anchor date', 'type' => 'text',
              'help' => 'Only used when trash day is set. Any past pickup date (YYYY-MM-DD); empty disables biweekly recycle'],
             ['key' => 'COUNTDOWNS', 'label' => 'Countdowns', 'type' => 'rows', 'keyed' => true, 'scalar' => true,
-             'columns' => [['key' => '_key', 'label' => 'Label'], ['key' => '_value', 'label' => 'Date (YYYY-MM-DD)']]],
+             'columns' => [
+                 ['key' => '_key', 'label' => 'Label'],
+                 ['key' => '_value', 'label' => 'Date (YYYY-MM-DD)'],
+             ]],
             $tz, $ttl(),
         ]],
         'rss' => ['title' => 'RSS Stories', 'file' => 'rss.php', 'fields' => [
             ['key' => 'FEEDS', 'label' => 'Feeds', 'type' => 'rows', 'keyed' => true,
-             'columns' => [['key' => '_key', 'label' => 'Key', 'help' => 'used in ?feed='],
-                           ['key' => 'name', 'label' => 'Display name'],
-                           ['key' => 'url', 'label' => 'Feed URL', 'wide' => true],
-                           ['key' => 'stories', 'label' => '# stories', 'cast' => 'int'],
-                           ['key' => 'dwell', 'label' => 'Secs/story', 'cast' => 'int']]],
+             'columns' => [
+                 ['key' => '_key', 'label' => 'Key', 'help' => 'used in ?feed='],
+                 ['key' => 'name', 'label' => 'Display name'],
+                 ['key' => 'url', 'label' => 'Feed URL', 'wide' => true],
+                 ['key' => 'stories', 'label' => '# stories', 'cast' => 'int'],
+                 ['key' => 'dwell', 'label' => 'Secs/story', 'cast' => 'int'],
+             ]],
             ['key' => 'DEFAULT_STORIES', 'label' => 'Default stories per cycle', 'type' => 'number'],
             ['key' => 'DEFAULT_DWELL', 'label' => 'Default seconds per story', 'type' => 'number'],
             ['key' => 'SYNOPSIS_CHARS', 'label' => 'Synopsis length (chars)', 'type' => 'number'],
@@ -175,11 +188,13 @@ function admin_schema(): array
         ]],
         'grafana' => ['title' => 'Grafana', 'file' => 'grafana.php', 'fields' => [
             ['key' => 'DASHBOARDS', 'label' => 'Dashboards', 'type' => 'rows', 'keyed' => true,
-             'columns' => [['key' => '_key', 'label' => 'Key', 'help' => 'used in ?d='],
-                           ['key' => 'title', 'label' => 'Title'],
-                           ['key' => 'url', 'label' => 'Dashboard URL', 'wide' => true],
-                           ['key' => 'refresh', 'label' => 'Refresh', 'placeholder' => '30s'],
-                           ['key' => 'params', 'label' => 'Extra params']]],
+             'columns' => [
+                 ['key' => '_key', 'label' => 'Key', 'help' => 'used in ?d='],
+                 ['key' => 'title', 'label' => 'Title'],
+                 ['key' => 'url', 'label' => 'Dashboard URL', 'wide' => true],
+                 ['key' => 'refresh', 'label' => 'Refresh', 'placeholder' => '30s'],
+                 ['key' => 'params', 'label' => 'Extra params'],
+             ]],
             ['key' => 'GRAFANA_THEME', 'label' => 'Theme', 'type' => 'select', 'options' => ['dark', 'light']],
             $tz,
         ]],
@@ -196,10 +211,12 @@ function admin_schema(): array
         ]],
         'splunkdash' => ['title' => 'Splunk Published', 'file' => 'splunkdash.php', 'fields' => [
             ['key' => 'DASHBOARDS', 'label' => 'Published dashboards', 'type' => 'rows', 'keyed' => true,
-             'columns' => [['key' => '_key', 'label' => 'Key', 'help' => 'used in ?d='],
-                           ['key' => 'title', 'label' => 'Title'],
-                           ['key' => 'url', 'label' => 'Published URL', 'wide' => true],
-                           ['key' => 'reload', 'label' => 'Reload (s)', 'cast' => 'int']]],
+             'columns' => [
+                 ['key' => '_key', 'label' => 'Key', 'help' => 'used in ?d='],
+                 ['key' => 'title', 'label' => 'Title'],
+                 ['key' => 'url', 'label' => 'Published URL', 'wide' => true],
+                 ['key' => 'reload', 'label' => 'Reload (s)', 'cast' => 'int'],
+             ]],
             ['key' => 'DEFAULT_RELOAD', 'label' => 'Default iframe reload (s)', 'type' => 'number', 'help' => '0 disables'],
             $tz,
         ]],

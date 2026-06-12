@@ -4,12 +4,14 @@
  * Crossfading slideshow from a local directory, with optional camera EXIF
  * captions. Photos can live outside the webroot; this script serves them.
  *
- * Setup: point PHOTO_DIR at a folder of JPG/PNG images.
+ * Setup: upload in admin or point PHOTO_DIR at a folder of JPG/PNG images (default ./photos).
  */
 
 require_once __DIR__ . '/config.php';
 
-define('PHOTO_DIR', cfg('rotator.PHOTO_DIR', '/srv/photos/signage'));
+require_once __DIR__ . '/rotator_lib.php';
+
+define('PHOTO_DIR', rotator_photo_dir());
 define('BRAND', cfg('rotator.BRAND', 'VEDDERS VISUALS'));
 define('INTERVAL_SEC', cfg('rotator.INTERVAL_SEC', 18));
 define('SHUFFLE', cfg('rotator.SHUFFLE', true));
@@ -18,23 +20,12 @@ define('TIMEZONE', cfg('rotator.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
 
-function list_photos(): array
-{
-    $out = [];
-    if (!is_dir(PHOTO_DIR)) return $out;
-    foreach (scandir(PHOTO_DIR) as $f) {
-        if (preg_match('/\.(jpe?g|png)$/i', $f)) $out[] = $f;
-    }
-    sort($out);
-    return $out;
-}
-
-$photos = list_photos();
+$photos = rotator_list_photos(PHOTO_DIR);
 
 // ── Image + metadata endpoints (filenames validated against the listing) ────
 if (isset($_GET['img']) || isset($_GET['meta'])) {
-    $name = basename((string)($_GET['img'] ?? $_GET['meta']));
-    if (!in_array($name, $photos, true)) { http_response_code(404); exit; }
+    $name = rotator_safe_filename(basename((string)($_GET['img'] ?? $_GET['meta'] ?? '')));
+    if ($name === null || !in_array($name, $photos, true)) { http_response_code(404); exit; }
     $path = PHOTO_DIR . '/' . $name;
 
     if (isset($_GET['meta'])) {
@@ -108,7 +99,7 @@ if (SHUFFLE) shuffle($photos);
 <?php if (!$photos): ?>
   <div class="empty">
     <h1><?= htmlspecialchars(BRAND) ?></h1>
-    <p>No images found in <code><?= htmlspecialchars(PHOTO_DIR) ?></code> — drop in some JPGs and reload.</p>
+    <p>No images yet — upload JPGs in <code>admin.php → Photo Rotator</code> or add files to <code><?= htmlspecialchars(PHOTO_DIR) ?></code>.</p>
   </div>
 <?php else: ?>
   <div class="layer" id="layerA"></div>
