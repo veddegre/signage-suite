@@ -58,27 +58,44 @@ $obs = null;
 $raw = cached_get('https://www.ndbc.noaa.gov/data/realtime2/' . NDBC_STATION . '.txt', 'ndbc');
 if ($raw !== null) {
     $lines = preg_split('/\R/', trim($raw));
-    // line0 = column names, line1 = units, line2+ = newest-first observations
+    // line0 = column names, line1 = units, line2+ = newest-first observations.
+    // Buoys report met data (wind/temps) more often than wave spectra, so the
+    // newest row frequently has MM in WVHT/DPD while a slightly older row has
+    // them. Take each field's freshest non-MM value within a 4-hour window.
     if (count($lines) >= 3) {
-        $cols = preg_split('/\s+/', ltrim($lines[0], "# "));
-        for ($i = 2; $i < min(count($lines), 8); $i++) {           // first row with usable data
-            $vals = preg_split('/\s+/', trim($lines[$i]));
-            if (count($vals) < count($cols)) continue;
-            $row = array_combine($cols, array_slice($vals, 0, count($cols)));
-            $get = fn($k) => (isset($row[$k]) && $row[$k] !== 'MM') ? (float)$row[$k] : null;
+        $cols   = preg_split('/\s+/', ltrim($lines[0], "# "));
+        $want   = ['WVHT','DPD','WTMP','ATMP','WSPD','GST','WDIR','PRES'];
+        $vals   = [];           // field => freshest numeric value
+        $vtimes = [];           // field => timestamp of that value
+        $newest = null;
+        for ($i = 2; $i < min(count($lines), 40); $i++) {
+            $parts = preg_split('/\s+/', trim($lines[$i]));
+            if (count($parts) < count($cols)) continue;
+            $row = array_combine($cols, array_slice($parts, 0, count($cols)));
             $ts  = gmmktime((int)$row['hh'], (int)$row['mm'], 0, (int)$row['MM'], (int)$row['DD'], (int)$row['YY']);
+            if ($newest === null) $newest = $ts;
+            if ($newest - $ts > 4 * 3600) break;                    // too old to substitute
+            foreach ($want as $f) {
+                if (!isset($vals[$f]) && isset($row[$f]) && $row[$f] !== 'MM') {
+                    $vals[$f] = (float)$row[$f];
+                    $vtimes[$f] = $ts;
+                }
+            }
+            if (count($vals) === count($want)) break;
+        }
+        if ($newest !== null) {
             $obs = [
-                'time'  => $ts,
-                'wvht'  => $get('WVHT') !== null ? m_to_ft($get('WVHT')) : null,
-                'dpd'   => $get('DPD'),
-                'wtmp'  => $get('WTMP') !== null ? c_to_f($get('WTMP')) : null,
-                'atmp'  => $get('ATMP') !== null ? c_to_f($get('ATMP')) : null,
-                'wspd'  => $get('WSPD') !== null ? ms_to_mph($get('WSPD')) : null,
-                'gst'   => $get('GST')  !== null ? ms_to_mph($get('GST'))  : null,
-                'wdir'  => $get('WDIR'),
-                'pres'  => $get('PRES') !== null ? $get('PRES') * 0.02953 : null,
+                'time'      => $newest,
+                'wvht'      => isset($vals['WVHT']) ? m_to_ft($vals['WVHT']) : null,
+                'wvht_time' => $vtimes['WVHT'] ?? null,
+                'dpd'       => $vals['DPD'] ?? null,
+                'wtmp'      => isset($vals['WTMP']) ? c_to_f($vals['WTMP']) : null,
+                'atmp'      => isset($vals['ATMP']) ? c_to_f($vals['ATMP']) : null,
+                'wspd'      => isset($vals['WSPD']) ? ms_to_mph($vals['WSPD']) : null,
+                'gst'       => isset($vals['GST'])  ? ms_to_mph($vals['GST'])  : null,
+                'wdir'      => $vals['WDIR'] ?? null,
+                'pres'      => isset($vals['PRES']) ? $vals['PRES'] * 0.02953 : null,
             ];
-            break;
         }
     }
 }
@@ -196,7 +213,14 @@ $sun = date_sun_info(time(), LAT, LON);
     <div class="label">Wave Height &middot; <?= h(STATION_NAME) ?></div>
     <?php if ($buoyOnline): ?>
       <div class="big"><?= $obs['wvht'] !== null ? number_format($obs['wvht'], 1) : '—' ?><small> ft</small></div>
-      <div class="period"><?= $obs['dpd'] !== null ? 'Dominant period ' . number_format($obs['dpd'], 0) . ' s' : '' ?></div>
+      <div class="period"><?php
+        $bits = [];
+        if ($obs['dpd'] !== null) $bits[] = 'Dominant period ' . number_format($obs['dpd'], 0) . ' s';
+        if ($obs['wvht'] !== null && $obs['wvht_time'] !== null && ($obs['time'] - $obs['wvht_time']) > 1800) {
+            $bits[] = 'wave obs ' . date('g:i A', $obs['wvht_time']);
+        }
+        echo h(implode(' · ', $bits));
+      ?></div>
       <?php if ($risk): ?>
         <div class="risk">
           <span class="pill" style="background:<?= $risk[1] ?>"><?= $risk[0] ?> RISK</span>
