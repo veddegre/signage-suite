@@ -998,11 +998,14 @@ function admin_field(array $f, $val, string $board): void
                 <?php endif; ?>
               </div>
               <div>Deno (JS runtime):
-                <?php if ($videoYtdlpSupport['deno']): ?>
-                  <span class="pill ok">installed</span>
+                <?php if ($videoYtdlpSupport['deno_ok'] ?? false): ?>
+                  <span class="pill ok"><?= h($videoYtdlpSupport['deno_version'] ?? 'installed') ?></span>
                   <?php if (!empty($videoYtdlpSupport['deno_path'])): ?>
                     <code><?= h($videoYtdlpSupport['deno_path']) ?></code>
                   <?php endif; ?>
+                <?php elseif ($videoYtdlpSupport['deno'] ?? false): ?>
+                  <span class="pill warn">too old</span>
+                  <span class="help"> — need <?= h(video_ytdlp_deno_min_version()) ?>+ (have <?= h($videoYtdlpSupport['deno_version'] ?? '?') ?>); upgrade deno</span>
                 <?php else: ?>
                   <span class="pill warn">missing</span>
                   — run <code>setup-server.sh</code> or install to <code>/usr/local/bin/deno</code>
@@ -1011,6 +1014,7 @@ function admin_field(array $f, $val, string $board): void
               <div>YouTube cookies:
                 <?php if ($videoYtdlpSupport['cookies']): ?>
                   <span class="pill ok">found</span>
+                  (<?= number_format((int)($videoYtdlpSupport['cookies_bytes'] ?? 0)) ?> bytes)
                 <?php else: ?>
                   <span class="pill bad">missing</span>
                   — export to <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>

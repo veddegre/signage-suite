@@ -135,8 +135,8 @@ install_packages() {
     if [[ -x /root/.local/bin/yt-dlp && ! -e /usr/local/bin/yt-dlp ]]; then
       ln -sf /root/.local/bin/yt-dlp /usr/local/bin/yt-dlp
     fi
-    if ! command -v deno >/dev/null 2>&1; then
-      log "Installing deno (yt-dlp JavaScript runtime for YouTube)"
+    if ! command -v deno >/dev/null 2>&1 || ! deno --version 2>/dev/null | awk -F. '$1<2 || ($1==2 && $2<3){exit 1}'; then
+      log "Installing/upgrading deno (yt-dlp needs 2.3.0+ for YouTube EJS)"
       curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
     fi
     if [[ -x /usr/local/bin/deno && ! -e /usr/bin/deno ]]; then
@@ -194,7 +194,7 @@ setup_directories() {
   for d in config cache videos slides photos bin; do
     write_deny_htaccess "$WEBROOT/$d"
   done
-  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/cache/yt-dlp"
+  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/cache/yt-dlp/deno"
 
   # slide_backgrounds/ ships in git; ensure it exists and is readable
   mkdir -p "$WEBROOT/slide_backgrounds"

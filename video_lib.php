@@ -200,6 +200,46 @@ function video_ytdlp_cache_dir(): ?string
     return is_writable($dir) ? $dir : null;
 }
 
+/** Minimum deno for yt-dlp EJS (https://github.com/yt-dlp/yt-dlp/wiki/EJS). */
+function video_ytdlp_deno_min_version(): string
+{
+    return '2.3.0';
+}
+
+function video_ytdlp_deno_version(?string $path = null): ?string
+{
+    $path = $path ?? video_ytdlp_find_executable('deno');
+    if ($path === null) {
+        return null;
+    }
+    $out = trim((string)@shell_exec(escapeshellarg($path) . ' --version 2>/dev/null'));
+    return $out !== '' ? $out : null;
+}
+
+function video_ytdlp_deno_ok(?string $path = null): bool
+{
+    $v = video_ytdlp_deno_version($path);
+    return $v !== null && version_compare($v, video_ytdlp_deno_min_version(), '>=');
+}
+
+/** Env vars so deno/yt-dlp caches work when PHP runs as www-data. */
+function video_ytdlp_exec_env(): string
+{
+    $cache = video_ytdlp_cache_dir();
+    if ($cache === null) {
+        return '';
+    }
+    $denoDir = $cache . '/deno';
+    if (!is_dir($denoDir)) {
+        @mkdir($denoDir, 0775, true);
+    }
+    $parts = [
+        'DENO_DIR=' . escapeshellarg($denoDir),
+        'XDG_CACHE_HOME=' . escapeshellarg($cache),
+    ];
+    return implode(' ', $parts) . ' ';
+}
+
 /** Extra yt-dlp CLI flags for YouTube (cookies + JS runtime). */
 function video_ytdlp_extra_args(): string
 {
@@ -215,13 +255,17 @@ function video_ytdlp_extra_args(): string
     $rt = video_ytdlp_js_runtime();
     if ($rt !== null) {
         $args .= ' --js-runtimes ' . escapeshellarg($rt['name'] . ':' . $rt['path']);
-        // YouTube n/signature challenges (2025+); harmless on older yt-dlp.
+        // YouTube n/signature challenges (2025+).
         $args .= ' --remote-components ejs:github';
+        if ($rt['name'] === 'deno') {
+            // Fallback if GitHub EJS assets are unreachable from the server network.
+            $args .= ' --remote-components ejs:npm';
+        }
     }
     return $args;
 }
 
-/** @return array{deno:bool,node:bool,deno_path:?string,node_path:?string,cookies:bool,cookies_path:?string} */
+/** @return array{deno:bool,deno_ok:bool,deno_version:?string,node:bool,deno_path:?string,node_path:?string,cookies:bool,cookies_bytes:int,cookies_path:?string} */
 function video_ytdlp_support_status(): array
 {
     $configured = trim((string)cfg('video.YTDLP_COOKIES_FILE', ''));
@@ -230,13 +274,22 @@ function video_ytdlp_support_status(): array
     }
     $denoPath = video_ytdlp_find_executable('deno');
     $nodePath = video_ytdlp_find_executable('node');
+    $cookiesPath = video_ytdlp_cookies_path();
+    $cookiesBytes = 0;
+    if ($cookiesPath !== null) {
+        $sz = filesize($cookiesPath);
+        $cookiesBytes = $sz !== false ? (int)$sz : 0;
+    }
     return [
         'deno' => $denoPath !== null,
+        'deno_ok' => video_ytdlp_deno_ok($denoPath),
+        'deno_version' => video_ytdlp_deno_version($denoPath),
         'node' => $nodePath !== null,
         'deno_path' => $denoPath,
         'node_path' => $nodePath,
-        'cookies' => video_ytdlp_cookies_path() !== null,
-        'cookies_path' => video_ytdlp_cookies_path() ?? $configured,
+        'cookies' => $cookiesPath !== null,
+        'cookies_bytes' => $cookiesBytes,
+        'cookies_path' => $cookiesPath ?? $configured,
     ];
 }
 
@@ -637,7 +690,7 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
 
         $emit("[{$key}] fetching {$v['youtube']}");
         $out = $dir . "/$key.%(ext)s";
-        $cmd = video_ytdlp_shell($bin)
+        $cmd = video_ytdlp_exec_env() . video_ytdlp_shell($bin)
             . video_ytdlp_extra_args()
             . ' -f ' . escapeshellarg($fmt)
             . ' --merge-output-format mp4 --no-progress --force-overwrites'
@@ -662,7 +715,7 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
             }
             if (str_contains($blob, 'Signature solving failed') || str_contains($blob, 'n challenge solving failed')
                 || str_contains($blob, 'Only images are available')) {
-                $emit("[{$key}] hint: install deno on the server (setup-server.sh) and deploy latest video_lib.php — Apache's PATH often hides /usr/local/bin/deno");
+                $emit("[{$key}] hint: need deno " . video_ytdlp_deno_min_version() . '+, fresh cookies, and writable cache/yt-dlp — or scp the .mp4 and use local file');
             }
             if (str_contains($blob, 'Sign in to confirm') || str_contains($blob, 'not a bot')) {
                 $emit("[{$key}] hint: export YouTube cookies to config/cookies/youtube.txt (see README Video Board)");
