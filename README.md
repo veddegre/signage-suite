@@ -16,13 +16,13 @@ Then open **admin.php** in a browser, create your admin password, and configure 
 
 ## Server requirements (manual install)
 
-If you prefer not to use `setup-server.sh`, you need PHP 8.1+ with curl, xml, mbstring, and gd — on Ubuntu 24.04+:
+If you prefer not to use `setup-server.sh`, you need PHP 8.1+ with curl, xml, mbstring, gd, and zip — on Ubuntu 24.04+:
 
-    sudo apt install apache2 libapache2-mod-php php-curl php-xml php-mbstring php-gd ffmpeg
+    sudo apt install apache2 libapache2-mod-php php-curl php-xml php-mbstring php-gd php-zip ffmpeg
     sudo mkdir -p /var/www/html/boards/{config,cache,videos,slides,photos}
     sudo chown -R www-data:www-data /var/www/html/boards/config /var/www/html/boards/cache /var/www/html/boards/videos /var/www/html/boards/slides /var/www/html/boards/photos
 
-(`php-gd` powers the slide creator backgrounds. `ffmpeg` is for video.php duration readouts; install `yt-dlp` via `pipx` rather than apt — the repo version goes stale and YouTube breaks it.)
+(`php-gd` powers the slide creator backgrounds. `php-zip` lets admin install deno updates on the Video Board. `ffmpeg` is for video.php duration readouts; install `yt-dlp` via `pipx` rather than apt — the repo version goes stale and YouTube breaks it.)
 
 **Important on Ubuntu's default Apache:** `/var/www` ships with `AllowOverride None`, which silently ignores the protective `.htaccess` files in `config/`, `cache/`, `slides/`, and `photos/` — leaving your API tokens in `settings.json` (and uploaded images) downloadable. Add this to your site config (e.g. `/etc/apache2/conf-available/signage.conf`, then `a2enconf signage && systemctl reload apache2`):
 

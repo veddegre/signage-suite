@@ -10,7 +10,7 @@
 #     sudo bash setup-server.sh --clone https://github.com/you/signage-suite.git
 #
 # What it does:
-#   * Installs Apache + PHP 8.x (curl, xml, mbstring, gd), ffmpeg, and yt-dlp (pipx)
+#   * Installs Apache + PHP 8.x (curl, xml, mbstring, gd, zip), ffmpeg, and yt-dlp (pipx)
 #   * Optionally skips yt-dlp (--no-ytdlp) or adds weekly video fetch cron (--with-video-cron)
 #   * Deploys board files to the web root
 #   * Creates config/, cache/, videos/, slides/, photos/ with correct ownership
@@ -359,9 +359,13 @@ guess_url_base() {
 post_install_php() {
   log "Checking PHP"
   php -v | head -1
-  for ext in curl xml mbstring gd; do
+  for ext in curl xml mbstring gd zip; do
     php -m | grep -qi "^${ext}$" || warn "PHP extension missing: $ext"
   done
+
+  if ! php -m | grep -qi '^zip$'; then
+    warn "php-zip not loaded — admin deno updates (Video Board) will not work until php-zip is installed"
+  fi
 
   if php -m | grep -qi '^gd$'; then
     log "Generating slide background PNGs (if missing)"
