@@ -2008,17 +2008,14 @@ function admin_field(array $f, $val, string $board): void
               </details>
               <?php if ($fileOk):
                 $deleteFile = slide_safe_filename($fileLabel);
-                $deleteConfirm = $deleteFile !== null
-                    ? 'Delete "' . $deleteFile . "\" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone."
-                    : '';
               ?>
               <div class="slide-card-actions">
                 <?php if ($previewUrl): ?>
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
                 <?php endif; ?>
                 <?php if ($deleteFile !== null): ?>
-                <button type="submit" form="slideDeleteForm" class="secondary" style="padding:6px 12px;font-size:13px"
-                        onclick="document.getElementById('slideDeleteFile').value=<?= json_encode($deleteFile) ?>; return confirm(<?= json_encode($deleteConfirm) ?>);">Delete file</button>
+                <button type="button" class="secondary slide-delete-btn" style="padding:6px 12px;font-size:13px"
+                        data-delete-file="<?= h($deleteFile) ?>">Delete file</button>
                 <?php endif; ?>
               </div>
               <?php endif; ?>
@@ -2068,11 +2065,9 @@ function admin_field(array $f, $val, string $board): void
                       <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
                       <?php endif; ?>
                       <?php if (!$lib['in_deck']): ?>
-                      <button type="submit" form="slideAddForm" class="secondary"
-                              onclick="document.getElementById('slideAddFile').value=<?= json_encode($lib['file']) ?>;">Add to deck</button>
+                      <button type="button" class="secondary slide-add-btn" data-add-file="<?= h($lib['file']) ?>">Add to deck</button>
                       <?php endif; ?>
-                      <button type="submit" form="slideDeleteForm" class="secondary"
-                              onclick="document.getElementById('slideDeleteFile').value=<?= json_encode($lib['file']) ?>; return confirm(<?= json_encode('Delete "' . $lib['file'] . "\" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.") ?>);">Delete</button>
+                      <button type="button" class="secondary slide-delete-btn" data-delete-file="<?= h($lib['file']) ?>">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -2567,6 +2562,45 @@ function initSlideDeck() {
     setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
   }
 }
+
+function submitSlideDelete(file) {
+  if (!file) return;
+  if (!confirm('Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.')) return;
+  const form = document.getElementById('slideDeleteForm');
+  const input = document.getElementById('slideDeleteFile');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = file;
+  form.submit();
+}
+
+function submitSlideAddToDeck(file) {
+  if (!file) return;
+  const form = document.getElementById('slideAddForm');
+  const input = document.getElementById('slideAddFile');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = file;
+  form.submit();
+}
+
+document.addEventListener('click', function (e) {
+  const delBtn = e.target.closest('.slide-delete-btn');
+  if (delBtn) {
+    e.preventDefault();
+    submitSlideDelete(delBtn.getAttribute('data-delete-file') || '');
+    return;
+  }
+  const addBtn = e.target.closest('.slide-add-btn');
+  if (addBtn) {
+    e.preventDefault();
+    submitSlideAddToDeck(addBtn.getAttribute('data-add-file') || '');
+  }
+});
 
 function addSlideCard() {
   const deck = document.getElementById('slideDeck');
