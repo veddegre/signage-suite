@@ -32,6 +32,13 @@ if (($_GET['api'] ?? '') === '1') {
     echo json_encode($runtime, JSON_UNESCAPED_SLASHES);
     exit;
 }
+
+if (($_GET['api'] ?? '') === 'cec') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo json_encode(rotation_cec_api_payload($SCREEN), JSON_UNESCAPED_SLASHES);
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

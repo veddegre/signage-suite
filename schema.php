@@ -53,11 +53,16 @@ function admin_schema(): array
             ['key' => 'SCREENS', 'label' => 'Screens', 'type' => 'rows', 'keyed' => true,
              'columns' => [['key' => '_key', 'label' => 'Key', 'help' => 'used in ?screen='],
                            ['key' => 'name', 'label' => 'Display name'],
-                           ['key' => 'shuffle', 'label' => 'Shuffle', 'type' => 'check']],
+                           ['key' => 'shuffle', 'label' => 'Shuffle', 'type' => 'check'],
+                           ['key' => 'cec_enabled', 'label' => 'CEC', 'type' => 'check'],
+                           ['key' => 'cec_off', 'label' => 'Off hr'],
+                           ['key' => 'cec_on', 'label' => 'On hr']],
              'help' => 'One row per physical display. Each kiosk points at board.php?screen=<key> '
                      . '(plain board.php = the "main" screen). Save after adding a screen and its '
-                     . 'page list appears below. A screen with no pages of its own falls back to main.'],
+                     . 'page list appears below. A screen with no pages of its own falls back to main. '
+                     . 'CEC schedules TV standby/wake on kiosks set up with setup-kiosk.sh.'],
         ], rotation_page_fields(), [
+            $tz,
             ['key' => 'FADE_MS', 'label' => 'Crossfade (ms)', 'type' => 'number'],
             ['key' => 'SETTLE_MS', 'label' => 'Settle after load (ms)', 'type' => 'number',
              'help' => 'Lets fonts/maps finish before reveal'],

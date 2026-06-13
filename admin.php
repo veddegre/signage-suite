@@ -216,6 +216,16 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             if (isset($row['shuffle'])) {
                 $entry['shuffle'] = true;
             }
+            if (isset($row['cec_enabled'])) {
+                $off = trim((string)($row['cec_off'] ?? ''));
+                $on = trim((string)($row['cec_on'] ?? ''));
+                $entry['cec'] = [
+                    'enabled' => true,
+                    'off' => $off !== '' ? max(0, min(23, (int)$off)) : 23,
+                    'on' => $on !== '' ? max(0, min(23, (int)$on)) : 6,
+                    'device' => 0,
+                ];
+            }
             $screensOut[$key] = $entry;
         }
         if ($screensOut === []) {
@@ -600,7 +610,7 @@ $navGroups = [
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'MUTED', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
-$rotationBoardKeys = ['FADE_MS', 'SETTLE_MS', 'HANG_MS'];
+$rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
 $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
@@ -1239,22 +1249,23 @@ function admin_field(array $f, $val, string $board): void
           $scrRows = [];
           if (is_array($scrVal)) {
               foreach ($scrVal as $rk => $rv) {
-                  $scrRows[] = ['_key' => $rk] + (is_array($rv) ? $rv : ['name' => $rv]);
+                  $scrRows[] = rotation_admin_screen_row((string)$rk, $rv);
               }
           }
           if ($scrRows === []) {
               foreach ($rotationScreens as $rk => $rv) {
-                  $scrRows[] = ['_key' => $rk] + (is_array($rv) ? $rv : ['name' => (string)$rv]);
+                  $scrRows[] = rotation_admin_screen_row((string)$rk, $rv);
               }
           }
         ?>
           <div class="section-title">Displays</div>
           <div class="help" style="margin-bottom:12px">Each screen has its own playlist below. Kiosks use <code>board.php?screen=KEY</code>
-            (plain <code>board.php</code> = main). Add a display row here if you need more than one screen.</div>
+            (plain <code>board.php</code> = main). <strong>CEC</strong> sends HDMI standby/wake on player boxes running
+            <code>setup-kiosk.sh</code> (requires TV CEC enabled). Schedule uses the rotation timezone below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Shuffle</th><th></th>
+                <th>Key</th><th>Display name</th><th>Shuffle</th><th>CEC</th><th>Off hr</th><th>On hr</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow): ?>
@@ -1263,6 +1274,10 @@ function admin_field(array $f, $val, string $board): void
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][name]" value="<?= h((string)($srow['name'] ?? '')) ?>" placeholder="Garage TV"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][shuffle]" value="1" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_off]" value="<?= h((string)($srow['cec_off'] ?? '23')) ?>" placeholder="23" style="width:52px"></td>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_on]" value="<?= h((string)($srow['cec_on'] ?? '6')) ?>" placeholder="6" style="width:52px"></td>
                   <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
                 </tr>
                 <?php endforeach; ?>
@@ -1313,6 +1328,7 @@ function admin_field(array $f, $val, string $board): void
               <code><?= h($screenKey) ?></code>
               <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
               <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
+              <?php if ($screenSettings['cec']['enabled']): ?><span class="pill ok">CEC <?= (int)$screenSettings['cec']['off'] ?>→<?= (int)$screenSettings['cec']['on'] ?></span><?php endif; ?>
               <span class="rotation-summary-actions">
                 <a class="secondary" href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener"
                    onclick="event.stopPropagation()">Preview ↗</a>

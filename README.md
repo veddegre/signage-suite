@@ -233,7 +233,12 @@ Turns a fresh Raspberry Pi OS Lite (Bookworm) install into the kiosk:
 
 (Quote the URL when it contains `?screen=`. The optional scale argument — e.g. `2` — fills a 4K display, since boards are designed at 1920×1080.)
 
-It installs cage (minimal Wayland compositor) + Chromium, creates a systemd service that boots into the rotation and restarts on crash, schedules a nightly 04:00 browser restart to flush memory, and prints optional HDMI-CEC cron lines for turning the TV off overnight. Chromium runs with `--autoplay-policy=no-user-gesture-required`, so un-muted video works if you ever want sound. Any small x86 box works the same way — reuse the unit file.
+It installs cage (minimal Wayland compositor) + Chromium, creates a systemd service that boots into the rotation and restarts on crash, schedules a nightly 04:00 browser restart to flush memory, and (by default) installs **HDMI-CEC power sync** — a timer on the player box that polls the server every minute and sends standby/on based on the schedule you set in **Admin → Rotation → Displays** (CEC checkbox, Off hr, On hr). Use `--no-cec` to skip CEC on boxes without a CEC-capable TV. Set **Rotation → Timezone** on the server so off/on hours match local wall time. Chromium runs with `--autoplay-policy=no-user-gesture-required`, so un-muted video works if you ever want sound. Any small x86 box works the same way — reuse the unit file.
+
+Re-run after pulling updates to refresh the CEC sync script:
+
+    cd ~/signage-suite && git pull
+    sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage" [scale]
 
 After setup the Pi never needs touching for content: everything is managed on the server through admin.php. The Pi only needs occasional `apt full-upgrade`.
 

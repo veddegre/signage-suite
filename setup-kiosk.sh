@@ -6,6 +6,9 @@
 #
 #     sudo bash setup-kiosk.sh http://your-server/boards/board.php [scale]
 #
+# Options:
+#   --no-cec     Skip HDMI-CEC power scheduling (TV on/off from admin)
+#
 # The optional [scale] argument handles displays that aren't 1080p: the boards
 # are designed at 1920x1080, so on a 4K display pass 2 (everything renders
 # pixel-doubled and fills the screen). Omit it for a 1080p display.
@@ -14,17 +17,26 @@
 #   * cage (a minimal Wayland kiosk compositor) running Chromium fullscreen
 #   * a systemd service that starts it at boot and restarts it if it crashes
 #   * a nightly 04:00 service restart to flush browser memory
-#   * optional screen on/off schedule (see SCREEN SCHEDULE below)
+#   * HDMI-CEC sync (polls admin schedule every minute via board.php?api=cec)
 #
 # Works on Pi 4/5 and on x86 mini PCs running Ubuntu Server — the script
 # handles both distros' Chromium packaging (Ubuntu's is a snap).
 
 set -euo pipefail
 
-KIOSK_URL="${1:-}"
-SCALE="${2:-1}"
+WITH_CEC=1
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --no-cec) WITH_CEC=0 ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+
+KIOSK_URL="${ARGS[0]:-}"
+SCALE="${ARGS[1]:-1}"
 if [[ -z "$KIOSK_URL" ]]; then
-  echo "Usage: sudo bash setup-kiosk.sh http://server/boards/board.php [scale]" >&2
+  echo "Usage: sudo bash setup-kiosk.sh http://server/boards/board.php [scale] [--no-cec]" >&2
   exit 1
 fi
 if [[ $EUID -ne 0 ]]; then
@@ -32,14 +44,29 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Derive boards base URL and ?screen= key from the kiosk URL.
+KIOSK_PATH="${KIOSK_URL%%\?*}"
+BOARDS_URL="$(dirname "$KIOSK_PATH")"
+SCREEN=main
+if [[ "$KIOSK_URL" == *"screen="* ]]; then
+  SCREEN="$(printf '%s' "$KIOSK_URL" | sed -n 's/.*[?&]screen=\([^&]*\).*/\1/p' | tr '[:upper:]' '[:lower:]')"
+  SCREEN="$(printf '%s' "$SCREEN" | tr -cd 'a-z0-9_-')"
+fi
+[[ -z "$SCREEN" ]] && SCREEN=main
+
 KIOSK_USER="${SUDO_USER:-pi}"
 echo "==> Kiosk user: $KIOSK_USER"
 echo "==> Kiosk URL:  $KIOSK_URL"
+echo "==> Screen key: $SCREEN"
+echo "==> Boards API: $BOARDS_URL"
 echo "==> Scale:      $SCALE (use 2 for a 4K display)"
+echo "==> HDMI-CEC:   $([[ $WITH_CEC -eq 1 ]] && echo enabled || echo skipped)"
 
 echo "==> Installing packages"
 apt-get update -q
-apt-get install -y -q cage seatd
+apt-get install -y -q cage seatd curl python3
 # Chromium packaging differs by distro: Pi OS has a real deb named
 # chromium-browser; Ubuntu's chromium-browser/chromium packages are snap
 # shims. Try them in order, then fall back to installing the snap directly.
@@ -53,6 +80,20 @@ if [[ ! -x "$CHROMIUM" ]]; then
 fi
 echo "==> Using browser: $CHROMIUM"
 usermod -aG video,render,input "$KIOSK_USER"
+
+if [[ $WITH_CEC -eq 1 ]]; then
+  apt-get install -y -q cec-utils 2>/dev/null || echo "==> cec-utils not available — CEC scheduling disabled on this box."
+fi
+
+echo "==> Writing /etc/signage/kiosk.conf"
+mkdir -p /etc/signage
+cat > /etc/signage/kiosk.conf <<EOF
+# Signage kiosk — used by signage-cec-sync
+KIOSK_URL="$KIOSK_URL"
+BOARDS_URL="$BOARDS_URL"
+SCREEN="$SCREEN"
+EOF
+chmod 644 /etc/signage/kiosk.conf
 
 echo "==> Writing /usr/local/bin/signage-kiosk"
 cat > /usr/local/bin/signage-kiosk <<EOF
@@ -72,6 +113,38 @@ exec cage -- "$CHROMIUM" \\
   --start-fullscreen
 EOF
 chmod +x /usr/local/bin/signage-kiosk
+
+if [[ $WITH_CEC -eq 1 ]]; then
+  echo "==> Installing signage-cec-sync"
+  if [[ -f "$SCRIPT_DIR/scripts/signage-cec-sync.sh" ]]; then
+    install -m 755 "$SCRIPT_DIR/scripts/signage-cec-sync.sh" /usr/local/bin/signage-cec-sync
+  else
+    echo "==> Warning: scripts/signage-cec-sync.sh not found — run setup from the signage-suite repo." >&2
+  fi
+
+  if [[ -x /usr/local/bin/signage-cec-sync ]]; then
+  cat > /etc/systemd/system/signage-cec.service <<'EOF'
+[Unit]
+Description=Signage HDMI-CEC power sync
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/signage-cec-sync
+EOF
+  cat > /etc/systemd/system/signage-cec.timer <<'EOF'
+[Unit]
+Description=Poll signage CEC schedule every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+  fi
+fi
 
 echo "==> Writing systemd service"
 cat > /etc/systemd/system/signage.service <<EOF
@@ -122,8 +195,12 @@ systemctl disable --now getty@tty1.service || true
 systemctl daemon-reload
 systemctl enable signage.service signage-restart.timer
 systemctl start signage-restart.timer
+if [[ $WITH_CEC -eq 1 ]] && [[ -x /usr/local/bin/signage-cec-sync ]]; then
+  systemctl enable signage-cec.timer
+  systemctl start signage-cec.timer
+fi
 
-cat <<'NOTES'
+cat <<NOTES
 
 ============================================================
 Done. Reboot to start the kiosk:  sudo reboot
@@ -133,18 +210,19 @@ Useful afterwards:
   journalctl -u signage -f          # watch the browser logs
   sudo systemctl restart signage    # manual restart
 
-SCREEN SCHEDULE (optional)
-Turn the display off at night without stopping the rotation.
-HDMI-CEC (best, if the TV supports it — apt install cec-utils):
-  0 23 * * *  echo 'standby 0' | cec-client -s -d 1
-  0 6  * * *  echo 'on 0'      | cec-client -s -d 1
-DPMS via wlr-randr inside the cage session is fiddly; CEC or the
-display's own sleep timer is the reliable route. Add the lines
-with:  sudo crontab -e
+HDMI-CEC (TV power from admin → Rotation → Displays):
+  Schedules are set per screen in admin.php (CEC / Off hr / On hr).
+  This box polls every minute as screen "$SCREEN".
+  Test:  sudo /usr/local/bin/signage-cec-sync
+  Logs:  journalctl -u signage-cec -f
+  Disable: sudo systemctl disable --now signage-cec.timer
+
+  TV must have CEC enabled (Anynet+, Simplink, Bravia Sync, etc.).
+  Re-run setup with --no-cec to skip CEC entirely.
 
 UPDATING
 The kiosk is just a browser — all content updates happen on the
-server through admin.php. The Pi only ever needs OS updates:
+server through admin.php. The Pi only needs OS updates:
   sudo apt update && sudo apt full-upgrade
 ============================================================
 NOTES

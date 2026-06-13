@@ -11,7 +11,7 @@ function rotation_normalize_screen_key(string $key): string
     return $key !== '' ? $key : 'main';
 }
 
-/** @return array{name:string,shuffle:bool} */
+/** @return array{name:string,shuffle:bool,cec:array{enabled:bool,off:int,on:int,device:int}} */
 function rotation_screen_settings(string $screen = 'main'): array
 {
     $screen = rotation_normalize_screen_key($screen);
@@ -25,23 +25,134 @@ function rotation_screen_settings(string $screen = 'main'): array
             }
         }
     }
+    $defaults = [
+        'name' => $screen === 'main' ? 'Main Display' : $screen,
+        'shuffle' => false,
+        'cec' => rotation_cec_defaults(),
+    ];
     if ($scr === null) {
-        return ['name' => $screen === 'main' ? 'Main Display' : $screen, 'shuffle' => false];
+        return $defaults;
     }
     if (is_string($scr)) {
-        return ['name' => $scr, 'shuffle' => false];
+        return ['name' => $scr, 'shuffle' => false, 'cec' => rotation_cec_defaults()];
     }
     if (!is_array($scr)) {
-        return ['name' => $screen === 'main' ? 'Main Display' : $screen, 'shuffle' => false];
+        return $defaults;
     }
     $name = trim((string)($scr['name'] ?? ''));
     return [
         'name' => $name !== '' ? $name : ($screen === 'main' ? 'Main Display' : $screen),
         'shuffle' => !empty($scr['shuffle']),
+        'cec' => rotation_cec_from_screen($scr),
     ];
 }
 
-/** @return array<string, array{name:string,shuffle?:bool}> */
+function rotation_admin_screen_row(string $key, $rv): array
+{
+    $key = rotation_normalize_screen_key($key);
+    $row = is_array($rv) ? $rv : ['name' => (string)$rv];
+    $cec = rotation_cec_from_screen($row);
+    return [
+        '_key' => $key,
+        'name' => (string)($row['name'] ?? ''),
+        'shuffle' => !empty($row['shuffle']),
+        'cec_enabled' => $cec['enabled'],
+        'cec_off' => (string)$cec['off'],
+        'cec_on' => (string)$cec['on'],
+    ];
+}
+
+/** @return array{enabled:bool,off:int,on:int,device:int} */
+function rotation_cec_defaults(): array
+{
+    return ['enabled' => false, 'off' => 23, 'on' => 6, 'device' => 0];
+}
+
+/** @param array<string,mixed> $scr @return array{enabled:bool,off:int,on:int,device:int} */
+function rotation_cec_from_screen(array $scr): array
+{
+    $cec = rotation_cec_defaults();
+    $block = is_array($scr['cec'] ?? null) ? $scr['cec'] : [];
+    if (!empty($block['enabled']) || !empty($scr['cec_enabled'])) {
+        $cec['enabled'] = true;
+    }
+    if (isset($block['off']) || isset($scr['cec_off'])) {
+        $cec['off'] = max(0, min(23, (int)($block['off'] ?? $scr['cec_off'] ?? $cec['off'])));
+    }
+    if (isset($block['on']) || isset($scr['cec_on'])) {
+        $cec['on'] = max(0, min(23, (int)($block['on'] ?? $scr['cec_on'] ?? $cec['on'])));
+    }
+    if (isset($block['device'])) {
+        $cec['device'] = max(0, min(15, (int)$block['device']));
+    }
+    return $cec;
+}
+
+function rotation_timezone(): string
+{
+    $tz = trim((string)cfg('rotation.TIMEZONE', cfg('index.TIMEZONE', 'America/Detroit')));
+    return $tz !== '' ? $tz : 'America/Detroit';
+}
+
+/** TV standby during the configured off window (supports overnight, e.g. off 23 / on 6). */
+function rotation_cec_should_standby(int $offHour, int $onHour, ?int $hour = null): bool
+{
+    if ($offHour === $onHour) {
+        return false;
+    }
+    $hour = $hour ?? (int)date('G');
+    if ($offHour < $onHour) {
+        return $hour >= $offHour && $hour < $onHour;
+    }
+    return $hour >= $offHour || $hour < $onHour;
+}
+
+function rotation_cec_revision(string $screen = 'main'): string
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $cec = rotation_screen_settings($screen)['cec'];
+    $mtime = is_file(cfg_path()) ? (int)filemtime(cfg_path()) : 0;
+    $blob = json_encode([
+        'mtime' => $mtime,
+        'screen' => $screen,
+        'timezone' => rotation_timezone(),
+        'cec' => $cec,
+    ], JSON_UNESCAPED_SLASHES);
+    return substr(sha1($blob ?: ''), 0, 12);
+}
+
+/** @return array<string,mixed> */
+function rotation_cec_api_payload(string $screen = 'main'): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $tz = rotation_timezone();
+    try {
+        $prevTz = date_default_timezone_get();
+        date_default_timezone_set($tz);
+        $hour = (int)date('G');
+        date_default_timezone_set($prevTz);
+    } catch (Throwable $e) {
+        $hour = (int)date('G');
+        $tz = 'America/Detroit';
+    }
+    $cec = rotation_screen_settings($screen)['cec'];
+    $standby = $cec['enabled'] && rotation_cec_should_standby($cec['off'], $cec['on'], $hour);
+    return [
+        'screen' => $screen,
+        'timezone' => $tz,
+        'hour' => $hour,
+        'cec' => [
+            'enabled' => $cec['enabled'],
+            'off' => $cec['off'],
+            'on' => $cec['on'],
+            'device' => $cec['device'],
+            'standby' => $standby,
+        ],
+        'revision' => rotation_cec_revision($screen),
+    ];
+}
+
+/** @return array<string, array{name:string,shuffle?:bool,cec?:array<string,mixed>}> */
 function rotation_screens(): array
 {
     $screens = cfg('rotation.SCREENS', ['main' => 'Main Display']);
@@ -61,6 +172,15 @@ function rotation_screens(): array
             $entry = ['name' => $name !== '' ? $name : ($nk === 'main' ? 'Main Display' : $nk)];
             if (!empty($scr['shuffle'])) {
                 $entry['shuffle'] = true;
+            }
+            $cec = rotation_cec_from_screen($scr);
+            if ($cec['enabled']) {
+                $entry['cec'] = [
+                    'enabled' => true,
+                    'off' => $cec['off'],
+                    'on' => $cec['on'],
+                    'device' => $cec['device'],
+                ];
             }
             $out[$nk] = $entry;
         }
@@ -144,6 +264,7 @@ function rotation_config_revision(string $screen = 'main'): string
         'screen' => $screen,
         'pages' => rotation_screen_effective_pages($screen),
         'shuffle' => $settings['shuffle'],
+        'cec' => $settings['cec'],
         'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
         'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
         'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),
