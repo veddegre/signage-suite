@@ -472,7 +472,8 @@ if ($authed && $board === 'slides' && csrf_ok()) {
                     if (slide_append_to_deck($name)) {
                         slides_deploy_to_screens(['main']);
                         cfg_reload();
-                        $flash = 'Uploaded ' . $name . ' and deployed to main rotation — adjust schedule below if needed.';
+                        header('Location: ?board=slides&highlight=' . rawurlencode($name));
+                        exit;
                     } else {
                         $flash = 'File saved but could not update settings.json.'; $flashOk = false;
                     }
@@ -480,6 +481,21 @@ if ($authed && $board === 'slides' && csrf_ok()) {
                     $flash = 'Could not write to ' . slides_dir() . ' — check permissions.'; $flashOk = false;
                 }
             }
+        }
+    }
+
+    if (($_POST['action'] ?? '') === 'add_slide_to_deck') {
+        $file = slide_safe_filename((string)($_POST['file'] ?? ''));
+        if ($file === null || !is_file($slideDir . '/' . $file)) {
+            $flash = 'Invalid slide file.'; $flashOk = false;
+        } elseif (in_array($file, slides_deck_files(), true)) {
+            $flash = $file . ' is already in the slide deck.';
+        } elseif (slide_append_to_deck($file)) {
+            cfg_reload();
+            header('Location: ?board=slides&highlight=' . rawurlencode($file));
+            exit;
+        } else {
+            $flash = 'Could not update settings.json.'; $flashOk = false;
         }
     }
 
@@ -535,7 +551,8 @@ if ($authed && $board === 'slides' && csrf_ok()) {
                         if (slide_append_to_deck($name, $extra)) {
                             slides_deploy_to_screens(['main']);
                             cfg_reload();
-                            $flash = 'Created ' . $name . ' and deployed to main rotation — adjust schedule below if needed.';
+                            header('Location: ?board=slides&highlight=' . rawurlencode($name));
+                            exit;
                         } else {
                             $flash = 'Slide saved but could not update settings.json.'; $flashOk = false;
                         }
@@ -711,6 +728,13 @@ if ($rotationMainPages === []) {
 }
 $slidesDeckStats = slides_deck_stats($rawConf['slides.SLIDES'] ?? []);
 $slidesDeployStatus = slides_deploy_status($rawConf['slides.SLIDES'] ?? null);
+$slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
+$slidesDeckFileSet = ($board === 'slides')
+    ? array_flip(slides_deck_files($rawConf['slides.SLIDES'] ?? null))
+    : [];
+$slidesOrphanFiles = ($board === 'slides')
+    ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
+    : [];
 
 function admin_field(array $f, $val, string $board): void
 {
@@ -874,6 +898,10 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-advanced summary { cursor:pointer; color:var(--mist); font-size:13px; margin-bottom:10px; }
   .slide-card-flags { display:flex; flex-wrap:wrap; gap:16px; margin-top:4px; }
   .slide-card-flags label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); }
+  .slide-deck-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; margin-bottom:14px; }
+  .slide-added-notice { margin-bottom:12px; padding:12px 14px; border-radius:10px; background:rgba(255,179,71,.12); border:1px solid var(--beacon); color:var(--snow); font-size:14px; }
+  .slide-orphan-notice { margin-bottom:12px; padding:12px 14px; border-radius:10px; background:var(--lake-night); border:1px solid var(--line); color:var(--mist); font-size:13px; }
+  .slide-card-highlight { border-color:var(--beacon); box-shadow:0 0 0 2px rgba(255,179,71,.28); }
   @media (max-width: 760px) { .slide-card-grid { grid-template-columns:1fr; } .slide-card-grid .span-2 { grid-column:span 1; } }
   .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; min-height:72px; }
   .rotation-playlist-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; text-align:center; }
@@ -1115,145 +1143,6 @@ function admin_field(array $f, $val, string $board): void
         <?php elseif (!empty($b['file'])): ?>
           <a href="<?= h($b['file']) ?>" target="_blank" rel="noopener">Preview board ↗</a>
         <?php endif; ?></div>
-
-      <?php if ($board === 'slides'): ?>
-      <details class="panel">
-        <summary>Add slides</summary>
-        <div class="panel-body">
-          <div class="upload-box">
-            <h3>Upload an image</h3>
-            <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=slides">
-              <input type="hidden" name="action" value="upload_slide">
-              <input type="hidden" name="board" value="slides">
-              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-              <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
-              <button class="secondary" type="submit">Upload</button>
-            </form>
-            <div class="help" style="margin-top:8px">JPG, PNG, or WebP. New files start on the <strong>Always</strong> schedule.</div>
-            <?php $diskFiles = slides_list_files();
-            if ($diskFiles): ?>
-            <ul class="filelist">
-              <?php foreach ($diskFiles as $df): ?>
-                <li>
-                  <code><?= h($df) ?></code>
-                  <form method="post" action="?board=slides" onsubmit="return confirm('Delete <?= h($df) ?>?');">
-                    <input type="hidden" name="action" value="delete_slide">
-                    <input type="hidden" name="board" value="slides">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="file" value="<?= h($df) ?>">
-                    <button class="secondary" type="submit">Delete</button>
-                  </form>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-            <?php endif; ?>
-          </div>
-
-          <div class="creator-box">
-            <h3>Create a text slide</h3>
-            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. <strong>Photo scenes</strong> use real photography (dimmed for readability); <strong>Theme colors</strong> are the original gradients. Saves as PNG on the <strong>Always</strong> schedule — adjust timing in the table below.</p>
-            <div class="creator-layout">
-              <div class="creator-preview-block">
-                <div class="preview-head">
-                  <label class="l" style="margin:0">Preview</label>
-                  <span class="preview-badge">1920 × 1080</span>
-                </div>
-                <div class="preview-wrap"><canvas id="slidePreview" width="1920" height="1080"></canvas></div>
-              </div>
-
-              <div class="creator-panel creator-fields">
-                <div class="span-full">
-                  <label class="l">Template</label>
-                  <div class="template-pick" id="templatePick" role="group" aria-label="Slide templates">
-                    <?php foreach (slide_creator_templates() as $tid => $tpl): ?>
-                      <button type="button" class="template-chip" data-template="<?= h($tid) ?>"><?= h($tpl['label']) ?></button>
-                    <?php endforeach; ?>
-                  </div>
-                  <div class="field-hint">Prefills text and background — replace bracketed placeholders like <code>[Name]</code>.</div>
-                </div>
-
-                <div class="creator-editor">
-                  <div class="field-block span-full">
-                    <label class="l">Background</label>
-                    <div class="bg-section">
-                      <div class="bg-section-title">Photo scenes</div>
-                      <div class="bg-section-help">Real photography from Unsplash, dimmed so your text stays readable — like Canva.</div>
-                      <div class="bg-pick" id="bgPickPhoto">
-                        <?php foreach (slide_photo_background_presets() as $id => $preset):
-                          $bgUrl = slide_background_url($id); ?>
-                          <label title="<?= h($preset['label']) ?>">
-                            <input type="radio" name="creator_bg" value="<?= h($id) ?>">
-                            <div class="bg-swatch photo" data-bg="<?= h($id) ?>">
-                              <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
-                              <span><?= h($preset['label']) ?></span>
-                            </div>
-                          </label>
-                        <?php endforeach; ?>
-                      </div>
-                    </div>
-                    <div class="bg-section">
-                      <div class="bg-section-title">Theme colors</div>
-                      <div class="bg-pick" id="bgPickTheme">
-                        <?php foreach (slide_theme_background_presets() as $id => $preset):
-                          $bgUrl = slide_background_url($id); ?>
-                          <label title="<?= h($preset['label']) ?>">
-                            <input type="radio" name="creator_bg" value="<?= h($id) ?>" <?= $id === 'lake_night' ? 'checked' : '' ?>>
-                            <div class="bg-swatch" data-bg="<?= h($id) ?>">
-                              <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
-                              <span><?= h($preset['label']) ?></span>
-                            </div>
-                          </label>
-                        <?php endforeach; ?>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="field-block span-full">
-                    <label class="l">Alignment</label>
-                    <div class="seg-control" role="group" aria-label="Text alignment">
-                      <label><input type="radio" name="creator_align" value="left" checked><span>Left</span></label>
-                      <label><input type="radio" name="creator_align" value="center"><span>Center</span></label>
-                    </div>
-                  </div>
-
-                  <div class="field-block">
-                    <label class="l" for="creator_title">Title</label>
-                    <textarea id="creator_title" rows="3" placeholder="Happy Birthday, Mom!"></textarea>
-                    <div class="field-hint">Large headline — up to three lines on the wall.</div>
-                  </div>
-                  <div class="field-block">
-                    <label class="l" for="creator_subtitle">Subtitle</label>
-                    <textarea id="creator_subtitle" rows="3" placeholder="March 15"></textarea>
-                    <div class="field-hint">Date, occasion, or short tagline.</div>
-                  </div>
-
-                  <div class="field-block span-full">
-                    <label class="l" for="creator_body">Body</label>
-                    <textarea id="creator_body" rows="8" placeholder="Dinner at 6 — cake after."></textarea>
-                    <div class="field-hint">Details and directions. Blank lines add extra spacing.</div>
-                  </div>
-
-                  <div class="field-block">
-                    <label class="l" for="creator_footer">Footer (optional)</label>
-                    <textarea id="creator_footer" rows="3" placeholder="Love, the family"></textarea>
-                  </div>
-                  <div class="field-block">
-                    <label class="l" for="creator_name">Filename</label>
-                    <input type="text" id="creator_name" placeholder="mom-birthday (optional — .png added)">
-                    <div class="field-hint">Auto-filled from the title; edit to override.</div>
-                  </div>
-
-                  <div class="field-block span-full creator-actions">
-                    <button type="button" class="save" id="creatorSave">Create slide</button>
-                    <p class="help">Preview updates as you type. Requires a title or body.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </details>
-      <?php endif; ?>
 
       <?php if ($board === 'rotator'): ?>
       <details class="panel" open>
@@ -1899,8 +1788,24 @@ function admin_field(array $f, $val, string $board): void
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
         ?>
           <div class="section-title">Slide deck</div>
-          <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each card is one image — schedule when it appears inside the deck.</div>
+          <div class="help" style="margin-bottom:12px">Your rotation plays from this list — drag to reorder (top = first). Upload or create new slides in <strong>Add slides</strong> below; they land here automatically. Set each slide's schedule, then <strong>Save</strong>.</div>
+          <?php if ($slideHighlight !== null): ?>
+          <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule below, then Save.</div>
+          <?php endif; ?>
+          <?php if ($slidesOrphanFiles !== []): ?>
+          <div class="slide-orphan-notice">
+            <strong><?= count($slidesOrphanFiles) ?></strong> file<?= count($slidesOrphanFiles) === 1 ? '' : 's' ?> on disk not in the deck:
+            <?php foreach ($slidesOrphanFiles as $oi => $orphan): ?>
+              <?php if ($oi > 0): ?>, <?php endif; ?>
+              <code><?= h($orphan) ?></code>
+            <?php endforeach; ?>
+            — use <strong>Add to deck</strong> in the file list below, or open <strong>Add slides</strong>.
+          </div>
+          <?php endif; ?>
           <div class="deck-list" id="slideDeck" data-field="SLIDES">
+            <?php if ($slideRows === []): ?>
+            <div class="slide-deck-empty">No slides yet. Open <strong>Add slides</strong> below to upload or create one — it will appear here ready to schedule.</div>
+            <?php endif; ?>
             <?php foreach ($slideRows as $ri => $row):
               if (!is_array($row)) continue;
               $sched = strtolower((string)($row['schedule'] ?? 'always'));
@@ -1909,8 +1814,10 @@ function admin_field(array $f, $val, string $board): void
               $fileOk = slide_safe_filename($fileLabel) !== null && is_file(slides_dir() . '/' . slide_safe_filename($fileLabel));
               $activeNow = empty($row['off']) && $fileOk && slide_schedule_active($row, $slideNow);
               $schedSummary = slide_schedule_summary($row);
+              $highlightCard = $slideHighlight !== null
+                  && slide_safe_filename($fileLabel) === $slideHighlight;
             ?>
-            <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?>" data-slide-card>
+            <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?><?= $highlightCard ? ' slide-card-highlight' : '' ?>" data-slide-card data-slide-file="<?= h($fileLabel) ?>">
               <div class="slide-card-head">
                 <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
                 <div class="slide-card-title">
@@ -2133,6 +2040,158 @@ function admin_field(array $f, $val, string $board): void
           <label class="check"><input type="checkbox" name="clear_cache"> Clear cache after save</label>
         </div>
       </form>
+      <?php if ($board === 'slides'): ?>
+      <details class="panel" id="add-slides-panel" style="margin-top:22px"<?= $slideHighlight !== null ? ' open' : '' ?>>
+        <summary>Add slides</summary>
+        <div class="panel-body">
+          <div class="upload-box">
+            <h3>Upload an image</h3>
+            <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=slides">
+              <input type="hidden" name="action" value="upload_slide">
+              <input type="hidden" name="board" value="slides">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
+              <button class="secondary" type="submit">Upload</button>
+            </form>
+            <div class="help" style="margin-top:8px">JPG, PNG, or WebP. Uploaded files are added to the <strong>Slide deck</strong> above on the <strong>Always</strong> schedule.</div>
+            <?php $diskFiles = slides_list_files();
+            if ($diskFiles): ?>
+            <ul class="filelist">
+              <?php foreach ($diskFiles as $df):
+                $inDeck = isset($slidesDeckFileSet[$df]);
+              ?>
+                <li>
+                  <code><?= h($df) ?></code>
+                  <?php if ($inDeck): ?>
+                    <span class="pill ok">In deck</span>
+                  <?php else: ?>
+                    <span class="pill warn">Not in deck</span>
+                    <form method="post" action="?board=slides" style="display:inline">
+                      <input type="hidden" name="action" value="add_slide_to_deck">
+                      <input type="hidden" name="board" value="slides">
+                      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                      <input type="hidden" name="file" value="<?= h($df) ?>">
+                      <button class="secondary" type="submit">Add to deck</button>
+                    </form>
+                  <?php endif; ?>
+                  <form method="post" action="?board=slides" onsubmit="return confirm('Delete <?= h($df) ?>?');" style="display:inline">
+                    <input type="hidden" name="action" value="delete_slide">
+                    <input type="hidden" name="board" value="slides">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="file" value="<?= h($df) ?>">
+                    <button class="secondary" type="submit">Delete</button>
+                  </form>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+          </div>
+
+          <div class="creator-box">
+            <h3>Create a text slide</h3>
+            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. <strong>Create slide</strong> saves a PNG and adds it to the <strong>Slide deck</strong> above — set schedule there, then Save.</p>
+            <div class="creator-layout">
+              <div class="creator-preview-block">
+                <div class="preview-head">
+                  <label class="l" style="margin:0">Preview</label>
+                  <span class="preview-badge">1920 × 1080</span>
+                </div>
+                <div class="preview-wrap"><canvas id="slidePreview" width="1920" height="1080"></canvas></div>
+              </div>
+
+              <div class="creator-panel creator-fields">
+                <div class="span-full">
+                  <label class="l">Template</label>
+                  <div class="template-pick" id="templatePick" role="group" aria-label="Slide templates">
+                    <?php foreach (slide_creator_templates() as $tid => $tpl): ?>
+                      <button type="button" class="template-chip" data-template="<?= h($tid) ?>"><?= h($tpl['label']) ?></button>
+                    <?php endforeach; ?>
+                  </div>
+                  <div class="field-hint">Prefills text and background — replace bracketed placeholders like <code>[Name]</code>.</div>
+                </div>
+
+                <div class="creator-editor">
+                  <div class="field-block span-full">
+                    <label class="l">Background</label>
+                    <div class="bg-section">
+                      <div class="bg-section-title">Photo scenes</div>
+                      <div class="bg-section-help">Real photography from Unsplash, dimmed so your text stays readable — like Canva.</div>
+                      <div class="bg-pick" id="bgPickPhoto">
+                        <?php foreach (slide_photo_background_presets() as $id => $preset):
+                          $bgUrl = slide_background_url($id); ?>
+                          <label title="<?= h($preset['label']) ?>">
+                            <input type="radio" name="creator_bg" value="<?= h($id) ?>">
+                            <div class="bg-swatch photo" data-bg="<?= h($id) ?>">
+                              <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
+                              <span><?= h($preset['label']) ?></span>
+                            </div>
+                          </label>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+                    <div class="bg-section">
+                      <div class="bg-section-title">Theme colors</div>
+                      <div class="bg-pick" id="bgPickTheme">
+                        <?php foreach (slide_theme_background_presets() as $id => $preset):
+                          $bgUrl = slide_background_url($id); ?>
+                          <label title="<?= h($preset['label']) ?>">
+                            <input type="radio" name="creator_bg" value="<?= h($id) ?>" <?= $id === 'lake_night' ? 'checked' : '' ?>>
+                            <div class="bg-swatch" data-bg="<?= h($id) ?>">
+                              <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
+                              <span><?= h($preset['label']) ?></span>
+                            </div>
+                          </label>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="field-block span-full">
+                    <label class="l">Alignment</label>
+                    <div class="seg-control" role="group" aria-label="Text alignment">
+                      <label><input type="radio" name="creator_align" value="left" checked><span>Left</span></label>
+                      <label><input type="radio" name="creator_align" value="center"><span>Center</span></label>
+                    </div>
+                  </div>
+
+                  <div class="field-block">
+                    <label class="l" for="creator_title">Title</label>
+                    <textarea id="creator_title" rows="3" placeholder="Happy Birthday, Mom!"></textarea>
+                    <div class="field-hint">Large headline — up to three lines on the wall.</div>
+                  </div>
+                  <div class="field-block">
+                    <label class="l" for="creator_subtitle">Subtitle</label>
+                    <textarea id="creator_subtitle" rows="3" placeholder="March 15"></textarea>
+                    <div class="field-hint">Date, occasion, or short tagline.</div>
+                  </div>
+
+                  <div class="field-block span-full">
+                    <label class="l" for="creator_body">Body</label>
+                    <textarea id="creator_body" rows="8" placeholder="Wishing you a wonderful day…"></textarea>
+                    <div class="field-hint">Details and directions. Blank lines add extra spacing.</div>
+                  </div>
+
+                  <div class="field-block">
+                    <label class="l" for="creator_footer">Footer (optional)</label>
+                    <textarea id="creator_footer" rows="3" placeholder="Love, the family"></textarea>
+                  </div>
+                  <div class="field-block">
+                    <label class="l" for="creator_name">Filename</label>
+                    <input type="text" id="creator_name" placeholder="mom-birthday (optional — .png added)">
+                    <div class="field-hint">Auto-filled from the title; edit to override.</div>
+                  </div>
+
+                  <div class="field-block span-full creator-actions">
+                    <button type="button" class="save" id="creatorSave">Create slide</button>
+                    <p class="help">Adds to the Slide deck above. Requires a title or body.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+      <?php endif; ?>
       <?php if ($board === 'video'): foreach ($videoStatuses as $st):
         if (empty($st['fetchable'])) continue;
         $fid = preg_replace('/[^a-z0-9_\-]/i', '', $st['key']);
@@ -2350,6 +2409,10 @@ function initSlideDeck() {
     bindPlaylistCardHandle(card, d, '.drag-handle', reindexSlideDeck);
     bindSlideCard(card);
   });
+  const hl = deck.querySelector('.slide-card-highlight');
+  if (hl) {
+    setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
+  }
 }
 
 function addSlideCard() {
@@ -3091,10 +3154,11 @@ function addVideoCard() {
         fd.append('creator_subtitle', document.getElementById('creator_subtitle').value.trim());
         fd.append('creator_name', document.getElementById('creator_name').value.trim());
         fd.append('slide_image', blob, 'slide.png');
-        fetch('?board=slides', { method: 'POST', body: fd })
+        fetch('?board=slides', { method: 'POST', body: fd, redirect: 'follow' })
           .then(function (res) {
-            if (res.ok) location.href = '?board=slides';
-            else {
+            if (res.ok || res.redirected) {
+              location.href = res.url;
+            } else {
               alert('Save failed — check server permissions.');
               btn.disabled = false;
             }

@@ -43,6 +43,34 @@ function slides_list_files(?string $dir = null): array
     return $out;
 }
 
+/** Filenames referenced in the saved slide deck. @return list<string> */
+function slides_deck_files(?array $deck = null): array
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        return [];
+    }
+    $files = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file !== null) {
+            $files[] = $file;
+        }
+    }
+    return $files;
+}
+
+/** Image files on disk that are not in the slide deck yet. @return list<string> */
+function slides_orphan_files(?array $deck = null, ?string $dir = null): array
+{
+    $dir = $dir ?? slides_dir();
+    $inDeck = array_flip(slides_deck_files($deck));
+    return array_values(array_filter(slides_list_files($dir), static fn($f) => !isset($inDeck[$f])));
+}
+
 /** Append a new slide entry to config deck (used by upload + creator). */
 function slide_append_to_deck(string $filename, array $extra = []): bool
 {
@@ -402,7 +430,7 @@ function slide_creator_templates(): array
             'align' => 'center',
             'title' => 'Happy Birthday, [Name]!',
             'subtitle' => '[Month Day]',
-            'body' => "Balloons and presents in the living room — party at [Time].\nCan't wait to celebrate!",
+            'body' => "Wishing you a wonderful day filled with happiness, laughter, and celebration.\nEnjoy your special day!",
             'footer' => 'Love, the family',
             'filename' => 'birthday',
         ],
