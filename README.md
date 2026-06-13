@@ -194,7 +194,12 @@ What it installs and configures:
 
 Re-run safely after pulling updates (preserves your config and uploads):
 
-    sudo bash setup-server.sh --skip-apt --source /var/www/html/boards
+    cd ~/signage-suite && git pull
+    sudo bash setup-server.sh --skip-apt --source ~/signage-suite --webroot /var/www/html/boards
+
+If the webroot **is** the git checkout (installed with `--clone`), updates are just:
+
+    cd /var/www/html/boards && sudo git pull
 
 ### setup-kiosk.sh — the display device
 Turns a fresh Raspberry Pi OS Lite (Bookworm) install into the kiosk:
