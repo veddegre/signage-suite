@@ -103,6 +103,73 @@ function video_ytdlp_version(?string $bin = null): ?string
     return $v !== '' ? $v : null;
 }
 
+function video_github_release_url_allowed(string $url): bool
+{
+    return str_starts_with($url, 'https://github.com/yt-dlp/yt-dlp/releases/download/');
+}
+
+/**
+ * Fetch a pinned yt-dlp GitHub release asset (follows redirects to githubusercontent.com).
+ * @return array{data:?string,http:int,error:?string}
+ */
+function video_http_get_github_release(string $url, int $timeout = 120): array
+{
+    if (!video_github_release_url_allowed($url)) {
+        return ['data' => null, 'http' => 0, 'error' => 'untrusted URL'];
+    }
+    $policy = signage_fetch_url_allowed($url, false);
+    if (!$policy['ok']) {
+        return ['data' => null, 'http' => 0, 'error' => $policy['error'] ?? 'blocked'];
+    }
+
+    if (function_exists('curl_init')) {
+        $opts = [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 5,
+            CURLOPT_CONNECTTIMEOUT => 15,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_HTTPHEADER => ['User-Agent: HomeSignage/1.0'],
+        ];
+        if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
+            $opts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+            $opts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTPS;
+        }
+        $ch = curl_init();
+        curl_setopt_array($ch, $opts);
+        $body = curl_exec($ch);
+        $http = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $err = curl_error($ch);
+        if ($err !== '') {
+            return ['data' => null, 'http' => $http, 'error' => $err];
+        }
+        if (!is_string($body) || $body === '') {
+            return ['data' => null, 'http' => $http, 'error' => 'empty response'];
+        }
+        return ['data' => $body, 'http' => $http, 'error' => null];
+    }
+
+    $ctx = stream_context_create(['http' => [
+        'timeout' => $timeout,
+        'follow_location' => 1,
+        'max_redirects' => 5,
+        'header' => "User-Agent: HomeSignage/1.0\r\n",
+    ]]);
+    $body = @file_get_contents($url, false, $ctx);
+    $http = 0;
+    $headers = function_exists('http_get_last_response_headers')
+        ? http_get_last_response_headers()
+        : null;
+    if (is_array($headers) && isset($headers[0]) && preg_match('/\s(\d{3})\s/', $headers[0], $m)) {
+        $http = (int)$m[1];
+    }
+    if (!is_string($body) || $body === '') {
+        return ['data' => null, 'http' => $http, 'error' => 'empty response'];
+    }
+    return ['data' => $body, 'http' => $http, 'error' => null];
+}
+
 /** @return array{version:?string,checked_at:int,error:?string} */
 function video_ytdlp_latest_release(bool $force = false): array
 {
@@ -164,7 +231,8 @@ function video_ytdlp_latest_release(bool $force = false): array
             }
             $payload['yt_dlp_url'] = $binUrl;
             if ($sumsUrl !== null && $binUrl !== null) {
-                $sumsRaw = @file_get_contents($sumsUrl, false, $ctx);
+                $sumsResp = video_http_get_github_release($sumsUrl, 30);
+                $sumsRaw = $sumsResp['data'];
                 if (is_string($sumsRaw)) {
                     foreach (preg_split('/\r\n|\n|\r/', $sumsRaw) as $line) {
                         if (!preg_match('/^([a-f0-9]{64})\s+\*?yt-dlp\s*$/i', trim($line), $m)) {
@@ -243,15 +311,14 @@ function video_ytdlp_install_bin(array $lines = []): array
             'version' => video_ytdlp_version(),
         ];
     }
-    $ctx = stream_context_create([
-        'http' => [
-            'timeout' => 120,
-            'follow_location' => 0,
-            'header' => "User-Agent: HomeSignage/1.0\r\n",
-        ],
-    ]);
-    $data = @file_get_contents($url, false, $ctx);
-    if ($data === false || $data === '') {
+    $dl = video_http_get_github_release($url, 120);
+    $data = $dl['data'];
+    if (!is_string($data) || $data === '') {
+        $detail = $dl['error'] ?? 'unknown error';
+        if (($dl['http'] ?? 0) > 0) {
+            $detail = 'HTTP ' . (int)$dl['http'] . ($detail !== '' ? " — $detail" : '');
+        }
+        $lines[] = "Download failed: $detail";
         return [
             'ok' => false,
             'message' => 'Could not download the yt-dlp release binary.',
