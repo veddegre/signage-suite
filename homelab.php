@@ -36,9 +36,14 @@ function http_get(string $url, array $headers = [], ?string $userpass = null, bo
 {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_HTTPHEADER => $headers, CURLOPT_SSL_VERIFYPEER => $verify,
-        CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0, CURLOPT_NOBODY => false,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_SSL_VERIFYPEER => $verify,
+        CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+        CURLOPT_NOBODY => false,
+        CURLOPT_USERAGENT => 'HomeSignage/ServiceCheck/1.0',
     ]);
     if ($userpass !== null) curl_setopt($ch, CURLOPT_USERPWD, $userpass);
     $body = curl_exec($ch);

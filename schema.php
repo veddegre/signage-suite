@@ -88,6 +88,8 @@ function admin_schema(): array
             ['key' => 'ST_EXPORT_TOKEN', 'label' => 'Export API token', 'type' => 'password',
              'help' => 'EXPORT_API_TOKEN from includes/config.local.php — used server-side only'],
             ['key' => 'WINDOW_HOURS', 'label' => 'Window (hours)', 'type' => 'number'],
+            ['key' => 'IGNORE_IPS', 'label' => 'Ignore IPs in feed', 'type' => 'text',
+             'help' => 'Comma-separated — hide your signage/homelab monitor IP from Recent Activity (e.g. 192.168.1.50)'],
             $tz, $ttl(),
         ]],
         'homelab' => ['title' => 'Homelab Ops', 'file' => 'homelab.php', 'fields' => [
@@ -103,7 +105,9 @@ function admin_schema(): array
                  ['key' => '_key', 'label' => 'Name'],
                  ['key' => '_value', 'label' => 'URL'],
              ],
-             'help' => 'HTTP(S) endpoints to ping for up/down and response time. Leave empty for none.'],
+             'help' => 'HTTP(S) endpoints to ping for up/down and response time. Leave empty for none. '
+                     . 'Do not use SignalTrace honeypot/token URLs — checks register as hits. '
+                     . 'User-Agent is HomeSignage/ServiceCheck/1.0 (add a skip pattern in SignalTrace if needed).'],
             ['key' => 'LATENCY_TARGET', 'label' => 'WAN latency target', 'type' => 'text'],
             $tz, $ttl(),
         ]],

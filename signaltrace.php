@@ -18,6 +18,7 @@ require_once __DIR__ . '/config.php';
 define('ST_BASE_URL', cfg('signaltrace.ST_BASE_URL', 'https://your-signaltrace-host'));
 define('ST_EXPORT_TOKEN', cfg('signaltrace.ST_EXPORT_TOKEN', 'PUT-YOUR-EXPORT-API-TOKEN-HERE'));
 define('WINDOW_HOURS', cfg('signaltrace.WINDOW_HOURS', 24));
+define('IGNORE_IPS', cfg('signaltrace.IGNORE_IPS', ''));
 define('TIMEZONE', cfg('signaltrace.TIMEZONE', 'America/Detroit'));
 const CACHE_DIR       = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('signaltrace.CACHE_TTL', 60));
@@ -28,7 +29,7 @@ $GLOBALS['diag'] = [];
 function st_get(string $path, string $key): ?array
 {
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
-    $f = CACHE_DIR . "/$key.json";
+    $f = CACHE_DIR . "/{$key}_" . md5($path) . '.json';
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
         $d = json_decode((string)file_get_contents($f), true);
         if (is_array($d)) return $d;
@@ -61,6 +62,66 @@ function ago(int $ts): string
     return (int)round($d / 86400) . 'd ago';
 }
 
+/** IPs to hide from the feed (comma-separated in admin — e.g. your signage/homelab server). */
+function st_ignore_ips(): array
+{
+    static $ips = null;
+    if ($ips !== null) {
+        return $ips;
+    }
+    $raw = IGNORE_IPS;
+    if (is_array($raw)) {
+        $ips = array_values(array_filter(array_map('trim', $raw)));
+        return $ips;
+    }
+    $ips = array_values(array_filter(array_map('trim', explode(',', (string)$raw))));
+    return $ips;
+}
+
+function st_event_ignored(array $row): bool
+{
+    $ip = (string)($row['ip'] ?? '');
+    return $ip !== '' && in_array($ip, st_ignore_ips(), true);
+}
+
+function st_event_ts(array $row): int
+{
+    if (isset($row['clicked_at_unix_ms'])) {
+        return (int)($row['clicked_at_unix_ms'] / 1000);
+    }
+    return strtotime((string)($row['clicked_at'] ?? '')) ?: 0;
+}
+
+/** Normalize country rows from SignalTrace export APIs (country + hits). */
+function st_country_rows(?array $stats, ?array $byCountry, int $limit = 4): array
+{
+    $out = [];
+    $sources = [];
+    if (is_array($byCountry) && array_is_list($byCountry)) {
+        $sources = $byCountry;
+    } elseif (is_array($stats['top_countries'] ?? null)) {
+        $sources = $stats['top_countries'];
+    }
+    foreach ($sources as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $name = trim((string)($row['country'] ?? $row['ip_country'] ?? ''));
+        if ($name === '') {
+            $name = 'Unknown';
+        }
+        $hits = (int)($row['hits'] ?? $row['count'] ?? $row['events'] ?? $row['total'] ?? 0);
+        $out[] = ['country' => $name, 'hits' => $hits];
+    }
+    usort($out, fn($a, $b) => $b['hits'] <=> $a['hits']);
+    return array_slice($out, 0, $limit);
+}
+
+function labelColor(string $l): string
+{
+    return ['bot'=>'#ff5d5d','suspicious'=>'#ffb347','uncertain'=>'#8aa0c0','human'=>'#39c46d'][strtolower($l)] ?? '#8aa0c0';
+}
+
 $configured = ST_EXPORT_TOKEN !== 'PUT-YOUR-EXPORT-API-TOKEN-HERE'
            && ST_BASE_URL !== 'https://your-signaltrace-host';
 
@@ -68,8 +129,9 @@ $fromMs = (time() - WINDOW_HOURS * 3600) * 1000;
 $toMs   = time() * 1000;
 $qs     = "?from=$fromMs&to=$toMs";
 
-$stats  = $configured ? st_get("/export/stats/extended$qs", 'st_stats') : null;
-$clicks = $configured ? st_get("/export/json$qs", 'st_clicks') : null;
+$stats     = $configured ? st_get("/export/stats/extended$qs", 'st_stats') : null;
+$byCountry = $configured ? st_get("/export/by-country$qs&limit=4", 'st_countries') : null;
+$clicks    = $configured ? st_get("/export/json$qs", 'st_clicks') : null;
 
 $total      = (int)($stats['total_events'] ?? $stats['total'] ?? 0);
 $uniqueIps  = (int)($stats['unique_ips'] ?? 0);
@@ -81,17 +143,17 @@ $labels = [
     'human'      => ['Human',      (int)($stats['human_events'] ?? 0),      '#39c46d'],
 ];
 $labelMax = max(1, max(array_values(array_map(fn($l) => $l[1], $labels))));
-$topCountries = array_slice($stats['top_countries'] ?? [], 0, 4);
+$topCountries = st_country_rows($stats, $byCountry, 4);
 
-// Recent feed: newest first, trimmed for display
+// Recent feed: newest first, optional IP filter, trimmed for display
 $recent = [];
 if (is_array($clicks)) {
-    usort($clicks, fn($a, $b) => strcmp($b['clicked_at'] ?? '', $a['clicked_at'] ?? ''));
+    if (!array_is_list($clicks)) {
+        $clicks = array_values($clicks);
+    }
+    $clicks = array_values(array_filter($clicks, fn($r) => is_array($r) && !st_event_ignored($r)));
+    usort($clicks, fn($a, $b) => st_event_ts($b) <=> st_event_ts($a));
     $recent = array_slice($clicks, 0, 11);
-}
-function labelColor(string $l): string
-{
-    return ['bot'=>'#ff5d5d','suspicious'=>'#ffb347','uncertain'=>'#8aa0c0','human'=>'#39c46d'][strtolower($l)] ?? '#8aa0c0';
 }
 ?>
 <!DOCTYPE html>
@@ -199,8 +261,8 @@ function labelColor(string $l): string
       <div class="k">Top Source Countries</div>
       <?php if ($topCountries): foreach ($topCountries as $c): ?>
         <div class="country">
-          <span class="n"><?= h($c['ip_country'] ?? $c['country'] ?? '??') ?></span>
-          <span class="c"><?= number_format((int)($c['count'] ?? $c['events'] ?? $c['total'] ?? 0)) ?></span>
+          <span class="n"><?= h($c['country'] ?? '??') ?></span>
+          <span class="c"><?= number_format((int)($c['hits'] ?? 0)) ?></span>
         </div>
       <?php endforeach; else: ?>
         <div class="country"><span class="n dim">No events in window</span></div>
@@ -213,8 +275,7 @@ function labelColor(string $l): string
     <table>
       <tr><th>When</th><th>Token</th><th>Source</th><th>Org</th><th>Class</th></tr>
       <?php foreach ($recent as $r):
-        $when = isset($r['clicked_at_unix_ms']) ? (int)($r['clicked_at_unix_ms'] / 1000)
-              : (strtotime($r['clicked_at'] ?? '') ?: time());
+        $when = st_event_ts($r) ?: time();
         $lab  = strtolower($r['confidence_label'] ?? 'uncertain');
       ?>
         <tr>
