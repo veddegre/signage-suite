@@ -250,9 +250,27 @@ function slide_background_presets(): array
 }
 
 /**
- * Occasion starters for the admin slide creator — prefills text, background, and alignment.
+ * Occasion starters for the admin slide creator — prefills text, background, alignment, and artwork.
  * Bracketed tokens like [Name] are meant to be replaced before saving.
  */
+function slide_creator_decor_labels(): array
+{
+    return [
+        'birthday' => 'Birthday — balloons, gifts & confetti',
+        'anniversary' => 'Anniversary — hearts & rings',
+        'welcome_home' => 'Welcome home — house & porch light',
+        'congrats' => 'Congratulations — stars & trophy',
+        'party' => 'Party — streamers & balloons',
+        'holiday' => 'Holiday — snowflakes & ornaments',
+        'new_baby' => 'New baby — moon, stars & rattle',
+        'thank_you' => 'Thank you — flowers & hearts',
+        'graduation' => 'Graduation — cap & stars',
+        'get_well' => 'Get well — sun & flowers',
+        'game_day' => 'Game day — pennants & ball',
+        'reminder' => 'Reminder — calendar',
+    ];
+}
+
 function slide_creator_templates(): array
 {
     return [
@@ -260,6 +278,7 @@ function slide_creator_templates(): array
             'label' => 'Birthday',
             'bg' => 'celebration',
             'align' => 'center',
+            'decor' => 'birthday',
             'title' => 'Happy Birthday, [Name]!',
             'subtitle' => '[Month Day]',
             'body' => "Join us for cake and celebration at [Time].\nPresents in the living room — dinner at 6.",
@@ -270,6 +289,7 @@ function slide_creator_templates(): array
             'label' => 'Anniversary',
             'bg' => 'golden_hour',
             'align' => 'center',
+            'decor' => 'anniversary',
             'title' => 'Happy Anniversary',
             'subtitle' => '[Years] years · [Month Day]',
             'body' => "Celebrating [Name] & [Partner].\nDinner reservation at [Time] — dress nice!",
@@ -280,6 +300,7 @@ function slide_creator_templates(): array
             'label' => 'Welcome home',
             'bg' => 'harbor_glow',
             'align' => 'center',
+            'decor' => 'welcome_home',
             'title' => 'Welcome Home, [Name]!',
             'subtitle' => 'We missed you',
             'body' => "So glad you're back.\nDrop your bags — there's food in the kitchen.",
@@ -290,6 +311,7 @@ function slide_creator_templates(): array
             'label' => 'Congratulations',
             'bg' => 'sky_glow',
             'align' => 'center',
+            'decor' => 'congrats',
             'title' => 'Congratulations, [Name]!',
             'subtitle' => '[Achievement]',
             'body' => "We're so proud of you.\nCelebrate tonight — you earned it.",
@@ -300,6 +322,7 @@ function slide_creator_templates(): array
             'label' => 'Party invite',
             'bg' => 'coral',
             'align' => 'center',
+            'decor' => 'party',
             'title' => "You're Invited!",
             'subtitle' => '[Occasion] · [Month Day]',
             'body' => "[Time] at [Place]\nRSVP to [Contact]",
@@ -310,6 +333,7 @@ function slide_creator_templates(): array
             'label' => 'Holiday',
             'bg' => 'frost',
             'align' => 'center',
+            'decor' => 'holiday',
             'title' => 'Happy Holidays',
             'subtitle' => 'From our family to yours',
             'body' => "Wishing you warmth, rest, and time together\nthis season.",
@@ -320,6 +344,7 @@ function slide_creator_templates(): array
             'label' => 'New baby',
             'bg' => 'rose',
             'align' => 'center',
+            'decor' => 'new_baby',
             'title' => 'Welcome, [Name]!',
             'subtitle' => 'Born [Month Day]',
             'body' => "Introducing our newest family member.\nVisiting hours: [Time]",
@@ -330,16 +355,51 @@ function slide_creator_templates(): array
             'label' => 'Thank you',
             'bg' => 'seafoam',
             'align' => 'center',
+            'decor' => 'thank_you',
             'title' => 'Thank You, [Name]',
             'subtitle' => 'We appreciate you',
             'body' => "Your kindness meant the world to us.",
             'footer' => 'With gratitude',
             'filename' => 'thank-you',
         ],
+        'graduation' => [
+            'label' => 'Graduation',
+            'bg' => 'sky_glow',
+            'align' => 'center',
+            'decor' => 'graduation',
+            'title' => 'Congratulations, [Name]!',
+            'subtitle' => 'Class of [Year]',
+            'body' => "We are so proud of everything you've accomplished.\nCelebration at [Time].",
+            'footer' => 'Love, the family',
+            'filename' => 'graduation',
+        ],
+        'get_well' => [
+            'label' => 'Get well',
+            'bg' => 'seafoam',
+            'align' => 'center',
+            'decor' => 'get_well',
+            'title' => 'Get Well Soon, [Name]',
+            'subtitle' => 'Sending healing thoughts',
+            'body' => "Rest up — we're thinking of you.\nSoup in the fridge if you need anything.",
+            'footer' => 'Love, the family',
+            'filename' => 'get-well',
+        ],
+        'game_day' => [
+            'label' => 'Game day',
+            'bg' => 'ember',
+            'align' => 'center',
+            'decor' => 'game_day',
+            'title' => 'Game Day!',
+            'subtitle' => '[Team] vs [Opponent]',
+            'body' => "Kickoff at [Time] — snacks in the den.\nWear your colors!",
+            'footer' => 'Go [Team]!',
+            'filename' => 'game-day',
+        ],
         'reminder' => [
             'label' => 'Reminder',
             'bg' => 'slate',
             'align' => 'left',
+            'decor' => 'reminder',
             'title' => '[Headline]',
             'subtitle' => '[When]',
             'body' => "[Details]\n[Location or contact if needed]",
