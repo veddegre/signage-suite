@@ -64,11 +64,11 @@ function signage_frame_height(): int
     return 1080 - signage_safe_bottom();
 }
 
-/** html/body height rule for framed signage boards. */
+/** html/body height declaration for framed signage boards (property only — not a nested rule). */
 function signage_viewport_css(): string
 {
     $h = signage_frame_height();
-    return "html,body{height:calc({$h}px - var(--signage-ticker-inset,0px));}";
+    return "height:calc({$h}px - var(--signage-ticker-inset,0px));";
 }
 
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */

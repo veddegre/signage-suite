@@ -154,7 +154,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .board { width:1920px; height:100%; padding:<?= $compact ? '20px 28px' : '28px 32px' ?>; display:grid;
            gap:<?= $compact ? 18 : 24 ?>px;
            grid-template-columns: 1fr 1fr 1fr;
-           grid-template-rows: auto minmax(<?= $compact ? 248 : 280 ?>px, 34%) minmax(0, 1fr) auto;
+           grid-template-rows: <?= $compact ? '80px 280px' : '96px 300px' ?> minmax(0, 1fr) auto;
            grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 54 : 64 ?>px; }
