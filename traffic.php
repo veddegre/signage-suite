@@ -28,6 +28,8 @@ $configured = TOMTOM_API_KEY !== '' && TOMTOM_API_KEY !== 'PUT-YOUR-TOMTOM-KEY-H
 $frameH = signage_frame_height();
 $flowStyles = ['relative0-dark', 'relative0', 'relative', 'absolute'];
 $flowStyle = in_array(FLOW_STYLE, $flowStyles, true) ? FLOW_STYLE : 'relative0-dark';
+$tileBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/traffic.php')), '/')
+    . '/traffic_tiles.php?style=' . rawurlencode($flowStyle) . '&';
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -74,6 +76,9 @@ $markers = [
              background:rgba(12,20,34,.78); padding:8px 16px; border-radius:8px;
              border:1px solid var(--hairline); }
   .map-tag b { color:var(--beacon); font-weight:600; }
+  .tile-warn { position:absolute; right:20px; bottom:16px; z-index:501; max-width:520px;
+               font-size:16px; line-height:1.45; color:var(--snow); background:rgba(160,32,64,.92);
+               padding:12px 16px; border-radius:8px; border:1px solid #ff5d5d; display:none; }
 
   .legend { grid-area:legend; display:flex; align-items:center; gap:28px; padding:0 8px; }
   .legend .lab { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
@@ -106,6 +111,7 @@ $markers = [
   <div class="mapwrap">
     <div id="trafficMap"></div>
     <div class="map-tag">Flow <b>TomTom</b> &middot; refreshes every <?= (int)RELOAD_SEC ?>s</div>
+    <div id="tileWarn" class="tile-warn">Traffic tiles are not loading — check TomTom API key, Traffic API access, and that <code>traffic_tiles.php</code> is deployed.</div>
   </div>
   <div class="legend">
     <span class="lab">Congestion</span>
@@ -148,8 +154,7 @@ $markers = [
   (function () {
     const CENTER = [<?= LAT ?>, <?= LON ?>];
     const ZOOM = <?= (int)ZOOM ?>;
-    const FLOW = <?= json_encode($flowStyle) ?>;
-    const TILE_BASE = 'traffic_tiles.php?style=' + encodeURIComponent(FLOW) + '&';
+    const TILE_BASE = <?= json_encode($tileBase) ?>;
     const MARKERS = <?= json_encode($markers) ?>;
     const RELOAD = <?= max(60, (int)RELOAD_SEC) ?> * 1000;
 
@@ -167,7 +172,16 @@ $markers = [
     let trafficLayer = L.tileLayer(
       TILE_BASE + 'z={z}&x={x}&y={y}',
       { opacity: 0.92, maxZoom: 19, attribution: '&copy; TomTom' }
-    ).addTo(map);
+    );
+    let tileErrors = 0;
+    trafficLayer.on('tileerror', function () {
+      tileErrors++;
+      if (tileErrors >= 4) {
+        var w = document.getElementById('tileWarn');
+        if (w) w.style.display = 'block';
+      }
+    });
+    trafficLayer.addTo(map);
 
     MARKERS.forEach(function (m) {
       L.circleMarker([m.lat, m.lon], {

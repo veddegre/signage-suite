@@ -100,7 +100,14 @@ Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule
 ## traffic.php — Traffic Map
 Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional city markers. Defaults to the Allendale ↔ Grand Rapids area but center, zoom, and labels are all editable in admin.
 
-- **Setup:** free TomTom Developer key at [developer.tomtom.com](https://developer.tomtom.com/) (enable Traffic API) → admin → **Traffic Map** → paste key. Tiles are fetched through `traffic_tiles.php` so the key never appears in the browser.
+- **Setup:** free TomTom Developer key at [developer.tomtom.com](https://developer.tomtom.com/) (enable **Traffic API** on the key) → admin → **Traffic Map** → paste key. Tiles are fetched through `traffic_tiles.php` so the key never appears in the browser.
+- **What you should see:** colored lines on major roads — green = free flow, yellow/red = slower/congested (default style `relative0-dark`). Late night on quiet roads, some segments may be sparse, but I-96 and US-131 should still show TomTom coverage around Grand Rapids.
+- **Nothing colored, only the dark basemap?** Tiles are not loading. After updates, make sure `traffic_tiles.php` is deployed to the web root (see [setup-server.sh](#setup-serversh--the-web-host)). Then test on the server:
+
+      curl -I "http://localhost/boards/traffic_tiles.php?style=relative0-dark&z=11&x=536&y=753"
+
+  Expect `HTTP/1.1 200` and `Content-Type: image/png`. If you get 403/502, check the key in admin and TomTom portal → your app → **Traffic API** enabled. Errors are logged to `cache/traffic_tiles/last_error.txt`.
+- **Hard to see green?** Try **Flow style → `relative0`** in admin for brighter colors on the dark basemap, or bump **Zoom** to 12.
 - Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.
 - **Flow style** `relative0-dark` matches the dark basemap best. Map reloads on a configurable interval (default 5 min).
 
