@@ -375,6 +375,61 @@ function ics_is_excluded(int $ts, array $ev): bool
     return in_array(date('Ymd', $ts), $ev['exdates'], true);
 }
 
+/** Each local-midnight timestamp for an all-day span (end is iCal-exclusive). */
+function ics_all_day_instances(array $ev, int $winStart, int $winEnd): array
+{
+    $tz = new DateTimeZone(TIMEZONE);
+    $start = (new DateTime('@' . $ev['start']))->setTimezone($tz)->setTime(0, 0, 0);
+    $endEx = (int)($ev['end'] ?? ($ev['start'] + 86400));
+    $end = (new DateTime('@' . $endEx))->setTimezone($tz)->setTime(0, 0, 0);
+    if ($end <= $start) {
+        $end = (clone $start)->modify('+1 day');
+    }
+    $out = [];
+    for ($d = clone $start; $d < $end; $d->modify('+1 day')) {
+        $ts = $d->getTimestamp();
+        if ($ts >= $winStart && $ts <= $winEnd) {
+            $out[] = $ts;
+        }
+    }
+    return $out;
+}
+
+/** Normalize Outlook all-day quirks after DTSTART/DTEND are parsed. */
+function ics_finalize_vevent(array $cur): array
+{
+    if ($cur['start'] === null) {
+        return $cur;
+    }
+    if (!empty($cur['ms_all_day']) && !$cur['all_day'] && ($cur['end'] ?? null) !== null) {
+        $startDay = strtotime('today', $cur['start']);
+        $endDay = strtotime('today', $cur['end']);
+        if ($endDay > $startDay || ($cur['end'] - $cur['start']) >= 82800) {
+            $cur['all_day'] = true;
+            $cur['start'] = $startDay;
+            $cur['end'] = $cur['end'] > $endDay ? $endDay + 86400 : $endDay;
+            if ($cur['end'] <= $cur['start']) {
+                $cur['end'] = $cur['start'] + 86400;
+            }
+        }
+    }
+    // Outlook work calendar: OOF blocks (holidays/vacation) export as timed 8–5, not VALUE=DATE.
+    if (!$cur['all_day'] && ($cur['busy'] ?? '') === 'OOF' && ($cur['end'] ?? null) !== null) {
+        $dur = $cur['end'] - $cur['start'];
+        if ($dur >= 4 * 3600) {
+            $first = strtotime('today', $cur['start']);
+            $last = strtotime('today', $cur['end']);
+            $cur['all_day'] = true;
+            $cur['start'] = $first;
+            $cur['end'] = strtotime('+1 day', $last);
+        }
+    }
+    if ($cur['all_day'] && ($cur['end'] ?? null) === null) {
+        $cur['end'] = $cur['start'] + 86400;
+    }
+    return $cur;
+}
+
 /** Expand one VEVENT into instances inside [winStart, winEnd]. */
 function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = []): array
 {
@@ -394,7 +449,11 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
     };
 
     if (!$ev['rrule']) {
-        if ($start >= $winStart && $start <= $winEnd) {
+        if ($allDay) {
+            foreach (ics_all_day_instances($ev, $winStart, $winEnd) as $ts) {
+                $push($ts);
+            }
+        } elseif ($start >= $winStart && $start <= $winEnd) {
             $push($start);
         }
         return $out;
@@ -479,9 +538,9 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
     foreach ($lines as $line) {
         if ($line === 'BEGIN:VEVENT') {
             $cur = [
-                'start' => null, 'all_day' => false, 'summary' => '', 'rrule' => null,
+                'start' => null, 'end' => null, 'all_day' => false, 'summary' => '', 'rrule' => null,
                 'exdates' => [], 'exdate_ts' => [], 'uid' => '', 'recurrence_id' => null,
-                'status' => '',
+                'status' => '', 'busy' => '', 'ms_all_day' => false,
                 'cal' => (string)($feedMeta['key'] ?? ''),
                 'color' => (string)($feedMeta['color'] ?? 'beacon'),
                 'hex' => (string)($feedMeta['hex'] ?? '#ffb347'),
@@ -490,7 +549,7 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
         }
         if ($line === 'END:VEVENT') {
             if ($cur && $cur['start'] !== null && strtoupper($cur['status']) !== 'CANCELLED') {
-                $vevents[] = $cur;
+                $vevents[] = ics_finalize_vevent($cur);
             }
             $cur = null;
             continue;
@@ -513,6 +572,15 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
                 if ($t) {
                     $cur['start'] = $t[0];
                     $cur['all_day'] = $t[1];
+                }
+                break;
+            case 'DTEND':
+                $t = ics_time($params, $value);
+                if ($t) {
+                    $cur['end'] = $t[0];
+                    if ($t[1]) {
+                        $cur['all_day'] = true;
+                    }
                 }
                 break;
             case 'RECURRENCE-ID':
@@ -544,6 +612,12 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
                     }
                 }
                 break;
+            case 'X-MICROSOFT-CDO-BUSYSTATUS':
+                $cur['busy'] = strtoupper(trim($value));
+                break;
+            case 'X-MICROSOFT-CDO-ALLDAYEVENT':
+                $cur['ms_all_day'] = strtoupper(trim($value)) === 'TRUE';
+                break;
         }
     }
     return $vevents;
@@ -569,7 +643,18 @@ foreach (ICS_FEEDS as $i => $feed) {
     foreach ($vevents as $ev) {
         if ($ev['recurrence_id'] !== null && ($ev['uid'] ?? '') !== '') {
             $overrides[$ev['uid']][$ev['recurrence_id']] = true;
-            if ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
+            if ($ev['all_day']) {
+                foreach (ics_all_day_instances($ev, $winStart, $winEnd) as $ts) {
+                    $events[] = [
+                        'ts' => $ts,
+                        'all_day' => true,
+                        'summary' => $ev['summary'],
+                        'cal' => $ev['cal'],
+                        'color' => $ev['color'],
+                        'hex' => $ev['hex'],
+                    ];
+                }
+            } elseif ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
                 $events[] = [
                     'ts' => $ev['start'],
                     'all_day' => $ev['all_day'],
