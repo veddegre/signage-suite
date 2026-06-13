@@ -312,11 +312,11 @@ function slide_photo_background_presets(): array
             'overlay' => slide_photo_overlay_vignette(0.68, 0.34, 0.72),
             'subtitle' => '#ffd089',
         ]),
-        'photo_celebration' => array_merge($textDark, [
-            'label' => 'Celebration',
+        'photo_birthday' => array_merge($textDark, [
+            'label' => 'Birthday',
             'kind' => 'photo',
-            'photo' => 'photos/celebration.jpg',
-            'overlay' => slide_photo_overlay_vignette(0.76, 0.44, 0.8),
+            'photo' => 'photos/birthday.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.72, 0.38, 0.78),
             'subtitle' => '#ff9d9d',
         ]),
         'photo_winter_trees' => array_merge($textDark, [
@@ -326,7 +326,7 @@ function slide_photo_background_presets(): array
             'overlay' => slide_photo_overlay_vignette(0.62, 0.28, 0.7),
         ]),
         'photo_romantic_dinner' => array_merge($textDark, [
-            'label' => 'Candlelit dinner',
+            'label' => 'Fine dining',
             'kind' => 'photo',
             'photo' => 'photos/romantic_dinner.jpg',
             'overlay' => slide_photo_overlay_vignette(0.82, 0.5, 0.86),
@@ -367,35 +367,16 @@ function slide_background_is_photo(array $preset): bool
 }
 
 /**
- * Occasion starters for the admin slide creator — prefills text, background, alignment, and artwork.
+ * Occasion starters for the admin slide creator — prefills text, background, and alignment.
  * Bracketed tokens like [Name] are meant to be replaced before saving.
  */
-function slide_creator_decor_labels(): array
-{
-    return [
-        'birthday' => 'Birthday — balloons, gifts & confetti',
-        'anniversary' => 'Anniversary — hearts & rings',
-        'welcome_home' => 'Welcome home — house & porch light',
-        'congrats' => 'Congratulations — stars & trophy',
-        'party' => 'Party — streamers & balloons',
-        'holiday' => 'Holiday — snowflakes & ornaments',
-        'new_baby' => 'New baby — moon, stars & rattle',
-        'thank_you' => 'Thank you — flowers & hearts',
-        'graduation' => 'Graduation — cap & stars',
-        'get_well' => 'Get well — sun & flowers',
-        'game_day' => 'Game day — pennants & ball',
-        'reminder' => 'Reminder — calendar',
-    ];
-}
-
 function slide_creator_templates(): array
 {
     return [
         'birthday' => [
             'label' => 'Birthday',
-            'bg' => 'photo_celebration',
+            'bg' => 'photo_birthday',
             'align' => 'center',
-            'decor' => 'birthday',
             'title' => 'Happy Birthday, [Name]!',
             'subtitle' => '[Month Day]',
             'body' => "Join us for cake and celebration at [Time].\nPresents in the living room — dinner at 6.",
@@ -406,7 +387,6 @@ function slide_creator_templates(): array
             'label' => 'Anniversary',
             'bg' => 'photo_romantic_dinner',
             'align' => 'center',
-            'decor' => 'anniversary',
             'title' => 'Happy Anniversary',
             'subtitle' => '[Years] years · [Month Day]',
             'body' => "Celebrating [Name] & [Partner].\nDinner reservation at [Time] — dress nice!",
@@ -417,7 +397,6 @@ function slide_creator_templates(): array
             'label' => 'Welcome home',
             'bg' => 'photo_cozy_home',
             'align' => 'center',
-            'decor' => 'welcome_home',
             'title' => 'Welcome Home, [Name]!',
             'subtitle' => 'We missed you',
             'body' => "So glad you're back.\nDrop your bags — there's food in the kitchen.",
@@ -428,7 +407,6 @@ function slide_creator_templates(): array
             'label' => 'Congratulations',
             'bg' => 'photo_mountain_sun',
             'align' => 'center',
-            'decor' => 'congrats',
             'title' => 'Congratulations, [Name]!',
             'subtitle' => '[Achievement]',
             'body' => "We're so proud of you.\nCelebrate tonight — you earned it.",
@@ -437,9 +415,8 @@ function slide_creator_templates(): array
         ],
         'party' => [
             'label' => 'Party invite',
-            'bg' => 'photo_celebration',
+            'bg' => 'photo_birthday',
             'align' => 'center',
-            'decor' => 'party',
             'title' => "You're Invited!",
             'subtitle' => '[Occasion] · [Month Day]',
             'body' => "[Time] at [Place]\nRSVP to [Contact]",
@@ -450,7 +427,6 @@ function slide_creator_templates(): array
             'label' => 'Holiday',
             'bg' => 'photo_winter_trees',
             'align' => 'center',
-            'decor' => 'holiday',
             'title' => 'Happy Holidays',
             'subtitle' => 'From our family to yours',
             'body' => "Wishing you warmth, rest, and time together\nthis season.",
@@ -461,7 +437,6 @@ function slide_creator_templates(): array
             'label' => 'New baby',
             'bg' => 'photo_nursery',
             'align' => 'center',
-            'decor' => 'new_baby',
             'title' => 'Welcome, [Name]!',
             'subtitle' => 'Born [Month Day]',
             'body' => "Introducing our newest family member.\nVisiting hours: [Time]",
@@ -472,7 +447,6 @@ function slide_creator_templates(): array
             'label' => 'Thank you',
             'bg' => 'photo_wildflowers',
             'align' => 'center',
-            'decor' => 'thank_you',
             'title' => 'Thank You, [Name]',
             'subtitle' => 'We appreciate you',
             'body' => "Your kindness meant the world to us.",
@@ -483,7 +457,6 @@ function slide_creator_templates(): array
             'label' => 'Graduation',
             'bg' => 'photo_mountain_sun',
             'align' => 'center',
-            'decor' => 'graduation',
             'title' => 'Congratulations, [Name]!',
             'subtitle' => 'Class of [Year]',
             'body' => "We are so proud of everything you've accomplished.\nCelebration at [Time].",
@@ -494,7 +467,6 @@ function slide_creator_templates(): array
             'label' => 'Get well',
             'bg' => 'photo_wildflowers',
             'align' => 'center',
-            'decor' => 'get_well',
             'title' => 'Get Well Soon, [Name]',
             'subtitle' => 'Sending healing thoughts',
             'body' => "Rest up — we're thinking of you.\nSoup in the fridge if you need anything.",
@@ -505,7 +477,6 @@ function slide_creator_templates(): array
             'label' => 'Game day',
             'bg' => 'photo_stadium',
             'align' => 'center',
-            'decor' => 'game_day',
             'title' => 'Game Day!',
             'subtitle' => '[Team] vs [Opponent]',
             'body' => "Kickoff at [Time] — snacks in the den.\nWear your colors!",
@@ -516,7 +487,6 @@ function slide_creator_templates(): array
             'label' => 'Reminder',
             'bg' => 'slate',
             'align' => 'left',
-            'decor' => 'reminder',
             'title' => '[Headline]',
             'subtitle' => '[When]',
             'body' => "[Details]\n[Location or contact if needed]",
@@ -671,25 +641,33 @@ function slide_background_gd_image(array $preset, int $w = 1920, int $h = 1080)
     return $im;
 }
 
-/** Remote URLs for bundled slide photo backgrounds (Unsplash + Pexels). */
+/** Remote URLs for bundled slide photo backgrounds (see photos/CREDITS.md). */
 function slide_photo_download_urls(): array
 {
     $unsplash = '?auto=format&fit=crop&w=1920&h=1080&q=82';
     $pexels   = '?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop';
 
     return [
-        'photos/lake_dusk.jpg'       => 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4' . $unsplash,
-        'photos/misty_forest.jpg'    => 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e' . $unsplash,
-        'photos/ocean_sunset.jpg'    => 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e' . $unsplash,
-        'photos/city_night.jpg'      => 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df' . $unsplash,
-        'photos/winter_trees.jpg'    => 'https://images.unsplash.com/photo-1519682337058-a94d519337bc' . $unsplash,
-        'photos/cozy_home.jpg'       => 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg' . $pexels,
-        'photos/wildflowers.jpg'     => 'https://images.pexels.com/photos/1563356/pexels-photo-1563356.jpeg' . $pexels,
-        'photos/celebration.jpg'     => 'https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg' . $pexels,
-        'photos/romantic_dinner.jpg' => 'https://images.pexels.com/photos/941864/pexels-photo-941864.jpeg' . $pexels,
-        'photos/nursery.jpg'         => 'https://images.pexels.com/photos/3608299/pexels-photo-3608299.jpeg' . $pexels,
-        'photos/stadium.jpg'         => 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg' . $pexels,
-        'photos/mountain_sun.jpg'    => 'https://images.pexels.com/photos/417173/pexels-photo-417173.jpeg' . $pexels,
+        'photos/lake_dusk.jpg'       => ['url' => 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4' . $unsplash, 'min_bytes' => 200000],
+        'photos/misty_forest.jpg'    => ['url' => 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e' . $unsplash, 'min_bytes' => 500000],
+        'photos/ocean_sunset.jpg'    => ['url' => 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e' . $unsplash, 'min_bytes' => 200000],
+        'photos/city_night.jpg'      => ['url' => 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df' . $unsplash, 'min_bytes' => 500000],
+        'photos/winter_trees.jpg'    => [
+            'url' => 'https://images.unsplash.com/photo-1548777123-e216912df7d8' . $unsplash,
+            'min_bytes' => 400000,
+            'sha256' => '0bf83e39b5acf47a8d4aad84ee4e7585b6d0e55c62c62bb50b3b7a9d6640f6e5',
+        ],
+        'photos/cozy_home.jpg'       => ['url' => 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg' . $pexels, 'min_bytes' => 250000],
+        'photos/wildflowers.jpg'     => ['url' => 'https://images.pexels.com/photos/1563356/pexels-photo-1563356.jpeg' . $pexels, 'min_bytes' => 500000],
+        'photos/birthday.jpg'        => ['url' => 'https://images.unsplash.com/photo-1578985545062-69928b1d9587' . $unsplash, 'min_bytes' => 300000],
+        'photos/romantic_dinner.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622' . $unsplash,
+            'min_bytes' => 250000,
+            'sha256' => 'b224738a3a32bc257493924c2999b2eb75b1c4a8b1f0706b900c9914255ed18d',
+        ],
+        'photos/nursery.jpg'         => ['url' => 'https://images.unsplash.com/photo-1516627145497-ae6968895b74' . $unsplash, 'min_bytes' => 200000],
+        'photos/stadium.jpg'         => ['url' => 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg' . $pexels, 'min_bytes' => 300000],
+        'photos/mountain_sun.jpg'    => ['url' => 'https://images.pexels.com/photos/417173/pexels-photo-417173.jpeg' . $pexels, 'min_bytes' => 250000],
     ];
 }
 
@@ -730,13 +708,25 @@ function slide_background_ensure_photos(?string $dir = null): int
         return 0;
     }
     $fetched = 0;
-    foreach (slide_photo_download_urls() as $rel => $url) {
+    foreach (slide_photo_download_urls() as $rel => $spec) {
+        if (is_string($spec)) {
+            $spec = ['url' => $spec, 'min_bytes' => 10000];
+        }
         $path = $dir . '/' . $rel;
-        if (is_file($path) && filesize($path) > 10000) {
+        $minBytes = (int)($spec['min_bytes'] ?? 10000);
+        $wantHash = (string)($spec['sha256'] ?? '');
+        if (is_file($path)) {
+            $size = filesize($path);
+            $hashOk = $wantHash === '' || hash_file('sha256', $path) === $wantHash;
+            if ($size >= $minBytes && $hashOk) {
+                continue;
+            }
+        }
+        $body = slide_http_get((string)($spec['url'] ?? ''));
+        if ($body === null || strlen($body) < $minBytes) {
             continue;
         }
-        $body = slide_http_get($url);
-        if ($body === null || strlen($body) < 10000) {
+        if ($wantHash !== '' && hash('sha256', $body) !== $wantHash) {
             continue;
         }
         if (@file_put_contents($path, $body) !== false) {

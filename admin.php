@@ -1082,7 +1082,7 @@ function admin_field(array $f, $val, string $board): void
 
           <div class="creator-box">
             <h3>Create a text slide</h3>
-            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. <strong>Photo scenes</strong> use real photography (dimmed like Canva); <strong>Theme colors</strong> are the original gradients. Occasion templates add artwork and usually pick a matching photo. Saves as PNG on the <strong>Always</strong> schedule — adjust timing in the table below.</p>
+            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. <strong>Photo scenes</strong> use real photography (dimmed for readability); <strong>Theme colors</strong> are the original gradients. Saves as PNG on the <strong>Always</strong> schedule — adjust timing in the table below.</p>
             <div class="creator-layout">
               <div class="creator-preview-block">
                 <div class="preview-head">
@@ -1100,7 +1100,7 @@ function admin_field(array $f, $val, string $board): void
                       <button type="button" class="template-chip" data-template="<?= h($tid) ?>"><?= h($tpl['label']) ?></button>
                     <?php endforeach; ?>
                   </div>
-                  <div class="field-hint">Prefills text, background, and artwork — replace bracketed placeholders like <code>[Name]</code>.</div>
+                  <div class="field-hint">Prefills text and background — replace bracketed placeholders like <code>[Name]</code>.</div>
                 </div>
 
                 <div class="creator-editor">
@@ -1139,22 +1139,12 @@ function admin_field(array $f, $val, string $board): void
                     </div>
                   </div>
 
-                  <div class="field-block">
+                  <div class="field-block span-full">
                     <label class="l">Alignment</label>
                     <div class="seg-control" role="group" aria-label="Text alignment">
                       <label><input type="radio" name="creator_align" value="left" checked><span>Left</span></label>
                       <label><input type="radio" name="creator_align" value="center"><span>Center</span></label>
                     </div>
-                  </div>
-                  <div class="field-block">
-                    <label class="l" for="creator_decor">Occasion artwork</label>
-                    <select id="creator_decor">
-                      <option value="">None</option>
-                      <?php foreach (slide_creator_decor_labels() as $did => $dlabel): ?>
-                        <option value="<?= h($did) ?>"><?= h($dlabel) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                    <div class="field-hint">Decorative icons drawn on the slide — set automatically by templates.</div>
                   </div>
 
                   <div class="field-block">
@@ -2555,471 +2545,6 @@ function addVideoCard() {
     }
   }
 
-  function decorHex(h, a) {
-    const x = h.replace('#', '');
-    const r = parseInt(x.slice(0, 2), 16);
-    const g = parseInt(x.slice(2, 4), 16);
-    const b = parseInt(x.slice(4, 6), 16);
-    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
-  }
-
-  function decorBalloon(c, x, y, r, color) {
-    c.save();
-    c.strokeStyle = decorHex('#edf2fb', 0.28);
-    c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(x, y + r * 0.95);
-    c.quadraticCurveTo(x + r * 0.15, y + r + 70, x + r * 0.35, y + r + 130);
-    c.stroke();
-    const g = c.createRadialGradient(x - r * 0.28, y - r * 0.32, r * 0.15, x, y, r);
-    g.addColorStop(0, decorHex(color, 0.95));
-    g.addColorStop(1, decorHex(color, 0.72));
-    c.fillStyle = g;
-    c.beginPath();
-    c.ellipse(x, y, r * 0.9, r, 0, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = color;
-    c.beginPath();
-    c.moveTo(x - 7, y + r * 0.88);
-    c.lineTo(x + 7, y + r * 0.88);
-    c.lineTo(x, y + r * 0.88 + 11);
-    c.closePath();
-    c.fill();
-    c.fillStyle = decorHex('#ffffff', 0.38);
-    c.beginPath();
-    c.ellipse(x - r * 0.22, y - r * 0.28, r * 0.16, r * 0.24, -0.4, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-  }
-
-  function decorGift(c, x, y, size, box, ribbon) {
-    c.save();
-    c.fillStyle = box;
-    c.fillRect(x, y, size, size * 0.82);
-    c.fillStyle = decorHex(box, 0.75);
-    c.fillRect(x - 5, y - 12, size + 10, 14);
-    c.fillStyle = ribbon;
-    c.fillRect(x + size / 2 - 7, y - 12, 14, size * 0.82 + 12);
-    c.fillRect(x, y + size * 0.32, size, 14);
-    c.beginPath();
-    c.arc(x + size / 2 - 16, y - 16, 12, 0, Math.PI * 2);
-    c.arc(x + size / 2 + 16, y - 16, 12, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-  }
-
-  function decorConfetti(c, colors, count) {
-    for (let i = 0; i < count; i++) {
-      const x = ((i * 173) % 1000) / 1000 * W;
-      const y = ((i * 97) % 1000) / 1000 * (H * 0.92);
-      c.save();
-      c.translate(x, y);
-      c.rotate((i * 0.91) % (Math.PI * 2));
-      c.globalAlpha = 0.28 + (i % 6) * 0.07;
-      c.fillStyle = colors[i % colors.length];
-      if (i % 3 === 0) c.fillRect(-10, -3, 20, 6);
-      else if (i % 3 === 1) { c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill(); }
-      else { c.beginPath(); c.moveTo(0, -8); c.lineTo(7, 8); c.lineTo(-7, 8); c.closePath(); c.fill(); }
-      c.restore();
-    }
-  }
-
-  function decorHeart(c, x, y, size, color, rot) {
-    c.save();
-    c.translate(x, y);
-    c.rotate(rot || 0);
-    c.fillStyle = color;
-    c.beginPath();
-    c.moveTo(0, size * 0.28);
-    c.bezierCurveTo(-size, -size * 0.35, -size * 0.2, -size, 0, -size * 0.45);
-    c.bezierCurveTo(size * 0.2, -size, size, -size * 0.35, 0, size * 0.28);
-    c.fill();
-    c.restore();
-  }
-
-  function decorStar(c, x, y, r, color, rot) {
-    c.save();
-    c.translate(x, y);
-    c.rotate(rot || 0);
-    c.fillStyle = color;
-    c.beginPath();
-    for (let i = 0; i < 5; i++) {
-      const a = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-      const px = Math.cos(a) * r;
-      const py = Math.sin(a) * r;
-      if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
-    }
-    c.closePath();
-    c.fill();
-    c.restore();
-  }
-
-  function decorSnowflake(c, x, y, r, color) {
-    c.save();
-    c.translate(x, y);
-    c.strokeStyle = color;
-    c.lineWidth = 3;
-    c.lineCap = 'round';
-    for (let i = 0; i < 6; i++) {
-      c.save();
-      c.rotate((Math.PI / 3) * i);
-      c.beginPath();
-      c.moveTo(0, 0);
-      c.lineTo(0, -r);
-      c.moveTo(0, -r * 0.55);
-      c.lineTo(r * 0.22, -r * 0.75);
-      c.moveTo(0, -r * 0.55);
-      c.lineTo(-r * 0.22, -r * 0.75);
-      c.stroke();
-      c.restore();
-    }
-    c.restore();
-  }
-
-  function decorOrnament(c, x, y, r, color) {
-    c.save();
-    c.strokeStyle = decorHex('#ffd089', 0.8);
-    c.lineWidth = 4;
-    c.beginPath();
-    c.moveTo(x, y - r - 18);
-    c.lineTo(x, y - r + 2);
-    c.stroke();
-    c.fillStyle = decorHex('#ffd089', 0.9);
-    c.fillRect(x - 8, y - r - 22, 16, 8);
-    const g = c.createRadialGradient(x - r * 0.25, y - r * 0.25, 2, x, y, r);
-    g.addColorStop(0, decorHex(color, 0.95));
-    g.addColorStop(1, decorHex(color, 0.55));
-    c.fillStyle = g;
-    c.beginPath();
-    c.arc(x, y, r, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = decorHex('#ffffff', 0.35);
-    c.lineWidth = 3;
-    c.beginPath();
-    c.arc(x, y - r * 0.15, r * 0.55, 0.2, Math.PI - 0.2);
-    c.stroke();
-    c.restore();
-  }
-
-  function decorStreamers(c, side) {
-    const colors = ['#ff9d9d', '#ffb347', '#7ec8ff', '#c4a8ff', '#6ee7c8'];
-    for (let i = 0; i < 7; i++) {
-      c.save();
-      c.strokeStyle = colors[i % colors.length];
-      c.globalAlpha = 0.55;
-      c.lineWidth = 5;
-      c.beginPath();
-      if (side === 'left') {
-        c.moveTo(0, 0);
-        c.bezierCurveTo(120 + i * 30, 180 + i * 40, 220 + i * 20, 420, 280 + i * 35, H);
-      } else {
-        c.moveTo(W, 0);
-        c.bezierCurveTo(W - 120 - i * 30, 180 + i * 40, W - 220 - i * 20, 420, W - 280 - i * 35, H);
-      }
-      c.stroke();
-      c.restore();
-    }
-  }
-
-  function decorHouse(c, x, y, scale) {
-    c.save();
-    c.translate(x, y);
-    c.scale(scale, scale);
-    c.fillStyle = decorHex('#edf2fb', 0.18);
-    c.fillRect(-90, -20, 180, 110);
-    c.beginPath();
-    c.moveTo(-110, -20);
-    c.lineTo(0, -95);
-    c.lineTo(110, -20);
-    c.closePath();
-    c.fill();
-    c.fillStyle = decorHex('#ffb347', 0.85);
-    c.fillRect(-18, 20, 36, 70);
-    c.fillStyle = decorHex('#7ec8ff', 0.55);
-    c.fillRect(35, 5, 42, 42);
-    c.fillRect(-77, 5, 42, 42);
-    c.fillStyle = decorHex('#ffb347', 0.95);
-    c.beginPath();
-    c.arc(95, -55, 18, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = decorHex('#ffd089', 0.9);
-    c.fillRect(82, -55, 26, 34);
-    c.restore();
-  }
-
-  function decorTrophy(c, x, y, scale) {
-    c.save();
-    c.translate(x, y);
-    c.scale(scale, scale);
-    c.fillStyle = decorHex('#ffd089', 0.9);
-    c.beginPath();
-    c.moveTo(-35, -60);
-    c.bezierCurveTo(-55, -20, -55, 20, -25, 35);
-    c.lineTo(25, 35);
-    c.bezierCurveTo(55, 20, 55, -20, 35, -60);
-    c.closePath();
-    c.fill();
-    c.fillRect(-12, 35, 24, 28);
-    c.fillRect(-35, 63, 70, 12);
-    c.fillStyle = decorHex('#ffb347', 0.55);
-    c.beginPath();
-    c.arc(0, -15, 22, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-  }
-
-  function decorCap(c, x, y, scale) {
-    c.save();
-    c.translate(x, y);
-    c.scale(scale, scale);
-    c.fillStyle = decorHex('#141f33', 0.92);
-    c.fillRect(-75, 0, 150, 18);
-    c.beginPath();
-    c.moveTo(-55, 0);
-    c.lineTo(0, -48);
-    c.lineTo(55, 0);
-    c.closePath();
-    c.fill();
-    c.fillStyle = decorHex('#ffb347', 0.95);
-    c.beginPath();
-    c.moveTo(55, 0);
-    c.quadraticCurveTo(95, 8, 110, 18);
-    c.lineTo(55, 18);
-    c.closePath();
-    c.fill();
-    c.fillStyle = decorHex('#ffd089', 0.85);
-    c.fillRect(-8, -58, 16, 12);
-    c.restore();
-  }
-
-  function decorFlower(c, x, y, r, petal, center) {
-    for (let i = 0; i < 6; i++) {
-      c.save();
-      c.translate(x, y);
-      c.rotate((Math.PI / 3) * i);
-      c.fillStyle = petal;
-      c.beginPath();
-      c.ellipse(0, -r * 0.55, r * 0.35, r * 0.55, 0, 0, Math.PI * 2);
-      c.fill();
-      c.restore();
-    }
-    c.fillStyle = center;
-    c.beginPath();
-    c.arc(x, y, r * 0.28, 0, Math.PI * 2);
-    c.fill();
-  }
-
-  function decorPennant(c, x, y, w, h, color) {
-    c.save();
-    c.fillStyle = color;
-    c.beginPath();
-    c.moveTo(x, y);
-    c.lineTo(x + w, y + h * 0.35);
-    c.lineTo(x, y + h);
-    c.closePath();
-    c.fill();
-    c.strokeStyle = decorHex('#edf2fb', 0.35);
-    c.lineWidth = 3;
-    c.beginPath();
-    c.moveTo(x, y);
-    c.lineTo(x, y + h + 40);
-    c.stroke();
-    c.restore();
-  }
-
-  function decorBall(c, x, y, r, color, seam) {
-    c.save();
-    const g = c.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
-    g.addColorStop(0, decorHex(color, 0.95));
-    g.addColorStop(1, decorHex(color, 0.65));
-    c.fillStyle = g;
-    c.beginPath();
-    c.arc(x, y, r, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = decorHex(seam, 0.75);
-    c.lineWidth = 4;
-    c.beginPath();
-    c.arc(x, y, r * 0.92, 0.3, Math.PI - 0.3);
-    c.stroke();
-    c.beginPath();
-    c.moveTo(x, y - r * 0.92);
-    c.lineTo(x, y + r * 0.92);
-    c.stroke();
-    c.restore();
-  }
-
-  function decorCalendar(c, x, y, scale) {
-    c.save();
-    c.translate(x, y);
-    c.scale(scale, scale);
-    c.fillStyle = decorHex('#edf2fb', 0.92);
-    c.fillRect(0, 0, 120, 130);
-    c.fillStyle = decorHex('#ff5d5d', 0.85);
-    c.fillRect(0, 0, 120, 32);
-    for (let i = 0; i < 2; i++) {
-      c.fillStyle = decorHex('#526580', 0.8);
-      c.fillRect(22 + i * 66, -14, 10, 22);
-    }
-    c.fillStyle = decorHex('#26344d', 0.35);
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 4; col++) {
-        c.fillRect(14 + col * 24, 48 + row * 24, 16, 16);
-      }
-    }
-    c.fillStyle = decorHex('#ffb347', 0.95);
-    c.fillRect(62, 96, 16, 16);
-    c.restore();
-  }
-
-  function decorRing(c, x, y, r, color) {
-    c.save();
-    c.strokeStyle = color;
-    c.lineWidth = 10;
-    c.beginPath();
-    c.ellipse(x, y, r, r * 0.82, -0.25, 0, Math.PI * 2);
-    c.stroke();
-    c.fillStyle = decorHex('#ffffff', 0.45);
-    c.beginPath();
-    c.ellipse(x - r * 0.25, y - r * 0.35, r * 0.18, r * 0.12, -0.25, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-  }
-
-  function drawOccasionDecor(c, decorId) {
-    if (!decorId) return;
-    c.save();
-    c.globalAlpha = 0.92;
-    switch (decorId) {
-      case 'birthday':
-        decorConfetti(c, ['#ffb347', '#ff9d9d', '#7ec8ff', '#c4a8ff', '#6ee7c8', '#ffd089'], 48);
-        decorBalloon(c, 140, 200, 72, '#ff9d9d');
-        decorBalloon(c, 260, 150, 58, '#7ec8ff');
-        decorBalloon(c, W - 140, 190, 68, '#ffb347');
-        decorBalloon(c, W - 260, 140, 54, '#c4a8ff');
-        decorBalloon(c, W / 2 - 180, 120, 46, '#6ee7c8');
-        decorBalloon(c, W / 2 + 180, 120, 46, '#ffd089');
-        decorGift(c, 70, H - 260, 110, '#7ec8ff', '#ffb347');
-        decorGift(c, W - 180, H - 250, 100, '#ff9d9d', '#ffd089');
-        decorGift(c, W / 2 - 55, H - 220, 90, '#c4a8ff', '#edf2fb');
-        break;
-      case 'anniversary':
-        decorHeart(c, 150, 220, 42, decorHex('#ff9d9d', 0.75), -0.2);
-        decorHeart(c, W - 150, 220, 42, decorHex('#ff9d9d', 0.75), 0.2);
-        decorHeart(c, W / 2, 170, 56, decorHex('#ff8fc7', 0.85), 0);
-        decorRing(c, W / 2 - 120, H - 220, 38, decorHex('#ffd089', 0.9));
-        decorRing(c, W / 2 + 120, H - 220, 38, decorHex('#ffd089', 0.9));
-        decorStar(c, 220, 140, 16, decorHex('#ffd089', 0.8), 0);
-        decorStar(c, W - 220, 140, 16, decorHex('#ffd089', 0.8), 0.4);
-        break;
-      case 'welcome_home':
-        decorHouse(c, 120, H - 240, 1);
-        decorHouse(c, W - 120, H - 240, 1);
-        decorHeart(c, W / 2, 150, 36, decorHex('#ffb347', 0.55), 0);
-        decorStar(c, 180, 120, 14, decorHex('#7ec8ff', 0.65), 0);
-        decorStar(c, W - 180, 120, 14, decorHex('#7ec8ff', 0.65), 0.2);
-        break;
-      case 'congrats':
-        decorStar(c, W / 2, 130, 52, decorHex('#ffd089', 0.85), 0);
-        decorStar(c, 200, 180, 22, decorHex('#7ec8ff', 0.75), 0.2);
-        decorStar(c, W - 200, 180, 22, decorHex('#7ec8ff', 0.75), 0);
-        decorStar(c, 260, 280, 16, decorHex('#ffb347', 0.7), 0.5);
-        decorStar(c, W - 260, 280, 16, decorHex('#ffb347', 0.7), 0);
-        decorTrophy(c, W / 2, H - 210, 1.35);
-        break;
-      case 'party':
-        decorStreamers(c, 'left');
-        decorStreamers(c, 'right');
-        decorConfetti(c, ['#ff9d9d', '#ffb347', '#7ec8ff', '#c4a8ff'], 36);
-        decorBalloon(c, 120, 180, 62, '#ff9d9d');
-        decorBalloon(c, W - 120, 180, 62, '#7ec8ff');
-        decorBalloon(c, 220, 120, 48, '#ffb347');
-        decorBalloon(c, W - 220, 120, 48, '#c4a8ff');
-        break;
-      case 'holiday':
-        decorSnowflake(c, 120, 140, 34, decorHex('#edf2fb', 0.55));
-        decorSnowflake(c, W - 120, 160, 28, decorHex('#edf2fb', 0.45));
-        decorSnowflake(c, 260, 260, 22, decorHex('#edf2fb', 0.35));
-        decorSnowflake(c, W - 280, 320, 26, decorHex('#edf2fb', 0.4));
-        decorSnowflake(c, W / 2, 110, 30, decorHex('#7ec8ff', 0.45));
-        decorOrnament(c, 100, H - 220, 38, '#ff5d5d');
-        decorOrnament(c, W - 100, H - 220, 38, '#ffb347');
-        decorOrnament(c, W / 2 - 70, H - 200, 32, '#6ee7c8');
-        decorOrnament(c, W / 2 + 70, H - 200, 32, '#c4a8ff');
-        break;
-      case 'new_baby':
-        c.fillStyle = decorHex('#ffd089', 0.35);
-        c.beginPath();
-        c.arc(W - 150, 130, 48, 0, Math.PI * 2);
-        c.fill();
-        decorStar(c, 160, 130, 18, decorHex('#ffd089', 0.85), 0);
-        decorStar(c, 240, 200, 12, decorHex('#edf2fb', 0.55), 0.3);
-        decorStar(c, W - 240, 220, 14, decorHex('#edf2fb', 0.5), 0);
-        decorHeart(c, W / 2, 150, 34, decorHex('#ff8fc7', 0.7), 0);
-        c.strokeStyle = decorHex('#ffb347', 0.75);
-        c.lineWidth = 8;
-        c.lineCap = 'round';
-        c.beginPath();
-        c.arc(110, H - 200, 28, 0.2, Math.PI - 0.2);
-        c.stroke();
-        c.beginPath();
-        c.moveTo(110, H - 172);
-        c.lineTo(110, H - 130);
-        c.stroke();
-        c.beginPath();
-        c.arc(110, H - 118, 16, Math.PI, 0);
-        c.stroke();
-        break;
-      case 'thank_you':
-        decorFlower(c, 130, H - 220, 38, decorHex('#ff9d9d', 0.75), decorHex('#ffd089', 0.9));
-        decorFlower(c, W - 130, H - 220, 38, decorHex('#ff8fc7', 0.75), decorHex('#ffd089', 0.9));
-        decorHeart(c, W / 2, 160, 40, decorHex('#ff9d9d', 0.65), 0);
-        decorHeart(c, 200, 240, 22, decorHex('#ffb347', 0.5), -0.3);
-        decorHeart(c, W - 200, 240, 22, decorHex('#ffb347', 0.5), 0.3);
-        break;
-      case 'graduation':
-        decorCap(c, W / 2, 150, 1.2);
-        decorStar(c, 180, 160, 20, decorHex('#ffd089', 0.85), 0);
-        decorStar(c, W - 180, 160, 20, decorHex('#ffd089', 0.85), 0.3);
-        decorStar(c, 260, 260, 14, decorHex('#7ec8ff', 0.7), 0.1);
-        decorStar(c, W - 260, 260, 14, decorHex('#7ec8ff', 0.7), 0.4);
-        decorConfetti(c, ['#ffb347', '#7ec8ff', '#edf2fb'], 24);
-        break;
-      case 'get_well':
-        c.fillStyle = decorHex('#ffd089', 0.45);
-        c.beginPath();
-        c.arc(150, 150, 52, 0, Math.PI * 2);
-        c.fill();
-        for (let i = 0; i < 8; i++) {
-          const a = (Math.PI * 2 * i) / 8;
-          decorStar(c, 150 + Math.cos(a) * 78, 150 + Math.sin(a) * 78, 10, decorHex('#ffd089', 0.75), a);
-        }
-        decorFlower(c, W - 140, H - 230, 42, decorHex('#ff9d9d', 0.7), decorHex('#ffb347', 0.9));
-        decorFlower(c, W - 240, H - 180, 32, decorHex('#ff8fc7', 0.65), decorHex('#ffd089', 0.85));
-        break;
-      case 'game_day':
-        decorPennant(c, 80, 80, 90, 120, decorHex('#ffb347', 0.85));
-        decorPennant(c, 190, 60, 80, 110, decorHex('#ff5d5d', 0.8));
-        decorPennant(c, W - 170, 60, 80, 110, decorHex('#7ec8ff', 0.8));
-        decorPennant(c, W - 80, 80, 90, 120, decorHex('#edf2fb', 0.75));
-        decorBall(c, W / 2, H - 200, 58, '#c45c26', '#edf2fb');
-        break;
-      case 'reminder':
-        decorCalendar(c, W - 170, 120, 1.15);
-        break;
-      default:
-        break;
-    }
-    c.restore();
-  }
-
-  function decorUsesSideArt(decorId) {
-    return decorId && decorId !== 'reminder';
-  }
-
-  function selectedDecor() {
-    const el = document.getElementById('creator_decor');
-    return el ? el.value : '';
-  }
 
   function wrapLines(c, text, maxWidth) {
     const paragraphs = String(text).replace(/\r\n/g, '\n').split('\n');
@@ -3133,8 +2658,6 @@ function addVideoCard() {
     document.getElementById('creator_footer').value = tpl.footer || '';
     if (tpl.bg) setBackground(tpl.bg);
     if (tpl.align) setAlign(tpl.align);
-    const decorEl = document.getElementById('creator_decor');
-    if (decorEl) decorEl.value = tpl.decor || '';
     filenameTouched = false;
     if (nameEl) {
       nameEl.value = tpl.filename || slugifyTitle(tpl.title || '');
@@ -3151,17 +2674,6 @@ function addVideoCard() {
       applyTemplate(btn.getAttribute('data-template'));
     });
   });
-
-  const decorSelect = document.getElementById('creator_decor');
-  if (decorSelect) {
-    decorSelect.addEventListener('change', function () {
-      activeTemplate = '';
-      document.querySelectorAll('.template-chip').forEach(function (btn) {
-        btn.classList.remove('active');
-      });
-      renderPreview();
-    });
-  }
 
   document.querySelectorAll('input[name="creator_bg"]').forEach(function (el) {
     el.addEventListener('change', function () {
@@ -3184,21 +2696,16 @@ function addVideoCard() {
     const preset = selectedPreset();
     await loadBgImage(preset.url);
     const align = textAlign();
-    const decor = selectedDecor();
     const title = document.getElementById('creator_title').value.trim();
     const subtitle = document.getElementById('creator_subtitle').value.trim();
     const body = document.getElementById('creator_body').value.trim();
     const footer = document.getElementById('creator_footer').value.trim();
-    const sideArt = decorUsesSideArt(decor);
-    const maxW = align === 'center'
-      ? W - padX * 2 - (sideArt ? 360 : 0)
-      : (sideArt ? 1080 : 1240);
+    const maxW = align === 'center' ? W - padX * 2 : 1240;
     const x = align === 'center' ? W / 2 : padX;
     const light = isLightPreset(preset);
 
     ctx.clearRect(0, 0, W, H);
     drawBackground(ctx, preset);
-    drawOccasionDecor(ctx, decor);
     ctx.textAlign = align;
     ctx.textBaseline = 'top';
 
