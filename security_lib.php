@@ -43,13 +43,18 @@ function signage_ip_policy(string $ip, bool $allowPrivate): array
         }
     }
     $blockedExact = [
-        '0.0.0.0', '127.0.0.1', '::1', '::',
-        '169.254.169.254', 'fd00::', 'fe80::',
+        '0.0.0.0', '127.0.0.1', '::1', '::', '169.254.169.254',
     ];
     foreach ($blockedExact as $bad) {
-        if ($ip === $bad || str_starts_with($ip, rtrim($bad, ':'))) {
+        if ($ip === $bad) {
             return ['blocked' => true, 'reason' => 'blocked host'];
         }
+    }
+    if (str_starts_with($ip, 'fe80:')) {
+        return ['blocked' => true, 'reason' => 'link-local address'];
+    }
+    if (preg_match('/^fd[0-9a-f]{2}:/i', $ip)) {
+        return ['blocked' => true, 'reason' => 'unique local address'];
     }
     if ($ip === '169.254.169.254') {
         return ['blocked' => true, 'reason' => 'cloud metadata'];
