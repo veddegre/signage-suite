@@ -326,7 +326,7 @@ function slide_photo_background_presets(): array
             'overlay' => slide_photo_overlay_vignette(0.62, 0.28, 0.7),
         ]),
         'photo_romantic_dinner' => array_merge($textDark, [
-            'label' => 'Fine dining',
+            'label' => 'Candlelit dinner',
             'kind' => 'photo',
             'photo' => 'photos/romantic_dinner.jpg',
             'overlay' => slide_photo_overlay_vignette(0.82, 0.5, 0.86),
@@ -648,26 +648,66 @@ function slide_photo_download_urls(): array
     $pexels   = '?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop';
 
     return [
-        'photos/lake_dusk.jpg'       => ['url' => 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4' . $unsplash, 'min_bytes' => 200000],
-        'photos/misty_forest.jpg'    => ['url' => 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e' . $unsplash, 'min_bytes' => 500000],
-        'photos/ocean_sunset.jpg'    => ['url' => 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e' . $unsplash, 'min_bytes' => 200000],
-        'photos/city_night.jpg'      => ['url' => 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df' . $unsplash, 'min_bytes' => 500000],
-        'photos/winter_trees.jpg'    => [
+        'photos/lake_dusk.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1511497584788-876760111969' . $unsplash,
+            'min_bytes' => 400000,
+            'sha256' => 'e84d01f2898c128802ebf3de48570ce8ea5b55020f8fd471ed81b3abdf89c761',
+        ],
+        'photos/misty_forest.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e' . $unsplash,
+            'min_bytes' => 500000,
+            'sha256' => 'f4e50e9494913632704a09d3714ef7edc6fa85101667958495970ea2aa4ed28f',
+        ],
+        'photos/ocean_sunset.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e' . $unsplash,
+            'min_bytes' => 200000,
+            'sha256' => 'e24cf96e32527ad68aedb9a3a60bc80c6a65276cd64088d67ed20b481663e4e6',
+        ],
+        'photos/city_night.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1514565131-fce0801e5785' . $unsplash,
+            'min_bytes' => 350000,
+            'sha256' => 'cd79cc3d69a651809b270aa79f8d63abed09f7c1ad0577bb02503518324957e5',
+        ],
+        'photos/winter_trees.jpg' => [
             'url' => 'https://images.unsplash.com/photo-1548777123-e216912df7d8' . $unsplash,
             'min_bytes' => 400000,
             'sha256' => '0bf83e39b5acf47a8d4aad84ee4e7585b6d0e55c62c62bb50b3b7a9d6640f6e5',
         ],
-        'photos/cozy_home.jpg'       => ['url' => 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg' . $pexels, 'min_bytes' => 250000],
-        'photos/wildflowers.jpg'     => ['url' => 'https://images.pexels.com/photos/1563356/pexels-photo-1563356.jpeg' . $pexels, 'min_bytes' => 500000],
-        'photos/birthday.jpg'        => ['url' => 'https://images.unsplash.com/photo-1578985545062-69928b1d9587' . $unsplash, 'min_bytes' => 300000],
-        'photos/romantic_dinner.jpg' => [
-            'url' => 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622' . $unsplash,
+        'photos/cozy_home.jpg' => [
+            'url' => 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg' . $pexels,
             'min_bytes' => 250000,
-            'sha256' => 'b224738a3a32bc257493924c2999b2eb75b1c4a8b1f0706b900c9914255ed18d',
+            'sha256' => '0321c10a2324a450d903e336d0d5b52f22bc677efeca027a25580285dcf62653',
         ],
-        'photos/nursery.jpg'         => ['url' => 'https://images.unsplash.com/photo-1516627145497-ae6968895b74' . $unsplash, 'min_bytes' => 200000],
-        'photos/stadium.jpg'         => ['url' => 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg' . $pexels, 'min_bytes' => 300000],
-        'photos/mountain_sun.jpg'    => ['url' => 'https://images.pexels.com/photos/417173/pexels-photo-417173.jpeg' . $pexels, 'min_bytes' => 250000],
+        'photos/wildflowers.jpg' => [
+            'url' => 'https://images.pexels.com/photos/931177/pexels-photo-931177.jpeg' . $pexels,
+            'min_bytes' => 500000,
+            'sha256' => '26e1213398e30a32fffcc5ea1c4f1b96aef9f375ce919e06bc3f536d93a51f25',
+        ],
+        'photos/birthday.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1578985545062-69928b1d9587' . $unsplash,
+            'min_bytes' => 300000,
+            'sha256' => '8343f4f2b0657d5859f1591423caa7500c080902abef62cb842e93744f960075',
+        ],
+        'photos/romantic_dinner.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0' . $unsplash,
+            'min_bytes' => 300000,
+            'sha256' => 'd06207c9428fb009e20bd437408f70b22d96951a8136f92c24dbb6a4d14c712b',
+        ],
+        'photos/nursery.jpg' => [
+            'url' => 'https://images.unsplash.com/photo-1516627145497-ae6968895b74' . $unsplash,
+            'min_bytes' => 200000,
+            'sha256' => 'e976bf3c81fd77e8fa6312d0e01b3160ae916c2104c8caea1e3857b6532d8958',
+        ],
+        'photos/stadium.jpg' => [
+            'url' => 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg' . $pexels,
+            'min_bytes' => 300000,
+            'sha256' => '388a71e081f1cc4f118a6b869cf50e7b7cace8e9fb9a43be3ce40a7540bd35e9',
+        ],
+        'photos/mountain_sun.jpg' => [
+            'url' => 'https://images.pexels.com/photos/417173/pexels-photo-417173.jpeg' . $pexels,
+            'min_bytes' => 250000,
+            'sha256' => '189df31adbe7d34618d1ccf3b44f36fa425cb2200180158490d1f294af073f09',
+        ],
     ];
 }
 
