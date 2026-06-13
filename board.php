@@ -73,7 +73,41 @@ if (($_GET['api'] ?? '') === 'cec') {
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
   const POLL_MS = 30000;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
-  let front = 0, idx = -1, gen = 0;
+  let front = 0, idx = -1, gen = 0, rotateTimer = null;
+
+  function clearRotateTimer() {
+    if (rotateTimer) {
+      clearTimeout(rotateTimer);
+      rotateTimer = null;
+    }
+  }
+
+  function scheduleRotate(ms) {
+    clearRotateTimer();
+    rotateTimer = setTimeout(function () {
+      rotateTimer = null;
+      rotate();
+    }, ms);
+  }
+
+  function isRssUrl(url) {
+    return /(?:^|[?&/])rss\.php(?:[?&#]|$)/.test(String(url));
+  }
+
+  function activeFrameWindow() {
+    try {
+      return frames[front].contentWindow;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  window.addEventListener('message', function (ev) {
+    if (!ev.data || ev.data.type !== 'signage-done') return;
+    if (ev.source !== activeFrameWindow()) return;
+    clearRotateTimer();
+    rotate();
+  });
 
   function inWindow(p) {
     if (p.from == null || p.to == null || p.from === '' || p.to === '') return true;
@@ -135,6 +169,7 @@ if (($_GET['api'] ?? '') === 'cec') {
 
   function rotate() {
     if (PAGES.length === 0) return;
+    clearRotateTimer();
     idx = nextPage();
     const p = PAGES[idx];
     const myGen = ++gen;
@@ -154,7 +189,10 @@ if (($_GET['api'] ?? '') === 'cec') {
           f.contentWindow.postMessage({ type: 'signage-show' }, '*');
         }
       } catch (e) {}
-      setTimeout(rotate, (+p.dwell) * 1000);
+      const dwellMs = (+p.dwell) * 1000;
+      // RSS boards report signage-done when their carousel finishes; dwell is only a safety cap.
+      const safetyMs = isRssUrl(p.url) ? Math.max(dwellMs + 15000, 60000) : dwellMs;
+      scheduleRotate(safetyMs);
     };
 
     stopFrame(f);

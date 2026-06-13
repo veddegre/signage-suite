@@ -298,6 +298,11 @@ $payload = array_map(fn($i) => [
       });
     }
 
+    function notifyDone() {
+      if (!EMBEDDED) return;
+      try { window.parent.postMessage({ type: 'signage-done' }, '*'); } catch (e) {}
+    }
+
     let carouselStarted = false;
 
     async function show() {
@@ -330,7 +335,10 @@ $payload = array_map(fn($i) => [
         if (i === idx) requestAnimationFrame(() => d.className = 'dot active');
       });
 
-      if (!EMBEDDED || idx + 1 < STORIES.length) {
+      const isLast = idx + 1 >= STORIES.length;
+      if (EMBEDDED && isLast) {
+        setTimeout(notifyDone, DWELL);
+      } else {
         setTimeout(show, DWELL);
       }
     }
@@ -345,7 +353,6 @@ $payload = array_map(fn($i) => [
       // Warm story images while board.php loads this frame hidden.
       STORIES.forEach(s => { preload(s.image); });
       window.addEventListener('message', (ev) => {
-        if (ev.source !== window.parent) return;
         if (!ev.data || ev.data.type !== 'signage-show') return;
         startCarousel();
       });
