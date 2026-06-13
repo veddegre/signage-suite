@@ -163,18 +163,16 @@ function admin_schema(): array
         'family' => ['title' => 'Family Board', 'file' => 'family.php', 'fields' => [
             ['key' => 'ICS_FEEDS', 'label' => 'Calendar feeds', 'type' => 'rows',
              'columns' => [
-                 ['key' => 'name', 'label' => 'Name'],
+                 ['key' => 'key', 'label' => 'Key', 'placeholder' => 'Dad'],
+                 ['key' => 'color', 'label' => 'Color', 'type' => 'palette'],
                  ['key' => 'source', 'label' => 'Source', 'type' => 'select',
                   'options' => ['ical', 'webdav']],
                  ['key' => 'url', 'label' => 'URL', 'wide' => true],
                  ['key' => 'user', 'label' => 'User', 'placeholder' => 'email for CalDAV'],
                  ['key' => 'password', 'label' => 'Password', 'type' => 'password'],
-                 ['key' => 'color', 'label' => 'Color', 'placeholder' => '#ffb347'],
              ],
-             'help' => 'ical: Google/Apple/Outlook secret iCal URL (user/password optional). '
-                     . 'webdav: CalDAV URL from your provider (Nextcloud, Fastmail Settings → Calendars → Export, …). '
-                     . 'Fastmail: source webdav, paste the CalDAV URL, user = your Fastmail email (e.g. greg@vedders.com), '
-                     . 'password = app-specific password (not your login password). Shared calendars keep the full URL path. '
+             'help' => 'Key is the legend label on the wall (e.g. Dad, Mom). Pick a theme color per feed. '
+                     . 'ical: secret iCal URL. webdav: CalDAV (Fastmail, Nextcloud, …) with app password. '
                      . 'LAN/private hosts need Security → Allow private URL fetches.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],

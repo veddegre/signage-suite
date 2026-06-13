@@ -19,6 +19,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
+require_once __DIR__ . '/family_lib.php';
 
 define('ICS_FEEDS', cfg('family.ICS_FEEDS', [
 
@@ -389,7 +390,7 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
             return;
         }
         $out[] = ['ts' => $ts, 'all_day' => $allDay, 'summary' => $ev['summary'],
-                  'cal' => $ev['cal'], 'color' => $ev['color']];
+                  'cal' => $ev['cal'], 'color' => $ev['color'], 'hex' => $ev['hex']];
     };
 
     if (!$ev['rrule']) {
@@ -480,7 +481,10 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
             $cur = [
                 'start' => null, 'all_day' => false, 'summary' => '', 'rrule' => null,
                 'exdates' => [], 'exdate_ts' => [], 'uid' => '', 'recurrence_id' => null,
-                'status' => '', 'cal' => $feedMeta['name'], 'color' => $feedMeta['color'],
+                'status' => '',
+                'cal' => (string)($feedMeta['key'] ?? ''),
+                'color' => (string)($feedMeta['color'] ?? 'beacon'),
+                'hex' => (string)($feedMeta['hex'] ?? '#ffb347'),
             ];
             continue;
         }
@@ -558,7 +562,7 @@ foreach (ICS_FEEDS as $i => $feed) {
     if ($raw === null) {
         continue;
     }
-    $meta = ['name' => (string)($feed['name'] ?? ''), 'color' => (string)($feed['color'] ?? '#ffb347')];
+    $meta = family_feed_meta($feed, $i);
     $vevents = parse_ics_vevents($raw, $meta);
     $overrides = [];
     $masters = [];
@@ -572,6 +576,7 @@ foreach (ICS_FEEDS as $i => $feed) {
                     'summary' => $ev['summary'],
                     'cal' => $ev['cal'],
                     'color' => $ev['color'],
+                    'hex' => $ev['hex'],
                 ];
             }
             continue;
@@ -619,6 +624,8 @@ foreach (COUNTDOWNS as $label => $date) {
     if ($d >= 0) $counts[] = [$label, $d];
 }
 usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
+
+$calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -645,7 +652,13 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
   .dateline { font-size:30px; color:var(--mist); margin-top:6px; }
   .today .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);
               margin:30px 0 8px; border-top:1px solid var(--hairline); padding-top:24px; }
-  .tev { display:flex; gap:16px; align-items:baseline; padding:11px 0; }
+  .cal-legend { display:flex; flex-wrap:wrap; gap:18px 28px; margin-top:22px; }
+  .cal-legend .leg { display:flex; align-items:center; gap:10px; font-size:20px; color:var(--snow); }
+  .cal-legend .dot { width:14px; height:14px; border-radius:50%; flex-shrink:0;
+                     box-shadow:0 0 0 2px rgba(255,255,255,.12); }
+  .tev { display:flex; gap:14px; align-items:baseline; padding:11px 0; }
+  .tev .who { font-size:18px; font-weight:600; letter-spacing:1px; text-transform:uppercase;
+              min-width:52px; flex-shrink:0; opacity:.95; }
   .tev .t { font-family:'Big Shoulders Display'; font-weight:600; font-size:30px; min-width:120px;
             color:var(--beacon); font-variant-numeric:tabular-nums; }
   .tev .s { font-size:28px; }
@@ -659,6 +672,8 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
   .day .d { font-size:19px; color:var(--mist); margin-bottom:12px; }
   .ev { font-size:20px; line-height:1.3; padding:7px 0 7px 14px; border-left:4px solid var(--beacon);
         margin-bottom:8px; overflow:hidden; }
+  .ev .ewho { font-size:15px; font-weight:600; letter-spacing:.8px; text-transform:uppercase;
+              display:block; margin-bottom:3px; }
   .ev .et { color:var(--mist); font-size:17px; display:block; }
   .more { font-size:18px; color:var(--mist); margin-top:auto; }
   .nothing { font-size:19px; color:var(--mist); opacity:.6; }
@@ -680,6 +695,13 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
   <section class="today">
     <div id="clock">--:--<span> --</span></div>
     <div class="dateline" id="dateline">&nbsp;</div>
+    <?php if ($calLegend !== []): ?>
+    <div class="cal-legend" aria-label="Calendar key">
+      <?php foreach ($calLegend as $leg): ?>
+      <span class="leg"><span class="dot" style="background:<?= h($leg['hex']) ?>"></span><?= h($leg['key']) ?></span>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
     <div class="k">Today</div>
     <?php $todayKey = date('Y-m-d');
     if (ICS_FEEDS === []) : ?>
@@ -687,7 +709,8 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
         (Nextcloud, Radicale, …) with user/password when required.</div>
     <?php elseif ($days[$todayKey]): foreach (array_slice($days[$todayKey], 0, 7) as $e): ?>
       <div class="tev">
-        <span class="t" style="color:<?= h($e['color']) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
+        <span class="who" style="color:<?= h($e['hex'] ?? family_calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= h($e['cal']) ?></span>
+        <span class="t" style="color:<?= h($e['hex'] ?? family_calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
     <?php endforeach; else: ?>
@@ -701,8 +724,11 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
       <div class="day">
         <div class="n"><?= date('D', $ts) ?></div>
         <div class="d"><?= date('M j', $ts) ?></div>
-        <?php foreach (array_slice($list, 0, 4) as $e): ?>
-          <div class="ev" style="border-color:<?= h($e['color']) ?>">
+        <?php foreach (array_slice($list, 0, 4) as $e):
+          $hex = $e['hex'] ?? family_calendar_color_hex((string)($e['color'] ?? ''));
+        ?>
+          <div class="ev" style="border-color:<?= h($hex) ?>">
+            <span class="ewho" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
             <?= h($e['summary']) ?>
             <span class="et"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
           </div>

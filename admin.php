@@ -16,6 +16,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
 require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/family_lib.php';
 require_once __DIR__ . '/slides_lib.php';
 require_once __DIR__ . '/rotator_lib.php';
 require_once __DIR__ . '/video_lib.php';
@@ -218,6 +219,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                                         $match = ($row['url'] ?? '') !== '' && ($row['url'] ?? '') === ($er['url'] ?? '');
                                         if (!$match && ($row['name'] ?? '') !== '') {
                                             $match = ($row['name'] ?? '') === ($er['name'] ?? '');
+                                        }
+                                        if (!$match && ($row['key'] ?? '') !== '') {
+                                            $match = ($row['key'] ?? '') === ($er['key'] ?? $er['name'] ?? '');
                                         }
                                         if ($match && ($er[$col['key']] ?? '') !== '') {
                                             $obj[$col['key']] = $er[$col['key']];
@@ -745,6 +749,13 @@ function admin_field(array $f, $val, string $board): void
   table.rows th { text-align:left; font-size:12.5px; letter-spacing:1px; text-transform:uppercase;
                   color:var(--mist); font-weight:500; padding:4px 8px 8px 0; }
   table.rows td { padding:0 8px 10px 0; vertical-align:top; }
+  .cal-palette-cell { display:flex; align-items:center; gap:10px; min-width:148px; }
+  .cal-palette-cell select { min-width:108px; }
+  .cal-swatch { width:22px; height:22px; border-radius:50%; flex-shrink:0;
+                box-shadow:0 0 0 2px var(--line); }
+  .cal-legend-preview { display:flex; flex-wrap:wrap; gap:12px 20px; margin:10px 0 0; }
+  .cal-legend-preview .leg { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mist); }
+  .cal-legend-preview .dot { width:12px; height:12px; border-radius:50%; }
   table.rows input { max-width:none; min-width:90px; padding:8px 10px; font-size:15px; }
   td.wide { width:38%; }
   .rowdel { background:none; border:1px solid var(--line); color:var(--bad); border-radius:8px;
@@ -1697,6 +1708,13 @@ function admin_field(array $f, $val, string $board): void
                       $rows = $val;
                   }
               }
+              $hasKeyCol = false;
+              foreach ($cols as $c) {
+                  if (($c['key'] ?? '') === 'key') {
+                      $hasKeyCol = true;
+                      break;
+                  }
+              }
             ?>
               <label class="l"><?= h($f['label']) ?></label>
               <div class="rows-scroll">
@@ -1705,7 +1723,11 @@ function admin_field(array $f, $val, string $board): void
                   <?php foreach ($cols as $c): ?><th><?= h($c['label']) ?></th><?php endforeach; ?><th></th>
                 </tr></thead>
                 <tbody>
-                  <?php foreach ($rows as $ri => $row): ?>
+                  <?php foreach ($rows as $ri => $row):
+                    if ($hasKeyCol && ($row['key'] ?? '') === '' && ($row['name'] ?? '') !== '') {
+                        $row['key'] = $row['name'];
+                    }
+                  ?>
                     <tr>
                       <?php foreach ($cols as $c): ?>
                         <td class="<?= !empty($c['wide']) ? 'wide' : '' ?>"<?= ($c['type'] ?? '') === 'check' ? ' style="text-align:center;vertical-align:middle"' : '' ?>>
@@ -1724,6 +1746,24 @@ function admin_field(array $f, $val, string $board): void
                             <input type="password" name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
                                    autocomplete="off"
                                    placeholder="<?= h(!empty($row[$c['key']]) ? '(unchanged)' : '') ?>">
+                          <?php elseif (($c['type'] ?? '') === 'palette'): ?>
+                            <?php
+                              $palVal = (string)($row[$c['key']] ?? '');
+                              if ($palVal === '' || ($palVal[0] !== '#' && !family_palette_has_key($palVal))) {
+                                  $palVal = family_calendar_palette()[$ri % count(family_calendar_palette())]['key'];
+                              }
+                              $palHex = family_calendar_color_hex($palVal);
+                            ?>
+                            <div class="cal-palette-cell">
+                              <span class="cal-swatch" data-swatch style="background:<?= h($palHex) ?>"></span>
+                              <select name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]" class="cal-palette-select"
+                                      onchange="syncCalSwatch(this)">
+                                <?php foreach (family_calendar_palette() as $p): ?>
+                                <option value="<?= h($p['key']) ?>" data-hex="<?= h($p['hex']) ?>"
+                                  <?= $palVal === $p['key'] || $palVal === $p['hex'] ? 'selected' : '' ?>><?= h($p['label']) ?></option>
+                                <?php endforeach; ?>
+                              </select>
+                            </div>
                           <?php else: ?>
                             <input type="text" name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
                                    value="<?= h((string)($row[$c['key']] ?? '')) ?>"
@@ -1738,6 +1778,9 @@ function admin_field(array $f, $val, string $board): void
               </table>
               </div>
               <button type="button" class="addrow" onclick="addRow(this)">+ Add row</button>
+              <?php if ($board === 'family' && $f['key'] === 'ICS_FEEDS'): ?>
+              <div class="cal-legend-preview" id="calLegendPreview" aria-label="Wall legend preview"></div>
+              <?php endif; ?>
               <?php if (!empty($f['help'])): ?><div class="help"><?= h($f['help']) ?></div><?php endif; ?>
 
             <?php else:
@@ -1792,6 +1835,8 @@ function addRow(btn) {
         'check' => ($c['type'] ?? '') === 'check',
         'select' => ($c['type'] ?? '') === 'select',
         'password' => ($c['type'] ?? '') === 'password',
+        'palette' => ($c['type'] ?? '') === 'palette',
+        'paletteOptions' => ($c['type'] ?? '') === 'palette' ? family_calendar_palette() : [],
         'options' => $c['options'] ?? []], $ff['columns']);
     echo json_encode($colMap);
   ?>;
@@ -1816,6 +1861,22 @@ function addRow(btn) {
     } else if (c.password) {
       inp.type = 'password';
       inp.autocomplete = 'off';
+    } else if (c.palette) {
+      td.className = (td.className ? td.className + ' ' : '') + 'cal-palette-cell';
+      const sw = document.createElement('span');
+      sw.className = 'cal-swatch';
+      sw.setAttribute('data-swatch', '');
+      inp = document.createElement('select');
+      inp.className = 'cal-palette-select';
+      inp.onchange = function () { syncCalSwatch(this); };
+      (c.paletteOptions || []).forEach(function (p) {
+        const opt = document.createElement('option');
+        opt.value = p.key;
+        opt.textContent = p.label;
+        opt.setAttribute('data-hex', p.hex);
+        inp.appendChild(opt);
+      });
+      td.appendChild(sw);
     } else {
       inp.type = 'text';
       inp.placeholder = c.ph;
@@ -1827,6 +1888,53 @@ function addRow(btn) {
   td.innerHTML = '<button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button>';
   tr.appendChild(td);
   table.querySelector('tbody').appendChild(tr);
+  const palSel = tr.querySelector('.cal-palette-select');
+  if (palSel) syncCalSwatch(palSel);
+  updateCalLegendPreview();
+}
+
+function syncCalSwatch(sel) {
+  const cell = sel.closest('.cal-palette-cell');
+  if (!cell) return;
+  const sw = cell.querySelector('[data-swatch]');
+  const opt = sel.options[sel.selectedIndex];
+  if (sw && opt) sw.style.background = opt.getAttribute('data-hex') || '#ffb347';
+  updateCalLegendPreview();
+}
+
+function updateCalLegendPreview() {
+  const box = document.getElementById('calLegendPreview');
+  if (!box) return;
+  const table = document.querySelector('table.rows[data-field="ICS_FEEDS"]');
+  if (!table) return;
+  const palette = <?= json_encode(family_calendar_palette()) ?>;
+  const hexFor = function (key) {
+    const hit = palette.find(function (x) { return x.key === key; });
+    return hit ? hit.hex : '#ffb347';
+  };
+  const seen = {};
+  const parts = [];
+  table.querySelectorAll('tbody tr').forEach(function (tr) {
+    const keyInp = tr.querySelector('input[name*="[key]"]');
+    const colorSel = tr.querySelector('select[name*="[color]"]');
+    const key = keyInp && keyInp.value.trim();
+    if (!key) return;
+    const id = key.toLowerCase();
+    if (seen[id]) return;
+    seen[id] = true;
+    const hex = colorSel ? hexFor(colorSel.value) : '#ffb347';
+    parts.push('<span class="leg"><span class="dot" style="background:' + hex + '"></span>'
+      + key.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>');
+  });
+  box.innerHTML = parts.join('');
+}
+
+document.querySelectorAll('.cal-palette-select').forEach(function (sel) { syncCalSwatch(sel); });
+updateCalLegendPreview();
+const calFeedsTable = document.querySelector('table.rows[data-field="ICS_FEEDS"]');
+if (calFeedsTable) {
+  calFeedsTable.addEventListener('input', updateCalLegendPreview);
+  calFeedsTable.addEventListener('change', updateCalLegendPreview);
 }
 
 const SLIDE_SCHEDULES = <?= json_encode(['always', 'once', 'range', 'yearly', 'yearly_range', 'monthly', 'weekly']) ?>;
