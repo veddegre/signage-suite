@@ -134,8 +134,13 @@ $loopAttr = $embedded ? '' : 'loop';
     }
     if (EMBEDDED) {
       window.addEventListener('message', function (ev) {
-        if (!ev.data || ev.data.type !== 'signage-show') return;
-        startVideo();
+        if (!ev.data) return;
+        if (ev.data.type === 'signage-stop') {
+          started = false;
+          v.pause();
+          return;
+        }
+        if (ev.data.type === 'signage-show') startVideo();
       });
       // noticker=1 outside the rotation shell (direct preview).
       if (window.parent === window) {

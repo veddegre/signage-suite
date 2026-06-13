@@ -94,17 +94,24 @@ if (($_GET['api'] ?? '') === 'cec') {
     return /(?:^|[?&/])rss\.php(?:[?&#]|$)/.test(String(url));
   }
 
-  function activeFrameWindow() {
+  function postToFrame(frame, msg) {
     try {
-      return frames[front].contentWindow;
-    } catch (e) {
-      return null;
-    }
+      if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, '*');
+    } catch (e) {}
   }
 
   window.addEventListener('message', function (ev) {
     if (!ev.data || ev.data.type !== 'signage-done') return;
-    if (ev.source !== activeFrameWindow()) return;
+    var fromVisible = false;
+    for (var i = 0; i < frames.length; i++) {
+      try {
+        if (frames[i].classList.contains('show') && frames[i].contentWindow === ev.source) {
+          fromVisible = true;
+          break;
+        }
+      } catch (e) {}
+    }
+    if (!fromVisible) return;
     clearRotateTimer();
     rotate();
   });
@@ -170,6 +177,8 @@ if (($_GET['api'] ?? '') === 'cec') {
   function rotate() {
     if (PAGES.length === 0) return;
     clearRotateTimer();
+    postToFrame(frames[0], { type: 'signage-stop' });
+    postToFrame(frames[1], { type: 'signage-stop' });
     idx = nextPage();
     const p = PAGES[idx];
     const myGen = ++gen;

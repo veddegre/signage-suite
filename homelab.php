@@ -32,6 +32,13 @@ define('CACHE_TTL', cfg('homelab.CACHE_TTL', 30));
 
 date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
+$embedded = isset($_GET['noticker']);
+$compact = $frameH < 1080;
+$rowHead = $compact ? 72 : 96;
+$rowMid = $compact ? 220 : 300;
+$padY = $compact ? 20 : 28;
+$gap = $compact ? 16 : 24;
+$vmLimit = $compact ? 6 : 8;
 $GLOBALS['diag'] = [];
 
 function http_get(string $url, array $headers = [], ?string $userpass = null, bool $verify = true, int $timeout = 6): array
@@ -148,24 +155,24 @@ $wanMs    = $checks['wan_ms'] ?? null;
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
-  .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 96px 300px minmax(0,1fr) auto;
+  .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $gap ?>px;
+           grid-template-columns: 1fr 1fr 1fr; grid-template-rows: <?= $rowHead ?>px <?= $rowMid ?>px minmax(0,1fr) auto;
            grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 52 : 64 ?>px; }
   .head h1 span { color:var(--beacon); }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:56px; color:var(--mist); }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 44 : 56 ?>px; color:var(--mist); }
 
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:26px 32px; min-height:0; overflow:hidden; }
-  .panel .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:110px; line-height:1.05;
+           padding:<?= $compact ? '18px 22px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
+  .panel .k { font-size:<?= $compact ? 17 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 84 : 110 ?>px; line-height:1.05;
             color:var(--beacon); font-variant-numeric:tabular-nums; }
-  .bignum small { font-size:44px; color:var(--mist); font-weight:600; }
-  .sub { font-size:24px; color:var(--mist); margin-top:6px; }
+  .bignum small { font-size:<?= $compact ? 34 : 44 ?>px; color:var(--mist); font-weight:600; }
+  .sub { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; }
 
-  .meter { margin-top:16px; }
-  .meter .lab { display:flex; justify-content:space-between; font-size:21px; color:var(--mist); margin-bottom:6px; }
+  .meter { margin-top:<?= $compact ? 10 : 16 ?>px; }
+  .meter .lab { display:flex; justify-content:space-between; font-size:<?= $compact ? 18 : 21 ?>px; color:var(--mist); margin-bottom:6px; }
   .meter .track { height:16px; background:var(--lake-night); border-radius:8px; overflow:hidden; }
   .meter .fill { height:100%; background:var(--beacon); border-radius:8px; }
   .meter .fill.hot { background:var(--down); }
@@ -173,22 +180,22 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .node { grid-area:node; } .dns { grid-area:dns; } .wan { grid-area:wan; }
   .vms { grid-area:vms; } .svc { grid-area:svc; }
 
-  table { width:100%; border-collapse:collapse; margin-top:14px; }
-  th { text-align:left; font-size:17px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
-       font-weight:500; padding:6px 8px; border-bottom:1px solid var(--hairline); }
-  td { font-size:23px; padding:11px 8px; border-bottom:1px solid var(--hairline);
+  table { width:100%; border-collapse:collapse; margin-top:<?= $compact ? 8 : 14 ?>px; }
+  th { text-align:left; font-size:<?= $compact ? 15 : 17 ?>px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
+       font-weight:500; padding:<?= $compact ? '4px 6px' : '6px 8px' ?>; border-bottom:1px solid var(--hairline); }
+  td { font-size:<?= $compact ? 19 : 23 ?>px; padding:<?= $compact ? '7px 6px' : '11px 8px' ?>; border-bottom:1px solid var(--hairline);
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  td.mono { font-family:'IBM Plex Mono',monospace; font-size:20px; color:var(--mist); }
+  td.mono { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 17 : 20 ?>px; color:var(--mist); }
   .dot { display:inline-block; width:16px; height:16px; border-radius:50%; margin-right:12px;
          vertical-align:-1px; }
   .ok { background:var(--up); } .bad { background:var(--down); }
   .svcrow { display:flex; align-items:center; justify-content:space-between;
-            border-bottom:1px solid var(--hairline); padding:17px 4px; }
+            border-bottom:1px solid var(--hairline); padding:<?= $compact ? '12px 4px' : '17px 4px' ?>; }
   .svcrow:last-child { border-bottom:none; }
-  .svcrow .n { font-size:28px; font-weight:500; }
-  .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:23px; color:var(--mist); }
-  .storagebars { margin-top:14px; }
-  .notcfg { font-size:24px; color:var(--mist); margin-top:14px; line-height:1.5; }
+  .svcrow .n { font-size:<?= $compact ? 22 : 28 ?>px; font-weight:500; }
+  .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 19 : 23 ?>px; color:var(--mist); }
+  .storagebars { margin-top:<?= $compact ? 8 : 14 ?>px; }
+  .notcfg { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:14px; line-height:1.5; }
   .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
@@ -246,7 +253,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
     <?php if ($vms): ?>
       <table>
         <tr><th></th><th>Name</th><th>Type</th><th>CPU</th><th>RAM</th><th>Uptime</th></tr>
-        <?php foreach (array_slice($vms, 0, 8) as $v):
+        <?php foreach (array_slice($vms, 0, $vmLimit) as $v):
           $up = ($v['status'] ?? '') === 'running'; ?>
           <tr>
             <td style="width:36px"><span class="dot <?= $up ? 'ok' : 'bad' ?>"></span></td>
@@ -288,7 +295,9 @@ $wanMs    = $checks['wan_ms'] ?? null;
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
+  <?php if (!$embedded): ?>
   setTimeout(() => location.reload(), 60 * 1000);
+  <?php endif; ?>
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>
 </body>

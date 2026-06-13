@@ -299,13 +299,22 @@ $payload = array_map(fn($i) => [
     }
 
     function notifyDone() {
-      if (!EMBEDDED) return;
+      if (!EMBEDDED || stopped) return;
       try { window.parent.postMessage({ type: 'signage-done' }, '*'); } catch (e) {}
     }
 
     let carouselStarted = false;
+    let stopped = false;
+    let stepTimer = null;
+    let doneTimer = null;
+
+    function clearCarouselTimers() {
+      if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
+      if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; }
+    }
 
     async function show() {
+      if (stopped) return;
       idx++;
       if (idx >= STORIES.length) {
         if (EMBEDDED) return;
@@ -337,14 +346,14 @@ $payload = array_map(fn($i) => [
 
       const isLast = idx + 1 >= STORIES.length;
       if (EMBEDDED && isLast) {
-        setTimeout(notifyDone, DWELL);
+        doneTimer = setTimeout(notifyDone, DWELL);
       } else {
-        setTimeout(show, DWELL);
+        stepTimer = setTimeout(show, DWELL);
       }
     }
 
     function startCarousel() {
-      if (carouselStarted) return;
+      if (carouselStarted || stopped) return;
       carouselStarted = true;
       show();
     }
@@ -353,8 +362,17 @@ $payload = array_map(fn($i) => [
       // Warm story images while board.php loads this frame hidden.
       STORIES.forEach(s => { preload(s.image); });
       window.addEventListener('message', (ev) => {
-        if (!ev.data || ev.data.type !== 'signage-show') return;
-        startCarousel();
+        if (!ev.data) return;
+        if (ev.data.type === 'signage-stop') {
+          stopped = true;
+          carouselStarted = false;
+          clearCarouselTimers();
+          return;
+        }
+        if (ev.data.type === 'signage-show') {
+          stopped = false;
+          startCarousel();
+        }
       });
       // noticker=1 outside the rotation shell (direct preview) — no parent message.
       if (window.parent === window) {
