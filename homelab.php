@@ -34,11 +34,11 @@ date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
 $embedded = isset($_GET['noticker']);
 $compact = $frameH < 1080;
-$rowHead = $compact ? 72 : 96;
-$rowMid = $compact ? 220 : 300;
 $padY = $compact ? 20 : 28;
 $gap = $compact ? 16 : 24;
 $vmLimit = $compact ? 6 : 8;
+$rowHeadCss = $compact ? 'auto' : '96px';
+$rowMidCss = $compact ? 'minmax(272px, 34%)' : '300px';
 $GLOBALS['diag'] = [];
 
 function http_get(string $url, array $headers = [], ?string $userpass = null, bool $verify = true, int $timeout = 6): array
@@ -154,9 +154,10 @@ $wanMs    = $checks['wan_ms'] ?? null;
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              <?= signage_viewport_css() ?> }
+              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
   .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $gap ?>px;
-           grid-template-columns: 1fr 1fr 1fr; grid-template-rows: <?= $rowHead ?>px <?= $rowMid ?>px minmax(0,1fr) auto;
+           grid-template-columns: 1fr 1fr 1fr;
+           grid-template-rows: <?= $rowHeadCss ?> <?= $rowMidCss ?> minmax(0, 1fr) auto;
            grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 52 : 64 ?>px; }
@@ -164,21 +165,23 @@ $wanMs    = $checks['wan_ms'] ?? null;
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 44 : 56 ?>px; color:var(--mist); }
 
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:<?= $compact ? '18px 22px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
-  .panel .k { font-size:<?= $compact ? 17 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 84 : 110 ?>px; line-height:1.05;
-            color:var(--beacon); font-variant-numeric:tabular-nums; }
-  .bignum small { font-size:<?= $compact ? 34 : 44 ?>px; color:var(--mist); font-weight:600; }
-  .sub { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; }
+           padding:<?= $compact ? '16px 20px' : '26px 32px' ?>; min-height:0; overflow:hidden;
+           display:flex; flex-direction:column; }
+  .panel .k { font-size:<?= $compact ? 17 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);
+              flex-shrink:0; }
+  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 72 : 110 ?>px; line-height:1;
+            color:var(--beacon); font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .bignum small { font-size:<?= $compact ? 28 : 44 ?>px; color:var(--mist); font-weight:600; }
+  .sub { font-size:<?= $compact ? 18 : 24 ?>px; color:var(--mist); margin-top:4px; flex-shrink:0; }
 
-  .meter { margin-top:<?= $compact ? 10 : 16 ?>px; }
+  .meter { margin-top:<?= $compact ? 8 : 16 ?>px; flex-shrink:0; }
   .meter .lab { display:flex; justify-content:space-between; font-size:<?= $compact ? 18 : 21 ?>px; color:var(--mist); margin-bottom:6px; }
   .meter .track { height:16px; background:var(--lake-night); border-radius:8px; overflow:hidden; }
   .meter .fill { height:100%; background:var(--beacon); border-radius:8px; }
   .meter .fill.hot { background:var(--down); }
 
   .node { grid-area:node; } .dns { grid-area:dns; } .wan { grid-area:wan; }
-  .vms { grid-area:vms; } .svc { grid-area:svc; }
+  .vms { grid-area:vms; min-height:0; } .svc { grid-area:svc; min-height:0; }
 
   table { width:100%; border-collapse:collapse; margin-top:<?= $compact ? 8 : 14 ?>px; }
   th { text-align:left; font-size:<?= $compact ? 15 : 17 ?>px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
@@ -216,8 +219,12 @@ $wanMs    = $checks['wan_ms'] ?? null;
       <div class="bignum"><?= $running ?><small> / <?= count($vms) ?> running</small></div>
       <div class="meter"><div class="lab"><span>Node CPU</span><span><?= $cpuPct ?>%</span></div>
         <div class="track"><div class="fill<?= $cpuPct > 85 ? ' hot' : '' ?>" style="width:<?= $cpuPct ?>%"></div></div></div>
+      <?php if (!$compact): ?>
       <div class="meter"><div class="lab"><span>Node RAM</span><span><?= $memPct ?>% &middot; <?= gb($n['mem'] ?? 0) ?>/<?= gb($n['maxmem'] ?? 0) ?> GB</span></div>
         <div class="track"><div class="fill<?= $memPct > 90 ? ' hot' : '' ?>" style="width:<?= $memPct ?>%"></div></div></div>
+      <?php else: ?>
+      <div class="sub">RAM <?= $memPct ?>% &middot; <?= gb($n['mem'] ?? 0) ?>/<?= gb($n['maxmem'] ?? 0) ?> GB</div>
+      <?php endif; ?>
     <?php elseif ($pveConfigured): ?>
       <div class="notcfg">Proxmox unreachable — <?= h($GLOBALS['diag']['proxmox'] ?? 'no data') ?></div>
     <?php else: ?>
