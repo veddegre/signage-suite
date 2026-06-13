@@ -122,21 +122,33 @@ $loopAttr = $embedded ? '' : 'loop';
     tick(); setInterval(tick, 1000);
     <?php endif; ?>
     const v = document.getElementById('player');
+    let started = false;
     function startVideo() {
+      if (started && !v.paused) return;
+      started = true;
       <?php if (!MUTED): ?>
       v.muted = false;
       v.volume = 1;
       <?php endif; ?>
-      v.play().catch(function () {});
-    }
-    if (SETTLE > 0) {
-      setTimeout(startVideo, SETTLE);
-    } else {
-      startVideo();
+      v.play().catch(function () { started = false; });
     }
     if (EMBEDDED) {
+      window.addEventListener('message', function (ev) {
+        if (!ev.data || ev.data.type !== 'signage-show') return;
+        startVideo();
+      });
+      // noticker=1 outside the rotation shell (direct preview).
+      if (window.parent === window) {
+        if (SETTLE > 0) setTimeout(startVideo, SETTLE);
+        else startVideo();
+      }
       v.addEventListener('ended', function () { v.pause(); });
+      setInterval(function () {
+        if (!v.ended && v.paused) startVideo();
+      }, 2000);
     } else {
+      if (SETTLE > 0) setTimeout(startVideo, SETTLE);
+      else startVideo();
       // Belt and suspenders: some Chromium builds pause looped video on decode
       // hiccups; nudge it back.
       setInterval(function () { if (v.paused) v.play().catch(function () {}); }, 5000);
