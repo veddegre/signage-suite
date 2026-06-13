@@ -167,13 +167,14 @@ function admin_schema(): array
                  ['key' => 'source', 'label' => 'Source', 'type' => 'select',
                   'options' => ['ical', 'webdav']],
                  ['key' => 'url', 'label' => 'URL', 'wide' => true],
-                 ['key' => 'user', 'label' => 'User', 'placeholder' => 'optional'],
+                 ['key' => 'user', 'label' => 'User', 'placeholder' => 'email for CalDAV'],
                  ['key' => 'password', 'label' => 'Password', 'type' => 'password'],
                  ['key' => 'color', 'label' => 'Color', 'placeholder' => '#ffb347'],
              ],
-             'help' => 'ical: Google/Apple secret iCal URL (user/password optional). '
-                     . 'webdav: CalDAV calendar URL (e.g. Nextcloud …/remote.php/dav/calendars/user/personal/) '
-                     . 'or a direct .ics path on WebDAV — set user/password when required. '
+             'help' => 'ical: Google/Apple/Outlook secret iCal URL (user/password optional). '
+                     . 'webdav: CalDAV URL from your provider (Nextcloud, Fastmail Settings → Calendars → Export, …). '
+                     . 'Fastmail: source webdav, paste the CalDAV URL, user = your Fastmail email (e.g. greg@vedders.com), '
+                     . 'password = app-specific password (not your login password). Shared calendars keep the full URL path. '
                      . 'LAN/private hosts need Security → Allow private URL fetches.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],

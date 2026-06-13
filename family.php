@@ -76,12 +76,50 @@ function family_feed_auth(array $feed): ?array
     return [$user, (string)($feed['password'] ?? '')];
 }
 
+function caldav_normalize_url(string $url): string
+{
+    $url = trim($url);
+    $parts = parse_url($url);
+    if (!is_array($parts) || empty($parts['host'])) {
+        return rtrim($url, '/') . '/';
+    }
+    $path = $parts['path'] ?? '/';
+    $path = preg_replace('#/+#', '/', $path);
+    if ($path === '') {
+        $path = '/';
+    }
+    if (!preg_match('/\.ics(\?|$)/i', $path) && !str_ends_with($path, '/')) {
+        $path .= '/';
+    }
+    $port = isset($parts['port']) ? ':' . (int)$parts['port'] : '';
+    $query = isset($parts['query']) ? '?' . $parts['query'] : '';
+    return ($parts['scheme'] ?? 'https') . '://' . $parts['host'] . $port . $path . $query;
+}
+
+function caldav_auth_error(int $code, string $host): string
+{
+    if ($code === 401 || $code === 403) {
+        if (str_contains(strtolower($host), 'fastmail.com')) {
+            return "HTTP $code — Fastmail needs your full email as user and an app-specific password "
+                 . '(Settings → Privacy & Security → App Passwords; not your login password)';
+        }
+        return "HTTP $code — check CalDAV user and password";
+    }
+    return "HTTP $code";
+}
+
 /** CalDAV calendar-query — returns merged ICS text for the event window. */
 function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, string $key): ?string
 {
+    $url = caldav_normalize_url($url);
+    $host = (string)(parse_url($url, PHP_URL_HOST) ?? '');
     $policy = signage_fetch_url_allowed($url, signage_allow_private_fetch());
     if (!$policy['ok']) {
         $GLOBALS['diag'][$key] = $policy['error'] ?? 'blocked URL';
+        return null;
+    }
+    if ($auth === null || trim((string)($auth[0] ?? '')) === '') {
+        $GLOBALS['diag'][$key] = 'CalDAV feed requires user and password';
         return null;
     }
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
@@ -90,8 +128,6 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
         return (string)file_get_contents($f);
     }
 
-    $base = rtrim($url, '/');
-    $target = str_contains($base, '.ics') ? $base : ($base . '/');
     $start = gmdate('Ymd\THis\Z', $winStart);
     $end = gmdate('Ymd\THis\Z', $winEnd + 86400);
     $xmlBody = '<?xml version="1.0" encoding="utf-8"?>'
@@ -103,7 +139,7 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
         . '</C:comp-filter></C:comp-filter></C:filter>'
         . '</C:calendar-query>';
 
-    $ch = curl_init($target);
+    $ch = curl_init($url);
     $opts = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => 'REPORT',
@@ -111,15 +147,15 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
         CURLOPT_HTTPHEADER => [
             'Depth: 1',
             'Content-Type: application/xml; charset=utf-8',
+            'Accept: text/calendar, application/xml',
         ],
+        CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
+        CURLOPT_USERPWD => $auth[0] . ':' . ($auth[1] ?? ''),
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 20,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_USERAGENT => 'HomeSignage/1.0',
     ];
-    if ($auth !== null && ($auth[0] ?? '') !== '') {
-        $opts[CURLOPT_USERPWD] = $auth[0] . ':' . ($auth[1] ?? '');
-    }
     curl_setopt_array($ch, $opts);
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -132,30 +168,52 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
             @file_put_contents($f, $ics, LOCK_EX);
             return $ics;
         }
-        $GLOBALS['diag'][$key] = 'empty CalDAV response';
+        $GLOBALS['diag'][$key] = 'empty CalDAV response (no events in range)';
     } else {
-        $GLOBALS['diag'][$key] = $err !== '' ? "curl: $err" : "HTTP $code";
+        $GLOBALS['diag'][$key] = $err !== '' ? "curl: $err" : caldav_auth_error($code, $host);
     }
     return is_file($f) ? (string)file_get_contents($f) : null;
 }
 
+function caldav_unescape_ics(string $block): string
+{
+    $block = html_entity_decode($block, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    return str_replace(["\\n", "\\N", "\\r"], ["\n", "\n", ''], $block);
+}
+
 function caldav_response_to_ics(string $xml): string
 {
-    if (!preg_match_all('/<(?:[\w-]+:)?calendar-data[^>]*>\s*(.*?)\s*<\/(?:[\w-]+:)?calendar-data>/is', $xml, $m)) {
-        return '';
-    }
     $chunks = [];
-    foreach ($m[1] as $block) {
-        $block = html_entity_decode($block, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-        $block = str_replace(["\\n", "\\N", "\\r"], ["\n", "\n", ''], $block);
-        $block = trim($block);
-        if ($block === '') {
-            continue;
-        }
-        if (stripos($block, 'BEGIN:VEVENT') !== false) {
-            $chunks[] = $block;
+
+    if (class_exists('SimpleXMLElement')) {
+        libxml_use_internal_errors(true);
+        $sx = @simplexml_load_string($xml);
+        if ($sx !== false) {
+            $nodes = $sx->xpath('//*[local-name()="calendar-data"]');
+            if (is_array($nodes)) {
+                foreach ($nodes as $node) {
+                    $block = caldav_unescape_ics(trim((string)$node));
+                    if ($block !== '' && stripos($block, 'BEGIN:VEVENT') !== false) {
+                        $chunks[] = $block;
+                    }
+                }
+            }
         }
     }
+
+    if ($chunks === [] && preg_match_all(
+        '/<(?:[\w-]+:)?calendar-data[^>]*>\s*(.*?)\s*<\/(?:[\w-]+:)?calendar-data>/is',
+        $xml,
+        $m
+    )) {
+        foreach ($m[1] as $block) {
+            $block = caldav_unescape_ics(trim($block));
+            if ($block !== '' && stripos($block, 'BEGIN:VEVENT') !== false) {
+                $chunks[] = $block;
+            }
+        }
+    }
+
     if ($chunks === []) {
         return '';
     }
@@ -177,7 +235,7 @@ function fetch_calendar_feed(array $feed, int $i, int $winStart, int $winEnd): ?
     $key = family_feed_cache_key($i, $feed, $winStart);
 
     if ($source === 'webdav' && !preg_match('/\.ics(\?|$)/i', $url)) {
-        return caldav_fetch($url, $auth, $winStart, $winEnd, $key);
+        return caldav_fetch(caldav_normalize_url($url), $auth, $winStart, $winEnd, $key);
     }
     return cached_get($url, $key, $auth);
 }
@@ -198,6 +256,29 @@ function ics_unfold(string $ics): array
     return $out;
 }
 
+/** Map Outlook/Windows TZID names to IANA zones PHP understands. */
+function ics_timezone(string $tzid): DateTimeZone
+{
+    static $windows = [
+        'Eastern Standard Time' => 'America/Detroit',
+        'Central Standard Time' => 'America/Chicago',
+        'Mountain Standard Time' => 'America/Denver',
+        'Pacific Standard Time' => 'America/Los_Angeles',
+        'US Eastern Standard Time' => 'America/Detroit',
+        'UTC' => 'UTC',
+        'GMT Standard Time' => 'Europe/London',
+    ];
+    $tzid = trim($tzid);
+    if (isset($windows[$tzid])) {
+        return new DateTimeZone($windows[$tzid]);
+    }
+    try {
+        return new DateTimeZone($tzid);
+    } catch (Throwable $e) {
+        return new DateTimeZone(TIMEZONE);
+    }
+}
+
 /** Parse a DTSTART/DTEND value (+params) into [unix_ts, all_day]. */
 function ics_time(string $params, string $value): ?array
 {
@@ -207,7 +288,7 @@ function ics_time(string $params, string $value): ?array
     }
     $tz = new DateTimeZone(TIMEZONE);
     if (preg_match('/TZID=([^;:]+)/', $params, $m)) {
-        try { $tz = new DateTimeZone($m[1]); } catch (Throwable $e) {}
+        $tz = ics_timezone($m[1]);
     }
     if (str_ends_with($value, 'Z')) {
         $t = DateTime::createFromFormat('Ymd\THis\Z', $value, new DateTimeZone('UTC'));
@@ -227,38 +308,113 @@ function parse_rrule(string $r): array
     return $out;
 }
 
+/** @return list<array{ord:?int,dow:int}> */
+function ics_parse_byday_rules(string $byday): array
+{
+    static $dayMap = ['MO'=>1,'TU'=>2,'WE'=>3,'TH'=>4,'FR'=>5,'SA'=>6,'SU'=>7];
+    $rules = [];
+    foreach (explode(',', $byday) as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+        if (preg_match('/^([+-]?\d+)?(MO|TU|WE|TH|FR|SA|SU)$/', $part, $m)) {
+            $ord = ($m[1] ?? '') !== '' ? (int)$m[1] : null;
+            $rules[] = ['ord' => $ord, 'dow' => $dayMap[$m[2]]];
+        }
+    }
+    return $rules;
+}
+
+/** Does $day fall on the requested weekday position (e.g. 2nd Friday)? */
+function ics_day_matches_byday(int $day, array $rule): bool
+{
+    if ((int)date('N', $day) !== $rule['dow']) {
+        return false;
+    }
+    $ord = $rule['ord'];
+    if ($ord === null) {
+        return true;
+    }
+    $year = (int)date('Y', $day);
+    $month = (int)date('n', $day);
+    $dom = (int)date('j', $day);
+    if ($ord > 0) {
+        $count = 0;
+        for ($d = 1; $d <= $dom; $d++) {
+            if ((int)date('N', mktime(12, 0, 0, $month, $d, $year)) === $rule['dow']) {
+                $count++;
+            }
+        }
+        return $count === $ord;
+    }
+    $daysInMonth = (int)date('t', $day);
+    $count = 0;
+    for ($d = $daysInMonth; $d >= $dom; $d--) {
+        if ((int)date('N', mktime(12, 0, 0, $month, $d, $year)) === $rule['dow']) {
+            $count++;
+        }
+    }
+    return $count === abs($ord);
+}
+
+function ics_months_between(int $day, int $start): int
+{
+    return ((int)date('Y', $day) * 12 + (int)date('n', $day))
+         - ((int)date('Y', $start) * 12 + (int)date('n', $start));
+}
+
+function ics_is_excluded(int $ts, array $ev): bool
+{
+    foreach ($ev['exdate_ts'] ?? [] as $ex) {
+        if ($ex === $ts) {
+            return true;
+        }
+    }
+    return in_array(date('Ymd', $ts), $ev['exdates'], true);
+}
+
 /** Expand one VEVENT into instances inside [winStart, winEnd]. */
-function expand_event(array $ev, int $winStart, int $winEnd): array
+function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = []): array
 {
     $out = [];
-    $start = $ev['start']; $allDay = $ev['all_day'];
-    $push = function (int $ts) use (&$out, $ev, $allDay) {
-        if (in_array(date('Ymd', $ts), $ev['exdates'], true)) return;
+    $start = $ev['start'];
+    $allDay = $ev['all_day'];
+    $uid = $ev['uid'] ?? '';
+    $push = function (int $ts) use (&$out, $ev, $allDay, $uid, $overrides) {
+        if (ics_is_excluded($ts, $ev)) {
+            return;
+        }
+        if ($uid !== '' && isset($overrides[$uid][$ts])) {
+            return;
+        }
         $out[] = ['ts' => $ts, 'all_day' => $allDay, 'summary' => $ev['summary'],
                   'cal' => $ev['cal'], 'color' => $ev['color']];
     };
 
     if (!$ev['rrule']) {
-        if ($start >= $winStart && $start <= $winEnd) $push($start);
+        if ($start >= $winStart && $start <= $winEnd) {
+            $push($start);
+        }
         return $out;
     }
 
     $r = $ev['rrule'];
-    $freq     = $r['FREQ'] ?? '';
+    $freq = $r['FREQ'] ?? '';
     $interval = max(1, (int)($r['INTERVAL'] ?? 1));
-    $until    = isset($r['UNTIL']) ? (ics_time('', $r['UNTIL'])[0] ?? PHP_INT_MAX) : PHP_INT_MAX;
-    $dayMap   = ['MO'=>1,'TU'=>2,'WE'=>3,'TH'=>4,'FR'=>5,'SA'=>6,'SU'=>7];
-    $byday    = [];
-    foreach (explode(',', $r['BYDAY'] ?? '') as $d) {
-        $d = preg_replace('/^[+-]?\d+/', '', trim($d));    // ignore ordinals like 2TU
-        if (isset($dayMap[$d])) $byday[] = $dayMap[$d];
-    }
+    $until = isset($r['UNTIL']) ? (ics_time('', $r['UNTIL'])[0] ?? PHP_INT_MAX) : PHP_INT_MAX;
+    $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
+    $weeklyDays = array_values(array_filter(
+        array_map(fn($rule) => $rule['ord'] === null ? $rule['dow'] : null, $bydayRules),
+        fn($d) => $d !== null
+    ));
 
-    // Walk each day in the window and test membership — simple and safe.
-    $tod = $allDay ? 0 : ($start - strtotime('today', $start));   // seconds into day
+    $tod = $allDay ? 0 : ($start - strtotime('today', $start));
     for ($day = strtotime('today', $winStart); $day <= $winEnd; $day += 86400) {
         $ts = $day + $tod;
-        if ($ts < $start || $ts > $until || $ts < $winStart || $ts > $winEnd) continue;
+        if ($ts < $start || $ts > $until || $ts < $winStart || $ts > $winEnd) {
+            continue;
+        }
         $match = false;
         switch ($freq) {
             case 'DAILY':
@@ -266,23 +422,127 @@ function expand_event(array $ev, int $winStart, int $winEnd): array
                 break;
             case 'WEEKLY':
                 $weeks = (int)floor(($day - strtotime('monday this week', $start)) / 604800);
-                $dow   = (int)date('N', $day);
-                $days  = $byday ?: [(int)date('N', $start)];
+                $dow = (int)date('N', $day);
+                $days = $weeklyDays !== [] ? $weeklyDays : [(int)date('N', $start)];
                 $match = $weeks % $interval === 0 && in_array($dow, $days, true);
                 break;
             case 'MONTHLY':
-                $dom   = (int)($r['BYMONTHDAY'] ?? date('j', $start));
-                $months = ((int)date('Y', $day) * 12 + (int)date('n', $day))
-                        - ((int)date('Y', $start) * 12 + (int)date('n', $start));
-                $match = (int)date('j', $day) === $dom && $months % $interval === 0;
+                $months = ics_months_between($day, $start);
+                if ($months % $interval !== 0) {
+                    break;
+                }
+                if ($bydayRules !== []) {
+                    foreach ($bydayRules as $rule) {
+                        if (ics_day_matches_byday($day, $rule)) {
+                            $match = true;
+                            break;
+                        }
+                    }
+                } else {
+                    $dom = (int)($r['BYMONTHDAY'] ?? date('j', $start));
+                    $match = (int)date('j', $day) === $dom;
+                }
                 break;
             case 'YEARLY':
-                $match = date('md', $day) === date('md', $start);
+                $years = (int)date('Y', $day) - (int)date('Y', $start);
+                if ($years % $interval !== 0) {
+                    break;
+                }
+                if (isset($r['BYMONTH']) && (int)date('n', $day) !== (int)$r['BYMONTH']) {
+                    break;
+                }
+                if ($bydayRules !== []) {
+                    foreach ($bydayRules as $rule) {
+                        if (ics_day_matches_byday($day, $rule)) {
+                            $match = true;
+                            break;
+                        }
+                    }
+                } else {
+                    $match = date('md', $day) === date('md', $start);
+                }
                 break;
         }
-        if ($match) $push($ts);
+        if ($match) {
+            $push($ts);
+        }
     }
     return $out;
+}
+
+function parse_ics_vevents(string $raw, array $feedMeta): array
+{
+    $lines = ics_unfold($raw);
+    $vevents = [];
+    $cur = null;
+    foreach ($lines as $line) {
+        if ($line === 'BEGIN:VEVENT') {
+            $cur = [
+                'start' => null, 'all_day' => false, 'summary' => '', 'rrule' => null,
+                'exdates' => [], 'exdate_ts' => [], 'uid' => '', 'recurrence_id' => null,
+                'status' => '', 'cal' => $feedMeta['name'], 'color' => $feedMeta['color'],
+            ];
+            continue;
+        }
+        if ($line === 'END:VEVENT') {
+            if ($cur && $cur['start'] !== null && strtoupper($cur['status']) !== 'CANCELLED') {
+                $vevents[] = $cur;
+            }
+            $cur = null;
+            continue;
+        }
+        if ($cur === null) {
+            continue;
+        }
+        $sep = strpos($line, ':');
+        if ($sep === false) {
+            continue;
+        }
+        $left = substr($line, 0, $sep);
+        $value = substr($line, $sep + 1);
+        $parts = explode(';', $left, 2);
+        $prop = strtoupper($parts[0]);
+        $params = $parts[1] ?? '';
+        switch ($prop) {
+            case 'DTSTART':
+                $t = ics_time($params, $value);
+                if ($t) {
+                    $cur['start'] = $t[0];
+                    $cur['all_day'] = $t[1];
+                }
+                break;
+            case 'RECURRENCE-ID':
+                $t = ics_time($params, $value);
+                if ($t) {
+                    $cur['recurrence_id'] = $t[0];
+                }
+                break;
+            case 'UID':
+                $cur['uid'] = trim($value);
+                break;
+            case 'STATUS':
+                $cur['status'] = strtoupper(trim($value));
+                break;
+            case 'SUMMARY':
+                $cur['summary'] = str_replace(['\\,', '\\;', '\\n'], [',', ';', ' '], $value);
+                break;
+            case 'RRULE':
+                $cur['rrule'] = parse_rrule($value);
+                break;
+            case 'EXDATE':
+                foreach (explode(',', $value) as $x) {
+                    $x = trim($x);
+                    $t = ics_time($params, $x);
+                    if ($t) {
+                        $cur['exdate_ts'][] = $t[0];
+                    } else {
+                        $cur['exdates'][] = substr($x, 0, 8);
+                    }
+                }
+                break;
+        }
+    }
+    return $vevents;
 }
 
 // ── Gather events for today + 6 days ────────────────────────────────────────
@@ -295,41 +555,32 @@ foreach (ICS_FEEDS as $i => $feed) {
         continue;
     }
     $raw = fetch_calendar_feed($feed, $i, $winStart, $winEnd);
-    if ($raw === null) continue;
-    $lines = ics_unfold($raw);
-    $cur = null;
-    foreach ($lines as $line) {
-        if ($line === 'BEGIN:VEVENT') {
-            $cur = ['start'=>null,'all_day'=>false,'summary'=>'','rrule'=>null,'exdates'=>[],
-                    'cal'=>$feed['name'],'color'=>$feed['color']];
+    if ($raw === null) {
+        continue;
+    }
+    $meta = ['name' => (string)($feed['name'] ?? ''), 'color' => (string)($feed['color'] ?? '#ffb347')];
+    $vevents = parse_ics_vevents($raw, $meta);
+    $overrides = [];
+    $masters = [];
+    foreach ($vevents as $ev) {
+        if ($ev['recurrence_id'] !== null && ($ev['uid'] ?? '') !== '') {
+            $overrides[$ev['uid']][$ev['recurrence_id']] = true;
+            if ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
+                $events[] = [
+                    'ts' => $ev['start'],
+                    'all_day' => $ev['all_day'],
+                    'summary' => $ev['summary'],
+                    'cal' => $ev['cal'],
+                    'color' => $ev['color'],
+                ];
+            }
             continue;
         }
-        if ($line === 'END:VEVENT') {
-            if ($cur && $cur['start'] !== null) {
-                foreach (expand_event($cur, $winStart, $winEnd) as $inst) $events[] = $inst;
-            }
-            $cur = null; continue;
-        }
-        if ($cur === null) continue;
-        $sep = strpos($line, ':');
-        if ($sep === false) continue;
-        $left = substr($line, 0, $sep); $value = substr($line, $sep + 1);
-        $parts = explode(';', $left, 2);
-        $prop = strtoupper($parts[0]); $params = $parts[1] ?? '';
-        switch ($prop) {
-            case 'DTSTART':
-                $t = ics_time($params, $value);
-                if ($t) { $cur['start'] = $t[0]; $cur['all_day'] = $t[1]; }
-                break;
-            case 'SUMMARY':
-                $cur['summary'] = str_replace(['\\,', '\\;', '\\n'], [',', ';', ' '], $value);
-                break;
-            case 'RRULE':
-                $cur['rrule'] = parse_rrule($value);
-                break;
-            case 'EXDATE':
-                foreach (explode(',', $value) as $x) $cur['exdates'][] = substr(trim($x), 0, 8);
-                break;
+        $masters[] = $ev;
+    }
+    foreach ($masters as $ev) {
+        foreach (expand_event($ev, $winStart, $winEnd, $overrides) as $inst) {
+            $events[] = $inst;
         }
     }
 }
