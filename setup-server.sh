@@ -116,7 +116,7 @@ install_packages() {
   log "Installing Apache, PHP, and ffmpeg"
   apt-get install -y -q \
     apache2 libapache2-mod-php \
-    php-cli php-curl php-xml php-mbstring php-gd \
+    php-cli php-curl php-xml php-mbstring php-gd php-zip \
     ffmpeg \
     rsync git curl
 

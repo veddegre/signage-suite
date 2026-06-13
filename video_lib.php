@@ -290,10 +290,34 @@ function video_deno_local_bin_path(): string
 function video_ytdlp_find_executable(string $name): ?string
 {
     if ($name === 'deno') {
-        foreach (['/usr/local/bin/deno', '/usr/bin/deno', video_deno_local_bin_path()] as $p) {
-            if (is_executable($p)) {
-                return $p;
+        $local = video_deno_local_bin_path();
+        $localVer = is_executable($local) ? video_ytdlp_deno_version($local) : null;
+
+        $systemPath = null;
+        $systemVer = null;
+        foreach (['/usr/local/bin/deno', '/usr/bin/deno'] as $p) {
+            if (!is_executable($p)) {
+                continue;
             }
+            $v = video_ytdlp_deno_version($p);
+            if ($v !== null) {
+                $systemPath = $p;
+                $systemVer = $v;
+                break;
+            }
+        }
+
+        // Prefer admin-managed bin/deno when it is at least as new as the system copy.
+        if ($localVer !== null && video_ytdlp_deno_ok($local)) {
+            if ($systemVer === null || version_compare($localVer, $systemVer, '>=')) {
+                return $local;
+            }
+        }
+        if ($systemPath !== null) {
+            return $systemPath;
+        }
+        if ($localVer !== null) {
+            return $local;
         }
         return null;
     }
@@ -347,12 +371,20 @@ function video_ytdlp_deno_min_version(): string
 
 function video_ytdlp_deno_version(?string $path = null): ?string
 {
-    $path = $path ?? video_ytdlp_find_executable('deno');
+    if ($path === null) {
+        $path = video_ytdlp_find_executable('deno');
+    }
     if ($path === null) {
         return null;
     }
     $out = trim((string)@shell_exec(escapeshellarg($path) . ' --version 2>/dev/null'));
-    return $out !== '' ? $out : null;
+    if ($out === '') {
+        return null;
+    }
+    if (preg_match('/\b(\d+\.\d+\.\d+)\b/', $out, $m)) {
+        return $m[1];
+    }
+    return $out;
 }
 
 function video_ytdlp_deno_ok(?string $path = null): bool
@@ -875,32 +907,24 @@ function video_deno_rmtree(string $dir): void
 /** @return array{ok:bool,message:string,lines:list<string>,version:?string} */
 function video_deno_update(): array
 {
-    $path = video_ytdlp_find_executable('deno');
-    $localPath = video_deno_local_bin_path();
-    $isSystem = $path !== null && $path !== $localPath;
-    $latestInfo = video_deno_latest_release(true);
-    $latest = $latestInfo['version'] ?? null;
-    $installed = video_ytdlp_deno_version($path);
-
-    if ($isSystem) {
-        if (video_deno_is_outdated($installed, $latest)) {
-            return [
-                'ok' => false,
-                'message' => 'System deno (' . ($installed ?? '?') . ') at ' . $path
-                    . ' requires root. SSH: curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh',
-                'lines' => [],
-                'version' => $installed,
-            ];
-        }
-        return [
-            'ok' => true,
-            'message' => 'System deno ' . ($installed ?? '') . ' is up to date.',
-            'lines' => [],
-            'version' => $installed,
-        ];
+    $result = video_deno_install_bin([]);
+    if (!$result['ok']) {
+        return $result;
     }
 
-    return video_deno_install_bin([]);
+    $path = video_ytdlp_find_executable('deno');
+    $localPath = video_deno_local_bin_path();
+    if ($path === $localPath) {
+        return $result;
+    }
+
+    $localVer = video_ytdlp_deno_version($localPath);
+    $systemVer = video_ytdlp_deno_version($path);
+    $result['message'] = 'Installed bin/deno ' . ($localVer ?? '')
+        . '. Still using system deno ' . ($systemVer ?? '') . ' at ' . $path
+        . ' (same or newer). Remove the system copy or upgrade via SSH to use bin/deno.';
+    $result['version'] = video_ytdlp_deno_version($path);
+    return $result;
 }
 
 /** @return array{installed:?string,path:?string,latest:?string,outdated:?bool,checked_at:?int,latest_error:?string,system:bool} */

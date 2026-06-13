@@ -1077,8 +1077,9 @@ function admin_field(array $f, $val, string $board): void
               Export from youtube.com while signed in using <strong>Get cookies.txt LOCALLY</strong>, test on your Mac with
               <code>yt-dlp --js-runtimes deno --remote-components ejs:github --cookies cookies.txt -F URL</code>
               (need 720p/1080p rows), then upload above — or use a <strong>local file</strong> in the video row.</div>
-            <div class="help" style="margin-top:8px">Admin updates download verified releases to <code>bin/yt-dlp</code> and can install
-              <code>bin/deno</code> when no system copy exists. System deno at <code>/usr/local/bin/deno</code> requires SSH:
+            <div class="help" style="margin-top:8px"><strong>Update deno</strong> downloads the latest release to
+              <code>bin/deno</code> (no root) and uses it when newer than the system copy at
+              <code>/usr/local/bin/deno</code>. To upgrade system deno instead: SSH as root
               <code>curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh</code></div>
             <div class="inline-actions">
               <form method="post" action="?board=video">
