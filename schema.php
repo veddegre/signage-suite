@@ -161,12 +161,20 @@ function admin_schema(): array
             $tz,
         ]],
         'family' => ['title' => 'Family Board', 'file' => 'family.php', 'fields' => [
-            ['key' => 'ICS_FEEDS', 'label' => 'Calendar feeds (ICS)', 'type' => 'rows',
+            ['key' => 'ICS_FEEDS', 'label' => 'Calendar feeds', 'type' => 'rows',
              'columns' => [
                  ['key' => 'name', 'label' => 'Name'],
-                 ['key' => 'url', 'label' => 'Secret iCal URL', 'wide' => true],
+                 ['key' => 'source', 'label' => 'Source', 'type' => 'select',
+                  'options' => ['ical', 'webdav']],
+                 ['key' => 'url', 'label' => 'URL', 'wide' => true],
+                 ['key' => 'user', 'label' => 'User', 'placeholder' => 'optional'],
+                 ['key' => 'password', 'label' => 'Password', 'type' => 'password'],
                  ['key' => 'color', 'label' => 'Color', 'placeholder' => '#ffb347'],
-             ]],
+             ],
+             'help' => 'ical: Google/Apple secret iCal URL (user/password optional). '
+                     . 'webdav: CalDAV calendar URL (e.g. Nextcloud …/remote.php/dav/calendars/user/personal/) '
+                     . 'or a direct .ics path on WebDAV — set user/password when required. '
+                     . 'LAN/private hosts need Security → Allow private URL fetches.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
              'help' => 'Leave as (default) to hide — e.g. apartment living'],

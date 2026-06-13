@@ -5,8 +5,9 @@
  * day, and countdowns to dates that matter.
  *
  * Setup:
- *   ICS_FEEDS — secret iCal URLs (Google Calendar: Settings → "Secret address
- *     in iCal format"). Add as many as you like; each gets a color.
+ *   ICS_FEEDS — iCal subscription URLs and/or WebDAV/CalDAV calendars (Nextcloud,
+ *     Radicale, etc.). Each row: name, source (ical|webdav), URL, optional user/
+ *     password, color.
  *   TRASH_WEEKDAY — pickup day (leave unset to hide — e.g. apartment). RECYCLE_ANCHOR —
  *     any date recycling was collected, for every-other-week cadence ('' to disable).
  *   COUNTDOWNS — [label => YYYY-MM-DD].
@@ -35,7 +36,7 @@ define('CACHE_TTL', cfg('family.CACHE_TTL', 600));
 date_default_timezone_set(TIMEZONE);
 $GLOBALS['diag'] = [];
 
-function cached_get(string $url, string $key): ?string
+function cached_get(string $url, string $key, ?array $auth = null): ?string
 {
     $policy = signage_fetch_url_allowed($url, signage_allow_private_fetch());
     if (!$policy['ok']) {
@@ -46,13 +47,139 @@ function cached_get(string $url, string $key): ?string
     $f = CACHE_DIR . "/$key.dat";
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) return (string)file_get_contents($f);
     $ch = curl_init($url);
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>5,
-        CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_USERAGENT=>'HomeSignage/1.0']);
+    $opts = [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>5,
+        CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_USERAGENT=>'HomeSignage/1.0'];
+    if ($auth !== null && ($auth[0] ?? '') !== '') {
+        $opts[CURLOPT_USERPWD] = $auth[0] . ':' . ($auth[1] ?? '');
+    }
+    curl_setopt_array($ch, $opts);
     $body = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch); curl_close($ch);
     if ($body !== false && $code === 200) { @file_put_contents($f, $body, LOCK_EX); return $body; }
     $GLOBALS['diag'][$key] = $err !== '' ? "curl: $err" : "HTTP $code";
     return is_file($f) ? (string)file_get_contents($f) : null;
+}
+
+function family_feed_cache_key(int $i, array $feed, int $winStart): string
+{
+    $blob = ($feed['url'] ?? '') . '|' . ($feed['user'] ?? '') . '|' . ($feed['source'] ?? 'ical')
+          . '|' . date('Ymd', $winStart);
+    return 'ics_' . $i . '_' . substr(sha1($blob), 0, 12);
+}
+
+function family_feed_auth(array $feed): ?array
+{
+    $user = trim((string)($feed['user'] ?? ''));
+    if ($user === '') {
+        return null;
+    }
+    return [$user, (string)($feed['password'] ?? '')];
+}
+
+/** CalDAV calendar-query — returns merged ICS text for the event window. */
+function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, string $key): ?string
+{
+    $policy = signage_fetch_url_allowed($url, signage_allow_private_fetch());
+    if (!$policy['ok']) {
+        $GLOBALS['diag'][$key] = $policy['error'] ?? 'blocked URL';
+        return null;
+    }
+    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
+    $f = CACHE_DIR . "/$key.dat";
+    if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
+        return (string)file_get_contents($f);
+    }
+
+    $base = rtrim($url, '/');
+    $target = str_contains($base, '.ics') ? $base : ($base . '/');
+    $start = gmdate('Ymd\THis\Z', $winStart);
+    $end = gmdate('Ymd\THis\Z', $winEnd + 86400);
+    $xmlBody = '<?xml version="1.0" encoding="utf-8"?>'
+        . '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+        . '<D:prop><D:getetag/><C:calendar-data/></D:prop>'
+        . '<C:filter><C:comp-filter name="VCALENDAR">'
+        . '<C:comp-filter name="VEVENT">'
+        . '<C:time-range start="' . $start . '" end="' . $end . '"/>'
+        . '</C:comp-filter></C:comp-filter></C:filter>'
+        . '</C:calendar-query>';
+
+    $ch = curl_init($target);
+    $opts = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'REPORT',
+        CURLOPT_POSTFIELDS => $xmlBody,
+        CURLOPT_HTTPHEADER => [
+            'Depth: 1',
+            'Content-Type: application/xml; charset=utf-8',
+        ],
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_USERAGENT => 'HomeSignage/1.0',
+    ];
+    if ($auth !== null && ($auth[0] ?? '') !== '') {
+        $opts[CURLOPT_USERPWD] = $auth[0] . ':' . ($auth[1] ?? '');
+    }
+    curl_setopt_array($ch, $opts);
+    $body = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+
+    if ($body !== false && in_array($code, [200, 207], true)) {
+        $ics = caldav_response_to_ics((string)$body);
+        if ($ics !== '') {
+            @file_put_contents($f, $ics, LOCK_EX);
+            return $ics;
+        }
+        $GLOBALS['diag'][$key] = 'empty CalDAV response';
+    } else {
+        $GLOBALS['diag'][$key] = $err !== '' ? "curl: $err" : "HTTP $code";
+    }
+    return is_file($f) ? (string)file_get_contents($f) : null;
+}
+
+function caldav_response_to_ics(string $xml): string
+{
+    if (!preg_match_all('/<(?:[\w-]+:)?calendar-data[^>]*>\s*(.*?)\s*<\/(?:[\w-]+:)?calendar-data>/is', $xml, $m)) {
+        return '';
+    }
+    $chunks = [];
+    foreach ($m[1] as $block) {
+        $block = html_entity_decode($block, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        $block = str_replace(["\\n", "\\N", "\\r"], ["\n", "\n", ''], $block);
+        $block = trim($block);
+        if ($block === '') {
+            continue;
+        }
+        if (stripos($block, 'BEGIN:VEVENT') !== false) {
+            $chunks[] = $block;
+        }
+    }
+    if ($chunks === []) {
+        return '';
+    }
+    return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//HomeSignage//CalDAV//EN\r\n"
+        . implode("\r\n", $chunks) . "\r\nEND:VCALENDAR\r\n";
+}
+
+function fetch_calendar_feed(array $feed, int $i, int $winStart, int $winEnd): ?string
+{
+    $url = trim((string)($feed['url'] ?? ''));
+    if ($url === '') {
+        return null;
+    }
+    $source = strtolower(trim((string)($feed['source'] ?? 'ical')));
+    if ($source !== 'webdav') {
+        $source = 'ical';
+    }
+    $auth = family_feed_auth($feed);
+    $key = family_feed_cache_key($i, $feed, $winStart);
+
+    if ($source === 'webdav' && !preg_match('/\.ics(\?|$)/i', $url)) {
+        return caldav_fetch($url, $auth, $winStart, $winEnd, $key);
+    }
+    return cached_get($url, $key, $auth);
 }
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -164,7 +291,10 @@ $winEnd   = strtotime('today +7 days') - 1;
 $events   = [];
 
 foreach (ICS_FEEDS as $i => $feed) {
-    $raw = cached_get($feed['url'], 'ics_' . $i);
+    if (!is_array($feed)) {
+        continue;
+    }
+    $raw = fetch_calendar_feed($feed, $i, $winStart, $winEnd);
     if ($raw === null) continue;
     $lines = ics_unfold($raw);
     $cur = null;
@@ -302,8 +432,8 @@ usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
     <div class="k">Today</div>
     <?php $todayKey = date('Y-m-d');
     if (ICS_FEEDS === []) : ?>
-      <div class="setup">Add calendar feeds to <code>ICS_FEEDS</code> — in Google Calendar:
-        Settings &rarr; your calendar &rarr; <em>Secret address in iCal format</em>.</div>
+      <div class="setup">Add calendar feeds in admin — iCal subscription URLs or WebDAV/CalDAV
+        (Nextcloud, Radicale, …) with user/password when required.</div>
     <?php elseif ($days[$todayKey]): foreach (array_slice($days[$todayKey], 0, 7) as $e): ?>
       <div class="tev">
         <span class="t" style="color:<?= h($e['color']) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>

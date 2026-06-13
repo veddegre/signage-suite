@@ -113,7 +113,7 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 
 ## family.php — Family Board
 - **Setup:**
-  - `ICS_FEEDS`: secret iCal URLs (Google Calendar → Settings → calendar → *Secret address in iCal format*), one entry per calendar with a color.
+  - `ICS_FEEDS`: one row per calendar with a color. **Source** `ical` for secret subscription URLs (Google Calendar → Settings → calendar → *Secret address in iCal format*). **Source** `webdav` for CalDAV/WebDAV (Nextcloud `…/remote.php/dav/calendars/user/name/`, or a direct `.ics` path) with user/password when required.
   - `TRASH_WEEKDAY` and `RECYCLE_ANCHOR` (any past date recycling was collected; drives the every-other-week cadence). Leave trash day as **(default)** to hide the chip entirely — useful for apartments.
   - `COUNTDOWNS`: label → `YYYY-MM-DD`.
 - RRULE support: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), YEARLY, with INTERVAL/UNTIL/EXDATE. Exotic rules show only on their original date.

@@ -152,6 +152,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             case 'rows':
                 $rows = $_POST[$name] ?? [];
                 if (!is_array($rows)) $rows = [];
+                $existingRows = $conf[$cfgKey] ?? [];
+                if (!is_array($existingRows)) $existingRows = [];
                 $keyed  = !empty($f['keyed']);
                 $scalar = !empty($f['scalar']);
                 $outV = [];
@@ -172,6 +174,25 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                                     if (($row[$col['key']] ?? '') !== '') $obj[$col['key']] = true;
                                     continue;
                                 }
+                                if (($col['type'] ?? '') === 'password') {
+                                    $v = $row[$col['key']] ?? '';
+                                    if ($v !== '') {
+                                        $obj[$col['key']] = $v;
+                                    } else {
+                                        foreach ($existingRows as $er) {
+                                            if (!is_array($er)) continue;
+                                            $match = ($row['url'] ?? '') !== '' && ($row['url'] ?? '') === ($er['url'] ?? '');
+                                            if (!$match && ($row['name'] ?? '') !== '') {
+                                                $match = ($row['name'] ?? '') === ($er['name'] ?? '');
+                                            }
+                                            if ($match && ($er[$col['key']] ?? '') !== '') {
+                                                $obj[$col['key']] = $er[$col['key']];
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                }
                                 $v = $row[$col['key']] ?? '';
                                 if ($v === '') continue;
                                 $obj[$col['key']] = ($col['cast'] ?? '') === 'int' ? (int)$v : $v;
@@ -185,6 +206,26 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                             if (($col['type'] ?? '') === 'check') {
                                 if (($row[$col['key']] ?? '') !== '') $obj[$col['key']] = true;
                                 continue;          // a lone checkbox doesn't make a row real
+                            }
+                            if (($col['type'] ?? '') === 'password') {
+                                $v = $row[$col['key']] ?? '';
+                                if ($v !== '') {
+                                    $obj[$col['key']] = $v;
+                                    $any = true;
+                                } else {
+                                    foreach ($existingRows as $er) {
+                                        if (!is_array($er)) continue;
+                                        $match = ($row['url'] ?? '') !== '' && ($row['url'] ?? '') === ($er['url'] ?? '');
+                                        if (!$match && ($row['name'] ?? '') !== '') {
+                                            $match = ($row['name'] ?? '') === ($er['name'] ?? '');
+                                        }
+                                        if ($match && ($er[$col['key']] ?? '') !== '') {
+                                            $obj[$col['key']] = $er[$col['key']];
+                                            break;
+                                        }
+                                    }
+                                }
+                                continue;
                             }
                             $v = $row[$col['key']] ?? '';
                             if ($v === '') continue;          // omit blank cells (a 0 is not "unset")
@@ -1679,6 +1720,10 @@ function admin_field(array $f, $val, string $board): void
                                 <option value="<?= h($o) ?>" <?= ($row[$c['key']] ?? '') === $o ? 'selected' : '' ?>><?= h($o) ?></option>
                               <?php endforeach; ?>
                             </select>
+                          <?php elseif (($c['type'] ?? '') === 'password'): ?>
+                            <input type="password" name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
+                                   autocomplete="off"
+                                   placeholder="<?= h(!empty($row[$c['key']]) ? '(unchanged)' : '') ?>">
                           <?php else: ?>
                             <input type="text" name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
                                    value="<?= h((string)($row[$c['key']] ?? '')) ?>"
@@ -1746,6 +1791,7 @@ function addRow(btn) {
         'wide' => !empty($c['wide']), 'ph' => $c['placeholder'] ?? '',
         'check' => ($c['type'] ?? '') === 'check',
         'select' => ($c['type'] ?? '') === 'select',
+        'password' => ($c['type'] ?? '') === 'password',
         'options' => $c['options'] ?? []], $ff['columns']);
     echo json_encode($colMap);
   ?>;
@@ -1767,8 +1813,12 @@ function addRow(btn) {
         opt.value = o; opt.textContent = o;
         inp.appendChild(opt);
       });
+    } else if (c.password) {
+      inp.type = 'password';
+      inp.autocomplete = 'off';
     } else {
-      inp.type = 'text'; inp.placeholder = c.ph;
+      inp.type = 'text';
+      inp.placeholder = c.ph;
     }
     inp.name = field + '[' + idx + '][' + c.key + ']';
     td.appendChild(inp); tr.appendChild(td);
