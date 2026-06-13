@@ -511,13 +511,23 @@ function slide_background_url(string $presetId): ?string
     $preset = $presets[$presetId];
     if (!empty($preset['photo'])) {
         $file = slide_backgrounds_dir() . '/' . $preset['photo'];
-        return is_file($file) ? 'slide_backgrounds/' . $preset['photo'] : null;
+        if (!is_file($file)) {
+            return null;
+        }
+        $v = substr(hash_file('sha256', $file), 0, 12);
+
+        return 'slide_backgrounds/' . $preset['photo'] . '?v=' . $v;
     }
     if (!isset($preset['thumb'])) {
         return null;
     }
     $file = slide_backgrounds_dir() . '/' . $preset['thumb'];
-    return is_file($file) ? 'slide_backgrounds/' . $preset['thumb'] : null;
+    if (!is_file($file)) {
+        return null;
+    }
+    $v = substr(hash_file('sha256', $file), 0, 12);
+
+    return 'slide_backgrounds/' . $preset['thumb'] . '?v=' . $v;
 }
 
 function slide_hex_rgb(string $hex): array
@@ -694,9 +704,9 @@ function slide_photo_download_urls(): array
             'sha256' => 'd06207c9428fb009e20bd437408f70b22d96951a8136f92c24dbb6a4d14c712b',
         ],
         'photos/nursery.jpg' => [
-            'url' => 'https://images.unsplash.com/photo-1516627145497-ae6968895b74' . $unsplash,
-            'min_bytes' => 200000,
-            'sha256' => 'e976bf3c81fd77e8fa6312d0e01b3160ae916c2104c8caea1e3857b6532d8958',
+            'url' => 'https://images.pexels.com/photos/3933250/pexels-photo-3933250.jpeg' . $pexels,
+            'min_bytes' => 80000,
+            'sha256' => '7b2b95e58758f40fed7016380a88b753d2262f83bba1b5382953ffd13e12db42',
         ],
         'photos/stadium.jpg' => [
             'url' => 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg' . $pexels,

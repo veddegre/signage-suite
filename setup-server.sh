@@ -178,8 +178,15 @@ deploy_files() {
     --exclude 'cache/' \
     --exclude 'videos/' \
     --exclude 'slides/' \
-    --exclude 'photos/' \
+    --exclude '/photos/' \
     "$SOURCE/" "$WEBROOT/"
+
+  # Bundled slide JPGs live under slide_backgrounds/photos/ — must not be skipped
+  # (a bare photos/ exclude would also block that path and leave stale hotlink junk).
+  if [[ -d "$SOURCE/slide_backgrounds/photos" ]]; then
+    log "Syncing bundled slide photo backgrounds"
+    rsync -a "$SOURCE/slide_backgrounds/photos/" "$WEBROOT/slide_backgrounds/photos/"
+  fi
 }
 
 write_deny_htaccess() {
