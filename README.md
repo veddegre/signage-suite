@@ -80,9 +80,9 @@ Allendale weather, RainViewer animated radar, sunrise arc. Needs `OWM_API_KEY`.
 ## slides.php — Custom Slides
 Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule each one independently.
 
-- **Upload / create:** new slides auto-deploy to **main** rotation. Use **Deploy to displays** at the top of **Custom Slides** to push `slides.php` to any screen in one click — dwell is calculated from your slide seconds.
+- **Upload / create:** new slides auto-deploy to **main** rotation. Use **Deploy to displays** at the top of **Custom Slides** to sync one playlist entry per slide to any screen — each entry uses that slide's dwell seconds.
 - **Slide deck:** drag cards to reorder. Each card shows **Active now**, schedule summary, and per-slide timing. Save the deck with **Deploy to** checkboxes to sync rotation on selected displays.
-- **Rotation:** one playlist entry (`slides.php`) per display runs the whole deck. Recommended dwell = sum of enabled slide seconds (shown in the deploy panel). Per-slide schedules control which images play inside the deck; rotation hour windows control when the deck appears at all.
+- **Rotation:** each enabled slide is its own playlist entry (`slides.php?slide=…`) with dwell from that slide's settings. Per-slide schedules control which entries are active on the wall (including priority takeover). In **Rotation**, slide entries appear grouped under **Custom slides** so long decks don't clutter the playlist.
 - **Slide creator:** same page — start from an occasion **template** (Birthday, Fall, Baseball, Bowling, etc.) or pick a **Photo scene** background (curated photography, dimmed for readability) or a **Theme color** gradient. Full-width edit fields, live preview at 1920×1080, **Create slide** saves into `./slides/`.
 - **Scheduling (per slide in the deck):**
   - **always** — show whenever the deck is on screen (optional hour window)
@@ -200,7 +200,7 @@ Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's bo
 
 **Multiple displays:** define screens on the Rotation page (one row per display — e.g. `main` / Living Room, `garage` / Garage Bench); after saving, each screen gets its own page-list editor. Point each device at its URL: plain `board.php` is the `main` screen, `board.php?screen=garage` is the garage. Any number of devices can share one URL (they render independently; the shared server-side cache means ten screens cost the same API usage as one), and a screen with no pages of its own — or an unknown `?screen=` value — falls back to the main rotation, so a freshly provisioned kiosk always shows something.
 
-Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
+Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
 
 ### setup-server.sh — the web host
 Onboards a fresh Ubuntu / Debian / Raspberry Pi OS machine as the signage **server** (Apache, PHP, permissions, hardening):

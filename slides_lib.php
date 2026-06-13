@@ -1048,7 +1048,7 @@ function slide_schedule_summary(array $slide): string
 
 /**
  * Deck counters for admin deploy panel.
- * @return array{total:int,enabled:int,on_disk:int,active_now:int,recommended_dwell:int}
+ * @return array{total:int,enabled:int,on_disk:int,active_now:int,playlist_entries:int}
  */
 function slides_deck_stats(?array $deck = null): array
 {
@@ -1057,11 +1057,9 @@ function slides_deck_stats(?array $deck = null): array
         $deck = [];
     }
     $dir = slides_dir();
-    $default = slides_default_dwell();
     $tz = new DateTimeZone(slides_timezone());
     $now = new DateTime('now', $tz);
     $total = $enabled = $onDisk = $activeNow = 0;
-    $dwellSum = 0;
 
     foreach ($deck as $slide) {
         if (!is_array($slide)) {
@@ -1077,7 +1075,6 @@ function slides_deck_stats(?array $deck = null): array
             continue;
         }
         $onDisk++;
-        $dwellSum += slide_dwell($slide, $default);
         if (slide_schedule_active($slide, $now)) {
             $activeNow++;
         }
@@ -1088,14 +1085,88 @@ function slides_deck_stats(?array $deck = null): array
         'enabled' => $enabled,
         'on_disk' => $onDisk,
         'active_now' => $activeNow,
-        'recommended_dwell' => max(30, $dwellSum + ($onDisk > 1 ? min(10, $onDisk * 2) : 0)),
+        'playlist_entries' => $onDisk,
     ];
 }
 
-/** Rotation dwell for slides.php — sum of enabled slide dwells on disk. */
-function slides_recommended_rotation_dwell(?array $deck = null): int
+/** Rotation URL for one slide image (one playlist entry per slide). */
+function slide_rotation_url(string $file): string
 {
-    return slides_deck_stats($deck)['recommended_dwell'];
+    $safe = slide_safe_filename($file);
+    if ($safe === null) {
+        return 'slides.php';
+    }
+    return 'slides.php?slide=' . rawurlencode($safe);
+}
+
+/** Parse slide filename from a rotation URL, or null if not a slide entry. */
+function slide_rotation_parse_file(string $url): ?string
+{
+    $url = trim($url);
+    if (strtok($url, '?') !== 'slides.php') {
+        return null;
+    }
+    $query = parse_url($url, PHP_URL_QUERY);
+    if (!is_string($query) || $query === '') {
+        return null;
+    }
+    parse_str($query, $params);
+    if (!isset($params['slide'])) {
+        return null;
+    }
+    return slide_safe_filename((string)$params['slide']);
+}
+
+/** @return array<string,mixed>|null */
+function slide_deck_by_file(string $file, ?array $deck = null): ?array
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        return null;
+    }
+    $want = slide_safe_filename($file);
+    if ($want === null) {
+        return null;
+    }
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        if (slide_safe_filename((string)($slide['file'] ?? '')) === $want) {
+            return $slide;
+        }
+    }
+    return null;
+}
+
+/**
+ * Enabled on-disk slides as rotation page rows, in deck order.
+ * @return list<array{url:string,dwell:int,file:string}>
+ */
+function slides_rotation_pages(?array $deck = null): array
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        return [];
+    }
+    $dir = slides_dir();
+    $default = slides_default_dwell();
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide) || !empty($slide['off'])) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file === null || !is_file($dir . '/' . $file)) {
+            continue;
+        }
+        $out[] = [
+            'url' => slide_rotation_url($file),
+            'dwell' => slide_dwell($slide, $default),
+            'file' => $file,
+        ];
+    }
+    return $out;
 }
 
 /** Active slides that exist on disk, in configured order. */

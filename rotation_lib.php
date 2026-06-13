@@ -244,12 +244,44 @@ function rotation_screen_kiosk_url(string $screen = 'main'): string
 /** @return list<array<string,mixed>> Active pages for the rotation shell (url set, dwell > 0, not skipped). */
 function rotation_screen_active_pages(string $screen = 'main'): array
 {
+    require_once __DIR__ . '/slides_lib.php';
+    $activeSlides = slides_active_entries();
+    $activeFiles = [];
+    foreach ($activeSlides as $slide) {
+        $activeFiles[(string)$slide['file']] = true;
+    }
+
+    $effective = rotation_screen_effective_pages($screen);
+    $hasSlideEntries = false;
+    foreach ($effective as $p) {
+        if (!is_array($p)) {
+            continue;
+        }
+        if (rotation_is_slide_url(trim((string)($p['url'] ?? '')))) {
+            $hasSlideEntries = true;
+            break;
+        }
+    }
+
     return array_values(array_filter(
-        rotation_screen_effective_pages($screen),
-        static fn($p) => is_array($p)
-            && trim((string)($p['url'] ?? '')) !== ''
-            && (int)($p['dwell'] ?? 0) > 0
-            && empty($p['off'])
+        $effective,
+        static function ($p) use ($activeFiles, $hasSlideEntries) {
+            if (!is_array($p)
+                || trim((string)($p['url'] ?? '')) === ''
+                || (int)($p['dwell'] ?? 0) <= 0
+                || !empty($p['off'])) {
+                return false;
+            }
+            $url = trim((string)($p['url'] ?? ''));
+            if ($hasSlideEntries && rotation_is_legacy_slides_url($url)) {
+                return false;
+            }
+            $file = slide_rotation_parse_file($url);
+            if ($file === null) {
+                return true;
+            }
+            return isset($activeFiles[$file]);
+        }
     ));
 }
 
@@ -359,6 +391,14 @@ function rotation_page_label(string $url): string
         return 'Grafana — ' . urldecode($m[1]);
     }
 
+    require_once __DIR__ . '/slides_lib.php';
+    $slideFile = slide_rotation_parse_file($url);
+    if ($slideFile !== null) {
+        $slide = slide_deck_by_file($slideFile);
+        $caption = is_array($slide) ? trim((string)($slide['caption'] ?? '')) : '';
+        return 'Slide — ' . ($caption !== '' ? $caption : $slideFile);
+    }
+
     static $boards = [
         'index.php' => 'Weather',
         'lake.php' => 'Lake Michigan',
@@ -394,7 +434,6 @@ function rotation_quick_add_items(): array
         ['label' => 'Homelab', 'url' => 'homelab.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'SignalTrace', 'url' => 'signaltrace.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Photo rotator', 'url' => 'rotator.php', 'dwell' => 300, 'group' => 'Media'],
-        ['label' => 'Custom slides', 'url' => 'slides.php', 'dwell' => 45, 'group' => 'Media'],
     ];
 
     $feeds = cfg('rss.FEEDS', []);
@@ -497,14 +536,238 @@ function rotation_upsert_url(string $screen, string $url, int $dwell): array
     return ['pages' => $pages, 'added' => true, 'updated' => false, 'screen' => $screen];
 }
 
-/** @return array{pages:list<array<string,mixed>>,added:bool,updated:bool,screen:string} */
+function rotation_is_legacy_slides_url(string $url): bool
+{
+    return trim($url) === 'slides.php';
+}
+
+function rotation_is_slide_url(string $url): bool
+{
+    require_once __DIR__ . '/slides_lib.php';
+    return slide_rotation_parse_file($url) !== null;
+}
+
+/** @return list<array<string,mixed>> */
+function rotation_strip_slide_pages(array $pages): array
+{
+    return array_values(array_filter($pages, static function ($page) {
+        if (!is_array($page)) {
+            return false;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        return !rotation_is_legacy_slides_url($url) && !rotation_is_slide_url($url);
+    }));
+}
+
+/**
+ * Human page count — a contiguous slide block counts as one board.
+ * @return array{total:int,slide_entries:int,slide_blocks:int}
+ */
+function rotation_playlist_counts(array $pageRows): array
+{
+    $total = 0;
+    $slideEntries = 0;
+    $slideBlocks = 0;
+    $inSlideBlock = false;
+
+    foreach ($pageRows as $prow) {
+        if (!is_array($prow)) {
+            continue;
+        }
+        $url = trim((string)($prow['url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+        if (rotation_is_legacy_slides_url($url) || rotation_is_slide_url($url)) {
+            $slideEntries++;
+            if (!$inSlideBlock) {
+                $slideBlocks++;
+                $total++;
+                $inSlideBlock = true;
+            }
+            continue;
+        }
+        $inSlideBlock = false;
+        $total++;
+    }
+
+    return ['total' => $total, 'slide_entries' => $slideEntries, 'slide_blocks' => $slideBlocks];
+}
+
+/**
+ * Split saved playlist rows into normal pages and contiguous slide blocks.
+ * @return list<array{type:string,items?:list<array<string,mixed>>,row?:array<string,mixed>,url?:string,index?:int}>
+ */
+function rotation_playlist_segments(array $pageRows): array
+{
+    $segments = [];
+    $slideBuf = [];
+
+    foreach ($pageRows as $idx => $prow) {
+        if (!is_array($prow)) {
+            continue;
+        }
+        $purl = trim((string)($prow['url'] ?? ''));
+        if ($purl === '') {
+            if ($slideBuf !== []) {
+                $segments[] = ['type' => 'slides', 'items' => $slideBuf];
+                $slideBuf = [];
+            }
+            $segments[] = ['type' => 'page', 'index' => $idx, 'row' => $prow, 'url' => ''];
+            continue;
+        }
+        $isSlide = rotation_is_legacy_slides_url($purl) || rotation_is_slide_url($purl);
+        if ($isSlide) {
+            $slideBuf[] = ['index' => $idx, 'row' => $prow, 'url' => $purl];
+            continue;
+        }
+        if ($slideBuf !== []) {
+            $segments[] = ['type' => 'slides', 'items' => $slideBuf];
+            $slideBuf = [];
+        }
+        $segments[] = ['type' => 'page', 'index' => $idx, 'row' => $prow, 'url' => $purl];
+    }
+    if ($slideBuf !== []) {
+        $segments[] = ['type' => 'slides', 'items' => $slideBuf];
+    }
+
+    return $segments;
+}
+
+/**
+ * Collapse slide runs for the “on the wall” summary list.
+ * @return list<array{label:string,detail:string}>
+ */
+function rotation_effective_playlist_lines(array $pages): array
+{
+    $lines = [];
+    $slideRun = [];
+
+    foreach ($pages as $ep) {
+        if (!is_array($ep) || empty($ep['url']) || !empty($ep['off'])) {
+            continue;
+        }
+        $url = trim((string)$ep['url']);
+        if (rotation_is_legacy_slides_url($url) || rotation_is_slide_url($url)) {
+            $slideRun[] = $ep;
+            continue;
+        }
+        if ($slideRun !== []) {
+            $lines[] = rotation_format_slide_run_line($slideRun);
+            $slideRun = [];
+        }
+        $dwell = (int)($ep['dwell'] ?? 0);
+        $lines[] = [
+            'label' => rotation_page_label($url),
+            'detail' => $url . ($dwell > 0 ? ' · ' . $dwell . 's' : ''),
+        ];
+    }
+    if ($slideRun !== []) {
+        $lines[] = rotation_format_slide_run_line($slideRun);
+    }
+
+    return $lines;
+}
+
+/** @param list<array<string,mixed>> $run @return array{label:string,detail:string} */
+function rotation_format_slide_run_line(array $run): array
+{
+    $count = count($run);
+    $dwells = array_values(array_filter(array_map(static fn($p) => (int)($p['dwell'] ?? 0), $run)));
+    $dwellLabel = '';
+    if ($dwells !== []) {
+        $min = min($dwells);
+        $max = max($dwells);
+        $dwellLabel = $min === $max ? (' · ' . $min . 's each') : (' · ' . $min . '–' . $max . 's');
+    }
+    if ($count === 1 && rotation_is_legacy_slides_url(trim((string)($run[0]['url'] ?? '')))) {
+        return [
+            'label' => 'Custom slides (legacy)',
+            'detail' => 'slides.php — deploy from Custom Slides to split into per-slide entries' . $dwellLabel,
+        ];
+    }
+
+    return [
+        'label' => 'Custom slides (' . $count . ')',
+        'detail' => $count . ' slide' . ($count === 1 ? '' : 's') . $dwellLabel,
+    ];
+}
+
+/** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,screen:string} */
 function rotation_sync_slides(string $screen = 'main', ?array $deck = null): array
 {
     require_once __DIR__ . '/slides_lib.php';
-    $dwell = slides_recommended_rotation_dwell($deck);
-    return rotation_upsert_url($screen, 'slides.php', $dwell);
+    $screen = rotation_normalize_screen_key($screen);
+    $pages = rotation_screen_pages($screen);
+    $expected = slides_rotation_pages($deck);
+    $expectedByUrl = [];
+    foreach ($expected as $row) {
+        $expectedByUrl[$row['url']] = (int)$row['dwell'];
+    }
+
+    $insertAt = null;
+    $filtered = [];
+    $oldSlideUrls = [];
+    $removedLegacy = false;
+
+    foreach ($pages as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if (rotation_is_legacy_slides_url($url)) {
+            if ($insertAt === null) {
+                $insertAt = count($filtered);
+            }
+            $removedLegacy = true;
+            continue;
+        }
+        if (rotation_is_slide_url($url)) {
+            if ($insertAt === null) {
+                $insertAt = count($filtered);
+            }
+            $oldSlideUrls[$url] = (int)($page['dwell'] ?? 0);
+            continue;
+        }
+        $filtered[] = $page;
+    }
+    if ($insertAt === null) {
+        $insertAt = count($filtered);
+    }
+
+    $slidePages = [];
+    $added = 0;
+    $updated = 0;
+    foreach ($expectedByUrl as $url => $dwell) {
+        if (!array_key_exists($url, $oldSlideUrls)) {
+            $added++;
+        } elseif ($oldSlideUrls[$url] !== $dwell) {
+            $updated++;
+        }
+        $slidePages[] = ['url' => $url, 'dwell' => $dwell];
+    }
+    foreach (array_keys($oldSlideUrls) as $oldUrl) {
+        if (!array_key_exists($oldUrl, $expectedByUrl)) {
+            $updated++;
+        }
+    }
+    if ($removedLegacy && $expected !== []) {
+        $updated = max($updated, 1);
+    }
+
+    array_splice($filtered, $insertAt, 0, $slidePages);
+
+    return [
+        'pages' => $filtered,
+        'added' => $added,
+        'updated' => $updated,
+        'removed_legacy' => $removedLegacy,
+        'slide_count' => count($slidePages),
+        'screen' => $screen,
+    ];
 }
 
+/** @deprecated Use slide_rotation_url() per slide. Kept for legacy config checks. */
 function slides_rotation_url(): string
 {
     return 'slides.php';
@@ -512,38 +775,82 @@ function slides_rotation_url(): string
 
 function slides_in_rotation(string $screen = 'main'): bool
 {
-    $screen = rotation_normalize_screen_key($screen);
-    foreach (rotation_screen_own_pages($screen) as $page) {
-        if (!is_array($page)) {
-            continue;
-        }
-        if (trim((string)($page['url'] ?? '')) === slides_rotation_url() && empty($page['off'])) {
-            return true;
-        }
-    }
-    return false;
+    return slides_rotation_sync_info($screen)['on_playlist'];
 }
 
-/** Find slides.php on a screen's saved playlist (not inherited from main). */
-function slides_rotation_entry(string $screen = 'main'): ?array
+/** @return array{expected:int,synced:int,first_index:?int,last_index:?int,dwell_mismatch:int,on_playlist:bool,partial:bool} */
+function slides_rotation_sync_info(string $screen = 'main', ?array $deck = null): array
 {
+    require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    foreach (rotation_screen_own_pages($screen) as $i => $page) {
+    $expected = slides_rotation_pages($deck);
+    $own = rotation_screen_own_pages($screen);
+    $byUrl = [];
+    foreach ($own as $i => $page) {
         if (!is_array($page)) {
             continue;
         }
-        if (trim((string)($page['url'] ?? '')) !== slides_rotation_url()) {
+        $url = trim((string)($page['url'] ?? ''));
+        if (rotation_is_legacy_slides_url($url)) {
+            $byUrl['__legacy__'] = ['index' => $i + 1, 'dwell' => (int)($page['dwell'] ?? 0), 'off' => !empty($page['off'])];
             continue;
         }
-        return [
+        $file = slide_rotation_parse_file($url);
+        if ($file === null) {
+            continue;
+        }
+        $byUrl[$url] = [
             'index' => $i + 1,
             'dwell' => (int)($page['dwell'] ?? 0),
-            'from' => $page['from'] ?? null,
-            'to' => $page['to'] ?? null,
             'off' => !empty($page['off']),
+            'file' => $file,
         ];
     }
-    return null;
+
+    $synced = 0;
+    $dwellMismatch = 0;
+    $indices = [];
+    foreach ($expected as $exp) {
+        $url = $exp['url'];
+        if (!isset($byUrl[$url]) || !empty($byUrl[$url]['off'])) {
+            continue;
+        }
+        $synced++;
+        $indices[] = (int)$byUrl[$url]['index'];
+        if ((int)$byUrl[$url]['dwell'] !== (int)$exp['dwell']) {
+            $dwellMismatch++;
+        }
+    }
+
+    $expectedCount = count($expected);
+    return [
+        'expected' => $expectedCount,
+        'synced' => $synced,
+        'first_index' => $indices !== [] ? min($indices) : null,
+        'last_index' => $indices !== [] ? max($indices) : null,
+        'dwell_mismatch' => $dwellMismatch,
+        'on_playlist' => $expectedCount > 0 && $synced === $expectedCount && !isset($byUrl['__legacy__']),
+        'partial' => $synced > 0 && ($synced < $expectedCount || isset($byUrl['__legacy__'])),
+    ];
+}
+
+/** @return array{index:int,dwell:int,from:mixed,to:mixed,off:bool}|null */
+function slides_rotation_entry(string $screen = 'main'): ?array
+{
+    $info = slides_rotation_sync_info($screen);
+    if ($info['synced'] === 0 && !$info['partial']) {
+        return null;
+    }
+    return [
+        'index' => (int)($info['first_index'] ?? 1),
+        'last_index' => (int)($info['last_index'] ?? $info['first_index'] ?? 1),
+        'count' => (int)$info['synced'],
+        'expected' => (int)$info['expected'],
+        'dwell_mismatch' => (int)$info['dwell_mismatch'],
+        'off' => false,
+        'from' => null,
+        'to' => null,
+    ];
 }
 
 /**
@@ -555,42 +862,62 @@ function slides_deploy_status(?array $deck = null): array
     require_once __DIR__ . '/slides_lib.php';
     $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
     $stats = slides_deck_stats($deck);
-    $recommended = $stats['recommended_dwell'];
+    $expected = (int)$stats['playlist_entries'];
     $out = [];
 
     foreach (rotation_screens() as $key => $scr) {
         $own = rotation_screen_own_pages($key);
-        $effective = rotation_screen_effective_pages($key);
         $mirrorsMain = ($key !== 'main' && $own === []);
-        $entry = slides_rotation_entry($key);
+        $sync = slides_rotation_sync_info($key, $deck);
 
-        $onWall = null;
+        $wallSlides = 0;
+        $wallPos = null;
         $pos = 0;
-        foreach ($effective as $page) {
-            if (!is_array($page) || empty($page['url']) || !empty($page['off'])) {
+        foreach (rotation_screen_active_pages($key) as $page) {
+            if (!is_array($page) || empty($page['url'])) {
                 continue;
             }
             $pos++;
-            if (trim((string)$page['url']) === slides_rotation_url()) {
-                $onWall = ['position' => $pos, 'dwell' => (int)($page['dwell'] ?? 0)];
-                break;
+            $url = trim((string)$page['url']);
+            if (rotation_is_slide_url($url) || rotation_is_legacy_slides_url($url)) {
+                if ($wallPos === null) {
+                    $wallPos = $pos;
+                }
+                $wallSlides++;
             }
         }
 
         $out[$key] = [
             'name' => (string)($scr['name'] ?? $key),
             'mirrors_main' => $mirrorsMain,
-            'on_playlist' => $entry !== null && empty($entry['off']),
-            'on_wall' => $onWall !== null,
-            'entry' => $entry,
-            'wall' => $onWall,
-            'recommended_dwell' => $recommended,
-            'dwell_short' => $entry !== null && !$entry['off'] && ($entry['dwell'] ?? 0) > 0
-                && ($entry['dwell'] ?? 0) < $recommended,
+            'on_playlist' => $sync['on_playlist'],
+            'partial' => $sync['partial'],
+            'on_wall' => $wallSlides > 0,
+            'entry' => slides_rotation_entry($key),
+            'sync' => $sync,
+            'wall' => $wallSlides > 0 ? ['position' => $wallPos, 'slide_count' => $wallSlides] : null,
+            'expected' => $expected,
+            'dwell_mismatch' => (int)$sync['dwell_mismatch'],
         ];
     }
 
     return $out;
+}
+
+/**
+ * @return array{pages:list<array<string,mixed>>,removed:bool,removed_count:int,screen:string}
+ */
+function rotation_remove_all_slides(string $screen): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $pages = rotation_screen_pages($screen);
+    $stripped = rotation_strip_slide_pages($pages);
+    return [
+        'pages' => $stripped,
+        'removed' => count($stripped) < count($pages),
+        'removed_count' => count($pages) - count($stripped),
+        'screen' => $screen,
+    ];
 }
 
 /**
@@ -617,15 +944,16 @@ function rotation_remove_url(string $screen, string $url): array
 }
 
 /**
- * Add or update slides.php on one or more rotation screens.
+ * Sync one rotation entry per enabled slide onto selected screens.
  * @param list<string> $screens
- * @return array{added:int,updated:int,screens:list<string>}
+ * @return array{added:int,updated:int,screens:list<string>,slide_count:int}
  */
 function slides_deploy_to_screens(array $screens, ?array $deck = null): array
 {
     require_once __DIR__ . '/slides_lib.php';
     $added = 0;
     $updated = 0;
+    $slideCount = 0;
     $done = [];
     foreach ($screens as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
@@ -635,27 +963,36 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
         $done[$screen] = true;
         $sync = rotation_sync_slides($screen, $deck);
         rotation_pages_write($sync['screen'], $sync['pages']);
-        if ($sync['added']) {
-            $added++;
-        } elseif ($sync['updated']) {
-            $updated++;
-        }
+        $added += (int)$sync['added'];
+        $updated += (int)$sync['updated'];
+        $slideCount = max($slideCount, (int)$sync['slide_count']);
     }
 
-    return ['added' => $added, 'updated' => $updated, 'screens' => array_keys($done)];
+    return [
+        'added' => $added,
+        'updated' => $updated,
+        'screens' => array_keys($done),
+        'slide_count' => $slideCount,
+    ];
 }
 
 function slides_deploy_flash_message(array $result): string
 {
+    $slideCount = (int)($result['slide_count'] ?? 0);
+    $screenCount = count($result['screens'] ?? []);
     $parts = [];
-    if ($result['added'] > 0) {
-        $parts[] = 'added to ' . $result['added'] . ' playlist' . ($result['added'] === 1 ? '' : 's');
+    if ($slideCount > 0 && $screenCount > 0) {
+        $parts[] = 'synced ' . $slideCount . ' slide' . ($slideCount === 1 ? '' : 's')
+            . ' to ' . $screenCount . ' display' . ($screenCount === 1 ? '' : 's');
     }
-    if ($result['updated'] > 0) {
-        $parts[] = 'updated dwell on ' . $result['updated'] . ' playlist' . ($result['updated'] === 1 ? '' : 's');
+    if (($result['added'] ?? 0) > 0) {
+        $parts[] = (int)$result['added'] . ' new slide entr' . ((int)$result['added'] === 1 ? 'y' : 'ies');
+    }
+    if (($result['updated'] ?? 0) > 0) {
+        $parts[] = (int)$result['updated'] . ' dwell/order update' . ((int)$result['updated'] === 1 ? '' : 's');
     }
     if ($parts === []) {
-        return 'Slides already on selected playlists with correct dwell.';
+        return 'Slides already synced on selected displays.';
     }
     return 'Custom slides ' . implode('; ', $parts) . '.';
 }

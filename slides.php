@@ -12,7 +12,7 @@
  *   hour_from/to — optional 0–23 window on any schedule (overnight OK)
  *   priority     — when any priority slide is active, only those show
  *
- * Add slides.php to the rotation in admin (dwell = longest slide or a comfortable average).
+ * Add each slide to the rotation from admin (Deploy to displays) — one playlist entry per slide with its own dwell.
  */
 
 require_once __DIR__ . '/slides_lib.php';
@@ -25,11 +25,6 @@ define('TIMEZONE', slides_timezone());
 date_default_timezone_set(TIMEZONE);
 
 $dir     = slides_dir();
-$entries = slides_active_entries(null, $dir);
-if (SHUFFLE) {
-    shuffle($entries);
-}
-
 $frameH = signage_frame_height();
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -50,6 +45,83 @@ if (isset($_GET['img'])) {
     header('Content-Length: ' . filesize($path));
     readfile($path);
     exit;
+}
+
+// ── Single slide (rotation entry) ────────────────────────────────────────────
+if (isset($_GET['slide'])) {
+    $name = slide_safe_filename((string)$_GET['slide']);
+    $slide = $name !== null ? slide_deck_by_file($name) : null;
+    $tz = new DateTimeZone(TIMEZONE);
+    $now = new DateTime('now', $tz);
+    $active = $name !== null
+        && is_file($dir . '/' . $name)
+        && is_array($slide)
+        && empty($slide['off'])
+        && slide_schedule_active($slide, $now);
+    $caption = is_array($slide) ? trim((string)($slide['caption'] ?? '')) : '';
+    $fit = FIT;
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title><?= h($caption !== '' ? $caption : ($name ?? 'Slide')) ?></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
+              font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
+  .layer { position:absolute; inset:0; background-position:center; background-repeat:no-repeat;
+           background-color:#000; background-size:<?= $fit === 'cover' ? 'cover' : 'contain' ?>; }
+  .caption { position:absolute; left:44px; bottom:36px; z-index:10; font-size:24px;
+             letter-spacing:.5px; color:var(--mist); text-shadow:0 1px 12px rgba(0,0,0,.85); max-width:70%; }
+  #clock { position:absolute; right:44px; bottom:36px; z-index:10;
+           font-family:'Big Shoulders Display'; font-weight:600; font-size:40px; color:var(--snow);
+           opacity:.85; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
+  .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+           flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
+  .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
+  .empty p { font-size:26px; line-height:1.5; max-width:900px; }
+</style>
+</head>
+<body>
+<?php if ($active): ?>
+  <div class="layer" style="background-image:url('?img=<?= rawurlencode((string)$name) ?>')"></div>
+  <?php if ($caption !== ''): ?><div class="caption"><?= h($caption) ?></div><?php endif; ?>
+  <div id="clock">--:--</div>
+  <script>
+    function tick() {
+      const n = new Date();
+      let h = n.getHours();
+      const ap = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      document.getElementById('clock').textContent =
+        h + ':' + String(n.getMinutes()).padStart(2, '0') + ' ' + ap;
+    }
+    tick();
+    setInterval(tick, 1000);
+    setTimeout(function () { location.reload(); }, 5 * 60 * 1000);
+  </script>
+<?php else: ?>
+  <div class="empty">
+    <h1>Slide not scheduled</h1>
+    <p>This slide is off rotation or outside its schedule window.</p>
+  </div>
+<?php endif; ?>
+<?php include __DIR__ . '/ticker.php'; ?>
+</body>
+</html>
+    <?php
+    exit;
+}
+
+$entries = slides_active_entries(null, $dir);
+if (SHUFFLE) {
+    shuffle($entries);
 }
 
 $playlist = array_map(fn($s) => [
@@ -94,7 +166,7 @@ $playlist = array_map(fn($s) => [
   <div class="empty">
     <h1>No slides scheduled</h1>
     <p>Upload images in <code>admin.php → Custom Slides</code>, set each slide's schedule,
-       then add <code>slides.php</code> to the rotation.</p>
+       then deploy from <strong>Deploy to displays</strong> (one rotation entry per slide).</p>
   </div>
 <?php else: ?>
   <div class="layer" id="layerA"></div>
