@@ -15,7 +15,8 @@
 #   * Deploys board files to the web root
 #   * Creates config/, cache/, videos/, slides/, photos/ with correct ownership
 #   * Blocks direct HTTP access to config/, cache/, slides/, and photos/
-#   * Generates slide_backgrounds/ PNGs (requires php-gd)
+#   * Generates slide_backgrounds/ theme PNGs (requires php-gd)
+#   * Fetches slide_backgrounds/photos/ from Unsplash/Pexels if missing (requires outbound HTTPS)
 #   * Optionally adds a weekly cron job for `php video.php fetch`
 #   * Raises PHP / web-server timeouts for admin YouTube downloads
 #
@@ -368,13 +369,25 @@ post_install_php() {
   fi
 
   if php -m | grep -qi '^gd$'; then
-    log "Generating slide background PNGs (if missing)"
-    php -r "require '$WEBROOT/slides_lib.php'; slide_background_ensure_assets();" \
-      && chown -R root:"$WEB_USER" "$WEBROOT/slide_backgrounds" \
+    log "Generating slide theme background PNGs (if missing)"
+    php -r "require '$WEBROOT/slides_lib.php'; slide_background_ensure_assets();"
+  else
+    warn "php-gd not loaded — slide creator theme PNGs will generate on first admin visit"
+  fi
+
+  log "Ensuring slide photo backgrounds (download if missing)"
+  if fetched="$(php -r "require '$WEBROOT/slides_lib.php'; echo slide_background_ensure_photos();")"; then
+    if [[ -n "$fetched" && "$fetched" != "0" ]]; then
+      log "Downloaded $fetched slide photo(s)"
+    fi
+  else
+    warn "Could not fetch slide photo backgrounds — needs outbound HTTPS; re-run setup-server.sh or scripts/download-slide-photos.sh"
+  fi
+
+  if [[ -d "$WEBROOT/slide_backgrounds" ]]; then
+    chown -R root:"$WEB_USER" "$WEBROOT/slide_backgrounds" \
       && chmod 755 "$WEBROOT/slide_backgrounds" \
       && find "$WEBROOT/slide_backgrounds" -type f -exec chmod 644 {} \;
-  else
-    warn "php-gd not loaded — slide creator backgrounds will generate on first admin visit"
   fi
 }
 

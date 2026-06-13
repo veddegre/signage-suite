@@ -24,6 +24,7 @@ require_once __DIR__ . '/rotation_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
 
 slide_background_ensure_assets();
+slide_background_ensure_photos();
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json';
 

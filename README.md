@@ -216,7 +216,8 @@ What it installs and configures:
 - Deploys board files to the web root, creates `config/`, `cache/`, `videos/`, and `slides/` owned by `www-data`
 - Blocks direct HTTP access to `config/`, `cache/`, and `slides/` (Apache `DirectoryMatch` or nginx `location`)
 - Raises PHP / Apache / nginx timeouts to **1 hour** for admin YouTube downloads (`99-signage-timeouts.ini`)
-- Generates `slide_backgrounds/` PNGs if missing
+- Generates `slide_backgrounds/` theme PNGs if missing (php-gd)
+- Fetches `slide_backgrounds/photos/` from Unsplash/Pexels if missing (outbound HTTPS; skipped when already present)
 
 Re-run safely after pulling updates (preserves your config and uploads):
 
@@ -264,5 +265,5 @@ Every board works unchanged as an Anthias web asset (`lake.php`, `rss.php?feed=a
 
 ## General notes
 - Keep all files in one folder so they share `config/` and `cache/`.
-- Runtime directories created on first use: `config/` (settings + admin password hash), `cache/` (API responses), `videos/` (yt-dlp downloads), `slides/` (uploaded and creator-generated slide images), `photos/` (rotator uploads). `slide_backgrounds/` ships in the repo for the slide creator themes.
+- Runtime directories created on first use: `config/` (settings + admin password hash), `cache/` (API responses), `videos/` (yt-dlp downloads), `slides/` (uploaded and creator-generated slide images), `photos/` (rotator uploads). `slide_backgrounds/` ships theme PNGs; `slide_backgrounds/photos/` is populated by `setup-server.sh` (or first admin visit) if not already in git.
 - Every board shows a small diagnostic stamp bottom-right when an API call fails (HTTP code or curl error) while continuing to render from cache.

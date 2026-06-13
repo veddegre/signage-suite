@@ -671,6 +671,81 @@ function slide_background_gd_image(array $preset, int $w = 1920, int $h = 1080)
     return $im;
 }
 
+/** Remote URLs for bundled slide photo backgrounds (Unsplash + Pexels). */
+function slide_photo_download_urls(): array
+{
+    $unsplash = '?auto=format&fit=crop&w=1920&h=1080&q=82';
+    $pexels   = '?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop';
+
+    return [
+        'photos/lake_dusk.jpg'       => 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4' . $unsplash,
+        'photos/misty_forest.jpg'    => 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e' . $unsplash,
+        'photos/ocean_sunset.jpg'    => 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e' . $unsplash,
+        'photos/city_night.jpg'      => 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df' . $unsplash,
+        'photos/winter_trees.jpg'    => 'https://images.unsplash.com/photo-1519682337058-a94d519337bc' . $unsplash,
+        'photos/cozy_home.jpg'       => 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg' . $pexels,
+        'photos/wildflowers.jpg'     => 'https://images.pexels.com/photos/1563356/pexels-photo-1563356.jpeg' . $pexels,
+        'photos/celebration.jpg'     => 'https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg' . $pexels,
+        'photos/romantic_dinner.jpg' => 'https://images.pexels.com/photos/941864/pexels-photo-941864.jpeg' . $pexels,
+        'photos/nursery.jpg'         => 'https://images.pexels.com/photos/3608299/pexels-photo-3608299.jpeg' . $pexels,
+        'photos/stadium.jpg'         => 'https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg' . $pexels,
+        'photos/mountain_sun.jpg'    => 'https://images.pexels.com/photos/417173/pexels-photo-417173.jpeg' . $pexels,
+    ];
+}
+
+function slide_http_get(string $url): ?string
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT        => 120,
+            CURLOPT_USERAGENT      => 'signage-suite/1.0',
+        ]);
+        $body = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($body === false || $code < 200 || $code >= 300) {
+            return null;
+        }
+        return $body;
+    }
+    $ctx = stream_context_create([
+        'http' => ['timeout' => 120, 'header' => "User-Agent: signage-suite/1.0\r\n"],
+    ]);
+    $body = @file_get_contents($url, false, $ctx);
+    return is_string($body) ? $body : null;
+}
+
+/**
+ * Download any missing slide photo backgrounds into slide_backgrounds/photos/.
+ * Idempotent — skips files already on disk. Returns count of newly fetched files.
+ */
+function slide_background_ensure_photos(?string $dir = null): int
+{
+    $dir = $dir ?? slide_backgrounds_dir();
+    $photosDir = $dir . '/photos';
+    if (!is_dir($photosDir) && !@mkdir($photosDir, 0775, true)) {
+        return 0;
+    }
+    $fetched = 0;
+    foreach (slide_photo_download_urls() as $rel => $url) {
+        $path = $dir . '/' . $rel;
+        if (is_file($path) && filesize($path) > 10000) {
+            continue;
+        }
+        $body = slide_http_get($url);
+        if ($body === null || strlen($body) < 10000) {
+            continue;
+        }
+        if (@file_put_contents($path, $body) !== false) {
+            $fetched++;
+        }
+    }
+    return $fetched;
+}
+
 /** Write missing 1920×1080 PNGs into slide_backgrounds/. */
 function slide_background_ensure_assets(): void
 {
