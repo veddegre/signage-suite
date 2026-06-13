@@ -51,14 +51,15 @@ if (isset($_GET['img'])) {
 // ── Single slide (rotation entry) ────────────────────────────────────────────
 if (isset($_GET['slide'])) {
     $name = slide_safe_filename((string)$_GET['slide']);
+    $preview = isset($_GET['preview']);
     $slide = $name !== null ? slide_deck_by_file($name) : null;
     $tz = new DateTimeZone(TIMEZONE);
     $now = new DateTime('now', $tz);
-    $active = $name !== null
-        && is_file($dir . '/' . $name)
-        && is_array($slide)
+    $onDisk = $name !== null && is_file($dir . '/' . $name);
+    $scheduled = is_array($slide)
         && empty($slide['off'])
         && slide_schedule_active($slide, $now);
+    $active = $onDisk && ($preview || $scheduled);
     $pageTitle = is_array($slide) && trim((string)($slide['caption'] ?? '')) !== ''
         ? trim((string)$slide['caption'])
         : ($name ?? 'Slide');
@@ -113,8 +114,10 @@ if (isset($_GET['slide'])) {
   </script>
 <?php else: ?>
   <div class="empty">
-    <h1>Slide not scheduled</h1>
-    <p>This slide is off rotation or outside its schedule window.</p>
+    <h1><?= $onDisk ? 'Slide not scheduled' : 'Slide not found' ?></h1>
+    <p><?= $onDisk
+        ? 'This slide is off rotation or outside its schedule window.'
+        : 'That file is missing from the slide directory.' ?></p>
   </div>
 <?php endif; ?>
 <?php include __DIR__ . '/ticker.php'; ?>

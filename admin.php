@@ -488,7 +488,7 @@ if ($authed && $board === 'slides') {
         } else {
             $result = slide_delete_file((string)($_POST['file'] ?? ''));
             if (!empty($result['ok'])) {
-                header('Location: admin.php?board=slides&deleted=' . rawurlencode((string)$result['file']));
+                header('Location: ?board=slides&deleted=' . rawurlencode((string)$result['file']));
                 exit;
             }
             $flash = (string)($result['error'] ?? 'Could not delete slide.');
@@ -594,7 +594,7 @@ if ($authed && $board === 'slides') {
                     if (slide_append_to_deck($name)) {
                         slides_deploy_to_screens(['main']);
                         cfg_reload();
-                        header('Location: admin.php?board=slides&highlight=' . rawurlencode($name));
+                        header('Location: ?board=slides&highlight=' . rawurlencode($name));
                         exit;
                     } else {
                         $flash = 'File saved but could not update settings.json.'; $flashOk = false;
@@ -614,7 +614,7 @@ if ($authed && $board === 'slides') {
             $flash = $file . ' is already in the slide deck.';
         } elseif (slide_append_to_deck($file)) {
             cfg_reload();
-            header('Location: admin.php?board=slides&highlight=' . rawurlencode($file));
+            header('Location: ?board=slides&highlight=' . rawurlencode($file));
             exit;
         } else {
             $flash = 'Could not update settings.json.'; $flashOk = false;
@@ -1482,6 +1482,21 @@ function admin_field(array $f, $val, string $board): void
           </div>
       <?php endif; ?>
 
+      <?php if ($board === 'slides'): ?>
+      <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="delete_slide">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideDeleteFile" value="">
+      </form>
+      <form id="slideAddForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="add_slide_to_deck">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideAddFile" value="">
+      </form>
+      <?php endif; ?>
+
       <form method="post" id="boardform" action="?board=<?= h($board) ?>">
         <input type="hidden" name="action" value="save">
         <input type="hidden" name="board" value="<?= h($board) ?>">
@@ -1991,13 +2006,20 @@ function admin_field(array $f, $val, string $board): void
                 </div>
                 <?php endif; ?>
               </details>
-              <?php if ($fileOk): ?>
+              <?php if ($fileOk):
+                $deleteFile = slide_safe_filename($fileLabel);
+                $deleteConfirm = $deleteFile !== null
+                    ? 'Delete "' . $deleteFile . "\" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone."
+                    : '';
+              ?>
               <div class="slide-card-actions">
                 <?php if ($previewUrl): ?>
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
                 <?php endif; ?>
-                <button type="button" class="secondary" style="padding:6px 12px;font-size:13px"
-                        onclick="submitSlideDelete(<?= json_encode($fileLabel) ?>)">Delete file</button>
+                <?php if ($deleteFile !== null): ?>
+                <button type="submit" form="slideDeleteForm" class="secondary" style="padding:6px 12px;font-size:13px"
+                        onclick="document.getElementById('slideDeleteFile').value=<?= json_encode($deleteFile) ?>; return confirm(<?= json_encode($deleteConfirm) ?>);">Delete file</button>
+                <?php endif; ?>
               </div>
               <?php endif; ?>
             </div>
@@ -2046,10 +2068,11 @@ function admin_field(array $f, $val, string $board): void
                       <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
                       <?php endif; ?>
                       <?php if (!$lib['in_deck']): ?>
-                      <button class="secondary" type="button"
-                              onclick="submitSlideAddToDeck(<?= json_encode($lib['file']) ?>)">Add to deck</button>
+                      <button type="submit" form="slideAddForm" class="secondary"
+                              onclick="document.getElementById('slideAddFile').value=<?= json_encode($lib['file']) ?>;">Add to deck</button>
                       <?php endif; ?>
-                      <button type="button" class="secondary" onclick="submitSlideDelete(<?= json_encode($lib['file']) ?>)">Delete</button>
+                      <button type="submit" form="slideDeleteForm" class="secondary"
+                              onclick="document.getElementById('slideDeleteFile').value=<?= json_encode($lib['file']) ?>; return confirm(<?= json_encode('Delete "' . $lib['file'] . "\" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.") ?>);">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -2202,18 +2225,6 @@ function admin_field(array $f, $val, string $board): void
         </div>
       </form>
       <?php if ($board === 'slides'): ?>
-      <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
-        <input type="hidden" name="action" value="delete_slide">
-        <input type="hidden" name="board" value="slides">
-        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <input type="hidden" name="file" id="slideDeleteFile" value="">
-      </form>
-      <form id="slideAddForm" method="post" action="?board=slides" hidden>
-        <input type="hidden" name="action" value="add_slide_to_deck">
-        <input type="hidden" name="board" value="slides">
-        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <input type="hidden" name="file" id="slideAddFile" value="">
-      </form>
       <details class="panel" id="add-slides-panel" style="margin-top:22px"<?= $slideHighlight !== null ? ' open' : '' ?>>
         <summary>Add slides</summary>
         <div class="panel-body">
@@ -2555,33 +2566,6 @@ function initSlideDeck() {
   if (hl) {
     setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
   }
-}
-
-function submitSlidePost(formId, fileInputId, file, confirmMsg) {
-  if (!file) return false;
-  if (confirmMsg && !confirm(confirmMsg)) return false;
-  const form = document.getElementById(formId);
-  const input = document.getElementById(fileInputId);
-  if (!form || !input) {
-    alert('Could not submit — refresh the page and try again.');
-    return false;
-  }
-  input.value = file;
-  form.submit();
-  return true;
-}
-
-function submitSlideDelete(file) {
-  submitSlidePost(
-    'slideDeleteForm',
-    'slideDeleteFile',
-    file,
-    'Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.'
-  );
-}
-
-function submitSlideAddToDeck(file) {
-  submitSlidePost('slideAddForm', 'slideAddFile', file, '');
 }
 
 function addSlideCard() {
@@ -3371,7 +3355,7 @@ function addVideoCard() {
   function submitCreatorForm(fields) {
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = 'admin.php?board=slides';
+    form.action = '?board=slides';
     form.style.display = 'none';
     Object.keys(fields).forEach(function (key) {
       const input = document.createElement('input');

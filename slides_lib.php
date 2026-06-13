@@ -81,14 +81,14 @@ function slide_thumb_url(string $file): ?string
     return 'slides.php?img=' . rawurlencode($safe);
 }
 
-/** Single-slide preview URL (rotation / full board). */
+/** Single-slide preview URL (admin / library — shows file even if not on deck). */
 function slide_preview_url(string $file): ?string
 {
     $safe = slide_safe_filename($file);
     if ($safe === null) {
         return null;
     }
-    return 'slides.php?slide=' . rawurlencode($safe);
+    return 'slides.php?slide=' . rawurlencode($safe) . '&preview=1';
 }
 
 /** Human label for a slide file (caption from deck, else filename). */
@@ -275,7 +275,7 @@ function slide_creator_read_png(?string $b64, ?array $upload): ?string
 
 function slide_creator_finish(string $filename): void
 {
-    header('Location: admin.php?board=slides&highlight=' . rawurlencode($filename));
+    header('Location: ?board=slides&highlight=' . rawurlencode($filename));
     exit;
 }
 
