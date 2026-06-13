@@ -71,18 +71,6 @@ function signage_viewport_css(): string
     return "html,body{height:calc({$h}px - var(--signage-ticker-inset,0px));}";
 }
 
-/** Design canvas + scale for boards that render 1080px then shrink to fit the frame. */
-function signage_board_framing(int $designH = 1080): array
-{
-    $frameH = signage_frame_height();
-    return [
-        'designH' => $designH,
-        'frameH' => $frameH,
-        'embedded' => isset($_GET['noticker']),
-        'scale' => round($frameH / $designH, 5),
-    ];
-}
-
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */
 function signage_board_preview_url(string $file): string
 {

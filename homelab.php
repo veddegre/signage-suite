@@ -31,11 +31,9 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('homelab.CACHE_TTL', 30));
 
 date_default_timezone_set(TIMEZONE);
-$framing = signage_board_framing();
-$designH = $framing['designH'];
-$frameH = $framing['frameH'];
-$embedded = $framing['embedded'];
-$frameScale = $framing['scale'];
+$frameH = signage_frame_height();
+$embedded = isset($_GET['noticker']);
+$compact = $frameH < 1080;
 $vmLimit = 8;
 $GLOBALS['diag'] = [];
 
@@ -152,27 +150,27 @@ $wanMs    = $checks['wan_ms'] ?? null;
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              height:<?= $embedded ? $frameH . 'px' : $designH . 'px' ?>; }
-  .frame { width:1920px; height:<?= $designH ?>px; transform-origin:top left;
-           transform:scale(<?= $embedded ? (string)$frameScale : 'var(--homelab-scale, 1)' ?>); }
-  .board { width:1920px; height:<?= $designH ?>px; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 96px 300px minmax(0, 1fr) auto;
+              <?= signage_viewport_css() ?> }
+  .board { width:1920px; height:100%; padding:<?= $compact ? '20px 28px' : '28px 32px' ?>; display:grid;
+           gap:<?= $compact ? 18 : 24 ?>px;
+           grid-template-columns: 1fr 1fr 1fr;
+           grid-template-rows: auto minmax(<?= $compact ? 248 : 280 ?>px, 34%) minmax(0, 1fr) auto;
            grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 54 : 64 ?>px; }
   .head h1 span { color:var(--beacon); }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:56px; color:var(--mist); }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 46 : 56 ?>px; color:var(--mist); }
 
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:26px 32px; min-height:0; overflow:hidden; }
-  .panel .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:110px; line-height:1.05;
+           padding:<?= $compact ? '18px 22px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
+  .panel .k { font-size:<?= $compact ? 18 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 88 : 110 ?>px; line-height:1;
             color:var(--beacon); font-variant-numeric:tabular-nums; }
-  .bignum small { font-size:44px; color:var(--mist); font-weight:600; }
-  .sub { font-size:24px; color:var(--mist); margin-top:6px; }
+  .bignum small { font-size:<?= $compact ? 36 : 44 ?>px; color:var(--mist); font-weight:600; }
+  .sub { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; }
 
-  .meter { margin-top:16px; }
-  .meter .lab { display:flex; justify-content:space-between; font-size:21px; color:var(--mist); margin-bottom:6px; }
+  .meter { margin-top:<?= $compact ? 10 : 16 ?>px; }
+  .meter .lab { display:flex; justify-content:space-between; font-size:<?= $compact ? 18 : 21 ?>px; color:var(--mist); margin-bottom:6px; }
   .meter .track { height:16px; background:var(--lake-night); border-radius:8px; overflow:hidden; }
   .meter .fill { height:100%; background:var(--beacon); border-radius:8px; }
   .meter .fill.hot { background:var(--down); }
@@ -180,29 +178,28 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .node { grid-area:node; } .dns { grid-area:dns; } .wan { grid-area:wan; }
   .vms { grid-area:vms; min-height:0; } .svc { grid-area:svc; min-height:0; }
 
-  table { width:100%; border-collapse:collapse; margin-top:14px; }
-  th { text-align:left; font-size:17px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
-       font-weight:500; padding:6px 8px; border-bottom:1px solid var(--hairline); }
-  td { font-size:23px; padding:11px 8px; border-bottom:1px solid var(--hairline);
+  table { width:100%; border-collapse:collapse; margin-top:<?= $compact ? 8 : 14 ?>px; }
+  th { text-align:left; font-size:<?= $compact ? 15 : 17 ?>px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
+       font-weight:500; padding:<?= $compact ? '4px 6px' : '6px 8px' ?>; border-bottom:1px solid var(--hairline); }
+  td { font-size:<?= $compact ? 20 : 23 ?>px; padding:<?= $compact ? '8px 6px' : '11px 8px' ?>; border-bottom:1px solid var(--hairline);
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  td.mono { font-family:'IBM Plex Mono',monospace; font-size:20px; color:var(--mist); }
+  td.mono { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); }
   .dot { display:inline-block; width:16px; height:16px; border-radius:50%; margin-right:12px;
          vertical-align:-1px; }
   .ok { background:var(--up); } .bad { background:var(--down); }
   .svcrow { display:flex; align-items:center; justify-content:space-between;
-            border-bottom:1px solid var(--hairline); padding:17px 4px; }
+            border-bottom:1px solid var(--hairline); padding:<?= $compact ? '12px 4px' : '17px 4px' ?>; }
   .svcrow:last-child { border-bottom:none; }
-  .svcrow .n { font-size:28px; font-weight:500; }
-  .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:23px; color:var(--mist); }
-  .storagebars { margin-top:14px; }
-  .notcfg { font-size:24px; color:var(--mist); margin-top:14px; line-height:1.5; }
+  .svcrow .n { font-size:<?= $compact ? 24 : 28 ?>px; font-weight:500; }
+  .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 20 : 23 ?>px; color:var(--mist); }
+  .storagebars { margin-top:<?= $compact ? 8 : 14 ?>px; }
+  .notcfg { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:14px; line-height:1.5; }
   .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>
 </head>
 <body>
-<div class="frame">
 <div class="board">
   <div class="head">
     <h1>Homelab <span>&middot; Ops</span></h1>
@@ -292,26 +289,12 @@ $wanMs    = $checks['wan_ms'] ?? null;
   </section>
   <div class="stamp">Proxmox API &middot; AdGuard Home<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-</div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
   <?php if (!$embedded): ?>
   setTimeout(() => location.reload(), 60 * 1000);
-  (function () {
-    function fitHomelab() {
-      var inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--signage-ticker-inset')) || 0;
-      var h = <?= $designH ?> - inset;
-      document.documentElement.style.setProperty('--homelab-scale', String(h / <?= $designH ?>));
-      document.body.style.height = h + 'px';
-    }
-    fitHomelab();
-    setInterval(fitHomelab, 1000);
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') fitHomelab();
-    });
-  })();
   <?php endif; ?>
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>
