@@ -194,7 +194,7 @@ function admin_schema(): array
                            ['key' => 'title', 'label' => 'Title (blank to hide)'],
                            ['key' => 'youtube', 'label' => 'YouTube URL', 'wide' => true],
                            ['key' => 'file', 'label' => 'or local file']],
-             'help' => 'Save URL changes, then use Download / refresh YouTube videos above (or run php video.php fetch)'],
+             'help' => 'Managed on this page via the drag-and-drop playlist below. Each video needs a unique key.'],
             ['key' => 'VIDEO_DIR', 'label' => 'Video directory', 'type' => 'text'],
             ['key' => 'MUTED', 'label' => 'Muted', 'type' => 'bool', 'default' => true],
             ['key' => 'FIT', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain']],

@@ -1256,3 +1256,84 @@ function video_ytdlp_status(bool $refreshLatest = false): array
         'latest_error' => $latestInfo['error'] ?? null,
     ];
 }
+
+function video_rotation_url(string $key): string
+{
+    return 'video.php?v=' . rawurlencode($key);
+}
+
+/** @return list<array<string,mixed>> */
+function video_rotation_screen_pages(string $screen = 'main'): array
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '') {
+        $screen = 'main';
+    }
+    $pages = cfg("rotation.PAGES_$screen", null);
+    if (!is_array($pages) || $pages === []) {
+        $pages = cfg('rotation.PAGES_main', cfg('rotation.PAGES', []));
+    }
+    return is_array($pages) ? $pages : [];
+}
+
+function video_in_rotation(string $key, string $screen = 'main'): bool
+{
+    $want = video_rotation_url($key);
+    foreach (video_rotation_screen_pages($screen) as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        if (trim((string)($page['url'] ?? '')) === $want) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Add or update rotation entries for every video in the registry (playlist order).
+ * @return array{pages:list<array<string,mixed>>,added:list<string>,updated:list<string>,screen:string}
+ */
+function video_sync_rotation(string $screen = 'main'): array
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '') {
+        $screen = 'main';
+    }
+    $pages = video_rotation_screen_pages($screen);
+    $added = [];
+    $updated = [];
+    foreach (video_registry() as $key => $v) {
+        $st = video_entry_status($key, $v);
+        $url = video_rotation_url($key);
+        $dwell = max(15, (int)($st['rotation_dwell'] ?? 60));
+        $found = false;
+        foreach ($pages as &$page) {
+            if (!is_array($page)) {
+                continue;
+            }
+            if (trim((string)($page['url'] ?? '')) !== $url) {
+                continue;
+            }
+            if ((int)($page['dwell'] ?? 0) !== $dwell) {
+                $page['dwell'] = $dwell;
+                $updated[] = $key;
+            }
+            $found = true;
+            break;
+        }
+        unset($page);
+        if (!$found) {
+            $pages[] = ['url' => $url, 'dwell' => $dwell];
+            $added[] = $key;
+        }
+    }
+    return ['pages' => $pages, 'added' => $added, 'updated' => $updated, 'screen' => $screen];
+}
+
+function video_rotation_pages_write(string $screen, array $pages): bool
+{
+    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    $conf['rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', $screen)] = $pages;
+    return cfg_write($conf);
+}

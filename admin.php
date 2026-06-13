@@ -209,8 +209,21 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             if (isset($_POST['clear_cache'])) {
                 foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) @unlink($cf);
             }
-            $flash = $schema[$board]['title'] . ' saved.' . (isset($_POST['clear_cache']) ? ' Cache cleared.' : '');
             cfg_reload();
+            $extra = '';
+            if ($board === 'video' && isset($_POST['sync_rotation_main'])) {
+                $sync = video_sync_rotation('main');
+                if (video_rotation_pages_write($sync['screen'], $sync['pages'])) {
+                    cfg_reload();
+                    $n = count($sync['added']);
+                    $extra = $n > 0
+                        ? " Added $n video(s) to main rotation."
+                        : (count($sync['updated']) > 0 ? ' Updated rotation dwell times.' : ' Playlist already in main rotation.');
+                } else {
+                    $extra = ' Could not update main rotation.'; $flashOk = false;
+                }
+            }
+            $flash = $schema[$board]['title'] . ' saved.' . (isset($_POST['clear_cache']) ? ' Cache cleared.' : '') . $extra;
             $schema = admin_schema();   // pick up structural changes (e.g. new rotation screens)
         } else {
             $flash = 'Could not write config/settings.json — check directory permissions.'; $flashOk = false;
@@ -487,12 +500,16 @@ $tools = ($_GET['board'] ?? '') === 'tools';
 $videoYtdlpStatus = null;
 $videoDenoStatus = null;
 $videoStatuses = [];
+$videoStatusByKey = [];
 if ($authed && $board === 'video') {
     $videoYtdlpStatus = video_ytdlp_status();
     $videoDenoStatus = video_deno_status();
     $videoYtdlpSupport = video_ytdlp_support_status();
     foreach (video_registry() as $k => $v) {
-        $videoStatuses[] = video_entry_status($k, $v);
+        $st = video_entry_status($k, $v);
+        $st['in_rotation'] = video_in_rotation($k, 'main');
+        $videoStatuses[] = $st;
+        $videoStatusByKey[$k] = $st;
     }
 }
 
@@ -504,6 +521,7 @@ $navGroups = [
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
+$videoBoardKeys = ['VIDEO_DIR', 'MUTED', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 
 function admin_field(array $f, $val, string $board): void
 {
@@ -643,6 +661,23 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-flags { display:flex; flex-wrap:wrap; gap:16px; margin-top:4px; }
   .slide-card-flags label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); }
   @media (max-width: 760px) { .slide-card-grid { grid-template-columns:1fr; } .slide-card-grid .span-2 { grid-column:span 1; } }
+  .video-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
+  .video-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .video-card.dragging { opacity:.55; }
+  .video-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
+  .video-card-head .drag-handle { cursor:grab; color:var(--mist); font-size:18px; line-height:1; padding:4px 6px 0 0; user-select:none; }
+  .video-card-head .drag-handle:active { cursor:grabbing; }
+  .video-card-title { flex:1; min-width:0; }
+  .video-card-title strong { display:block; font-size:15px; color:var(--snow); margin-bottom:4px; }
+  .video-card-title code { font-size:12px; color:var(--beacon); }
+  .video-card-grid { display:grid; grid-template-columns:120px 1fr 1fr; gap:12px 14px; }
+  .video-card-grid label.mini { display:block; font-size:11px; letter-spacing:.8px; text-transform:uppercase;
+                                  color:var(--mist); margin-bottom:4px; }
+  .video-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
+                            background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .video-card-meta { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:12px; font-size:13px; color:var(--mist); align-items:center; }
+  .video-card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; align-items:center; }
+  @media (max-width: 900px) { .video-card-grid { grid-template-columns:1fr; } }
   .inline-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
   .video-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-top:14px; }
   .video-toolbar .help { margin:0; max-width:420px; }
@@ -955,48 +990,22 @@ function admin_field(array $f, $val, string $board): void
       <?php endif; ?>
 
       <?php if ($board === 'video' && $videoYtdlpStatus !== null): ?>
+      <?php if ($videoFetchLog): ?>
+        <pre class="video-log"><?= h($videoFetchLog) ?></pre>
+      <?php endif; ?>
+
       <div class="panel" style="padding:18px 20px;margin-bottom:18px">
         <div class="section-title" style="margin-top:0">YouTube downloads</div>
-        <div class="help">Save video URLs below, then fetch. Files land in <code>videos/</code>.</div>
-
-        <table class="video-status">
-          <thead>
-            <tr><th>Key</th><th>File</th><th>Length</th><th>Dwell</th><th></th></tr>
-          </thead>
-          <tbody>
-            <?php foreach ($videoStatuses as $st): ?>
-              <tr>
-                <td><code><?= h($st['key']) ?></code></td>
-                <td><?= $st['file'] ? h($st['file']) : '—' ?></td>
-                <td><?= $st['duration_label'] ? h($st['duration_label']) : '—' ?></td>
-                <td><?= $st['rotation_dwell'] ? h((string)$st['rotation_dwell'] . ' s') : '—' ?></td>
-                <td class="actions">
-                  <?php if ($st['fetchable']): ?>
-                    <form method="post" action="?board=video">
-                      <input type="hidden" name="action" value="video_fetch_one">
-                      <input type="hidden" name="board" value="video">
-                      <input type="hidden" name="video_key" value="<?= h($st['key']) ?>">
-                      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                      <button class="secondary" type="submit">Fetch</button>
-                    </form>
-                  <?php else: ?>
-                    <span class="help">—</span>
-                  <?php endif; ?>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-
-        <div class="video-toolbar">
-          <form method="post" class="inline-actions" action="?board=video">
-            <input type="hidden" name="action" value="video_fetch">
-            <input type="hidden" name="board" value="video">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <button class="save" type="submit">Download all</button>
-          </form>
-          <div class="help">Large downloads may take several minutes — keep this tab open.</div>
-        </div>
+        <div class="help" style="margin-bottom:12px">Build your playlist below, <strong>Save</strong>, then fetch files into <code>videos/</code>.
+          Check <strong>Add playlist to main rotation</strong> to put each video on the wall automatically
+          (<code>video.php?v=KEY</code> with dwell from video length).</div>
+        <form method="post" class="inline-actions" action="?board=video">
+          <input type="hidden" name="action" value="video_fetch">
+          <input type="hidden" name="board" value="video">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <button class="save" type="submit">Download all</button>
+        </form>
+        <span class="help">Large downloads may take several minutes — keep this tab open.</span>
 
         <details class="panel-muted" style="margin-top:16px;border:1px solid var(--line);border-radius:10px"<?= ($videoMaintOpen ?? false) ? ' open' : '' ?>>
           <summary>yt-dlp maintenance</summary>
@@ -1104,9 +1113,6 @@ function admin_field(array $f, $val, string $board): void
           </div>
         </details>
       </div>
-      <?php if ($videoFetchLog): ?>
-        <pre class="video-log"><?= h($videoFetchLog) ?></pre>
-      <?php endif; ?>
       <?php endif; ?>
 
       <form method="post" id="boardform" action="?board=<?= h($board) ?>">
@@ -1117,7 +1123,97 @@ function admin_field(array $f, $val, string $board): void
         <?php
         $scheduleOptions = ['always', 'once', 'range', 'yearly', 'yearly_range', 'monthly', 'weekly'];
 
-        if ($board === 'slides'):
+        if ($board === 'video'):
+          $videoVal = current_val($rawConf, $board, 'VIDEOS');
+          $videoRows = is_array($videoVal) ? $videoVal : [];
+        ?>
+          <div class="section-title">Video playlist</div>
+          <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
+            and either a YouTube URL or a local filename in <code>videos/</code>. After saving, videos appear on the wall only when
+            listed in <strong>Admin → Rotation</strong> as <code>video.php?v=KEY</code> — or check the box below to add them automatically.</div>
+
+          <div class="video-playlist" id="videoPlaylist" data-field="VIDEOS">
+            <?php $vri = 0; foreach ($videoRows as $vk => $row):
+              if (!is_array($row)) $row = [];
+              $st = $videoStatusByKey[$vk] ?? null;
+              $label = trim((string)($row['title'] ?? ''));
+              if ($label === '') $label = (string)$vk;
+            ?>
+            <div class="video-card" data-video-card draggable="true">
+              <div class="video-card-head">
+                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <div class="video-card-title">
+                  <strong><?= h($label) ?></strong>
+                  <code><?= h(video_rotation_url($vk)) ?></code>
+                </div>
+                <button type="button" class="rowdel" onclick="this.closest('[data-video-card]').remove(); reindexVideoPlaylist();" title="Remove">×</button>
+              </div>
+              <div class="video-card-grid">
+                <div>
+                  <label class="mini">Key</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][_key]" value="<?= h((string)$vk) ?>" placeholder="lantern" required data-video-key>
+                </div>
+                <div>
+                  <label class="mini">Title (optional)</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][title]" value="<?= h((string)($row['title'] ?? '')) ?>" placeholder="On-screen title" data-video-title>
+                </div>
+                <div>
+                  <label class="mini">YouTube URL</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/watch?v=…">
+                </div>
+                <div style="grid-column:2 / -1">
+                  <label class="mini">or local file</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="lantern.mp4 in videos/">
+                </div>
+              </div>
+              <div class="video-card-meta">
+                <?php if ($st): ?>
+                  <?php if ($st['file']): ?>
+                    <span>File: <code><?= h($st['file']) ?></code></span>
+                  <?php else: ?>
+                    <span>Not downloaded yet</span>
+                  <?php endif; ?>
+                  <?php if ($st['duration_label']): ?>
+                    <span>Length: <?= h($st['duration_label']) ?></span>
+                    <span>Dwell: <?= h((string)$st['rotation_dwell']) ?> s</span>
+                  <?php endif; ?>
+                  <?php if ($st['in_rotation']): ?>
+                    <span class="pill ok">On main rotation</span>
+                  <?php else: ?>
+                    <span class="pill warn">Not on rotation</span>
+                  <?php endif; ?>
+                <?php endif; ?>
+                <div class="video-card-actions">
+                  <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(video_rotation_url($vk)) ?>" target="_blank" rel="noopener">Preview</a>
+                  <?php if ($st && $st['fetchable']): ?>
+                    <button type="submit" class="secondary" form="video-fetch-<?= h(preg_replace('/[^a-z0-9_\-]/i', '', $vk)) ?>">Fetch</button>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+            <?php $vri++; endforeach; ?>
+          </div>
+          <button type="button" class="addrow" style="margin-top:12px" onclick="addVideoCard()">+ Add video</button>
+
+          <div class="actions" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
+            <label class="check"><input type="checkbox" name="sync_rotation_main" checked> Add playlist to main rotation on save</label>
+            <span class="help">Adds <code>video.php?v=KEY</code> entries to the main screen with dwell from each video length.</span>
+          </div>
+
+          <details class="panel panel-muted" style="margin-top:22px">
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if ($f['key'] === 'VIDEOS' || !in_array($f['key'], $videoBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'slides'):
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = is_array($slideVal) ? $slideVal : [];
         ?>
@@ -1287,6 +1383,18 @@ function admin_field(array $f, $val, string $board): void
           <label class="check"><input type="checkbox" name="clear_cache"> Clear cache after save</label>
         </div>
       </form>
+      <?php if ($board === 'video'): foreach ($videoStatuses as $st):
+        if (empty($st['fetchable'])) continue;
+        $fid = preg_replace('/[^a-z0-9_\-]/i', '', $st['key']);
+        if ($fid === '') continue;
+      ?>
+      <form id="video-fetch-<?= h($fid) ?>" method="post" action="?board=video" hidden>
+        <input type="hidden" name="action" value="video_fetch_one">
+        <input type="hidden" name="board" value="video">
+        <input type="hidden" name="video_key" value="<?= h($st['key']) ?>">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      </form>
+      <?php endforeach; endif; ?>
     <?php endif; ?>
   </main>
 </div>
@@ -1419,7 +1527,110 @@ function addSlideCard() {
   bindSlideCard(card);
 }
 
-document.addEventListener('DOMContentLoaded', initSlideDeck);
+document.addEventListener('DOMContentLoaded', function () {
+  initSlideDeck();
+  initVideoPlaylist();
+});
+
+function reindexVideoPlaylist() {
+  const deck = document.getElementById('videoPlaylist');
+  if (!deck) return;
+  deck.querySelectorAll('[data-video-card]').forEach(function (card, i) {
+    card.querySelectorAll('[name^="VIDEOS["]').forEach(function (inp) {
+      inp.name = inp.name.replace(/VIDEOS\[[^\]]+\]/, 'VIDEOS[' + i + ']');
+    });
+  });
+}
+
+function bindVideoCard(card) {
+  const keyInp = card.querySelector('[data-video-key]');
+  const titleInp = card.querySelector('[data-video-title]');
+  const headStrong = card.querySelector('.video-card-title strong');
+  const headCode = card.querySelector('.video-card-title code');
+  function syncHead() {
+    const k = keyInp ? keyInp.value.trim() : '';
+    if (headStrong) headStrong.textContent = (titleInp && titleInp.value.trim()) || k || 'New video';
+    if (headCode) headCode.textContent = k ? ('video.php?v=' + encodeURIComponent(k)) : 'video.php?v=KEY';
+  }
+  if (keyInp && !keyInp.dataset.bound) {
+    keyInp.dataset.bound = '1';
+    keyInp.addEventListener('input', syncHead);
+  }
+  if (titleInp && !titleInp.dataset.bound) {
+    titleInp.dataset.bound = '1';
+    titleInp.addEventListener('input', syncHead);
+  }
+  syncHead();
+}
+
+function bindVideoCardDrag(card, deck) {
+  card.addEventListener('dragstart', function (e) {
+    deck._dragCard = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  card.addEventListener('dragend', function () {
+    card.classList.remove('dragging');
+    deck._dragCard = null;
+    reindexVideoPlaylist();
+  });
+  card.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+  card.addEventListener('drop', function (e) {
+    e.preventDefault();
+    const dragEl = deck._dragCard;
+    if (!dragEl || dragEl === card) return;
+    const cards = Array.from(deck.querySelectorAll('[data-video-card]'));
+    const from = cards.indexOf(dragEl);
+    const to = cards.indexOf(card);
+    if (from < 0 || to < 0) return;
+    if (from < to) card.after(dragEl); else card.before(dragEl);
+    reindexVideoPlaylist();
+  });
+}
+
+function initVideoPlaylist() {
+  const deck = document.getElementById('videoPlaylist');
+  if (!deck) return;
+  deck.querySelectorAll('[data-video-card]').forEach(function (card) {
+    bindVideoCard(card);
+    if (!card.dataset.dragBound) {
+      card.dataset.dragBound = '1';
+      bindVideoCardDrag(card, deck);
+    }
+  });
+}
+
+function addVideoCard() {
+  const deck = document.getElementById('videoPlaylist');
+  if (!deck) return;
+  reindexVideoPlaylist();
+  const idx = deck.querySelectorAll('[data-video-card]').length;
+  const card = document.createElement('div');
+  card.className = 'video-card';
+  card.setAttribute('data-video-card', '');
+  card.setAttribute('draggable', 'true');
+  card.innerHTML =
+    '<div class="video-card-head">' +
+      '<span class="drag-handle" title="Drag to reorder">⋮⋮</span>' +
+      '<div class="video-card-title"><strong>New video</strong><code>video.php?v=KEY</code></div>' +
+      '<button type="button" class="rowdel" onclick="this.closest(\'[data-video-card]\').remove(); reindexVideoPlaylist();" title="Remove">×</button>' +
+    '</div>' +
+    '<div class="video-card-grid">' +
+      '<div><label class="mini">Key</label><input type="text" name="VIDEOS[' + idx + '][_key]" placeholder="lantern" required data-video-key></div>' +
+      '<div><label class="mini">Title (optional)</label><input type="text" name="VIDEOS[' + idx + '][title]" placeholder="On-screen title" data-video-title></div>' +
+      '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=…"></div>' +
+      '<div style="grid-column:2 / -1"><label class="mini">or local file</label><input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
+    '</div>' +
+    '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>Save, then fetch or upload file</span></div>';
+  deck.appendChild(card);
+  bindVideoCard(card);
+  bindVideoCardDrag(card, deck);
+  card.dataset.dragBound = '1';
+  reindexVideoPlaylist();
+}
 </script>
 <?php if ($authed && $board === 'slides'): ?>
 <script>
