@@ -247,6 +247,60 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if ($raw === '') unset($conf[$cfgKey]); else $conf[$cfgKey] = $raw;
         }
     }
+    if ($board === 'slides') {
+        require_once __DIR__ . '/slides_lib.php';
+        $allScreenKeys = array_keys(rotation_screens());
+        sort($allScreenKeys);
+        $outV = [];
+        foreach ($_POST['SLIDES'] ?? [] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $obj = [];
+            foreach (['file', 'caption', 'schedule', 'date_start', 'date_end', 'month_day', 'month_day_end', 'weekdays'] as $k) {
+                $v = trim((string)($row[$k] ?? ''));
+                if ($v !== '') {
+                    $obj[$k] = $v;
+                }
+            }
+            foreach (['dwell', 'day_of_month', 'hour_from', 'hour_to'] as $k) {
+                $v = trim((string)($row[$k] ?? ''));
+                if ($v !== '') {
+                    $obj[$k] = (int)$v;
+                }
+            }
+            if (!empty($row['priority'])) {
+                $obj['priority'] = true;
+            }
+            if (!empty($row['off'])) {
+                $obj['off'] = true;
+            }
+            $screens = [];
+            if (isset($row['screens']) && is_array($row['screens'])) {
+                foreach ($row['screens'] as $scr) {
+                    $sk = rotation_normalize_screen_key((string)$scr);
+                    if ($sk !== '') {
+                        $screens[$sk] = true;
+                    }
+                }
+            }
+            $screens = array_keys($screens);
+            sort($screens);
+            if (!isset($row['screens'])) {
+                $obj['screens'] = [];
+            } elseif ($screens !== $allScreenKeys) {
+                $obj['screens'] = $screens;
+            }
+            if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '' || ($obj['schedule'] ?? '') !== '') {
+                $outV[] = $obj;
+            }
+        }
+        if ($outV === []) {
+            unset($conf['slides.SLIDES']);
+        } else {
+            $conf['slides.SLIDES'] = $outV;
+        }
+    }
     if ($board === 'rotation') {
         $screensOut = [];
         foreach ($_POST['SCREENS'] ?? [] as $row) {
@@ -713,7 +767,7 @@ $navGroups = [
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash'],
 ];
-$slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
+$slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
@@ -729,11 +783,11 @@ if ($rotationMainPages === []) {
 $slidesDeckStats = slides_deck_stats($rawConf['slides.SLIDES'] ?? []);
 $slidesDeployStatus = slides_deploy_status($rawConf['slides.SLIDES'] ?? null);
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
-$slidesDeckFileSet = ($board === 'slides')
-    ? array_flip(slides_deck_files($rawConf['slides.SLIDES'] ?? null))
-    : [];
 $slidesOrphanFiles = ($board === 'slides')
     ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
+    : [];
+$slidesLibrary = ($board === 'slides')
+    ? slides_library_entries($rawConf['slides.SLIDES'] ?? null)
     : [];
 
 function admin_field(array $f, $val, string $board): void
@@ -898,10 +952,27 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-advanced summary { cursor:pointer; color:var(--mist); font-size:13px; margin-bottom:10px; }
   .slide-card-flags { display:flex; flex-wrap:wrap; gap:16px; margin-top:4px; }
   .slide-card-flags label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); }
+  .slide-card-screens { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+  .slide-screen-checks { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:8px; }
+  .slide-screen-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); }
   .slide-deck-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; margin-bottom:14px; }
   .slide-added-notice { margin-bottom:12px; padding:12px 14px; border-radius:10px; background:rgba(255,179,71,.12); border:1px solid var(--beacon); color:var(--snow); font-size:14px; }
   .slide-orphan-notice { margin-bottom:12px; padding:12px 14px; border-radius:10px; background:var(--lake-night); border:1px solid var(--line); color:var(--mist); font-size:13px; }
   .slide-card-highlight { border-color:var(--beacon); box-shadow:0 0 0 2px rgba(255,179,71,.28); }
+  .slide-card-thumb { width:128px; height:72px; border-radius:8px; object-fit:cover; background:#000; border:1px solid var(--line); flex-shrink:0; }
+  .slide-card-head-with-thumb { align-items:center; }
+  .slide-card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:center; }
+  .slide-library-panel { margin-top:18px; }
+  .slide-library-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:14px; margin-top:12px; }
+  .slide-library-tile { background:var(--harbor); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
+  .slide-library-tile.not-in-deck { border-color:var(--beacon); }
+  .slide-library-tile img { width:100%; aspect-ratio:16/9; object-fit:cover; background:#000; display:block; }
+  .slide-library-tile-body { padding:10px 12px 12px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .slide-library-tile-body strong { font-size:14px; color:var(--snow); line-height:1.35; word-break:break-word; }
+  .slide-library-tile-body code { font-size:11px; color:var(--mist); word-break:break-all; }
+  .slide-library-tile-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; }
+  .slide-library-tile-actions form { margin:0; display:inline; }
+  .slide-library-tile-actions .secondary { padding:4px 10px; font-size:12px; }
   @media (max-width: 760px) { .slide-card-grid { grid-template-columns:1fr; } .slide-card-grid .span-2 { grid-column:span 1; } }
   .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; min-height:72px; }
   .rotation-playlist-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; text-align:center; }
@@ -1783,24 +1854,15 @@ function admin_field(array $f, $val, string $board): void
           </details>
 
         <?php elseif ($board === 'slides'):
+          $rotationScreens = rotation_screens();
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = is_array($slideVal) ? $slideVal : [];
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
         ?>
           <div class="section-title">Slide deck</div>
-          <div class="help" style="margin-bottom:12px">Your rotation plays from this list — drag to reorder (top = first). Upload or create new slides in <strong>Add slides</strong> below; they land here automatically. Set each slide's schedule, then <strong>Save</strong>.</div>
+          <div class="help" style="margin-bottom:12px">These slides play on your displays (after you deploy). Drag to reorder. <strong>×</strong> removes a slide from the deck but keeps the file in the <strong>Slide library</strong> below. Use <strong>Delete file</strong> to remove it permanently. Save after changes.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule below, then Save.</div>
-          <?php endif; ?>
-          <?php if ($slidesOrphanFiles !== []): ?>
-          <div class="slide-orphan-notice">
-            <strong><?= count($slidesOrphanFiles) ?></strong> file<?= count($slidesOrphanFiles) === 1 ? '' : 's' ?> on disk not in the deck:
-            <?php foreach ($slidesOrphanFiles as $oi => $orphan): ?>
-              <?php if ($oi > 0): ?>, <?php endif; ?>
-              <code><?= h($orphan) ?></code>
-            <?php endforeach; ?>
-            — use <strong>Add to deck</strong> in the file list below, or open <strong>Add slides</strong>.
-          </div>
           <?php endif; ?>
           <div class="deck-list" id="slideDeck" data-field="SLIDES">
             <?php if ($slideRows === []): ?>
@@ -1816,32 +1878,45 @@ function admin_field(array $f, $val, string $board): void
               $schedSummary = slide_schedule_summary($row);
               $highlightCard = $slideHighlight !== null
                   && slide_safe_filename($fileLabel) === $slideHighlight;
+              $thumbUrl = $fileOk ? slide_thumb_url($fileLabel) : null;
+              $previewUrl = $fileOk ? slide_preview_url($fileLabel) : null;
+              $displayLabel = slide_display_label($fileLabel, $slideRows);
+              $slideScreens = array_key_exists('screens', $row) ? slide_target_screens($row) : [];
+              $slideAllScreens = !array_key_exists('screens', $row);
             ?>
             <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?><?= $highlightCard ? ' slide-card-highlight' : '' ?>" data-slide-card data-slide-file="<?= h($fileLabel) ?>">
-              <div class="slide-card-head">
+              <div class="slide-card-head slide-card-head-with-thumb">
                 <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                <?php if ($thumbUrl): ?>
+                <a href="<?= h($previewUrl ?? $thumbUrl) ?>" target="_blank" rel="noopener" title="Preview slide">
+                  <img class="slide-card-thumb" src="<?= h($thumbUrl) ?>" alt="">
+                </a>
+                <?php endif; ?>
                 <div class="slide-card-title">
-                  <strong><?= h($fileLabel !== '' ? $fileLabel : 'New slide') ?></strong>
+                  <strong><?= h($displayLabel !== '' ? $displayLabel : 'New slide') ?></strong>
+                  <?php if ($displayLabel !== $fileLabel && $fileLabel !== ''): ?>
+                  <code style="font-size:12px;color:var(--mist)"><?= h($fileLabel) ?></code>
+                  <?php endif; ?>
                   <span class="slide-card-meta-line">
                     <?php if ($activeNow): ?><span class="pill ok">Active now</span><?php endif; ?>
                     <?php if (!$fileOk && $fileLabel !== ''): ?><span class="pill warn">File missing</span><?php endif; ?>
                     <span class="schedule-summary" data-schedule-summary><?= h($schedSummary) ?></span>
                   </span>
                 </div>
-                <button type="button" class="rowdel" onclick="this.closest('[data-slide-card]').remove(); reindexSlideDeck();" title="Remove">×</button>
+                <button type="button" class="rowdel" onclick="this.closest('[data-slide-card]').remove(); reindexSlideDeck();" title="Remove from deck (file stays in library)">×</button>
               </div>
               <div class="slide-card-grid">
                 <div class="span-2">
                   <label class="mini">Image file</label>
-                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="filename.png">
+                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="filename.png" list="slide-file-options">
                 </div>
                 <div>
                   <label class="mini">Seconds</label>
                   <input type="text" name="SLIDES[<?= h((string)$ri) ?>][dwell]" value="<?= h((string)($row['dwell'] ?? '')) ?>" placeholder="12">
                 </div>
                 <div class="span-3">
-                  <label class="mini">Caption</label>
-                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][caption]" value="<?= h((string)($row['caption'] ?? '')) ?>" placeholder="Optional on-screen caption">
+                  <label class="mini">Label</label>
+                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][caption]" value="<?= h((string)($row['caption'] ?? '')) ?>" placeholder="Admin label only (not shown on wall)">
                 </div>
                 <div>
                   <label class="mini">Schedule</label>
@@ -1892,11 +1967,101 @@ function admin_field(array $f, $val, string $board): void
                   <label><input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][priority]" <?= !empty($row['priority']) ? 'checked' : '' ?>> Priority override</label>
                   <label><input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?>> Disabled</label>
                 </div>
+                <?php if (count($rotationScreens) > 0): ?>
+                <div class="slide-card-screens">
+                  <span class="mini">Show on displays</span>
+                  <div class="slide-screen-checks">
+                    <?php foreach ($rotationScreens as $screenKey => $screenMeta): ?>
+                    <label>
+                      <input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][screens][]" value="<?= h($screenKey) ?>"
+                        <?= $slideAllScreens || in_array($screenKey, $slideScreens, true) ? 'checked' : '' ?>>
+                      <?= h((string)($screenMeta['name'] ?? $screenKey)) ?>
+                    </label>
+                    <?php endforeach; ?>
+                  </div>
+                  <span class="help" style="margin:6px 0 0">Uncheck a display to keep this slide off that screen. All checked = deploys wherever you save below. None checked = slide stays out of rotation.</span>
+                </div>
+                <?php endif; ?>
               </details>
+              <?php if ($fileOk): ?>
+              <div class="slide-card-actions">
+                <?php if ($previewUrl): ?>
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
+                <?php endif; ?>
+                <button type="button" class="secondary" style="padding:6px 12px;font-size:13px"
+                        onclick="submitSlideDelete(<?= json_encode($fileLabel) ?>)">Delete file</button>
+              </div>
+              <?php endif; ?>
             </div>
             <?php endforeach; ?>
           </div>
-          <button type="button" class="addrow" style="margin-top:12px" onclick="addSlideCard()">+ Add slide</button>
+          <?php if ($slidesLibrary !== []): ?>
+          <datalist id="slide-file-options">
+            <?php foreach ($slidesLibrary as $lib): ?>
+            <option value="<?= h($lib['file']) ?>"><?= h($lib['label']) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <?php endif; ?>
+          <button type="button" class="addrow" style="margin-top:12px" onclick="addSlideCard()">+ Add blank deck row</button>
+
+          <details class="panel slide-library-panel" id="slide-library-panel"<?= $slidesOrphanFiles !== [] ? ' open' : '' ?>>
+            <summary>
+              <span>Slide library</span>
+              <span class="help" style="margin:0;font-weight:400"><?= count($slidesLibrary) ?> file<?= count($slidesLibrary) === 1 ? '' : 's' ?> on disk<?php if ($slidesOrphanFiles !== []): ?> · <?= count($slidesOrphanFiles) ?> not in deck<?php endif; ?></span>
+            </summary>
+            <div class="panel-body" style="padding-top:8px">
+              <div class="help" style="margin-bottom:8px">Every image in <code>slides/</code>, whether or not it is on the deck. Preview thumbnails, add removed slides back to the deck, or delete files permanently.</div>
+              <?php if ($slidesLibrary === []): ?>
+              <div class="slide-deck-empty">No slide files yet — upload or create one in <strong>Add slides</strong> below.</div>
+              <?php else: ?>
+              <div class="slide-library-grid">
+                <?php foreach ($slidesLibrary as $lib): ?>
+                <div class="slide-library-tile<?= !$lib['in_deck'] ? ' not-in-deck' : '' ?>">
+                  <?php if ($lib['thumb']): ?>
+                  <a href="<?= h($lib['preview'] ?? $lib['thumb']) ?>" target="_blank" rel="noopener">
+                    <img src="<?= h($lib['thumb']) ?>" alt="" loading="lazy">
+                  </a>
+                  <?php endif; ?>
+                  <div class="slide-library-tile-body">
+                    <strong><?= h($lib['label']) ?></strong>
+                    <?php if ($lib['label'] !== $lib['file']): ?><code><?= h($lib['file']) ?></code><?php endif; ?>
+                    <div>
+                      <?php if ($lib['in_deck']): ?>
+                        <span class="pill ok">In deck</span>
+                        <?php if ($lib['off']): ?><span class="pill">Disabled</span><?php endif; ?>
+                      <?php else: ?>
+                        <span class="pill warn">Not in deck</span>
+                      <?php endif; ?>
+                    </div>
+                    <div class="slide-library-tile-actions">
+                      <?php if ($lib['preview']): ?>
+                      <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
+                      <?php endif; ?>
+                      <?php if (!$lib['in_deck']): ?>
+                      <form method="post" action="?board=slides">
+                        <input type="hidden" name="action" value="add_slide_to_deck">
+                        <input type="hidden" name="board" value="slides">
+                        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                        <input type="hidden" name="file" value="<?= h($lib['file']) ?>">
+                        <button class="secondary" type="submit">Add to deck</button>
+                      </form>
+                      <?php endif; ?>
+                      <button type="button" class="secondary" onclick="submitSlideDelete(<?= json_encode($lib['file']) ?>)">Delete</button>
+                    </div>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+              <?php endif; ?>
+            </div>
+          </details>
+
+          <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
+            <input type="hidden" name="action" value="delete_slide">
+            <input type="hidden" name="board" value="slides">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="file" id="slideDeleteFile" value="">
+          </form>
 
           <div class="slides-save-deploy">
             <div class="deploy-checks">
@@ -2053,38 +2218,7 @@ function admin_field(array $f, $val, string $board): void
               <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
               <button class="secondary" type="submit">Upload</button>
             </form>
-            <div class="help" style="margin-top:8px">JPG, PNG, or WebP. Uploaded files are added to the <strong>Slide deck</strong> above on the <strong>Always</strong> schedule.</div>
-            <?php $diskFiles = slides_list_files();
-            if ($diskFiles): ?>
-            <ul class="filelist">
-              <?php foreach ($diskFiles as $df):
-                $inDeck = isset($slidesDeckFileSet[$df]);
-              ?>
-                <li>
-                  <code><?= h($df) ?></code>
-                  <?php if ($inDeck): ?>
-                    <span class="pill ok">In deck</span>
-                  <?php else: ?>
-                    <span class="pill warn">Not in deck</span>
-                    <form method="post" action="?board=slides" style="display:inline">
-                      <input type="hidden" name="action" value="add_slide_to_deck">
-                      <input type="hidden" name="board" value="slides">
-                      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                      <input type="hidden" name="file" value="<?= h($df) ?>">
-                      <button class="secondary" type="submit">Add to deck</button>
-                    </form>
-                  <?php endif; ?>
-                  <form method="post" action="?board=slides" onsubmit="return confirm('Delete <?= h($df) ?>?');" style="display:inline">
-                    <input type="hidden" name="action" value="delete_slide">
-                    <input type="hidden" name="board" value="slides">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="file" value="<?= h($df) ?>">
-                    <button class="secondary" type="submit">Delete</button>
-                  </form>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-            <?php endif; ?>
+            <div class="help" style="margin-top:8px">JPG, PNG, or WebP. Uploaded files are added to the deck automatically. All files also appear in the <strong>Slide library</strong> above.</div>
           </div>
 
           <div class="creator-box">
@@ -2415,6 +2549,16 @@ function initSlideDeck() {
   }
 }
 
+function submitSlideDelete(file) {
+  if (!file) return;
+  if (!confirm('Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.')) return;
+  const form = document.getElementById('slideDeleteForm');
+  const input = document.getElementById('slideDeleteFile');
+  if (!form || !input) return;
+  input.value = file;
+  form.submit();
+}
+
 function addSlideCard() {
   const deck = document.getElementById('slideDeck');
   if (!deck) return;
@@ -2425,7 +2569,13 @@ function addSlideCard() {
     card = proto.cloneNode(true);
     card.classList.remove('is-off', 'dragging');
     card.querySelectorAll('input[type="text"]').forEach(function (i) { i.value = ''; });
-    card.querySelectorAll('input[type="checkbox"]').forEach(function (i) { i.checked = false; });
+    card.querySelectorAll('input[type="checkbox"]').forEach(function (i) {
+      if (/\[screens\]/.test(i.name)) {
+        i.checked = true;
+      } else {
+        i.checked = false;
+      }
+    });
     const sel = card.querySelector('[data-schedule-select]');
     if (sel) { sel.value = 'always'; sel.removeAttribute('data-bound'); }
     card.querySelectorAll('[data-bound], [data-summary-bound]').forEach(function (el) {
@@ -2446,7 +2596,7 @@ function addSlideCard() {
       '<div class="slide-card-grid">' +
       '<div class="span-2"><label class="mini">Image file</label><input type="text" name="SLIDES[' + idx + '][file]" placeholder="filename.png"></div>' +
       '<div><label class="mini">Seconds</label><input type="text" name="SLIDES[' + idx + '][dwell]" placeholder="12"></div>' +
-      '<div class="span-3"><label class="mini">Caption</label><input type="text" name="SLIDES[' + idx + '][caption]" placeholder="Optional on-screen caption"></div>' +
+      '<div class="span-3"><label class="mini">Label</label><input type="text" name="SLIDES[' + idx + '][caption]" placeholder="Admin label only (not shown on wall)"></div>' +
       '<div><label class="mini">Schedule</label><select name="SLIDES[' + idx + '][schedule]" data-schedule-select>' +
       SLIDE_SCHEDULES.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
       '</select></div></div>';
@@ -3075,7 +3225,18 @@ function addVideoCard() {
 
     let y = padTop;
 
-    function drawBlock(text, font, color, lineH, maxLines, shadow) {
+    const footerLineH = 32;
+    const footerGap = 24;
+    let footerLines = [];
+    let footerBlockH = 0;
+    if (footer) {
+      ctx.font = '400 24px "IBM Plex Sans", sans-serif';
+      footerLines = wrapLines(ctx, footer, maxW);
+      footerBlockH = footerLines.length * footerLineH + footerGap;
+    }
+    const bodyMaxY = H - padBottom - footerBlockH;
+
+    function drawBlock(text, font, color, lineH, maxLines, shadow, maxY) {
       if (!text) return;
       ctx.font = font;
       ctx.fillStyle = color;
@@ -3086,24 +3247,36 @@ function addVideoCard() {
         lines = lines.slice(0, maxLines);
         lines[maxLines - 1] = lines[maxLines - 1].replace(/\s+\S*$/, '') + '\u2026';
       }
+      let truncated = false;
       lines.forEach(function (ln) {
+        if (maxY && y + lineH > maxY) {
+          truncated = true;
+          return;
+        }
         if (ln === '') y += Math.round(lineH * 0.55);
         else {
           ctx.fillText(ln, x, y);
           y += lineH;
         }
       });
+      if (truncated && y > padTop + lineH) {
+        resetTextShadow();
+        ctx.font = font;
+        ctx.fillStyle = color;
+        const ellY = Math.min(y - Math.round(lineH * 0.15), maxY ? maxY - 4 : y);
+        ctx.fillText('\u2026', x, ellY);
+      }
       resetTextShadow();
     }
 
-    drawBlock(title, '600 88px "Big Shoulders Display", sans-serif', preset.title, 94, 3, true);
+    drawBlock(title, '600 88px "Big Shoulders Display", sans-serif', preset.title, 94, 3, true, null);
     if (title) y = drawAccentRule(preset, align, x, y - 8, maxW);
     if (title && subtitle) y += 6;
-    drawBlock(subtitle, '500 42px "Big Shoulders Display", sans-serif', preset.subtitle, 50, 2, true);
+    drawBlock(subtitle, '500 42px "Big Shoulders Display", sans-serif', preset.subtitle, 50, 2, true, bodyMaxY);
     if ((title || subtitle) && body) y += 22;
-    drawBlock(body, '400 30px "IBM Plex Sans", sans-serif', preset.body, 44, 10, false);
+    drawBlock(body, '400 30px "IBM Plex Sans", sans-serif', preset.body, 44, null, false, bodyMaxY);
 
-    if (footer) {
+    if (footer && footerLines.length) {
       resetTextShadow();
       ctx.font = '400 24px "IBM Plex Sans", sans-serif';
       ctx.fillStyle = preset.footer || preset.body;
@@ -3112,8 +3285,6 @@ function addVideoCard() {
         ctx.globalAlpha = 0.92;
         applyTextShadow();
       }
-      const footerLines = wrapLines(ctx, footer, maxW);
-      const footerLineH = 32;
       let fy = H - padBottom - (footerLines.length - 1) * footerLineH;
       footerLines.forEach(function (ln) {
         ctx.fillText(ln, x, fy);

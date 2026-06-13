@@ -71,6 +71,82 @@ function slides_orphan_files(?array $deck = null, ?string $dir = null): array
     return array_values(array_filter(slides_list_files($dir), static fn($f) => !isset($inDeck[$f])));
 }
 
+/** Admin/preview URL for a slide image file. */
+function slide_thumb_url(string $file): ?string
+{
+    $safe = slide_safe_filename($file);
+    if ($safe === null || !is_file(slides_dir() . '/' . $safe)) {
+        return null;
+    }
+    return 'slides.php?img=' . rawurlencode($safe);
+}
+
+/** Single-slide preview URL (rotation / full board). */
+function slide_preview_url(string $file): ?string
+{
+    $safe = slide_safe_filename($file);
+    if ($safe === null) {
+        return null;
+    }
+    return 'slides.php?slide=' . rawurlencode($safe);
+}
+
+/** Human label for a slide file (caption from deck, else filename). */
+function slide_display_label(string $file, ?array $deck = null): string
+{
+    $slide = slide_deck_by_file($file, $deck);
+    if (is_array($slide)) {
+        $caption = trim((string)($slide['caption'] ?? ''));
+        if ($caption !== '') {
+            return $caption;
+        }
+    }
+    return $file;
+}
+
+/**
+ * All slide files on disk with deck membership for the admin library grid.
+ * @return list<array{file:string,in_deck:bool,label:string,caption:string,off:bool,thumb:?string,preview:?string}>
+ */
+function slides_library_entries(?array $deck = null, ?string $dir = null): array
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $deckByFile = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file !== null) {
+            $deckByFile[$file] = $slide;
+        }
+    }
+    $out = [];
+    foreach (slides_list_files($dir) as $file) {
+        $entry = $deckByFile[$file] ?? null;
+        $caption = is_array($entry) ? trim((string)($entry['caption'] ?? '')) : '';
+        $out[] = [
+            'file' => $file,
+            'in_deck' => $entry !== null,
+            'caption' => $caption,
+            'label' => $caption !== '' ? $caption : $file,
+            'off' => is_array($entry) && !empty($entry['off']),
+            'thumb' => slide_thumb_url($file),
+            'preview' => slide_preview_url($file),
+        ];
+    }
+    usort($out, static function ($a, $b) {
+        if ($a['in_deck'] !== $b['in_deck']) {
+            return $a['in_deck'] ? 1 : -1;
+        }
+        return strcasecmp($a['label'], $b['label']);
+    });
+    return $out;
+}
+
 /** Append a new slide entry to config deck (used by upload + creator). */
 function slide_append_to_deck(string $filename, array $extra = []): bool
 {
@@ -1210,11 +1286,50 @@ function slide_deck_by_file(string $file, ?array $deck = null): ?array
     return null;
 }
 
+/** @return list<string> Empty = no restriction (all deploy targets). */
+function slide_target_screens(array $slide): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $raw = $slide['screens'] ?? null;
+    if ($raw === null || $raw === '' || $raw === []) {
+        return [];
+    }
+    $keys = [];
+    if (is_array($raw)) {
+        foreach ($raw as $item) {
+            $k = rotation_normalize_screen_key((string)$item);
+            if ($k !== '') {
+                $keys[$k] = true;
+            }
+        }
+    } else {
+        foreach (preg_split('/\s*,\s*/', (string)$raw, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $item) {
+            $k = rotation_normalize_screen_key((string)$item);
+            if ($k !== '') {
+                $keys[$k] = true;
+            }
+        }
+    }
+    return array_keys($keys);
+}
+
+function slide_on_screen(array $slide, string $screen): bool
+{
+    if (!array_key_exists('screens', $slide)) {
+        return true;
+    }
+    $targets = slide_target_screens($slide);
+    if ($targets === []) {
+        return false;
+    }
+    return in_array(rotation_normalize_screen_key($screen), $targets, true);
+}
+
 /**
  * Enabled on-disk slides as rotation page rows, in deck order.
  * @return list<array{url:string,dwell:int,file:string}>
  */
-function slides_rotation_pages(?array $deck = null): array
+function slides_rotation_pages(?array $deck = null, ?string $screen = null): array
 {
     $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
     if (!is_array($deck)) {
@@ -1222,9 +1337,13 @@ function slides_rotation_pages(?array $deck = null): array
     }
     $dir = slides_dir();
     $default = slides_default_dwell();
+    $screenKey = $screen !== null ? rotation_normalize_screen_key($screen) : null;
     $out = [];
     foreach ($deck as $slide) {
         if (!is_array($slide) || !empty($slide['off'])) {
+            continue;
+        }
+        if ($screenKey !== null && $screenKey !== '' && !slide_on_screen($slide, $screenKey)) {
             continue;
         }
         $file = slide_safe_filename((string)($slide['file'] ?? ''));

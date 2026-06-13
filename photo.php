@@ -137,8 +137,8 @@ $padY = $compact ? 24 : 28;
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
   .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $compact ? 20 : 24 ?>px;
-           grid-template-columns: 1.2fr 1fr; grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowFoot ?>px;
-           grid-template-areas: "head head" "verdict moon" "windows windows"; }
+           grid-template-columns: 1.2fr 1fr; grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowFoot ?>px auto;
+           grid-template-areas: "head head" "verdict moon" "windows windows" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
   .head h1 span { color:var(--beacon); }
@@ -181,7 +181,8 @@ $padY = $compact ? 24 : 28;
             font-variant-numeric:tabular-nums; }
   .win.prime .v { color:var(--beacon); }
   .win .s { font-size:<?= $compact ? 19 : 21 ?>px; color:var(--mist); margin-top:6px; }
-  .stamp { position:absolute; top:<?= $padY + 4 ?>px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
+  <?= signage_stamp_css() ?>
+  .stamp { grid-area:meta; }
 </style>
 </head>
 <body>
@@ -252,8 +253,8 @@ $padY = $compact ? 24 : 28;
     <div class="win"><div class="k">Blue Hour PM</div><div class="v"><?= tspan($bluePm) ?></div>
       <div class="s">Sunset to end of civil twilight</div></div>
   </section>
+  <div class="stamp">OpenWeatherMap &middot; NOAA SWPC<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-<div class="stamp">OpenWeatherMap &middot; NOAA SWPC<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }

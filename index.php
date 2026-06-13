@@ -27,6 +27,7 @@ const CACHE_DIR   = __DIR__ . '/cache';  // must be writable by the web server
 define('CACHE_TTL', cfg('index.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
+$frameH = signage_frame_height();
 
 // ── Data layer ───────────────────────────────────────────────────────────────
 
@@ -209,23 +210,24 @@ $todayKey = date('Y-m-d');
 
   html, body {
     width: 1920px;
-    height: 1080px;
     overflow: hidden;
     background: var(--lake-night);
     color: var(--snow);
     font-family: 'IBM Plex Sans', sans-serif;
     cursor: none;                       /* signage: hide any stray pointer */
+    <?= signage_viewport_css() ?>
   }
 
   .board {
     width: 1920px;
-    height: 1080px;
+    height: 100%;
     display: grid;
     grid-template-columns: 700px 1fr;
-    grid-template-rows: 1fr 210px;
+    grid-template-rows: minmax(0, 1fr) 210px auto;
     grid-template-areas:
       "now   radar"
-      "week  week";
+      "week  week"
+      "meta  meta";
     gap: 24px;
     padding: 28px 32px;
   }
@@ -410,14 +412,8 @@ $todayKey = date('Y-m-d');
   .day .pop { font-size: 17px; color: var(--beacon); margin-top: 2px; }
 
   /* ── Footer / error states ─────────────────────────────────────────────── */
-  .stamp {
-    position: absolute;
-    bottom: 8px;
-    right: 36px;
-    font-size: 16px;
-    color: var(--mist);
-    opacity: 0.7;
-  }
+  <?= signage_stamp_css() ?>
+  .stamp { grid-area: meta; }
   .setup {
     width: 1920px; height: 1080px;
     display: flex; flex-direction: column;
@@ -529,9 +525,9 @@ $todayKey = date('Y-m-d');
     <?php endforeach; ?>
   </section>
 
-</div>
+  <div class="stamp">Conditions updated <?= date('g:i A', $cw['updated']) ?> &middot; OpenWeatherMap &middot; NWS RIDGE</div>
 
-<div class="stamp">Conditions updated <?= date('g:i A', $cw['updated']) ?> &middot; OpenWeatherMap &middot; NWS RIDGE</div>
+</div>
 
 <script>
   // ── Live clock ─────────────────────────────────────────────────────────

@@ -63,3 +63,19 @@ function signage_frame_height(): int
 {
     return 1080 - signage_safe_bottom();
 }
+
+/** html/body height rule for framed signage boards. */
+function signage_viewport_css(): string
+{
+    $h = signage_frame_height();
+    return "html,body{height:calc({$h}px - var(--signage-ticker-inset,0px));}";
+}
+
+/** In-flow attribution line — place inside .board, not as an absolute body overlay. */
+function signage_stamp_css(): string
+{
+    return '.stamp{display:block;text-align:right;font-size:15px;color:var(--mist);opacity:.7;'
+         . 'padding:2px 4px 0;flex-shrink:0;white-space:nowrap;overflow:hidden;'
+         . 'text-overflow:ellipsis;max-width:100%;}'
+         . '.board>.stamp{grid-column:1/-1;align-self:end;}';
+}

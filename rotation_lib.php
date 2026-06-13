@@ -698,7 +698,7 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null): arr
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     $pages = rotation_screen_pages($screen);
-    $expected = slides_rotation_pages($deck);
+    $expected = slides_rotation_pages($deck, $screen);
     $expectedByUrl = [];
     foreach ($expected as $row) {
         $expectedByUrl[$row['url']] = (int)$row['dwell'];
@@ -782,7 +782,7 @@ function slides_rotation_sync_info(string $screen = 'main', ?array $deck = null)
 {
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    $expected = slides_rotation_pages($deck);
+    $expected = slides_rotation_pages($deck, $screen);
     $own = rotation_screen_own_pages($screen);
     $byUrl = [];
     foreach ($own as $i => $page) {

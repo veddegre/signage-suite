@@ -83,6 +83,7 @@ $markers = [
   .legend { grid-area:legend; display:flex; align-items:center; gap:28px; padding:0 8px; }
   .legend .lab { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
   .legend .items { display:flex; gap:22px; flex:1; }
+  .legend .stamp { margin-left:auto; font-size:15px; color:var(--mist); opacity:.7; white-space:nowrap; }
   .legend .item { display:flex; align-items:center; gap:10px; font-size:21px; color:var(--snow); }
   .legend .swatch { width:36px; height:8px; border-radius:4px; }
   .sw-free { background:#39c46d; } .sw-slow { background:#ffb347; }
@@ -94,7 +95,6 @@ $markers = [
   .setup p { font-size:26px; color:var(--mist); line-height:1.55; max-width:900px; }
   .setup code { background:var(--lake-night); padding:3px 10px; border-radius:6px; color:var(--snow); }
   .setup a { color:var(--beacon); }
-  .stamp { position:absolute; top:28px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
 </style>
 </head>
 <body>
@@ -121,6 +121,7 @@ $markers = [
       <span class="item"><span class="swatch sw-bad"></span> Congested</span>
       <span class="item"><span class="swatch sw-worse"></span> Heavy / closed</span>
     </div>
+    <span class="stamp">TomTom Traffic Flow<?= $configured ? '' : ' · not configured' ?></span>
   </div>
   <?php else: ?>
   <div class="setup">
@@ -133,10 +134,10 @@ $markers = [
   <div class="legend">
     <span class="lab">Congestion</span>
     <div class="items" style="color:var(--mist)">—</div>
+    <span class="stamp">TomTom Traffic Flow · not configured</span>
   </div>
   <?php endif; ?>
 </div>
-<div class="stamp">TomTom Traffic Flow<?= $configured ? '' : ' · not configured' ?></div>
 
 <script>
   function tick() {

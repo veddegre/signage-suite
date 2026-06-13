@@ -35,6 +35,7 @@ const CACHE_DIR       = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('rss.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
+$frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
 // ── Feed selection ───────────────────────────────────────────────────────────
@@ -200,8 +201,9 @@ $payload = array_map(fn($i) => [
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              <?= signage_viewport_css() ?> }
 
   .photo { position:absolute; inset:0; background-position:center; background-size:cover;
            opacity:0; transition:opacity 1.6s ease; }
@@ -213,9 +215,12 @@ $payload = array_map(fn($i) => [
   @media (prefers-reduced-motion: reduce) { .photo, .text { transition:none !important; } }
 
   .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:5;
-            display:flex; justify-content:space-between; align-items:baseline; }
+            display:flex; justify-content:space-between; align-items:flex-start; }
+  .brand-block { display:flex; flex-direction:column; gap:6px; max-width:70%; }
   .brand { font-family:'Big Shoulders Display'; font-weight:700; font-size:52px; letter-spacing:1px; }
   .brand span { color:var(--beacon); }
+  .stamp { font-size:15px; color:var(--mist); opacity:.7; white-space:nowrap;
+           overflow:hidden; text-overflow:ellipsis; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
            font-variant-numeric:tabular-nums; text-shadow:0 1px 12px rgba(0,0,0,.6); }
 
@@ -241,8 +246,6 @@ $payload = array_map(fn($i) => [
            align-items:center; justify-content:center; color:var(--mist); }
   .empty h2 { font-family:'Big Shoulders Display'; font-size:60px; color:var(--snow); }
   .empty p { font-size:28px; }
-  .stamp { position:absolute; bottom:8px; right:36px; z-index:6; font-size:15px;
-           color:var(--mist); opacity:.7; }
 </style>
 </head>
 <body>
@@ -250,7 +253,10 @@ $payload = array_map(fn($i) => [
 <div class="photo" id="photoB"></div>
 
 <div class="chrome">
-  <div class="brand"><?= h($feed['name']) ?> <span>&middot; Stories</span></div>
+  <div class="brand-block">
+    <div class="brand"><?= h($feed['name']) ?> <span>&middot; Stories</span></div>
+    <div class="stamp"><?= h($feedKey) ?> &middot; <?= count($payload) ?> stories &middot; <?= $dwell ?>s<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
+  </div>
   <div id="clock">--:--</div>
 </div>
 
@@ -334,7 +340,6 @@ $payload = array_map(fn($i) => [
     setTimeout(() => location.reload(), 15 * 60 * 1000);
   </script>
 <?php endif; ?>
-<div class="stamp"><?= h($feedKey) ?> &middot; <?= count($payload) ?> stories &middot; <?= $dwell ?>s<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 <?php include __DIR__ . '/ticker.php'; ?>
 </body>
 </html>

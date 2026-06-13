@@ -31,6 +31,7 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('homelab.CACHE_TTL', 30));
 
 date_default_timezone_set(TIMEZONE);
+$frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
 function http_get(string $url, array $headers = [], ?string $userpass = null, bool $verify = true, int $timeout = 6): array
@@ -144,11 +145,12 @@ $wanMs    = $checks['wan_ms'] ?? null;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347;
           --up:#39c46d; --down:#ff5d5d; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:1080px; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 96px 300px 1fr;
-           grid-template-areas: "head head head" "node dns wan" "vms vms svc"; }
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              <?= signage_viewport_css() ?> }
+  .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
+           grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 96px 300px minmax(0,1fr) auto;
+           grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
   .head h1 span { color:var(--beacon); }
@@ -188,7 +190,8 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .storagebars { margin-top:14px; }
   .notcfg { font-size:24px; color:var(--mist); margin-top:14px; line-height:1.5; }
   .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
-  .stamp { position:absolute; bottom:6px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
+  <?= signage_stamp_css() ?>
+  .stamp { grid-area:meta; }
 </style>
 </head>
 <body>
@@ -279,8 +282,8 @@ $wanMs    = $checks['wan_ms'] ?? null;
       <div class="notcfg">Add services in admin &rarr; Homelab &rarr; <strong>Service checks</strong> (name + URL per row).</div>
     <?php endif; ?>
   </section>
+  <div class="stamp">Proxmox API &middot; AdGuard Home<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-<div class="stamp">Proxmox API &middot; AdGuard Home<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }

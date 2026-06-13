@@ -35,6 +35,7 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('family.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
+$frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
 function cached_get(string $url, string $key, ?array $auth = null): ?string
@@ -724,11 +725,12 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:1080px; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 600px 1fr; grid-template-rows: 1fr 150px;
-           grid-template-areas: "today week" "strip strip"; }
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              <?= signage_viewport_css() ?> }
+  .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
+           grid-template-columns: 600px 1fr; grid-template-rows: minmax(0,1fr) 150px auto;
+           grid-template-areas: "today week" "strip strip" "meta meta"; }
 
   .today { grid-area:today; background:var(--harbor); border:1px solid var(--hairline);
            border-radius:14px; padding:38px 42px; display:flex; flex-direction:column; min-height:0; }
@@ -772,7 +774,8 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
   .chip.trash .v { color:var(--beacon); }
   .setup { font-size:24px; color:var(--mist); line-height:1.6; }
   .setup code { background:var(--lake-night); padding:2px 8px; border-radius:6px; color:var(--snow); }
-  .stamp { position:absolute; bottom:6px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
+  <?= signage_stamp_css() ?>
+  .stamp { grid-area:meta; }
 </style>
 </head>
 <body>
@@ -842,8 +845,8 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
         <span class="v" style="font-size:26px;color:var(--mist)">add dates to COUNTDOWNS</span></div>
     <?php endif; ?>
   </section>
+  <div class="stamp">ICS feeds refresh every 10 min<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-<div class="stamp">ICS feeds refresh every 10 min<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 <script>
   function tick(){
     const n = new Date(); let h = n.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;

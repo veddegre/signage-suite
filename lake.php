@@ -21,6 +21,7 @@ const CACHE_DIR    = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('lake.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
+$frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
 function cached_get(string $url, string $key, array $headers = []): ?string
@@ -147,11 +148,12 @@ $sun = date_sun_info(time(), LAT, LON);
     --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:1080px; padding:28px 32px; display:grid;
-           grid-template-columns: 760px 1fr; grid-template-rows: 96px 1fr 130px;
-           grid-template-areas: "head head" "wave side" "foot foot"; gap:24px; }
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              <?= signage_viewport_css() ?> }
+  .board { width:1920px; height:100%; padding:28px 32px; display:grid;
+           grid-template-columns: 760px 1fr; grid-template-rows: 96px minmax(0,1fr) 130px auto;
+           grid-template-areas: "head head" "wave side" "foot foot" "meta meta"; gap:24px; }
 
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; letter-spacing:1px; }
@@ -199,7 +201,8 @@ $sun = date_sun_info(time(), LAT, LON);
   .chip .k { font-size:20px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
   .chip .v { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px;
              font-variant-numeric:tabular-nums; }
-  .stamp { position:absolute; bottom:6px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
+  <?= signage_stamp_css() ?>
+  .stamp { grid-area:meta; }
 </style>
 </head>
 <body>
@@ -268,8 +271,8 @@ $sun = date_sun_info(time(), LAT, LON);
     <div class="chip"><span class="k">Observed</span>
       <span class="v"><?= $buoyOnline ? $obsAgeMin . ' min ago' : 'offline' ?></span></div>
   </div>
+  <div class="stamp">NDBC <?= h(NDBC_STATION) ?> &middot; NWS API<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-<div class="stamp">NDBC <?= h(NDBC_STATION) ?> &middot; NWS API<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }

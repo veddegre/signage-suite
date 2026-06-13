@@ -24,6 +24,7 @@ const CACHE_DIR       = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('signaltrace.CACHE_TTL', 60));
 
 date_default_timezone_set(TIMEZONE);
+$frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
 function st_get(string $path, string $key): ?array
@@ -168,11 +169,12 @@ if (is_array($clicks)) {
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:1080px; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 640px 1fr; grid-template-rows: 96px 1fr;
-           grid-template-areas: "head head" "left feed"; }
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              <?= signage_viewport_css() ?> }
+  .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
+           grid-template-columns: 640px 1fr; grid-template-rows: 96px minmax(0,1fr) auto;
+           grid-template-areas: "head head" "left feed" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
   .head h1 span { color:var(--beacon); }
@@ -218,7 +220,8 @@ if (is_array($clicks)) {
   .dim { color:var(--mist); }
   .setupmsg { font-size:30px; color:var(--mist); line-height:1.6; padding:30px; }
   .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
-  .stamp { position:absolute; bottom:6px; right:36px; font-size:15px; color:var(--mist); opacity:.7; }
+  <?= signage_stamp_css() ?>
+  .stamp { grid-area:meta; }
 </style>
 </head>
 <body>
@@ -292,8 +295,8 @@ if (is_array($clicks)) {
   </section>
 
   <?php endif; ?>
+  <div class="stamp">SignalTrace export API<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-<div class="stamp">SignalTrace export API<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }

@@ -20,6 +20,7 @@ require_once __DIR__ . '/slides_lib.php';
 define('DEFAULT_DWELL', cfg('slides.DEFAULT_DWELL', 12));
 define('SHUFFLE', cfg('slides.SHUFFLE', false));
 define('FIT', cfg('slides.FIT', 'contain'));
+define('SHOW_CLOCK', cfg('slides.SHOW_CLOCK', true));
 define('TIMEZONE', slides_timezone());
 
 date_default_timezone_set(TIMEZONE);
@@ -58,14 +59,16 @@ if (isset($_GET['slide'])) {
         && is_array($slide)
         && empty($slide['off'])
         && slide_schedule_active($slide, $now);
-    $caption = is_array($slide) ? trim((string)($slide['caption'] ?? '')) : '';
+    $pageTitle = is_array($slide) && trim((string)($slide['caption'] ?? '')) !== ''
+        ? trim((string)$slide['caption'])
+        : ($name ?? 'Slide');
     $fit = FIT;
     ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title><?= h($caption !== '' ? $caption : ($name ?? 'Slide')) ?></title>
+<title><?= h($pageTitle) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
@@ -77,11 +80,10 @@ if (isset($_GET['slide'])) {
               height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
   .layer { position:absolute; inset:0; background-position:center; background-repeat:no-repeat;
            background-color:#000; background-size:<?= $fit === 'cover' ? 'cover' : 'contain' ?>; }
-  .caption { position:absolute; left:44px; bottom:36px; z-index:10; font-size:24px;
-             letter-spacing:.5px; color:var(--mist); text-shadow:0 1px 12px rgba(0,0,0,.85); max-width:70%; }
-  #clock { position:absolute; right:44px; bottom:36px; z-index:10;
-           font-family:'Big Shoulders Display'; font-weight:600; font-size:40px; color:var(--snow);
-           opacity:.85; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
+  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:10;
+            display:flex; justify-content:flex-end; align-items:baseline; pointer-events:none; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--snow);
+           opacity:.88; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
@@ -91,9 +93,11 @@ if (isset($_GET['slide'])) {
 <body>
 <?php if ($active): ?>
   <div class="layer" style="background-image:url('?img=<?= rawurlencode((string)$name) ?>')"></div>
-  <?php if ($caption !== ''): ?><div class="caption"><?= h($caption) ?></div><?php endif; ?>
-  <div id="clock">--:--</div>
+  <?php if (SHOW_CLOCK): ?>
+  <div class="chrome"><div id="clock">--:--</div></div>
+  <?php endif; ?>
   <script>
+    <?php if (SHOW_CLOCK): ?>
     function tick() {
       const n = new Date();
       let h = n.getHours();
@@ -104,6 +108,7 @@ if (isset($_GET['slide'])) {
     }
     tick();
     setInterval(tick, 1000);
+    <?php endif; ?>
     setTimeout(function () { location.reload(); }, 5 * 60 * 1000);
   </script>
 <?php else: ?>
@@ -125,9 +130,8 @@ if (SHUFFLE) {
 }
 
 $playlist = array_map(fn($s) => [
-    'file'    => $s['file'],
-    'caption' => (string)($s['caption'] ?? ''),
-    'dwell'   => slide_dwell($s, DEFAULT_DWELL),
+    'file'  => $s['file'],
+    'dwell' => slide_dwell($s, DEFAULT_DWELL),
 ], $entries);
 ?>
 <!DOCTYPE html>
@@ -149,11 +153,10 @@ $playlist = array_map(fn($s) => [
            background-size:<?= FIT === 'cover' ? 'cover' : 'contain' ?>; }
   .layer.show { opacity:1; }
   @media (prefers-reduced-motion: reduce) { .layer { transition:none; } }
-  .caption { position:absolute; left:44px; bottom:36px; z-index:10; font-size:24px;
-             letter-spacing:.5px; color:var(--mist); text-shadow:0 1px 12px rgba(0,0,0,.85); max-width:70%; }
-  #clock { position:absolute; right:44px; bottom:36px; z-index:10;
-           font-family:'Big Shoulders Display'; font-weight:600; font-size:40px; color:var(--snow);
-           opacity:.85; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
+  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:10;
+            display:flex; justify-content:flex-end; align-items:baseline; pointer-events:none; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--snow);
+           opacity:.88; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
@@ -171,12 +174,10 @@ $playlist = array_map(fn($s) => [
 <?php else: ?>
   <div class="layer" id="layerA"></div>
   <div class="layer" id="layerB"></div>
-  <div class="caption" id="caption"></div>
-  <div id="clock">--:--</div>
+  <?php if (SHOW_CLOCK): ?><div class="chrome"><div id="clock">--:--</div></div><?php endif; ?>
   <script>
     const SLIDES = <?= json_encode(array_values($playlist)) ?>;
     const layers = [document.getElementById('layerA'), document.getElementById('layerB')];
-    const cap = document.getElementById('caption');
     let idx = 0, front = 0, timer = null;
 
     function imgUrl(file) { return '?img=' + encodeURIComponent(file); }
@@ -198,13 +199,13 @@ $playlist = array_map(fn($s) => [
       layers[back].classList.add('show');
       layers[front].classList.remove('show');
       front = back;
-      cap.textContent = slide.caption || '';
       clearTimeout(timer);
       timer = setTimeout(showNext, slide.dwell * 1000);
     }
 
     showNext();
 
+    <?php if (SHOW_CLOCK): ?>
     function tick() {
       const n = new Date();
       let h = n.getHours();
@@ -215,6 +216,7 @@ $playlist = array_map(fn($s) => [
     }
     tick();
     setInterval(tick, 1000);
+    <?php endif; ?>
 
     // Reload periodically so schedule boundaries (midnight, hours, birthdays) pick up
     setTimeout(function () { location.reload(); }, 5 * 60 * 1000);
