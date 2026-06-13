@@ -901,6 +901,13 @@ function admin_field(array $f, $val, string $board): void
   .bg-pick input:focus-visible + .bg-swatch { outline:2px solid var(--beacon); outline-offset:2px; }
   .bg-swatch span { position:absolute; left:8px; bottom:6px; z-index:1; font-size:11px; color:#edf2fb;
                      text-shadow:0 1px 4px rgba(0,0,0,.8); letter-spacing:.3px; font-weight:500; }
+  .bg-swatch.photo::after { content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(180deg, rgba(12,20,34,.72) 0%, rgba(12,20,34,.28) 42%, rgba(12,20,34,.68) 100%); }
+  .bg-section { margin-top:18px; }
+  .bg-section:first-child { margin-top:8px; }
+  .bg-section-title { font-size:12px; letter-spacing:.55px; text-transform:uppercase; color:var(--mist);
+                      margin-bottom:10px; }
+  .bg-section-help { font-size:12px; color:var(--mist); margin:-4px 0 10px; line-height:1.45; }
   .seg-control { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-top:8px; }
   .seg-control label { display:flex; margin:0; cursor:pointer; }
   .seg-control input { position:absolute; opacity:0; pointer-events:none; }
@@ -1074,7 +1081,7 @@ function admin_field(array $f, $val, string $board): void
 
           <div class="creator-box">
             <h3>Create a text slide</h3>
-            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. Occasion templates include themed artwork (balloons, snowflakes, etc.). The slide saves as a PNG and joins the deck on the <strong>Always</strong> schedule — adjust timing in the table below.</p>
+            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. <strong>Photo scenes</strong> use real photography (dimmed like Canva); <strong>Theme colors</strong> are the original gradients. Occasion templates add artwork and usually pick a matching photo. Saves as PNG on the <strong>Always</strong> schedule — adjust timing in the table below.</p>
             <div class="creator-layout">
               <div class="creator-preview-block">
                 <div class="preview-head">
@@ -1098,17 +1105,36 @@ function admin_field(array $f, $val, string $board): void
                 <div class="creator-editor">
                   <div class="field-block span-full">
                     <label class="l">Background</label>
-                    <div class="bg-pick" id="bgPick">
-                      <?php foreach (slide_background_presets() as $id => $preset):
-                        $bgUrl = slide_background_url($id); ?>
-                        <label title="<?= h($preset['label']) ?>">
-                          <input type="radio" name="creator_bg" value="<?= h($id) ?>" <?= $id === 'lake_night' ? 'checked' : '' ?>>
-                          <div class="bg-swatch" data-bg="<?= h($id) ?>">
-                            <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
-                            <span><?= h($preset['label']) ?></span>
-                          </div>
-                        </label>
-                      <?php endforeach; ?>
+                    <div class="bg-section">
+                      <div class="bg-section-title">Photo scenes</div>
+                      <div class="bg-section-help">Real photography from Unsplash, dimmed so your text stays readable — like Canva.</div>
+                      <div class="bg-pick" id="bgPickPhoto">
+                        <?php foreach (slide_photo_background_presets() as $id => $preset):
+                          $bgUrl = slide_background_url($id); ?>
+                          <label title="<?= h($preset['label']) ?>">
+                            <input type="radio" name="creator_bg" value="<?= h($id) ?>">
+                            <div class="bg-swatch photo" data-bg="<?= h($id) ?>">
+                              <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
+                              <span><?= h($preset['label']) ?></span>
+                            </div>
+                          </label>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+                    <div class="bg-section">
+                      <div class="bg-section-title">Theme colors</div>
+                      <div class="bg-pick" id="bgPickTheme">
+                        <?php foreach (slide_theme_background_presets() as $id => $preset):
+                          $bgUrl = slide_background_url($id); ?>
+                          <label title="<?= h($preset['label']) ?>">
+                            <input type="radio" name="creator_bg" value="<?= h($id) ?>" <?= $id === 'lake_night' ? 'checked' : '' ?>>
+                            <div class="bg-swatch" data-bg="<?= h($id) ?>">
+                              <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
+                              <span><?= h($preset['label']) ?></span>
+                            </div>
+                          </label>
+                        <?php endforeach; ?>
+                      </div>
                     </div>
                   </div>
 
@@ -2420,6 +2446,9 @@ function addVideoCard() {
     $bgJs = slide_background_presets();
     foreach ($bgJs as $id => &$bp) {
         $bp['url'] = slide_background_url($id);
+        if (slide_background_is_photo($bp)) {
+            $bp['kind'] = 'photo';
+        }
     }
     unset($bp);
     echo json_encode($bgJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
@@ -2464,8 +2493,44 @@ function addVideoCard() {
     return g;
   }
 
+  function drawImageCover(c, img, w, h) {
+    const ir = img.width / img.height;
+    const cr = w / h;
+    let sw, sh, sx, sy;
+    if (ir > cr) {
+      sh = img.height;
+      sw = sh * cr;
+      sx = (img.width - sw) / 2;
+      sy = 0;
+    } else {
+      sw = img.width;
+      sh = sw / cr;
+      sx = 0;
+      sy = (img.height - sh) / 2;
+    }
+    c.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  }
+
+  function drawPhotoOverlay(c, preset) {
+    const ov = preset.overlay || {};
+    if (ov.gradient) {
+      c.fillStyle = ov.gradient.type === 'radial' ? radialGradient(c, ov.gradient) : linearGradient(c, ov.gradient);
+      c.fillRect(0, 0, W, H);
+    }
+    if (ov.base) {
+      c.fillStyle = 'rgba(12, 20, 34, ' + ov.base + ')';
+      c.fillRect(0, 0, W, H);
+    }
+  }
+
   function drawBackground(c, preset) {
-    if (preset.url && bgImageCache[preset.url]) {
+    const isPhoto = preset.kind === 'photo' || !!preset.photo;
+    if (isPhoto && preset.url && bgImageCache[preset.url]) {
+      drawImageCover(c, bgImageCache[preset.url], W, H);
+      drawPhotoOverlay(c, preset);
+      return;
+    }
+    if (preset.url && bgImageCache[preset.url] && !isPhoto) {
       c.drawImage(bgImageCache[preset.url], 0, 0, W, H);
       return;
     }

@@ -197,7 +197,7 @@ setup_directories() {
   mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/cache/yt-dlp/deno"
 
   # slide_backgrounds/ ships in git; ensure it exists and is readable
-  mkdir -p "$WEBROOT/slide_backgrounds"
+  mkdir -p "$WEBROOT/slide_backgrounds" "$WEBROOT/slide_backgrounds/photos"
 
   log "Setting ownership ($WEB_USER) on writable paths"
   chown -R "$WEB_USER:$WEB_USER" \

@@ -77,10 +77,9 @@ function slide_unique_filename(string $base, string $ext, ?string $dir = null): 
 }
 
 /**
- * Predefined slide backgrounds for the admin slide creator (rendered client-side).
- * Each preset: label, text colors, optional accent, and bg spec for canvas.
+ * Gradient / color theme backgrounds for the slide creator.
  */
-function slide_background_presets(): array
+function slide_theme_background_presets(): array
 {
     return [
         'lake_night' => [
@@ -249,6 +248,124 @@ function slide_background_presets(): array
     ];
 }
 
+/** Default vignette overlay so photo backgrounds stay readable with text on top. */
+function slide_photo_overlay_vignette(float $top = 0.74, float $mid = 0.38, float $bottom = 0.8): array
+{
+    return [
+        'gradient' => ['type' => 'linear', 'angle' => 180, 'stops' => [
+            [0, 'rgba(12,20,34,' . $top . ')'],
+            [0.36, 'rgba(12,20,34,' . $mid . ')'],
+            [0.64, 'rgba(12,20,34,' . $mid . ')'],
+            [1, 'rgba(12,20,34,' . $bottom . ')'],
+        ]],
+    ];
+}
+
+/**
+ * Photo scene backgrounds (Unsplash + Pexels — see slide_backgrounds/photos/CREDITS.md).
+ * Rendered client-side: cover-fit photo + dim vignette, then text.
+ */
+function slide_photo_background_presets(): array
+{
+    $textDark = [
+        'title' => '#edf2fb',
+        'subtitle' => '#ffb347',
+        'body' => '#c8d4e8',
+        'footer' => '#8aa0c0',
+    ];
+
+    return [
+        'photo_lake_dusk' => array_merge($textDark, [
+            'label' => 'Lake at dusk',
+            'kind' => 'photo',
+            'photo' => 'photos/lake_dusk.jpg',
+            'overlay' => slide_photo_overlay_vignette(),
+        ]),
+        'photo_misty_forest' => array_merge($textDark, [
+            'label' => 'Misty forest',
+            'kind' => 'photo',
+            'photo' => 'photos/misty_forest.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.78, 0.42, 0.84),
+        ]),
+        'photo_ocean_sunset' => array_merge($textDark, [
+            'label' => 'Ocean sunset',
+            'kind' => 'photo',
+            'photo' => 'photos/ocean_sunset.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.7, 0.32, 0.76),
+        ]),
+        'photo_city_night' => array_merge($textDark, [
+            'label' => 'City at night',
+            'kind' => 'photo',
+            'photo' => 'photos/city_night.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.8, 0.45, 0.88),
+        ]),
+        'photo_cozy_home' => array_merge($textDark, [
+            'label' => 'Cozy home',
+            'kind' => 'photo',
+            'photo' => 'photos/cozy_home.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.72, 0.4, 0.78),
+        ]),
+        'photo_wildflowers' => array_merge($textDark, [
+            'label' => 'Wildflowers',
+            'kind' => 'photo',
+            'photo' => 'photos/wildflowers.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.68, 0.34, 0.72),
+            'subtitle' => '#ffd089',
+        ]),
+        'photo_celebration' => array_merge($textDark, [
+            'label' => 'Celebration',
+            'kind' => 'photo',
+            'photo' => 'photos/celebration.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.76, 0.44, 0.8),
+            'subtitle' => '#ff9d9d',
+        ]),
+        'photo_winter_trees' => array_merge($textDark, [
+            'label' => 'Winter woods',
+            'kind' => 'photo',
+            'photo' => 'photos/winter_trees.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.62, 0.28, 0.7),
+        ]),
+        'photo_romantic_dinner' => array_merge($textDark, [
+            'label' => 'Candlelit dinner',
+            'kind' => 'photo',
+            'photo' => 'photos/romantic_dinner.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.82, 0.5, 0.86),
+            'subtitle' => '#ffd089',
+        ]),
+        'photo_nursery' => array_merge($textDark, [
+            'label' => 'Soft nursery',
+            'kind' => 'photo',
+            'photo' => 'photos/nursery.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.58, 0.26, 0.66),
+            'subtitle' => '#ff8fc7',
+        ]),
+        'photo_stadium' => array_merge($textDark, [
+            'label' => 'Stadium crowd',
+            'kind' => 'photo',
+            'photo' => 'photos/stadium.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.8, 0.48, 0.86),
+            'subtitle' => '#7ec8ff',
+        ]),
+        'photo_mountain_sun' => array_merge($textDark, [
+            'label' => 'Mountain sunrise',
+            'kind' => 'photo',
+            'photo' => 'photos/mountain_sun.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.66, 0.3, 0.74),
+        ]),
+    ];
+}
+
+/** All slide creator backgrounds (themes + photo scenes). */
+function slide_background_presets(): array
+{
+    return slide_theme_background_presets() + slide_photo_background_presets();
+}
+
+function slide_background_is_photo(array $preset): bool
+{
+    return !empty($preset['photo']) || (($preset['kind'] ?? '') === 'photo');
+}
+
 /**
  * Occasion starters for the admin slide creator — prefills text, background, alignment, and artwork.
  * Bracketed tokens like [Name] are meant to be replaced before saving.
@@ -276,7 +393,7 @@ function slide_creator_templates(): array
     return [
         'birthday' => [
             'label' => 'Birthday',
-            'bg' => 'celebration',
+            'bg' => 'photo_celebration',
             'align' => 'center',
             'decor' => 'birthday',
             'title' => 'Happy Birthday, [Name]!',
@@ -287,7 +404,7 @@ function slide_creator_templates(): array
         ],
         'anniversary' => [
             'label' => 'Anniversary',
-            'bg' => 'golden_hour',
+            'bg' => 'photo_romantic_dinner',
             'align' => 'center',
             'decor' => 'anniversary',
             'title' => 'Happy Anniversary',
@@ -298,7 +415,7 @@ function slide_creator_templates(): array
         ],
         'welcome_home' => [
             'label' => 'Welcome home',
-            'bg' => 'harbor_glow',
+            'bg' => 'photo_cozy_home',
             'align' => 'center',
             'decor' => 'welcome_home',
             'title' => 'Welcome Home, [Name]!',
@@ -309,7 +426,7 @@ function slide_creator_templates(): array
         ],
         'congrats' => [
             'label' => 'Congratulations',
-            'bg' => 'sky_glow',
+            'bg' => 'photo_mountain_sun',
             'align' => 'center',
             'decor' => 'congrats',
             'title' => 'Congratulations, [Name]!',
@@ -320,7 +437,7 @@ function slide_creator_templates(): array
         ],
         'party' => [
             'label' => 'Party invite',
-            'bg' => 'coral',
+            'bg' => 'photo_celebration',
             'align' => 'center',
             'decor' => 'party',
             'title' => "You're Invited!",
@@ -331,7 +448,7 @@ function slide_creator_templates(): array
         ],
         'holiday' => [
             'label' => 'Holiday',
-            'bg' => 'frost',
+            'bg' => 'photo_winter_trees',
             'align' => 'center',
             'decor' => 'holiday',
             'title' => 'Happy Holidays',
@@ -342,7 +459,7 @@ function slide_creator_templates(): array
         ],
         'new_baby' => [
             'label' => 'New baby',
-            'bg' => 'rose',
+            'bg' => 'photo_nursery',
             'align' => 'center',
             'decor' => 'new_baby',
             'title' => 'Welcome, [Name]!',
@@ -353,7 +470,7 @@ function slide_creator_templates(): array
         ],
         'thank_you' => [
             'label' => 'Thank you',
-            'bg' => 'seafoam',
+            'bg' => 'photo_wildflowers',
             'align' => 'center',
             'decor' => 'thank_you',
             'title' => 'Thank You, [Name]',
@@ -364,7 +481,7 @@ function slide_creator_templates(): array
         ],
         'graduation' => [
             'label' => 'Graduation',
-            'bg' => 'sky_glow',
+            'bg' => 'photo_mountain_sun',
             'align' => 'center',
             'decor' => 'graduation',
             'title' => 'Congratulations, [Name]!',
@@ -375,7 +492,7 @@ function slide_creator_templates(): array
         ],
         'get_well' => [
             'label' => 'Get well',
-            'bg' => 'seafoam',
+            'bg' => 'photo_wildflowers',
             'align' => 'center',
             'decor' => 'get_well',
             'title' => 'Get Well Soon, [Name]',
@@ -386,7 +503,7 @@ function slide_creator_templates(): array
         ],
         'game_day' => [
             'label' => 'Game day',
-            'bg' => 'ember',
+            'bg' => 'photo_stadium',
             'align' => 'center',
             'decor' => 'game_day',
             'title' => 'Game Day!',
@@ -414,15 +531,23 @@ function slide_backgrounds_dir(): string
     return __DIR__ . '/slide_backgrounds';
 }
 
-/** Web path to a preset thumbnail / full background PNG. */
+/** Web path to a preset image (theme PNG or photo JPEG). */
 function slide_background_url(string $presetId): ?string
 {
     $presets = slide_background_presets();
-    if (!isset($presets[$presetId]['thumb'])) {
+    if (!isset($presets[$presetId])) {
         return null;
     }
-    $file = slide_backgrounds_dir() . '/' . $presets[$presetId]['thumb'];
-    return is_file($file) ? 'slide_backgrounds/' . $presets[$presetId]['thumb'] : null;
+    $preset = $presets[$presetId];
+    if (!empty($preset['photo'])) {
+        $file = slide_backgrounds_dir() . '/' . $preset['photo'];
+        return is_file($file) ? 'slide_backgrounds/' . $preset['photo'] : null;
+    }
+    if (!isset($preset['thumb'])) {
+        return null;
+    }
+    $file = slide_backgrounds_dir() . '/' . $preset['thumb'];
+    return is_file($file) ? 'slide_backgrounds/' . $preset['thumb'] : null;
 }
 
 function slide_hex_rgb(string $hex): array
@@ -556,7 +681,7 @@ function slide_background_ensure_assets(): void
     if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
         return;
     }
-    foreach (slide_background_presets() as $id => $preset) {
+    foreach (slide_theme_background_presets() as $id => $preset) {
         $name = $preset['thumb'] ?? ($id . '.png');
         $path = $dir . '/' . $name;
         if (is_file($path)) {
