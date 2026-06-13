@@ -361,6 +361,7 @@ if ($authed && $board === 'slides' && csrf_ok()) {
 
 // ── Video board: YouTube fetch / yt-dlp upkeep ──────────────────────────────
 $videoFetchLog = null;
+$videoMaintOpen = ($board === 'video');
 if ($authed && $board === 'video' && csrf_ok()) {
     $videoDir = video_dir();
     if (!is_dir($videoDir)) {
@@ -377,6 +378,7 @@ if ($authed && $board === 'video' && csrf_ok()) {
         } else {
             $flash = 'Download finished with errors — see log below.'; $flashOk = false;
         }
+        $videoMaintOpen = true;
     }
 
     if (($_POST['action'] ?? '') === 'video_fetch_one') {
@@ -389,6 +391,7 @@ if ($authed && $board === 'video' && csrf_ok()) {
         } else {
             $flash = 'Download failed for "' . $fetchKey . '" — see log below.'; $flashOk = false;
         }
+        $videoMaintOpen = true;
     }
 
     if (($_POST['action'] ?? '') === 'ytdlp_update') {
@@ -399,11 +402,35 @@ if ($authed && $board === 'video' && csrf_ok()) {
         } else {
             $flash = $result['message']; $flashOk = false;
         }
+        $videoMaintOpen = true;
     }
 
     if (($_POST['action'] ?? '') === 'ytdlp_refresh') {
         video_ytdlp_latest_release(true);
-        $flash = 'Checked GitHub for the latest yt-dlp release.';
+        video_deno_latest_release(true);
+        $flash = 'Checked GitHub for the latest yt-dlp and deno releases.';
+        $videoMaintOpen = true;
+    }
+
+    if (($_POST['action'] ?? '') === 'deno_update') {
+        $result = video_deno_update();
+        $videoFetchLog = implode("\n", $result['lines']);
+        if ($result['ok']) {
+            $flash = $result['message'];
+        } else {
+            $flash = $result['message']; $flashOk = false;
+        }
+        $videoMaintOpen = true;
+    }
+
+    if (($_POST['action'] ?? '') === 'upload_youtube_cookies' && isset($_FILES['youtube_cookies'])) {
+        $result = video_ytdlp_save_cookies_upload($_FILES['youtube_cookies']);
+        if ($result['ok']) {
+            $flash = $result['message'];
+        } else {
+            $flash = $result['message']; $flashOk = false;
+        }
+        $videoMaintOpen = true;
     }
 }
 
@@ -458,9 +485,11 @@ function current_val(array $rawConf, string $board, string $key)
 }
 $tools = ($_GET['board'] ?? '') === 'tools';
 $videoYtdlpStatus = null;
+$videoDenoStatus = null;
 $videoStatuses = [];
 if ($authed && $board === 'video') {
     $videoYtdlpStatus = video_ytdlp_status();
+    $videoDenoStatus = video_deno_status();
     $videoYtdlpSupport = video_ytdlp_support_status();
     foreach (video_registry() as $k => $v) {
         $videoStatuses[] = video_entry_status($k, $v);
@@ -969,11 +998,11 @@ function admin_field(array $f, $val, string $board): void
           <div class="help">Large downloads may take several minutes — keep this tab open.</div>
         </div>
 
-        <details class="panel-muted" style="margin-top:16px;border:1px solid var(--line);border-radius:10px">
+        <details class="panel-muted" style="margin-top:16px;border:1px solid var(--line);border-radius:10px"<?= ($videoMaintOpen ?? false) ? ' open' : '' ?>>
           <summary>yt-dlp maintenance</summary>
           <div style="padding:12px 16px 16px">
             <div class="video-meta">
-              <div>Installed:
+              <div>yt-dlp installed:
                 <?php if ($videoYtdlpStatus['stub'] ?? false): ?>
                   <span class="pill bad">Broken stub</span>
                   <span class="help"> — pip/pipx launcher copied into bin/; click Update yt-dlp</span>
@@ -983,7 +1012,7 @@ function admin_field(array $f, $val, string $board): void
                   <span class="pill bad">Not found</span>
                 <?php endif; ?>
               </div>
-              <div>Latest:
+              <div>yt-dlp latest:
                 <?php if ($videoYtdlpStatus['latest']): ?>
                   <strong><?= h($videoYtdlpStatus['latest']) ?></strong>
                   <?php if ($videoYtdlpStatus['outdated'] === true): ?>
@@ -997,18 +1026,34 @@ function admin_field(array $f, $val, string $board): void
                   <span class="help">Unknown</span>
                 <?php endif; ?>
               </div>
-              <div>Deno (JS runtime):
-                <?php if ($videoYtdlpSupport['deno_ok'] ?? false): ?>
-                  <span class="pill ok"><?= h($videoYtdlpSupport['deno_version'] ?? 'installed') ?></span>
-                  <?php if (!empty($videoYtdlpSupport['deno_path'])): ?>
-                    <code><?= h($videoYtdlpSupport['deno_path']) ?></code>
+              <div>Deno installed:
+                <?php if ($videoDenoStatus['installed'] ?? false): ?>
+                  <strong><?= h($videoDenoStatus['installed']) ?></strong>
+                  <?php if (!empty($videoDenoStatus['path'])): ?>
+                    <code><?= h($videoDenoStatus['path']) ?></code>
+                    <?php if ($videoDenoStatus['system'] ?? false): ?>
+                      <span class="help">(system)</span>
+                    <?php endif; ?>
                   <?php endif; ?>
-                <?php elseif ($videoYtdlpSupport['deno'] ?? false): ?>
-                  <span class="pill warn">too old</span>
-                  <span class="help"> — need <?= h(video_ytdlp_deno_min_version()) ?>+ (have <?= h($videoYtdlpSupport['deno_version'] ?? '?') ?>); upgrade deno</span>
+                  <?php if ($videoDenoStatus['installed'] && !($videoYtdlpSupport['deno_ok'] ?? false)): ?>
+                    <span class="pill warn">below <?= h(video_ytdlp_deno_min_version()) ?></span>
+                  <?php endif; ?>
                 <?php else: ?>
                   <span class="pill warn">missing</span>
-                  — run <code>setup-server.sh</code> or install to <code>/usr/local/bin/deno</code>
+                <?php endif; ?>
+              </div>
+              <div>Deno latest:
+                <?php if ($videoDenoStatus['latest'] ?? false): ?>
+                  <strong><?= h($videoDenoStatus['latest']) ?></strong>
+                  <?php if ($videoDenoStatus['outdated'] === true): ?>
+                    <span class="pill warn">Update available</span>
+                  <?php elseif ($videoDenoStatus['outdated'] === false): ?>
+                    <span class="pill ok">Up to date</span>
+                  <?php endif; ?>
+                <?php elseif ($videoDenoStatus['latest_error'] ?? false): ?>
+                  <span class="help"><?= h($videoDenoStatus['latest_error']) ?></span>
+                <?php else: ?>
+                  <span class="help">Unknown — click Check versions</span>
                 <?php endif; ?>
               </div>
               <div>YouTube cookies:
@@ -1017,20 +1062,24 @@ function admin_field(array $f, $val, string $board): void
                   (<?= number_format((int)($videoYtdlpSupport['cookies_bytes'] ?? 0)) ?> bytes)
                 <?php else: ?>
                   <span class="pill bad">missing</span>
-                  — export to <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>
                 <?php endif; ?>
+                — <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>
               </div>
             </div>
+            <form method="post" enctype="multipart/form-data" class="upload-row" style="margin-top:12px" action="?board=video">
+              <input type="hidden" name="action" value="upload_youtube_cookies">
+              <input type="hidden" name="board" value="video">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="file" name="youtube_cookies" accept=".txt,text/plain" required>
+              <button class="secondary" type="submit">Upload cookies.txt</button>
+            </form>
             <div class="help" style="margin-top:10px">YouTube often blocks headless servers (“Sign in to confirm you’re not a bot”).
-              On <strong>Mac + Chrome</strong>, <code>yt-dlp --cookies-from-browser</code> usually does not export usable auth cookies — use the
-              <strong>Get cookies.txt LOCALLY</strong> extension on youtube.com instead. Then on your Mac:
-              <code>brew install deno && yt-dlp -U</code>, test with
+              Export from youtube.com while signed in using <strong>Get cookies.txt LOCALLY</strong>, test on your Mac with
               <code>yt-dlp --js-runtimes deno --remote-components ejs:github --cookies cookies.txt -F URL</code>
-              — you need real video formats (720p/1080p), not just <code>sb0</code> storyboards.
-              Upload to <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>, or use a <strong>local file</strong> in the video row.</div>
-            <div class="help" style="margin-top:8px">Admin updates download the verified GitHub release to <code>bin/yt-dlp</code>
-              (~3&nbsp;MB standalone script for <code>www-data</code>, not the pipx launcher). From SSH as root:
-              <code>sudo php video.php fetch</code> after updating.</div>
+              (need 720p/1080p rows), then upload above — or use a <strong>local file</strong> in the video row.</div>
+            <div class="help" style="margin-top:8px">Admin updates download verified releases to <code>bin/yt-dlp</code> and can install
+              <code>bin/deno</code> when no system copy exists. System deno at <code>/usr/local/bin/deno</code> requires SSH:
+              <code>curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh</code></div>
             <div class="inline-actions">
               <form method="post" action="?board=video">
                 <input type="hidden" name="action" value="ytdlp_update">
@@ -1039,10 +1088,16 @@ function admin_field(array $f, $val, string $board): void
                 <button class="secondary" type="submit">Update yt-dlp</button>
               </form>
               <form method="post" action="?board=video">
+                <input type="hidden" name="action" value="deno_update">
+                <input type="hidden" name="board" value="video">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button class="secondary" type="submit">Update deno</button>
+              </form>
+              <form method="post" action="?board=video">
                 <input type="hidden" name="action" value="ytdlp_refresh">
                 <input type="hidden" name="board" value="video">
                 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <button class="secondary" type="submit">Check version</button>
+                <button class="secondary" type="submit">Check versions</button>
               </form>
             </div>
           </div>

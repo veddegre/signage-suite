@@ -10,6 +10,9 @@ videos/
 # Local yt-dlp copy installed from admin
 bin/yt-dlp
 bin/yt-dlp.new
+bin/deno
+bin/deno.new
+bin/deno.zip.new
 
 # Uploaded custom slide images
 slides/

@@ -142,8 +142,8 @@ function video_ytdlp_bin(): ?string
     return null;
 }
 
-/** Resolved path to optional Netscape-format YouTube cookies, or null if unset/missing. */
-function video_ytdlp_cookies_path(): ?string
+/** Configured cookies path (absolute), whether or not the file exists yet. */
+function video_ytdlp_cookies_configured_path(): string
 {
     $raw = trim((string)cfg('video.YTDLP_COOKIES_FILE', ''));
     if ($raw === '') {
@@ -152,12 +152,151 @@ function video_ytdlp_cookies_path(): ?string
     if ($raw[0] !== '/') {
         $raw = __DIR__ . '/' . ltrim($raw, '/');
     }
+    return $raw;
+}
+
+/** Resolved path to optional Netscape-format YouTube cookies, or null if unset/missing. */
+function video_ytdlp_cookies_path(): ?string
+{
+    $raw = video_ytdlp_cookies_configured_path();
     return is_file($raw) && is_readable($raw) ? $raw : null;
+}
+
+function video_ytdlp_cookies_upload_allowed(string $path): bool
+{
+    $base = realpath(__DIR__ . '/config/cookies');
+    if ($base === false) {
+        $base = __DIR__ . '/config/cookies';
+    }
+    $dir = dirname($path);
+    $realDir = realpath($dir);
+    if ($realDir !== false) {
+        return str_starts_with($realDir, $base);
+    }
+    $normDir = str_replace('\\', '/', $dir);
+    $normBase = str_replace('\\', '/', $base);
+    return str_starts_with($normDir, $normBase);
+}
+
+/** @return string|null Error message, or null if content looks valid. */
+function video_ytdlp_validate_cookies_content(string $content): ?string
+{
+    if ($content === '') {
+        return 'File is empty.';
+    }
+    if (strlen($content) > 256 * 1024) {
+        return 'File is too large (max 256 KB).';
+    }
+    if (str_contains($content, "\0")) {
+        return 'Invalid file content.';
+    }
+    $hasCookieLine = false;
+    $hasYoutube = false;
+    foreach (preg_split('/\r\n|\n|\r/', $content) as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+        $parts = explode("\t", $line);
+        if (count($parts) < 7) {
+            continue;
+        }
+        $hasCookieLine = true;
+        if (str_contains($parts[0], 'youtube.com')) {
+            $hasYoutube = true;
+        }
+    }
+    if (!$hasCookieLine) {
+        return 'Not a Netscape cookies.txt file (expected tab-separated lines).';
+    }
+    if (!$hasYoutube) {
+        return 'No .youtube.com cookies found — export from youtube.com while signed in.';
+    }
+    return null;
+}
+
+/**
+ * Save an uploaded Netscape cookies.txt for YouTube.
+ * @param array<string,mixed> $file $_FILES entry
+ * @return array{ok:bool,message:string,bytes:int}
+ */
+function video_ytdlp_save_cookies_upload(array $file): array
+{
+    $fail = static function (string $message): array {
+        return ['ok' => false, 'message' => $message, 'bytes' => 0];
+    };
+
+    $err = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($err === UPLOAD_ERR_NO_FILE) {
+        return $fail('Choose a cookies.txt file to upload.');
+    }
+    if ($err !== UPLOAD_ERR_OK) {
+        return $fail('Upload failed (error ' . $err . ').');
+    }
+    $tmp = (string)($file['tmp_name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        return $fail('Invalid upload.');
+    }
+
+    $target = video_ytdlp_cookies_configured_path();
+    if (!video_ytdlp_cookies_upload_allowed($target)) {
+        return $fail('Configured cookies path is outside config/cookies/ — upload blocked.');
+    }
+
+    $content = @file_get_contents($tmp);
+    if (!is_string($content)) {
+        return $fail('Could not read uploaded file.');
+    }
+    $validation = video_ytdlp_validate_cookies_content($content);
+    if ($validation !== null) {
+        return $fail($validation);
+    }
+
+    $dir = dirname($target);
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        return $fail('Could not create cookies directory.');
+    }
+    if (!is_writable($dir)) {
+        return $fail('Cookies directory is not writable.');
+    }
+
+    $staging = $target . '.new';
+    if (@file_put_contents($staging, $content, LOCK_EX) === false) {
+        @unlink($staging);
+        return $fail('Could not write cookies file.');
+    }
+    @chmod($staging, 0640);
+    if (!@rename($staging, $target)) {
+        @unlink($staging);
+        return $fail('Could not replace cookies file.');
+    }
+    @chmod($target, 0640);
+
+    $bytes = filesize($target);
+    return [
+        'ok' => true,
+        'message' => 'Uploaded cookies to ' . basename($target)
+            . ' (' . number_format($bytes !== false ? (int)$bytes : 0) . ' bytes).',
+        'bytes' => $bytes !== false ? (int)$bytes : 0,
+    ];
+}
+
+function video_deno_local_bin_path(): string
+{
+    return __DIR__ . '/bin/deno';
 }
 
 /** Find deno/node for www-data (Apache PATH often omits /usr/local/bin). */
 function video_ytdlp_find_executable(string $name): ?string
 {
+    if ($name === 'deno') {
+        foreach (['/usr/local/bin/deno', '/usr/bin/deno', video_deno_local_bin_path()] as $p) {
+            if (is_executable($p)) {
+                return $p;
+            }
+        }
+        return null;
+    }
     $which = trim((string)@shell_exec('command -v ' . escapeshellarg($name) . ' 2>/dev/null'));
     if ($which !== '' && is_executable($which)) {
         return $which;
@@ -304,18 +443,24 @@ function video_ytdlp_version(?string $bin = null): ?string
     return $v !== '' ? $v : null;
 }
 
+function video_github_asset_url_allowed(string $url): bool
+{
+    return str_starts_with($url, 'https://github.com/yt-dlp/yt-dlp/releases/download/')
+        || str_starts_with($url, 'https://github.com/denoland/deno/releases/download/');
+}
+
 function video_github_release_url_allowed(string $url): bool
 {
-    return str_starts_with($url, 'https://github.com/yt-dlp/yt-dlp/releases/download/');
+    return video_github_asset_url_allowed($url);
 }
 
 /**
- * Fetch a pinned yt-dlp GitHub release asset (follows redirects to githubusercontent.com).
+ * Fetch a pinned GitHub release asset (follows redirects to githubusercontent.com).
  * @return array{data:?string,http:int,error:?string}
  */
 function video_http_get_github_release(string $url, int $timeout = 120): array
 {
-    if (!video_github_release_url_allowed($url)) {
+    if (!video_github_asset_url_allowed($url)) {
         return ['data' => null, 'http' => 0, 'error' => 'untrusted URL'];
     }
     $policy = signage_fetch_url_allowed($url, false);
@@ -464,6 +609,318 @@ function video_ytdlp_is_outdated(?string $local = null, ?string $latest = null):
         return null;
     }
     return version_compare($local, $latest, '<');
+}
+
+function video_deno_linux_zip_name(): ?string
+{
+    $arch = trim((string)@shell_exec('uname -m 2>/dev/null'));
+    return match ($arch) {
+        'x86_64', 'amd64' => 'deno-x86_64-unknown-linux-gnu.zip',
+        'aarch64', 'arm64' => 'deno-aarch64-unknown-linux-gnu.zip',
+        default => null,
+    };
+}
+
+/** @return array{version:?string,checked_at:int,error:?string,zip_url:?string} */
+function video_deno_latest_release(bool $force = false): array
+{
+    $cacheDir = __DIR__ . '/cache';
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0775, true);
+    }
+    $cacheFile = $cacheDir . '/deno-latest.json';
+    $ttl = 6 * 3600;
+    $zipName = video_deno_linux_zip_name();
+
+    if (!$force && is_file($cacheFile)) {
+        $cached = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($cached)
+            && !empty($cached['version'])
+            && (time() - (int)($cached['checked_at'] ?? 0)) < $ttl) {
+            return [
+                'version' => (string)$cached['version'],
+                'checked_at' => (int)$cached['checked_at'],
+                'error' => $cached['error'] ?? null,
+                'zip_url' => $cached['zip_url'] ?? null,
+            ];
+        }
+    }
+
+    $ctx = stream_context_create([
+        'http' => [
+            'timeout' => 12,
+            'header' => "Accept: application/vnd.github+json\r\nUser-Agent: HomeSignage/1.0\r\n",
+        ],
+    ]);
+    $raw = @file_get_contents('https://api.github.com/repos/denoland/deno/releases/latest', false, $ctx);
+    $payload = [
+        'version' => null,
+        'checked_at' => time(),
+        'error' => null,
+        'zip_url' => null,
+    ];
+
+    if ($raw === false) {
+        $payload['error'] = 'Could not reach GitHub for the latest deno release.';
+    } else {
+        $j = json_decode($raw, true);
+        $tag = is_array($j) ? ltrim((string)($j['tag_name'] ?? ''), 'v') : '';
+        if ($tag === '') {
+            $payload['error'] = 'GitHub response did not include a release version.';
+        } else {
+            $payload['version'] = $tag;
+            if ($zipName !== null) {
+                foreach ((array)($j['assets'] ?? []) as $asset) {
+                    if ((string)($asset['name'] ?? '') === $zipName) {
+                        $payload['zip_url'] = (string)($asset['browser_download_url'] ?? '');
+                        break;
+                    }
+                }
+            }
+            if ($payload['zip_url'] === null && $zipName !== null) {
+                $payload['error'] = "Release $tag has no $zipName asset for this CPU.";
+            }
+        }
+    }
+
+    @file_put_contents($cacheFile, json_encode($payload, JSON_UNESCAPED_SLASHES), LOCK_EX);
+    return $payload;
+}
+
+function video_deno_is_outdated(?string $local = null, ?string $latest = null): ?bool
+{
+    $path = video_ytdlp_find_executable('deno');
+    $local = $local ?? video_ytdlp_deno_version($path);
+    if ($local === null) {
+        return null;
+    }
+    if ($latest === null) {
+        $latest = video_deno_latest_release()['version'] ?? null;
+    }
+    if ($latest === null) {
+        return null;
+    }
+    return version_compare($local, $latest, '<');
+}
+
+/**
+ * Download deno release zip into bin/deno (works as www-data when system deno is absent).
+ * @return array{ok:bool,message:string,lines:list<string>,version:?string}
+ */
+function video_deno_install_bin(array $lines = []): array
+{
+    $zipName = video_deno_linux_zip_name();
+    if ($zipName === null) {
+        return [
+            'ok' => false,
+            'message' => 'Unsupported CPU for admin deno install — use setup-server.sh from SSH.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+    if (!class_exists('ZipArchive')) {
+        return [
+            'ok' => false,
+            'message' => 'PHP zip extension missing — install php-zip or upgrade deno via SSH.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+
+    $binDir = __DIR__ . '/bin';
+    if (!is_dir($binDir) && !@mkdir($binDir, 0775, true)) {
+        return [
+            'ok' => false,
+            'message' => 'Could not create bin/ — check webroot permissions.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+
+    $meta = video_deno_latest_release(true);
+    $url = (string)($meta['zip_url'] ?? '');
+    if ($url === '' || !str_starts_with($url, 'https://github.com/denoland/deno/releases/download/')) {
+        return [
+            'ok' => false,
+            'message' => (string)($meta['error'] ?? 'Could not resolve a deno download URL from GitHub.'),
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+
+    $target = video_deno_local_bin_path();
+    $tmpZip = $binDir . '/deno.zip.new';
+    $extractDir = $binDir . '/deno-extract.new';
+    $tmpBin = $target . '.new';
+
+    $dl = video_http_get_github_release($url, 180);
+    $data = $dl['data'];
+    if (!is_string($data) || $data === '') {
+        $detail = $dl['error'] ?? 'unknown error';
+        if (($dl['http'] ?? 0) > 0) {
+            $detail = 'HTTP ' . (int)$dl['http'] . ($detail !== '' ? " — $detail" : '');
+        }
+        $lines[] = "Download failed: $detail";
+        return [
+            'ok' => false,
+            'message' => 'Could not download the deno release zip.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+
+    if (@file_put_contents($tmpZip, $data, LOCK_EX) === false) {
+        @unlink($tmpZip);
+        return [
+            'ok' => false,
+            'message' => 'Could not write deno zip — check bin/ permissions.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($tmpZip) !== true) {
+        @unlink($tmpZip);
+        return [
+            'ok' => false,
+            'message' => 'Downloaded deno zip could not be opened.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+    if (is_dir($extractDir)) {
+        video_deno_rmtree($extractDir);
+    }
+    @mkdir($extractDir, 0775, true);
+    if ($zip->extractTo($extractDir) !== true) {
+        $zip->close();
+        @unlink($tmpZip);
+        video_deno_rmtree($extractDir);
+        return [
+            'ok' => false,
+            'message' => 'Could not extract deno zip.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+    $zip->close();
+    @unlink($tmpZip);
+
+    $extracted = $extractDir . '/deno';
+    if (!is_file($extracted)) {
+        video_deno_rmtree($extractDir);
+        return [
+            'ok' => false,
+            'message' => 'Extracted zip did not contain a deno binary.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+    if (!@rename($extracted, $tmpBin)) {
+        video_deno_rmtree($extractDir);
+        return [
+            'ok' => false,
+            'message' => 'Could not stage bin/deno.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+    video_deno_rmtree($extractDir);
+    @chmod($tmpBin, 0755);
+    if (!@rename($tmpBin, $target)) {
+        @unlink($tmpBin);
+        return [
+            'ok' => false,
+            'message' => 'Could not replace bin/deno.',
+            'lines' => $lines,
+            'version' => video_ytdlp_deno_version(),
+        ];
+    }
+
+    $ver = video_ytdlp_deno_version($target);
+    video_deno_latest_release(true);
+    $lines[] = 'Installed bin/deno' . ($ver ? " ($ver)" : '') . '.';
+    return [
+        'ok' => true,
+        'message' => 'Updated local bin/deno' . ($ver ? " to $ver" : '') . '.',
+        'lines' => $lines,
+        'version' => $ver,
+    ];
+}
+
+function video_deno_rmtree(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+    $items = scandir($dir);
+    if (!is_array($items)) {
+        return;
+    }
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') {
+            continue;
+        }
+        $path = $dir . '/' . $item;
+        if (is_dir($path)) {
+            video_deno_rmtree($path);
+        } else {
+            @unlink($path);
+        }
+    }
+    @rmdir($dir);
+}
+
+/** @return array{ok:bool,message:string,lines:list<string>,version:?string} */
+function video_deno_update(): array
+{
+    $path = video_ytdlp_find_executable('deno');
+    $localPath = video_deno_local_bin_path();
+    $isSystem = $path !== null && $path !== $localPath;
+    $latestInfo = video_deno_latest_release(true);
+    $latest = $latestInfo['version'] ?? null;
+    $installed = video_ytdlp_deno_version($path);
+
+    if ($isSystem) {
+        if (video_deno_is_outdated($installed, $latest)) {
+            return [
+                'ok' => false,
+                'message' => 'System deno (' . ($installed ?? '?') . ') at ' . $path
+                    . ' requires root. SSH: curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh',
+                'lines' => [],
+                'version' => $installed,
+            ];
+        }
+        return [
+            'ok' => true,
+            'message' => 'System deno ' . ($installed ?? '') . ' is up to date.',
+            'lines' => [],
+            'version' => $installed,
+        ];
+    }
+
+    return video_deno_install_bin([]);
+}
+
+/** @return array{installed:?string,path:?string,latest:?string,outdated:?bool,checked_at:?int,latest_error:?string,system:bool} */
+function video_deno_status(bool $refreshLatest = false): array
+{
+    $path = video_ytdlp_find_executable('deno');
+    $installed = video_ytdlp_deno_version($path);
+    $latestInfo = video_deno_latest_release($refreshLatest);
+    $latest = $latestInfo['version'] ?? null;
+    $localPath = video_deno_local_bin_path();
+
+    return [
+        'installed' => $installed,
+        'path' => $path,
+        'latest' => $latest,
+        'outdated' => video_deno_is_outdated($installed, $latest),
+        'checked_at' => $latestInfo['checked_at'] ?? null,
+        'latest_error' => $latestInfo['error'] ?? null,
+        'system' => $path !== null && $path !== $localPath,
+    ];
 }
 
 /** pipx only works when run as root — www-data cannot write /var/www/.local */
