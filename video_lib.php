@@ -92,6 +92,61 @@ function video_ytdlp_bin(): ?string
     return null;
 }
 
+/** Resolved path to optional Netscape-format YouTube cookies, or null if unset/missing. */
+function video_ytdlp_cookies_path(): ?string
+{
+    $raw = trim((string)cfg('video.YTDLP_COOKIES_FILE', ''));
+    if ($raw === '') {
+        $raw = 'config/cookies/youtube.txt';
+    }
+    if ($raw[0] !== '/') {
+        $raw = __DIR__ . '/' . ltrim($raw, '/');
+    }
+    return is_file($raw) && is_readable($raw) ? $raw : null;
+}
+
+/** Extra yt-dlp CLI flags for YouTube (cookies + JS runtime). */
+function video_ytdlp_extra_args(): string
+{
+    $args = '';
+    $cookies = video_ytdlp_cookies_path();
+    if ($cookies !== null) {
+        $args .= ' --cookies ' . escapeshellarg($cookies);
+    }
+    $runtime = (string)cfg('video.YTDLP_JS_RUNTIME', 'auto');
+    if ($runtime === 'none') {
+        return $args;
+    }
+    if ($runtime === 'auto') {
+        if (trim((string)@shell_exec('command -v deno 2>/dev/null')) !== '') {
+            $args .= ' --js-runtimes deno';
+        } elseif (trim((string)@shell_exec('command -v node 2>/dev/null')) !== '') {
+            $args .= ' --js-runtimes node';
+        }
+        return $args;
+    }
+    if (in_array($runtime, ['deno', 'node'], true)
+        && trim((string)@shell_exec('command -v ' . escapeshellarg($runtime) . ' 2>/dev/null')) !== '') {
+        $args .= ' --js-runtimes ' . $runtime;
+    }
+    return $args;
+}
+
+/** @return array{deno:bool,node:bool,cookies:bool,cookies_path:?string} */
+function video_ytdlp_support_status(): array
+{
+    $configured = trim((string)cfg('video.YTDLP_COOKIES_FILE', ''));
+    if ($configured === '') {
+        $configured = 'config/cookies/youtube.txt';
+    }
+    return [
+        'deno' => trim((string)@shell_exec('command -v deno 2>/dev/null')) !== '',
+        'node' => trim((string)@shell_exec('command -v node 2>/dev/null')) !== '',
+        'cookies' => video_ytdlp_cookies_path() !== null,
+        'cookies_path' => video_ytdlp_cookies_path() ?? $configured,
+    ];
+}
+
 function video_ytdlp_version(?string $bin = null): ?string
 {
     $bin = $bin ?? video_ytdlp_bin();
@@ -489,6 +544,7 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
         $emit("[{$key}] fetching {$v['youtube']}");
         $out = $dir . "/$key.%(ext)s";
         $cmd = escapeshellarg($bin)
+            . video_ytdlp_extra_args()
             . ' -f ' . escapeshellarg($fmt)
             . ' --merge-output-format mp4 --no-progress --force-overwrites'
             . ' -o ' . escapeshellarg($out)
@@ -503,6 +559,10 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
         }
         if ($rc !== 0) {
             $emit("[{$key}] yt-dlp failed (exit $rc)");
+            $blob = implode("\n", $procOut);
+            if (str_contains($blob, 'Sign in to confirm') || str_contains($blob, 'not a bot')) {
+                $emit("[{$key}] hint: export YouTube cookies to config/cookies/youtube.txt (see README Video Board)");
+            }
         }
 
         $st = video_entry_status($key, $v, $dir);

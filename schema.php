@@ -200,6 +200,11 @@ function admin_schema(): array
             ['key' => 'FIT', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain']],
             ['key' => 'SHOW_CLOCK', 'label' => 'Show clock', 'type' => 'bool', 'default' => true],
             ['key' => 'MAX_HEIGHT', 'label' => 'Max download height', 'type' => 'number'],
+            ['key' => 'YTDLP_COOKIES_FILE', 'label' => 'YouTube cookies file', 'type' => 'text',
+             'help' => 'Netscape cookies.txt path (default config/cookies/youtube.txt). Export from a logged-in browser — see README.'],
+            ['key' => 'YTDLP_JS_RUNTIME', 'label' => 'JS runtime', 'type' => 'select',
+             'options' => ['auto', 'deno', 'node', 'none'], 'default' => 'auto',
+             'help' => 'YouTube needs a JS runtime (deno recommended; setup-server.sh installs it)'],
             $tz,
         ]],
         'grafana' => ['title' => 'Grafana', 'file' => 'grafana.php', 'fields' => [

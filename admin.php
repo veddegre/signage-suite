@@ -461,6 +461,7 @@ $videoYtdlpStatus = null;
 $videoStatuses = [];
 if ($authed && $board === 'video') {
     $videoYtdlpStatus = video_ytdlp_status();
+    $videoYtdlpSupport = video_ytdlp_support_status();
     foreach (video_registry() as $k => $v) {
         $videoStatuses[] = video_entry_status($k, $v);
     }
@@ -993,8 +994,22 @@ function admin_field(array $f, $val, string $board): void
                   <span class="help">Unknown</span>
                 <?php endif; ?>
               </div>
+              <div>Deno (JS runtime):
+                <?= $videoYtdlpSupport['deno'] ? '<span class="pill ok">installed</span>' : '<span class="pill warn">missing</span>' ?>
+              </div>
+              <div>YouTube cookies:
+                <?php if ($videoYtdlpSupport['cookies']): ?>
+                  <span class="pill ok">found</span>
+                <?php else: ?>
+                  <span class="pill bad">missing</span>
+                  — export to <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>
+                <?php endif; ?>
+              </div>
             </div>
-            <div class="help" style="margin-top:10px">Admin updates download a verified copy to <code>bin/yt-dlp</code>
+            <div class="help" style="margin-top:10px">YouTube often blocks headless servers (“Sign in to confirm you’re not a bot”).
+              Export a logged-in browser’s cookies (Netscape format) to the path above, then re-fetch.
+              <code>setup-server.sh</code> installs <strong>deno</strong> for yt-dlp’s JS runtime.</div>
+            <div class="help" style="margin-top:8px">Admin updates download a verified copy to <code>bin/yt-dlp</code>
               (not pipx — the web server runs as <code>www-data</code>). From SSH as root:
               <code>pipx upgrade yt-dlp</code> or <code>sudo php video.php fetch</code>.</div>
             <div class="inline-actions">

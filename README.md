@@ -132,10 +132,12 @@ Mimics Anthias's native video handling for web assets: videos are **downloaded l
 - **Registry:** define entries in `VIDEOS` — either `'youtube' => URL` or `'file' => 'name.mp4'` for videos you copy in yourself. Each Anthias asset is `video.php?v=drone`, `video.php?v=ambient`, etc.
 - **Fetching:** use **Admin → Video Board → Download / refresh YouTube videos**, or run `php video.php fetch` on the server. Downloads land in `./videos/` (capped at 1080p mp4); admin shows each video's duration for rotation dwell. Re-fetch after URL changes; optional weekly cron if sources update:
   `0 4 * * 1 cd /var/www/boards && php video.php fetch >> /var/log/video-fetch.log 2>&1`
-- **yt-dlp upkeep:** admin shows installed vs latest GitHub release and can update yt-dlp (pipx or `bin/yt-dlp`).
+- **yt-dlp upkeep:** admin shows installed vs latest GitHub release and can update yt-dlp (`bin/yt-dlp` download from admin).
+- **YouTube bot checks:** headless servers often get “Sign in to confirm you’re not a bot”. Fix:
+  1. Install **deno** (`setup-server.sh` does this) — yt-dlp needs a JS runtime for YouTube.
+  2. Export cookies while logged into YouTube in your browser (extension such as “Get cookies.txt LOCALLY”, or `yt-dlp --cookies-from-browser chrome` once on a desktop), save as `config/cookies/youtube.txt` on the server (HTTP-blocked with the rest of `config/`), readable by `www-data`. Re-export every few months when fetches fail again.
 - The player loops, so an asset duration slightly longer than the video wraps to the start instead of going black.
-- `FIT` = `'cover'` (fill) or `'contain'` (letterbox); `MUTED` defaults to true — Chromium blocks un-muted autoplay unless the kiosk runs with `--autoplay-policy=no-user-gesture-required`.
-- **Requires:** `yt-dlp` in PATH or `bin/yt-dlp` for fetching (`setup-server.sh` installs via pipx by default), `ffmpeg`/`ffprobe` for merged downloads and duration readouts.
+- **Requires:** `yt-dlp` in PATH or `bin/yt-dlp`, **deno** (or node) for YouTube, optional `config/cookies/youtube.txt`, plus `ffmpeg`/`ffprobe` for merged downloads and duration readouts.
 - Videos live inside the webroot (`./videos/`) so Apache/nginx serves them directly with range support — easy on a Pi.
 
 ## grafana.php — Grafana Board (kiosk iframe wrapper)
