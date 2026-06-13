@@ -313,11 +313,18 @@ function slide_photo_background_presets(): array
             'subtitle' => '#ffd089',
         ]),
         'photo_birthday' => array_merge($textDark, [
-            'label' => 'Birthday',
+            'label' => 'Birthday party',
             'kind' => 'photo',
             'photo' => 'photos/birthday.jpg',
             'overlay' => slide_photo_overlay_vignette(0.72, 0.38, 0.78),
             'subtitle' => '#ff9d9d',
+        ]),
+        'photo_reminder' => array_merge($textDark, [
+            'label' => 'Reminder',
+            'kind' => 'photo',
+            'photo' => 'photos/reminder.jpg',
+            'overlay' => slide_photo_overlay_vignette(0.7, 0.36, 0.76),
+            'subtitle' => '#ffd089',
         ]),
         'photo_winter_trees' => array_merge($textDark, [
             'label' => 'Winter woods',
@@ -379,7 +386,7 @@ function slide_creator_templates(): array
             'align' => 'center',
             'title' => 'Happy Birthday, [Name]!',
             'subtitle' => '[Month Day]',
-            'body' => "Join us for cake and celebration at [Time].\nPresents in the living room — dinner at 6.",
+            'body' => "Balloons and presents in the living room — party at [Time].\nCan't wait to celebrate!",
             'footer' => 'Love, the family',
             'filename' => 'birthday',
         ],
@@ -485,7 +492,7 @@ function slide_creator_templates(): array
         ],
         'reminder' => [
             'label' => 'Reminder',
-            'bg' => 'slate',
+            'bg' => 'photo_reminder',
             'align' => 'left',
             'title' => '[Headline]',
             'subtitle' => '[When]',
@@ -694,9 +701,14 @@ function slide_photo_download_urls(): array
             'sha256' => '26e1213398e30a32fffcc5ea1c4f1b96aef9f375ce919e06bc3f536d93a51f25',
         ],
         'photos/birthday.jpg' => [
-            'url' => 'https://images.unsplash.com/photo-1578985545062-69928b1d9587' . $unsplash,
-            'min_bytes' => 300000,
-            'sha256' => '8343f4f2b0657d5859f1591423caa7500c080902abef62cb842e93744f960075',
+            'url' => 'https://images.unsplash.com/photo-1643175816971-a463dee6ae61' . $unsplash,
+            'min_bytes' => 400000,
+            'sha256' => 'fb385172a084b44b9239fa5bebf78279d097451accdda4b56f55671aef4ac05e',
+        ],
+        'photos/reminder.jpg' => [
+            'url' => 'https://images.pexels.com/photos/6357/coffee-cup-desk-pen.jpg' . $pexels,
+            'min_bytes' => 100000,
+            'sha256' => 'c24000a36e8f47e60693e4e7bd9821cbfd4d53a88a0409f687ab2a2cdbef1ba8',
         ],
         'photos/romantic_dinner.jpg' => [
             'url' => 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0' . $unsplash,
