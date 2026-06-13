@@ -238,7 +238,10 @@ function admin_schema(): array
         ]],
         'traffic' => ['title' => 'Traffic Map', 'file' => 'traffic.php', 'fields' => [
             ['key' => 'TOMTOM_API_KEY', 'label' => 'TomTom API key', 'type' => 'password',
-             'help' => 'Free at developer.tomtom.com — enable Traffic API on the key; no domain whitelist (server-side tiles)'],
+             'help' => 'Enable Traffic Flow API on the key; no domain whitelist (server-side tiles)'],
+            ['key' => 'TOMTOM_API', 'label' => 'Tile API', 'type' => 'select',
+             'options' => ['auto', 'legacy', 'orbis'], 'default' => 'auto',
+             'help' => 'Auto tries Orbis (new keys) then legacy v4. Use legacy only for older TomTom accounts.'],
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text'],
             ['key' => 'LAT', 'label' => 'Map center latitude', 'type' => 'number', 'step' => 'any'],

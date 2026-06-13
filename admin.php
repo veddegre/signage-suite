@@ -246,7 +246,8 @@ $trafficTestResult = null;
 if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') === 'traffic_test') {
     $trafficTestResult = traffic_test_connection();
     if ($trafficTestResult['ok']) {
-        $flash = 'TomTom tile test OK — HTTP ' . (int)$trafficTestResult['http']
+        $api = $trafficTestResult['api'] ?? 'unknown';
+        $flash = 'TomTom tile test OK — ' . $api . ' API, HTTP ' . (int)$trafficTestResult['http']
             . ', ' . (int)$trafficTestResult['bytes'] . ' bytes PNG.';
     } else {
         $flash = 'TomTom tile test failed — ' . ($trafficTestResult['error'] ?? 'unknown error');
@@ -355,22 +356,6 @@ if ($authed && $board === 'slides' && csrf_ok()) {
                 }
             }
         }
-    }
-}
-
-// ── Traffic board: TomTom tile test ─────────────────────────────────────────
-$trafficTestResult = null;
-if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') === 'traffic_test') {
-    $trafficTestResult = traffic_test_connection();
-    if ($trafficTestResult['ok']) {
-        $flash = 'TomTom tile test OK — HTTP ' . (int)$trafficTestResult['http']
-            . ', ' . (int)$trafficTestResult['bytes'] . ' bytes PNG.';
-    } else {
-        $flash = 'TomTom tile test failed — ' . ($trafficTestResult['error'] ?? 'unknown error');
-        if (!empty($trafficTestResult['detail'])) {
-            $flash .= ': ' . $trafficTestResult['detail'];
-        }
-        $flashOk = false;
     }
 }
 
@@ -918,6 +903,9 @@ function admin_field(array $f, $val, string $board): void
         <div class="video-meta">
           <div>API key in config: <strong><?= $trafficKeyOk ? 'yes' : 'no' ?></strong>
             <?php if (!$trafficKeyOk): ?> — paste key below and click <strong>Save</strong><?php endif; ?></div>
+          <?php $trafficMode = traffic_cached_api_mode(); ?>
+          <div>Working tile API: <strong><?= $trafficMode ? h($trafficMode) : 'not detected yet' ?></strong>
+            (auto tries Orbis, then legacy)</div>
           <?php if ($trafficLastErr): ?>
             <div>Last tile error: <code style="font-size:13px;color:var(--bad)"><?= h($trafficLastErr) ?></code></div>
           <?php endif; ?>
@@ -928,11 +916,11 @@ function admin_field(array $f, $val, string $board): void
           <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
           <button class="secondary" type="submit">Test tile fetch</button>
         </form>
-        <div class="help">Tiles are fetched <strong>server-side</strong> via <code>traffic_tiles.php</code>. In
-          <a href="https://developer.tomtom.com/user/me/apps" target="_blank" rel="noopener">developer.tomtom.com</a>
-          → your app → API key → enable <strong>Traffic API</strong> (Traffic Flow tiles). For this server proxy key,
-          leave <strong>domain restrictions empty</strong> — whitelisted domains block PHP/curl requests and cause HTTP 403.
-          After changing the key, Save, then run Test tile fetch.</div>
+        <div class="help">Tiles are fetched <strong>server-side</strong> via <code>traffic_tiles.php</code>. Enable
+          <strong>Traffic Flow API</strong> on your key at
+          <a href="https://developer.tomtom.com/user/me/apps" target="_blank" rel="noopener">developer.tomtom.com</a>.
+          New keys often require the <strong>Orbis</strong> tile API — leave <strong>Tile API</strong> on Auto (default).
+          Leave <strong>domain whitelisting off</strong> for server-side PHP. After changing the key, Save, then Test tile fetch.</div>
       </div>
       <?php endif; ?>
 
