@@ -125,6 +125,13 @@ if ($authed && !signage_admin_idle_check()) {
 $board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));
 if ($board === '' || !isset($schema[$board])) $board = array_key_first($schema);
 
+if ($authed && $board === 'slides' && isset($_GET['deleted'])) {
+    $deleted = slide_safe_filename((string)$_GET['deleted']);
+    if ($deleted !== null) {
+        $flash = 'Deleted ' . $deleted . '. Rotation updated on all displays.';
+    }
+}
+
 if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
     $errors = [];
@@ -472,7 +479,22 @@ if ($authed && $board === 'slides') {
     if (!is_dir($slideDir)) @mkdir($slideDir, 0775, true);
     protect_dirs();
 
-    if (($_POST['action'] ?? '') === 'create_slide') {
+    $slideAction = (string)($_POST['action'] ?? '');
+
+    if ($slideAction === 'delete_slide') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } else {
+            $result = slide_delete_file((string)($_POST['file'] ?? ''));
+            if (!empty($result['ok'])) {
+                header('Location: admin.php?board=slides&deleted=' . rawurlencode((string)$result['file']));
+                exit;
+            }
+            $flash = (string)($result['error'] ?? 'Could not delete slide.');
+            $flashOk = false;
+        }
+    } elseif ($slideAction === 'create_slide') {
         if (!csrf_ok()) {
             $flash = 'Session expired — refresh the page and try again.';
             $flashOk = false;
@@ -599,31 +621,9 @@ if ($authed && $board === 'slides') {
         }
     }
 
-    if (($_POST['action'] ?? '') === 'delete_slide') {
-        $del = slide_safe_filename((string)($_POST['file'] ?? ''));
-        if ($del === null) {
-            $flash = 'Invalid filename.'; $flashOk = false;
-        } else {
-            $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-            $deck = $conf['slides.SLIDES'] ?? [];
-            if (is_array($deck)) {
-                $conf['slides.SLIDES'] = array_values(array_filter($deck, fn($s) =>
-                    !is_array($s) || ($s['file'] ?? '') !== $del));
-            }
-            if (!cfg_write($conf)) {
-                $flash = 'Could not update settings.json.'; $flashOk = false;
-            } else {
-                cfg_reload();
-                @unlink($slideDir . '/' . $del);
-                foreach (array_keys(rotation_screens()) as $scr) {
-                    $sync = rotation_sync_slides($scr, $conf['slides.SLIDES'] ?? []);
-                    rotation_pages_write($sync['screen'], $sync['pages']);
-                }
-                cfg_reload();
-                $flash = 'Deleted ' . $del . '. Rotation updated on all displays.';
-            }
-        }
-    }
+    } elseif ($slideAction !== '') {
+        $flash = 'Session expired — refresh the page and try again.';
+        $flashOk = false;
     }
 }
 
@@ -2046,13 +2046,8 @@ function admin_field(array $f, $val, string $board): void
                       <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
                       <?php endif; ?>
                       <?php if (!$lib['in_deck']): ?>
-                      <form method="post" action="?board=slides">
-                        <input type="hidden" name="action" value="add_slide_to_deck">
-                        <input type="hidden" name="board" value="slides">
-                        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                        <input type="hidden" name="file" value="<?= h($lib['file']) ?>">
-                        <button class="secondary" type="submit">Add to deck</button>
-                      </form>
+                      <button class="secondary" type="button"
+                              onclick="submitSlideAddToDeck(<?= json_encode($lib['file']) ?>)">Add to deck</button>
                       <?php endif; ?>
                       <button type="button" class="secondary" onclick="submitSlideDelete(<?= json_encode($lib['file']) ?>)">Delete</button>
                     </div>
@@ -2207,6 +2202,18 @@ function admin_field(array $f, $val, string $board): void
         </div>
       </form>
       <?php if ($board === 'slides'): ?>
+      <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="delete_slide">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideDeleteFile" value="">
+      </form>
+      <form id="slideAddForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="add_slide_to_deck">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideAddFile" value="">
+      </form>
       <details class="panel" id="add-slides-panel" style="margin-top:22px"<?= $slideHighlight !== null ? ' open' : '' ?>>
         <summary>Add slides</summary>
         <div class="panel-body">
@@ -2550,27 +2557,31 @@ function initSlideDeck() {
   }
 }
 
-function submitSlideDelete(file) {
-  if (!file) return;
-  if (!confirm('Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.')) return;
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = 'admin.php?board=slides';
-  form.style.display = 'none';
-  [
-    ['action', 'delete_slide'],
-    ['board', 'slides'],
-    ['csrf', <?= json_encode(csrf_token()) ?>],
-    ['file', file],
-  ].forEach(function (pair) {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = pair[0];
-    input.value = pair[1];
-    form.appendChild(input);
-  });
-  document.body.appendChild(form);
+function submitSlidePost(formId, fileInputId, file, confirmMsg) {
+  if (!file) return false;
+  if (confirmMsg && !confirm(confirmMsg)) return false;
+  const form = document.getElementById(formId);
+  const input = document.getElementById(fileInputId);
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return false;
+  }
+  input.value = file;
   form.submit();
+  return true;
+}
+
+function submitSlideDelete(file) {
+  submitSlidePost(
+    'slideDeleteForm',
+    'slideDeleteFile',
+    file,
+    'Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.'
+  );
+}
+
+function submitSlideAddToDeck(file) {
+  submitSlidePost('slideAddForm', 'slideAddFile', file, '');
 }
 
 function addSlideCard() {

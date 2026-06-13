@@ -147,6 +147,62 @@ function slides_library_entries(?array $deck = null, ?string $dir = null): array
     return $out;
 }
 
+/** Remove one deck row by filename. @return list<array<string,mixed>> */
+function slide_remove_from_deck(array $deck, string $file): array
+{
+    $want = slide_safe_filename($file);
+    if ($want === null) {
+        return $deck;
+    }
+    return array_values(array_filter($deck, function ($slide) use ($want) {
+        if (!is_array($slide)) {
+            return false;
+        }
+        return slide_safe_filename((string)($slide['file'] ?? '')) !== $want;
+    }));
+}
+
+/**
+ * Delete a slide file, remove it from the deck, and resync rotation on all displays.
+ * @return array{ok:bool,file?:string,error?:string}
+ */
+function slide_delete_file(string $file): array
+{
+    $safe = slide_safe_filename($file);
+    if ($safe === null) {
+        return ['ok' => false, 'error' => 'Invalid filename.'];
+    }
+
+    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    $deck = $conf['slides.SLIDES'] ?? [];
+    if (is_array($deck)) {
+        $deck = slide_remove_from_deck($deck, $safe);
+        if ($deck === []) {
+            unset($conf['slides.SLIDES']);
+        } else {
+            $conf['slides.SLIDES'] = $deck;
+        }
+    }
+    if (!cfg_write($conf)) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
+
+    $path = slides_dir() . '/' . $safe;
+    if (is_file($path)) {
+        @unlink($path);
+    }
+
+    require_once __DIR__ . '/rotation_lib.php';
+    foreach (array_keys(rotation_screens()) as $screen) {
+        $sync = rotation_sync_slides($screen, $conf['slides.SLIDES'] ?? []);
+        rotation_pages_write($sync['screen'], $sync['pages']);
+    }
+    cfg_reload();
+
+    return ['ok' => true, 'file' => $safe];
+}
+
 /** Append a new slide entry to config deck (used by upload + creator). */
 function slide_append_to_deck(string $filename, array $extra = []): bool
 {
