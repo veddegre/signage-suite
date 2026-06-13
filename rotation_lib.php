@@ -419,6 +419,15 @@ function rotation_page_label(string $url): string
     return $boards[$base] ?? $base;
 }
 
+/** Total rotation dwell for one RSS feed pass (per-story seconds × story count). */
+function rotation_rss_feed_dwell(array $feed): int
+{
+    $perStory = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
+    $stories = (int)($feed['stories'] ?? cfg('rss.DEFAULT_STORIES', 6));
+
+    return max(30, $perStory * max(1, $stories));
+}
+
 /**
  * Quick-add presets for the rotation playlist editor.
  * @return list<array{label:string,url:string,dwell:int,group:string}>
@@ -442,12 +451,10 @@ function rotation_quick_add_items(): array
             if (!is_array($feed)) {
                 continue;
             }
-            $perStory = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
-            $stories = (int)($feed['stories'] ?? cfg('rss.DEFAULT_STORIES', 6));
             $items[] = [
                 'label' => 'RSS — ' . $name,
                 'url' => 'rss.php?feed=' . rawurlencode((string)$key),
-                'dwell' => max(30, $perStory * max(1, $stories) + (int)ceil(max(1, $stories) * 0.5)),
+                'dwell' => rotation_rss_feed_dwell($feed),
                 'group' => 'RSS feeds',
             ];
         }
@@ -1018,10 +1025,7 @@ function rotation_sync_rss(string $screen = 'main'): array
             continue;
         }
         $url = 'rss.php?feed=' . rawurlencode((string)$key);
-        $perStory = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
-        $stories = (int)($feed['stories'] ?? cfg('rss.DEFAULT_STORIES', 6));
-        // Per-story seconds × count, plus ~0.5s/story for crossfades and image preload.
-        $dwell = max(30, $perStory * max(1, $stories) + (int)ceil(max(1, $stories) * 0.5));
+        $dwell = rotation_rss_feed_dwell($feed);
         $found = false;
         foreach ($pages as &$page) {
             if (!is_array($page)) {

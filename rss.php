@@ -328,9 +328,25 @@ $payload = array_map(fn($i) => [
         if (i === idx) requestAnimationFrame(() => d.className = 'dot active');
       });
 
-      setTimeout(show, DWELL);
+      if (!EMBEDDED || idx + 1 < STORIES.length) {
+        setTimeout(show, DWELL);
+      }
     }
-    setTimeout(show, SETTLE);
+
+    function startCarousel() {
+      setTimeout(show, SETTLE);
+    }
+    // In rotation, board.php reveals after iframe load + SETTLE — start the carousel then
+    // so the last story is not held extra seconds while the board timer catches up.
+    if (EMBEDDED) {
+      if (document.readyState === 'complete') {
+        startCarousel();
+      } else {
+        window.addEventListener('load', startCarousel, { once: true });
+      }
+    } else {
+      startCarousel();
+    }
 
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
       document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
