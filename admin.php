@@ -998,7 +998,15 @@ function admin_field(array $f, $val, string $board): void
                 <?php endif; ?>
               </div>
               <div>Deno (JS runtime):
-                <?= $videoYtdlpSupport['deno'] ? '<span class="pill ok">installed</span>' : '<span class="pill warn">missing</span>' ?>
+                <?php if ($videoYtdlpSupport['deno']): ?>
+                  <span class="pill ok">installed</span>
+                  <?php if (!empty($videoYtdlpSupport['deno_path'])): ?>
+                    <code><?= h($videoYtdlpSupport['deno_path']) ?></code>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <span class="pill warn">missing</span>
+                  — run <code>setup-server.sh</code> or install to <code>/usr/local/bin/deno</code>
+                <?php endif; ?>
               </div>
               <div>YouTube cookies:
                 <?php if ($videoYtdlpSupport['cookies']): ?>

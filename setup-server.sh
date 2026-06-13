@@ -139,6 +139,9 @@ install_packages() {
       log "Installing deno (yt-dlp JavaScript runtime for YouTube)"
       curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
     fi
+    if [[ -x /usr/local/bin/deno && ! -e /usr/bin/deno ]]; then
+      ln -sf /usr/local/bin/deno /usr/bin/deno
+    fi
   fi
 }
 
@@ -191,7 +194,7 @@ setup_directories() {
   for d in config cache videos slides photos bin; do
     write_deny_htaccess "$WEBROOT/$d"
   done
-  mkdir -p "$WEBROOT/config/cookies"
+  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/cache/yt-dlp"
 
   # slide_backgrounds/ ships in git; ensure it exists and is readable
   mkdir -p "$WEBROOT/slide_backgrounds"
