@@ -197,30 +197,21 @@ function video_ytdlp_is_outdated(?string $local = null, ?string $latest = null):
     return version_compare($local, $latest, '<');
 }
 
-/** @return array{ok:bool,message:string,lines:list<string>,version:?string} */
-function video_ytdlp_update(): array
+/** pipx only works when run as root — www-data cannot write /var/www/.local */
+function video_ytdlp_pipx_usable(): bool
 {
-    $lines = [];
-    $pipx = trim((string)@shell_exec('command -v pipx 2>/dev/null'));
-    if ($pipx !== '') {
-        $cmd = escapeshellarg($pipx) . ' upgrade yt-dlp --force 2>&1';
-        $out = [];
-        $rc = 0;
-        exec($cmd, $out, $rc);
-        $lines = array_merge($lines, $out);
-        if ($rc === 0) {
-            $ver = video_ytdlp_version();
-            video_ytdlp_latest_release(true);
-            return [
-                'ok' => true,
-                'message' => 'Updated yt-dlp via pipx' . ($ver ? " to $ver" : '') . '.',
-                'lines' => $lines,
-                'version' => $ver,
-            ];
-        }
-        $lines[] = "pipx upgrade failed (exit $rc) — trying local bin/yt-dlp download.";
+    if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+        return false;
     }
+    return trim((string)@shell_exec('command -v pipx 2>/dev/null')) !== '';
+}
 
+/**
+ * Download verified yt-dlp release into bin/yt-dlp (works as www-data).
+ * @return array{ok:bool,message:string,lines:list<string>,version:?string}
+ */
+function video_ytdlp_install_bin(array $lines = []): array
+{
     $binDir = __DIR__ . '/bin';
     if (!is_dir($binDir) && !@mkdir($binDir, 0775, true)) {
         return [
@@ -299,13 +290,42 @@ function video_ytdlp_update(): array
 
     $ver = video_ytdlp_version($target);
     video_ytdlp_latest_release(true);
-    $lines[] = "Installed bin/yt-dlp" . ($ver ? " ($ver)" : '') . '.';
+    $lines[] = 'Installed bin/yt-dlp' . ($ver ? " ($ver)" : '') . '.';
     return [
         'ok' => true,
         'message' => 'Updated local bin/yt-dlp' . ($ver ? " to $ver" : '') . '.',
         'lines' => $lines,
         'version' => $ver,
     ];
+}
+
+/** @return array{ok:bool,message:string,lines:list<string>,version:?string} */
+function video_ytdlp_update(): array
+{
+    $lines = [];
+
+    // Admin runs as www-data — pipx needs root and writes under $HOME/.local.
+    if (video_ytdlp_pipx_usable()) {
+        $pipx = trim((string)@shell_exec('command -v pipx 2>/dev/null'));
+        $cmd = escapeshellarg($pipx) . ' upgrade yt-dlp --force 2>&1';
+        $out = [];
+        $rc = 0;
+        exec($cmd, $out, $rc);
+        $lines = array_merge($lines, $out);
+        if ($rc === 0) {
+            $ver = video_ytdlp_version();
+            video_ytdlp_latest_release(true);
+            return [
+                'ok' => true,
+                'message' => 'Updated yt-dlp via pipx' . ($ver ? " to $ver" : '') . '.',
+                'lines' => $lines,
+                'version' => $ver,
+            ];
+        }
+        $lines[] = 'pipx upgrade failed (exit ' . $rc . ') — trying bin/yt-dlp download.';
+    }
+
+    return video_ytdlp_install_bin($lines);
 }
 
 /** @return array<string,mixed> */

@@ -994,6 +994,9 @@ function admin_field(array $f, $val, string $board): void
                 <?php endif; ?>
               </div>
             </div>
+            <div class="help" style="margin-top:10px">Admin updates download a verified copy to <code>bin/yt-dlp</code>
+              (not pipx — the web server runs as <code>www-data</code>). From SSH as root:
+              <code>pipx upgrade yt-dlp</code> or <code>sudo php video.php fetch</code>.</div>
             <div class="inline-actions">
               <form method="post" action="?board=video">
                 <input type="hidden" name="action" value="ytdlp_update">

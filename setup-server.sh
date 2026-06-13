@@ -203,6 +203,16 @@ setup_directories() {
   chmod 775 "$WEBROOT/config" "$WEBROOT/cache" "$WEBROOT/videos" "$WEBROOT/slides" "$WEBROOT/photos" "$WEBROOT/bin"
 }
 
+seed_ytdlp_bin() {
+  [[ $WITH_YTDLP -eq 1 ]] || return
+  local src
+  src="$(command -v yt-dlp || true)"
+  [[ -n "$src" && -x "$src" ]] || return
+  log "Seeding $WEBROOT/bin/yt-dlp (for admin / www-data updates)"
+  install -m 755 "$src" "$WEBROOT/bin/yt-dlp"
+  chown "$WEB_USER:$WEB_USER" "$WEBROOT/bin/yt-dlp"
+}
+
 setup_apache() {
   [[ "$WEBSERVER" == "apache" ]] || return
 
@@ -468,6 +478,7 @@ main() {
   setup_php_timeouts
   deploy_files
   setup_directories
+  seed_ytdlp_bin
   if [[ "$WEBSERVER" == "nginx" ]]; then
     setup_nginx
   else
