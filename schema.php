@@ -209,7 +209,8 @@ function admin_schema(): array
              'help' => 'Managed on this page via the drag-and-drop playlist below. Each video needs a unique key. '
                      . 'Use Admin → Rotation to order all boards on the wall, or check “Add playlist to main rotation” when saving.'],
             ['key' => 'VIDEO_DIR', 'label' => 'Video directory', 'type' => 'text'],
-            ['key' => 'MUTED', 'label' => 'Muted', 'type' => 'bool', 'default' => true],
+            ['key' => 'MUTED', 'label' => 'Mute all videos', 'type' => 'bool', 'default' => true,
+             'help' => 'Uncheck to play sound. Kiosks need setup-kiosk.sh (includes autoplay-policy for unmuted video).'],
             ['key' => 'FIT', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain']],
             ['key' => 'SHOW_CLOCK', 'label' => 'Show clock', 'type' => 'bool', 'default' => true],
             ['key' => 'MAX_HEIGHT', 'label' => 'Max download height', 'type' => 'number'],

@@ -104,7 +104,7 @@ $title = $video['title'] ?? '';
        <code>videos/<?= h($key) ?>.mp4</code>.</p>
   </div>
 <?php else: ?>
-  <video src="<?= h($src) ?>" autoplay <?= MUTED ? 'muted' : '' ?> loop playsinline></video>
+  <video id="player" src="<?= h($src) ?>" autoplay <?= MUTED ? 'muted' : '' ?> loop playsinline></video>
   <div class="chrome">
     <div class="title"><?= h($title) ?></div>
     <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
@@ -117,7 +117,12 @@ $title = $video['title'] ?? '';
     <?php endif; ?>
     // Belt and suspenders: some Chromium builds pause looped video on decode
     // hiccups; nudge it back.
-    const v = document.querySelector('video');
+    const v = document.getElementById('player');
+    <?php if (!MUTED): ?>
+    v.muted = false;
+    v.volume = 1;
+    v.play().catch(function () {});
+    <?php endif; ?>
     setInterval(() => { if (v.paused) v.play().catch(()=>{}); }, 5000);
   </script>
 <?php endif; ?>

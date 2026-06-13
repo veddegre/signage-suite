@@ -654,7 +654,7 @@ $navGroups = [
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
-$videoBoardKeys = ['VIDEO_DIR', 'MUTED', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
+$videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
 $rotationQuickGroups = [];
@@ -1496,7 +1496,15 @@ function admin_field(array $f, $val, string $board): void
         <?php elseif ($board === 'video'):
           $videoVal = current_val($rawConf, $board, 'VIDEOS');
           $videoRows = is_array($videoVal) ? $videoVal : [];
+          $mutedVal = current_val($rawConf, $board, 'MUTED');
         ?>
+          <div class="field" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--harbor)">
+            <label class="check"><input type="checkbox" name="MUTED"
+              <?= ($mutedVal ?? true) ? 'checked' : '' ?>> Mute all videos</label>
+            <div class="help" style="margin-top:8px;margin-bottom:0">Leave checked for silent wall displays. Uncheck to play audio —
+              Pi/kiosk boxes must be set up with <code>setup-kiosk.sh</code> (autoplay policy is already included).</div>
+          </div>
+
           <div class="section-title">Video playlist</div>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
             and either a YouTube URL or a local filename in <code>videos/</code>. After saving, videos appear on the wall only when

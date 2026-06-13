@@ -130,6 +130,7 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 Mimics Anthias's native video handling for web assets: videos are **downloaded locally with yt-dlp** and played fullscreen from disk — no live YouTube embed, so no ads, buffering, or embed-blocked failures on the Pi.
 
 - **Registry:** define entries in `VIDEOS` — either `'youtube' => URL` or `'file' => 'name.mp4'` for videos you copy in yourself. Each Anthias asset is `video.php?v=drone`, `video.php?v=ambient`, etc.
+- **Sound:** muted by default for wall displays. **Admin → Video Board** — uncheck **Mute all videos** and save. Kiosks set up with `setup-kiosk.sh` already allow unmuted autoplay.
 - **Fetching:** use **Admin → Video Board → Download / refresh YouTube videos**, or run `php video.php fetch` on the server. Downloads land in `./videos/` (capped at 1080p mp4); admin shows each video's duration for rotation dwell. Re-fetch after URL changes; optional weekly cron if sources update:
   `0 4 * * 1 cd /var/www/boards && php video.php fetch >> /var/log/video-fetch.log 2>&1`
 - **yt-dlp upkeep:** admin shows installed vs latest GitHub release and can update yt-dlp (`bin/yt-dlp` download from admin).
