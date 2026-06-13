@@ -65,6 +65,10 @@ $video = VIDEOS[$key];
 $path  = video_path($key, $video);
 $src   = $path ? 'videos/' . rawurlencode(basename($path)) : null;
 $title = $video['title'] ?? '';
+$embedded = isset($_GET['noticker']);
+$settleMs = max(0, (int)($_GET['settle'] ?? 0));
+$autoplayAttr = $settleMs > 0 ? '' : 'autoplay';
+$loopAttr = $embedded ? '' : 'loop';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -104,26 +108,39 @@ $title = $video['title'] ?? '';
        <code>videos/<?= h($key) ?>.mp4</code>.</p>
   </div>
 <?php else: ?>
-  <video id="player" src="<?= h($src) ?>" autoplay <?= MUTED ? 'muted' : '' ?> loop playsinline></video>
+  <video id="player" src="<?= h($src) ?>" <?= $autoplayAttr ?> <?= MUTED ? 'muted' : '' ?> <?= $loopAttr ?> playsinline></video>
   <div class="chrome">
     <div class="title"><?= h($title) ?></div>
     <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
   <script>
+    const EMBEDDED = <?= json_encode($embedded) ?>;
+    const SETTLE = <?= (int)$settleMs ?>;
     <?php if (SHOW_CLOCK): ?>
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
       document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
     tick(); setInterval(tick, 1000);
     <?php endif; ?>
-    // Belt and suspenders: some Chromium builds pause looped video on decode
-    // hiccups; nudge it back.
     const v = document.getElementById('player');
-    <?php if (!MUTED): ?>
-    v.muted = false;
-    v.volume = 1;
-    v.play().catch(function () {});
-    <?php endif; ?>
-    setInterval(() => { if (v.paused) v.play().catch(()=>{}); }, 5000);
+    function startVideo() {
+      <?php if (!MUTED): ?>
+      v.muted = false;
+      v.volume = 1;
+      <?php endif; ?>
+      v.play().catch(function () {});
+    }
+    if (SETTLE > 0) {
+      setTimeout(startVideo, SETTLE);
+    } else {
+      startVideo();
+    }
+    if (EMBEDDED) {
+      v.addEventListener('ended', function () { v.pause(); });
+    } else {
+      // Belt and suspenders: some Chromium builds pause looped video on decode
+      // hiccups; nudge it back.
+      setInterval(function () { if (v.paused) v.play().catch(function () {}); }, 5000);
+    }
   </script>
 <?php endif; ?>
 <?php include __DIR__ . '/ticker.php'; ?>

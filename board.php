@@ -117,6 +117,22 @@ if (($_GET['api'] ?? '') === 'cec') {
     document.getElementById('empty').style.display = 'flex';
   }
 
+  function stopFrame(frame) {
+    if (!frame) return;
+    try {
+      const doc = frame.contentDocument;
+      if (doc) {
+        doc.querySelectorAll('video, audio').forEach(function (el) {
+          el.pause();
+          try { el.currentTime = 0; } catch (e) {}
+          el.muted = true;
+          el.removeAttribute('src');
+          if (typeof el.load === 'function') el.load();
+        });
+      }
+    } catch (e) {}
+  }
+
   function rotate() {
     if (PAGES.length === 0) return;
     idx = nextPage();
@@ -129,15 +145,17 @@ if (($_GET['api'] ?? '') === 'cec') {
     const reveal = () => {
       if (revealed || myGen !== gen) return;
       revealed = true;
+      stopFrame(frames[front]);
       f.classList.add('show');
       frames[front].classList.remove('show');
       front = back;
       setTimeout(rotate, (+p.dwell) * 1000);
     };
 
+    stopFrame(f);
     f.onload = () => setTimeout(reveal, SETTLE);
     const sep = p.url.includes('?') ? '&' : '?';
-    f.src = p.url + sep + 'noticker=1&safebottom=<?= SIGNAGE_TICKER_H ?>&r=' + Date.now();
+    f.src = p.url + sep + 'noticker=1&safebottom=<?= SIGNAGE_TICKER_H ?>&settle=' + SETTLE + '&r=' + Date.now();
     setTimeout(reveal, HANG);                              // safety net for hung pages
   }
 

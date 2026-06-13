@@ -442,13 +442,12 @@ function rotation_quick_add_items(): array
             if (!is_array($feed)) {
                 continue;
             }
-            $name = trim((string)($feed['name'] ?? $key));
-            $dwell = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
+            $perStory = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
             $stories = (int)($feed['stories'] ?? cfg('rss.DEFAULT_STORIES', 6));
             $items[] = [
                 'label' => 'RSS — ' . $name,
                 'url' => 'rss.php?feed=' . rawurlencode((string)$key),
-                'dwell' => max(30, $dwell * max(1, $stories)),
+                'dwell' => max(30, $perStory * max(1, $stories) + (int)ceil(max(1, $stories) * 0.5)),
                 'group' => 'RSS feeds',
             ];
         }
@@ -1019,9 +1018,10 @@ function rotation_sync_rss(string $screen = 'main'): array
             continue;
         }
         $url = 'rss.php?feed=' . rawurlencode((string)$key);
-        $dwell = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
+        $perStory = (int)($feed['dwell'] ?? cfg('rss.DEFAULT_DWELL', 16));
         $stories = (int)($feed['stories'] ?? cfg('rss.DEFAULT_STORIES', 6));
-        $dwell = max(30, $dwell * max(1, $stories));
+        // Per-story seconds × count, plus ~0.5s/story for crossfades and image preload.
+        $dwell = max(30, $perStory * max(1, $stories) + (int)ceil(max(1, $stories) * 0.5));
         $found = false;
         foreach ($pages as &$page) {
             if (!is_array($page)) {

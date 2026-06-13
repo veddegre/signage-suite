@@ -172,6 +172,9 @@ if ($raw !== null) {
 $items = array_values(array_filter($items, fn($i) => $i['title'] !== ''));
 $items = array_slice($items, 0, $stories);
 
+$embedded = isset($_GET['noticker']);
+$settleMs = max(0, (int)($_GET['settle'] ?? 0));
+
 function ago(?int $ts): string
 {
     if ($ts === null) return '';
@@ -268,6 +271,8 @@ $payload = array_map(fn($i) => [
     const STORIES = <?= json_encode($payload, JSON_UNESCAPED_SLASHES) ?>;
     const DWELL   = <?= $dwell ?> * 1000;
     const FEED    = <?= json_encode($feed['name']) ?>;
+    const EMBEDDED = <?= json_encode($embedded) ?>;
+    const SETTLE  = <?= (int)$settleMs ?>;
     const photos  = [document.getElementById('photoA'), document.getElementById('photoB')];
     const textEl  = document.getElementById('text');
     let idx = -1, front = 0;
@@ -288,7 +293,11 @@ $payload = array_map(fn($i) => [
     }
 
     async function show() {
-      idx = (idx + 1) % STORIES.length;
+      idx++;
+      if (idx >= STORIES.length) {
+        if (EMBEDDED) return;
+        idx = 0;
+      }
       const s = STORIES[idx];
       const ok = await preload(s.image);
 
@@ -315,7 +324,7 @@ $payload = array_map(fn($i) => [
 
       setTimeout(show, DWELL);
     }
-    show();
+    setTimeout(show, SETTLE);
 
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
       document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
