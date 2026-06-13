@@ -32,6 +32,48 @@ function rotation_screen_pages(string $screen = 'main'): array
     return is_array($pages) ? $pages : [];
 }
 
+/** Default playlist when nothing is configured yet (matches board.php fallback). */
+function rotation_starter_pages(): array
+{
+    return [
+        ['url' => 'index.php',   'dwell' => 180],
+        ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
+        ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
+        ['url' => 'family.php',  'dwell' => 90,  'from' => 6,  'to' => 21],
+        ['url' => 'homelab.php', 'dwell' => 45],
+        ['url' => 'traffic.php', 'dwell' => 90,  'from' => 6,  'to' => 20],
+    ];
+}
+
+/** Parse posted rotation page rows from admin forms. @return list<array<string,mixed>> */
+function rotation_parse_pages_rows(array $rows): array
+{
+    $outV = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $row = array_map(fn($v) => trim((string)$v), $row);
+        $obj = [];
+        $any = false;
+        foreach (['url', 'dwell', 'from', 'to'] as $col) {
+            $v = $row[$col] ?? '';
+            if ($v === '') {
+                continue;
+            }
+            $any = true;
+            $obj[$col] = in_array($col, ['dwell', 'from', 'to'], true) ? (int)$v : $v;
+        }
+        if (($row['off'] ?? '') !== '') {
+            $obj['off'] = true;
+        }
+        if ($any) {
+            $outV[] = $obj;
+        }
+    }
+    return $outV;
+}
+
 function rotation_page_label(string $url): string
 {
     $url = trim($url);

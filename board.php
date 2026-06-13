@@ -19,22 +19,13 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/rotation_lib.php';
 
 // Which screen is this device? board.php?screen=garage etc.; default 'main'.
 $SCREEN = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['screen'] ?? ''));
 if ($SCREEN === '') $SCREEN = 'main';
 
-$BUILTIN_PAGES = [
-    ['url' => 'index.php',           'dwell' => 180],
-    ['url' => 'lake.php',            'dwell' => 60, 'from' => 7,  'to' => 22],
-    ['url' => 'photo.php',           'dwell' => 60, 'from' => 14, 'to' => 23],
-    ['url' => 'family.php',          'dwell' => 90, 'from' => 6,  'to' => 21],
-    ['url' => 'homelab.php',         'dwell' => 45],
-    ['url' => 'traffic.php',         'dwell' => 90, 'from' => 6,  'to' => 20],
-    // ['url' => 'signaltrace.php',  'dwell' => 45],
-    // ['url' => 'rss.php?feed=ars', 'dwell' => 96],
-    // ['url' => 'rotator.php',      'dwell' => 300, 'from' => 22, 'to' => 6],
-];
+$BUILTIN_PAGES = rotation_starter_pages();
 
 // Fallback chain: this screen's pages → main's pages → legacy single-rotation key → built-in default.
 define('PAGES', cfg("rotation.PAGES_$SCREEN",

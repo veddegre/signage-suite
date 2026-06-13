@@ -201,6 +201,29 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if ($raw === '') unset($conf[$cfgKey]); else $conf[$cfgKey] = $raw;
         }
     }
+    if ($board === 'rotation') {
+        $schemaPageKeys = [];
+        foreach ($schema[$board]['fields'] as $sf) {
+            if (strpos($sf['key'], 'PAGES_') === 0) {
+                $schemaPageKeys[$sf['key']] = true;
+            }
+        }
+        foreach ($_POST as $name => $rows) {
+            if (!is_string($name) || !preg_match('/^PAGES_[a-z0-9_-]+$/i', $name)) {
+                continue;
+            }
+            if (!empty($schemaPageKeys[$name]) || !is_array($rows)) {
+                continue;
+            }
+            $cfgKey = "$board.$name";
+            $outV = rotation_parse_pages_rows($rows);
+            if ($outV === []) {
+                unset($conf[$cfgKey]);
+            } else {
+                $conf[$cfgKey] = $outV;
+            }
+        }
+    }
     $conf = array_filter($conf, fn($v) => $v !== null);
     if ($errors) {
         $flash = implode(' ', $errors); $flashOk = false;
@@ -550,6 +573,11 @@ $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
 }
+$rotationStarterPages = rotation_starter_pages();
+$rotationMainPages = rotation_screen_pages('main');
+if ($rotationMainPages === []) {
+    $rotationMainPages = $rotationStarterPages;
+}
 
 function admin_field(array $f, $val, string $board): void
 {
@@ -689,7 +717,9 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-flags { display:flex; flex-wrap:wrap; gap:16px; margin-top:4px; }
   .slide-card-flags label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); }
   @media (max-width: 760px) { .slide-card-grid { grid-template-columns:1fr; } .slide-card-grid .span-2 { grid-column:span 1; } }
-  .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
+  .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; min-height:72px; }
+  .rotation-playlist-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; text-align:center; }
+  .rotation-screen-tools { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 6px; }
   .video-card, .rotation-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
   .video-card.dragging, .rotation-card.dragging { opacity:.55; }
   .video-card-head, .rotation-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
@@ -1163,10 +1193,15 @@ function admin_field(array $f, $val, string $board): void
                   $scrRows[] = ['_key' => $rk] + (is_array($rv) ? $rv : ['name' => $rv]);
               }
           }
+          if ($scrRows === []) {
+              foreach ($rotationScreens as $rk => $rv) {
+                  $scrRows[] = ['_key' => $rk] + (is_array($rv) ? $rv : ['name' => (string)$rv]);
+              }
+          }
         ?>
           <div class="section-title">Displays</div>
-          <div class="help" style="margin-bottom:12px">One row per physical screen. Each kiosk uses <code>board.php?screen=KEY</code>
-            (plain <code>board.php</code> = main). Save after adding a screen — its playlist section appears below.</div>
+          <div class="help" style="margin-bottom:12px">Each screen has its own playlist below. Kiosks use <code>board.php?screen=KEY</code>
+            (plain <code>board.php</code> = main). Add a display row here if you need more than one screen.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
@@ -1187,64 +1222,74 @@ function admin_field(array $f, $val, string $board): void
           </div>
           <button type="button" class="addrow" onclick="addRow(this)">+ Add screen</button>
 
-          <?php foreach ($b['fields'] as $f):
-            if (strpos($f['key'], 'PAGES_') !== 0) continue;
-            $screenKey = substr($f['key'], 6);
-            $pagesVal = current_val($rawConf, $board, $f['key']);
+          <?php foreach ($rotationScreens as $screenKey => $screenMeta):
+            $fieldKey = 'PAGES_' . $screenKey;
+            $pagesVal = current_val($rawConf, $board, $fieldKey);
             $pageRows = is_array($pagesVal) ? $pagesVal : [];
             $screenName = rotation_screen_display_name($screenKey, $rotationScreens);
             $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
           ?>
-          <div class="section-title" style="margin-top:28px">Playlist — <?= h($screenName) ?></div>
-          <div class="help" style="margin-bottom:8px">Drag cards to set wall order (top = first). Use quick-add for weather, RSS, slides, rotator, videos, and more.
-            <?php if ($screenKey !== 'main'): ?> Leave empty to mirror the main screen.<?php endif; ?></div>
+          <div class="section-title" style="margin-top:28px">Playlist — <?= h($screenName) ?> <code style="font-size:13px;color:var(--beacon)"><?= h($screenKey) ?></code></div>
+          <div class="help" style="margin-bottom:8px">Drag cards by the <strong>⋮⋮</strong> handle to reorder (top = first on the wall).
+            <?php if ($screenKey !== 'main'): ?> Leave this playlist empty to mirror main.<?php endif; ?></div>
+
+          <div class="rotation-screen-tools">
+            <button type="button" class="secondary" onclick="loadRotationStarter('<?= h($deckId) ?>')">Load starter playlist</button>
+            <?php if ($screenKey !== 'main'): ?>
+            <button type="button" class="secondary" onclick="copyRotationFromMain('<?= h($deckId) ?>')">Copy from main</button>
+            <?php endif; ?>
+            <button type="button" class="addrow" onclick="addRotationPage('<?= h($deckId) ?>')">+ Add page</button>
+          </div>
 
           <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
           <div class="quick-add-bar">
             <span class="group-label"><?= h($groupName) ?></span>
             <?php foreach ($groupItems as $qa): ?>
             <button type="button" class="secondary quick-add-rotation" style="padding:6px 12px;font-size:13px"
-                    data-field="<?= h($f['key']) ?>" data-deck="<?= h($deckId) ?>"
+                    data-field="<?= h($fieldKey) ?>" data-deck="<?= h($deckId) ?>"
                     data-url="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>"><?= h($qa['label']) ?></button>
             <?php endforeach; ?>
           </div>
           <?php endforeach; ?>
 
-          <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($f['key']) ?>">
+          <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
+            <?php if ($pageRows === []): ?>
+            <div class="rotation-playlist-empty" data-rotation-empty>No pages yet — quick-add a board above, load the starter playlist, or add a blank page.</div>
+            <?php endif; ?>
             <?php $pri = 0; foreach ($pageRows as $prow):
               if (!is_array($prow)) continue;
               $purl = trim((string)($prow['url'] ?? ''));
             ?>
-            <div class="rotation-card" data-rotation-card draggable="true">
+            <div class="rotation-card" data-rotation-card>
               <div class="rotation-card-head">
-                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
                 <div class="rotation-card-title">
                   <strong data-rotation-label><?= h(rotation_page_label($purl)) ?></strong>
                   <code data-rotation-url-display><?= h($purl !== '' ? $purl : 'board URL') ?></code>
                 </div>
-                <button type="button" class="rowdel" onclick="this.closest('[data-rotation-card]').remove(); reindexRotationDeck(document.getElementById('<?= h($deckId) ?>'));" title="Remove">×</button>
+                <button type="button" class="rowdel" onclick="removeRotationCard(this, '<?= h($deckId) ?>')" title="Remove">×</button>
               </div>
               <div class="rotation-card-grid">
                 <div style="grid-column:1 / -1">
                   <label class="mini">URL</label>
-                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
                          placeholder="slides.php or rss.php?feed=ars" data-rotation-url required>
                 </div>
                 <div>
                   <label class="mini">Dwell (s)</label>
-                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="60">
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="60">
                 </div>
                 <div>
                   <label class="mini">From hr</label>
-                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
                 </div>
                 <div>
                   <label class="mini">To hr</label>
-                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
                 </div>
               </div>
               <div class="rotation-card-meta">
-                <label class="check" style="margin:0"><input type="checkbox" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this page</label>
+                <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this page</label>
                 <?php if ($purl !== ''): ?>
                 <div class="rotation-card-actions">
                   <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
@@ -1254,7 +1299,6 @@ function admin_field(array $f, $val, string $board): void
             </div>
             <?php $pri++; endforeach; ?>
           </div>
-          <button type="button" class="addrow" style="margin-top:12px" onclick="addRotationPage('<?= h($deckId) ?>')">+ Add page</button>
           <?php endforeach; ?>
 
           <details class="panel panel-muted" style="margin-top:22px">
@@ -1286,9 +1330,9 @@ function admin_field(array $f, $val, string $board): void
               $label = trim((string)($row['title'] ?? ''));
               if ($label === '') $label = (string)$vk;
             ?>
-            <div class="video-card" data-video-card draggable="true">
+            <div class="video-card" data-video-card>
               <div class="video-card-head">
-                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
                 <div class="video-card-title">
                   <strong><?= h($label) ?></strong>
                   <code><?= h(video_rotation_url($vk)) ?></code>
@@ -1700,6 +1744,55 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 
+const ROTATION_STARTER = <?= json_encode($rotationStarterPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
+const ROTATION_MAIN_PAGES = <?= json_encode($rotationMainPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
+
+function bindPlaylistDeckDrag(deck, cardSelector, handleSelector, reindexFn, bindCardFn) {
+  if (deck.dataset.dragDeckBound) {
+    deck.querySelectorAll(cardSelector).forEach(function (card) { bindCardFn(card, deck); });
+    return;
+  }
+  deck.dataset.dragDeckBound = '1';
+  deck.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const dragCard = deck._dragCard;
+    if (!dragCard) return;
+    const cards = Array.from(deck.querySelectorAll(cardSelector)).filter(function (c) { return c !== dragCard; });
+    let placed = false;
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) {
+        deck.insertBefore(dragCard, cards[i]);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) deck.appendChild(dragCard);
+    reindexFn(deck);
+  });
+  deck.addEventListener('drop', function (e) { e.preventDefault(); });
+  deck.querySelectorAll(cardSelector).forEach(function (card) { bindCardFn(card, deck); });
+}
+
+function bindPlaylistCardHandle(card, deck, handleSelector, reindexFn) {
+  const handle = card.querySelector(handleSelector);
+  if (!handle || handle.dataset.dragBound) return;
+  handle.dataset.dragBound = '1';
+  handle.setAttribute('draggable', 'true');
+  handle.addEventListener('dragstart', function (e) {
+    deck._dragCard = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', 'move');
+  });
+  handle.addEventListener('dragend', function () {
+    card.classList.remove('dragging');
+    deck._dragCard = null;
+    reindexFn(deck);
+  });
+}
+
 function rotationLabelFromUrl(url) {
   url = (url || '').trim();
   if (!url) return 'New page';
@@ -1724,6 +1817,69 @@ function reindexRotationDeck(deck) {
       inp.name = inp.name.replace(new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\[[^\\]]+\\]'), field + '[' + i + ']');
     });
   });
+}
+
+function syncRotationEmptyState(deck) {
+  if (!deck) return;
+  const empty = deck.querySelector('[data-rotation-empty]');
+  if (empty) empty.hidden = !!deck.querySelector('[data-rotation-card]');
+}
+
+function removeRotationCard(btn, deckId) {
+  const card = btn.closest('[data-rotation-card]');
+  const deck = document.getElementById(deckId);
+  if (card) card.remove();
+  if (deck) {
+    reindexRotationDeck(deck);
+    syncRotationEmptyState(deck);
+  }
+}
+
+function fillRotationCardTimes(card, page) {
+  if (!card || !page) return;
+  if (page.from != null && page.from !== '') {
+    const from = card.querySelector('[name*="[from]"]');
+    if (from) from.value = String(page.from);
+  }
+  if (page.to != null && page.to !== '') {
+    const to = card.querySelector('[name*="[to]"]');
+    if (to) to.value = String(page.to);
+  }
+  if (page.off) {
+    const off = card.querySelector('[name*="[off]"]');
+    if (off) off.checked = true;
+  }
+}
+
+function loadRotationStarter(deckId) {
+  const deck = document.getElementById(deckId);
+  if (!deck) return;
+  if (deck.querySelector('[data-rotation-card]') && !confirm('Replace the current playlist with the starter set?')) return;
+  deck.querySelectorAll('[data-rotation-card]').forEach(function (c) { c.remove(); });
+  ROTATION_STARTER.forEach(function (p) {
+    addRotationPage(deckId, p.url || '', String(p.dwell || 60), false);
+    fillRotationCardTimes(deck.querySelector('[data-rotation-card]:last-child'), p);
+  });
+  reindexRotationDeck(deck);
+  syncRotationEmptyState(deck);
+}
+
+function copyRotationFromMain(deckId) {
+  const deck = document.getElementById(deckId);
+  if (!deck) return;
+  const pages = ROTATION_MAIN_PAGES || [];
+  if (!pages.length) {
+    alert('Main screen has no saved playlist yet.');
+    return;
+  }
+  if (deck.querySelector('[data-rotation-card]') && !confirm('Replace this playlist with a copy of main?')) return;
+  deck.querySelectorAll('[data-rotation-card]').forEach(function (c) { c.remove(); });
+  pages.forEach(function (p) {
+    addRotationPage(deckId, p.url || '', String(p.dwell || 60), false);
+    fillRotationCardTimes(deck.querySelector('[data-rotation-card]:last-child'), p);
+  });
+  reindexRotationDeck(deck);
+  syncRotationEmptyState(deck);
 }
 
 function bindRotationCard(card, deck) {
@@ -1758,48 +1914,23 @@ function bindRotationCard(card, deck) {
 }
 
 function bindRotationCardDrag(card, deck) {
-  card.addEventListener('dragstart', function (e) {
-    deck._dragCard = card;
-    card.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-  card.addEventListener('dragend', function () {
-    card.classList.remove('dragging');
-    deck._dragCard = null;
-    reindexRotationDeck(deck);
-  });
-  card.addEventListener('dragover', function (e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  });
-  card.addEventListener('drop', function (e) {
-    e.preventDefault();
-    const dragEl = deck._dragCard;
-    if (!dragEl || dragEl === card) return;
-    const cards = Array.from(deck.querySelectorAll('[data-rotation-card]'));
-    const from = cards.indexOf(dragEl);
-    const to = cards.indexOf(card);
-    if (from < 0 || to < 0) return;
-    if (from < to) card.after(dragEl); else card.before(dragEl);
-    reindexRotationDeck(deck);
-  });
+  bindPlaylistCardHandle(card, deck, '.drag-handle', reindexRotationDeck);
 }
 
 function initRotationDecks() {
   document.querySelectorAll('.rotation-playlist').forEach(function (deck) {
-    deck.querySelectorAll('[data-rotation-card]').forEach(function (card) {
-      bindRotationCard(card, deck);
-      if (!card.dataset.dragBound) {
-        card.dataset.dragBound = '1';
-        bindRotationCardDrag(card, deck);
-      }
+    bindPlaylistDeckDrag(deck, '[data-rotation-card]', '.drag-handle', reindexRotationDeck, function (card, d) {
+      bindRotationCard(card, d);
+      bindRotationCardDrag(card, d);
     });
+    syncRotationEmptyState(deck);
   });
 }
 
-function addRotationPage(deckId, url, dwell) {
+function addRotationPage(deckId, url, dwell, scroll) {
+  if (scroll === undefined) scroll = true;
   const deck = typeof deckId === 'string' ? document.getElementById(deckId) : deckId;
-  if (!deck || !deck.dataset.field) return;
+  if (!deck || !deck.dataset.field) return null;
   const field = deck.dataset.field;
   reindexRotationDeck(deck);
   const idx = deck.querySelectorAll('[data-rotation-card]').length;
@@ -1808,14 +1939,12 @@ function addRotationPage(deckId, url, dwell) {
   const card = document.createElement('div');
   card.className = 'rotation-card';
   card.setAttribute('data-rotation-card', '');
-  card.setAttribute('draggable', 'true');
   card.innerHTML =
     '<div class="rotation-card-head">' +
-      '<span class="drag-handle" title="Drag to reorder">⋮⋮</span>' +
+      '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
       '<div class="rotation-card-title"><strong data-rotation-label>' + rotationLabelFromUrl(url) + '</strong>' +
       '<code data-rotation-url-display>' + (url || 'board URL') + '</code></div>' +
-      '<button type="button" class="rowdel" onclick="this.closest(\'[data-rotation-card]\').remove(); reindexRotationDeck(document.getElementById(\'' +
-      deck.id + '\'));" title="Remove">×</button>' +
+      '<button type="button" class="rowdel" onclick="removeRotationCard(this, \'' + deck.id + '\')" title="Remove">×</button>' +
     '</div>' +
     '<div class="rotation-card-grid">' +
       '<div style="grid-column:1 / -1"><label class="mini">URL</label>' +
@@ -1828,9 +1957,10 @@ function addRotationPage(deckId, url, dwell) {
   deck.appendChild(card);
   bindRotationCard(card, deck);
   bindRotationCardDrag(card, deck);
-  card.dataset.dragBound = '1';
   reindexRotationDeck(deck);
-  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  syncRotationEmptyState(deck);
+  if (scroll) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return card;
 }
 
 function reindexVideoPlaylist() {
@@ -1865,42 +1995,15 @@ function bindVideoCard(card) {
 }
 
 function bindVideoCardDrag(card, deck) {
-  card.addEventListener('dragstart', function (e) {
-    deck._dragCard = card;
-    card.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-  card.addEventListener('dragend', function () {
-    card.classList.remove('dragging');
-    deck._dragCard = null;
-    reindexVideoPlaylist();
-  });
-  card.addEventListener('dragover', function (e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  });
-  card.addEventListener('drop', function (e) {
-    e.preventDefault();
-    const dragEl = deck._dragCard;
-    if (!dragEl || dragEl === card) return;
-    const cards = Array.from(deck.querySelectorAll('[data-video-card]'));
-    const from = cards.indexOf(dragEl);
-    const to = cards.indexOf(card);
-    if (from < 0 || to < 0) return;
-    if (from < to) card.after(dragEl); else card.before(dragEl);
-    reindexVideoPlaylist();
-  });
+  bindPlaylistCardHandle(card, deck, '.drag-handle', reindexVideoPlaylist);
 }
 
 function initVideoPlaylist() {
   const deck = document.getElementById('videoPlaylist');
   if (!deck) return;
-  deck.querySelectorAll('[data-video-card]').forEach(function (card) {
+  bindPlaylistDeckDrag(deck, '[data-video-card]', '.drag-handle', reindexVideoPlaylist, function (card, d) {
     bindVideoCard(card);
-    if (!card.dataset.dragBound) {
-      card.dataset.dragBound = '1';
-      bindVideoCardDrag(card, deck);
-    }
+    bindVideoCardDrag(card, d);
   });
 }
 
@@ -1912,10 +2015,9 @@ function addVideoCard() {
   const card = document.createElement('div');
   card.className = 'video-card';
   card.setAttribute('data-video-card', '');
-  card.setAttribute('draggable', 'true');
   card.innerHTML =
     '<div class="video-card-head">' +
-      '<span class="drag-handle" title="Drag to reorder">⋮⋮</span>' +
+      '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
       '<div class="video-card-title"><strong>New video</strong><code>video.php?v=KEY</code></div>' +
       '<button type="button" class="rowdel" onclick="this.closest(\'[data-video-card]\').remove(); reindexVideoPlaylist();" title="Remove">×</button>' +
     '</div>' +
@@ -1929,7 +2031,6 @@ function addVideoCard() {
   deck.appendChild(card);
   bindVideoCard(card);
   bindVideoCardDrag(card, deck);
-  card.dataset.dragBound = '1';
   reindexVideoPlaylist();
 }
 </script>
