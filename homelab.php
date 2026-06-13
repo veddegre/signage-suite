@@ -31,9 +31,13 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('homelab.CACHE_TTL', 30));
 
 date_default_timezone_set(TIMEZONE);
-$frameH = signage_frame_height();
 $embedded = isset($_GET['noticker']);
-$compact = $frameH < 1080;
+$boardH = signage_frame_height();
+$rowHead = max(72, (int)round(96 * $boardH / 1080));
+$rowMid  = max(248, (int)round(300 * $boardH / 1080));
+$heightCss = $embedded
+    ? $boardH . 'px'
+    : 'calc(1080px - var(--signage-ticker-inset, 0px))';
 $vmLimit = 8;
 $GLOBALS['diag'] = [];
 
@@ -148,29 +152,32 @@ $wanMs    = $checks['wan_ms'] ?? null;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347;
           --up:#39c46d; --down:#ff5d5d; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              <?= signage_viewport_css() ?> }
-  .board { width:1920px; height:100%; padding:<?= $compact ? '20px 28px' : '28px 32px' ?>; display:grid;
-           gap:<?= $compact ? 18 : 24 ?>px;
+  html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
+  .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '28px 32px' ?>;
+           display:grid; gap:<?= $boardH < 1080 ? 18 : 24 ?>px;
            grid-template-columns: 1fr 1fr 1fr;
-           grid-template-rows: <?= $compact ? '80px 280px' : '96px 300px' ?> minmax(0, 1fr) auto;
-           grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
-  .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 54 : 64 ?>px; }
+           grid-template-rows: <?= $rowHead ?>px <?= $rowMid ?>px minmax(0, 1fr) auto;
+           grid-template-areas:
+             "head head head"
+             "node dns wan"
+             "vms vms svc"
+             "meta meta meta"; }
+  .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; min-height:0; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 54 : 64 ?>px; }
   .head h1 span { color:var(--beacon); }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 46 : 56 ?>px; color:var(--mist); }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 46 : 56 ?>px; color:var(--mist); }
 
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:<?= $compact ? '18px 22px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
-  .panel .k { font-size:<?= $compact ? 18 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 88 : 110 ?>px; line-height:1;
+           padding:<?= $boardH < 1080 ? '18px 22px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
+  .panel .k { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 88 : 110 ?>px; line-height:1;
             color:var(--beacon); font-variant-numeric:tabular-nums; }
-  .bignum small { font-size:<?= $compact ? 36 : 44 ?>px; color:var(--mist); font-weight:600; }
-  .sub { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; }
+  .bignum small { font-size:<?= $boardH < 1080 ? 36 : 44 ?>px; color:var(--mist); font-weight:600; }
+  .sub { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; }
 
-  .meter { margin-top:<?= $compact ? 10 : 16 ?>px; }
-  .meter .lab { display:flex; justify-content:space-between; font-size:<?= $compact ? 18 : 21 ?>px; color:var(--mist); margin-bottom:6px; }
+  .meter { margin-top:<?= $boardH < 1080 ? 10 : 16 ?>px; }
+  .meter .lab { display:flex; justify-content:space-between; font-size:<?= $boardH < 1080 ? 18 : 21 ?>px; color:var(--mist); margin-bottom:6px; }
   .meter .track { height:16px; background:var(--lake-night); border-radius:8px; overflow:hidden; }
   .meter .fill { height:100%; background:var(--beacon); border-radius:8px; }
   .meter .fill.hot { background:var(--down); }
@@ -178,22 +185,22 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .node { grid-area:node; } .dns { grid-area:dns; } .wan { grid-area:wan; }
   .vms { grid-area:vms; min-height:0; } .svc { grid-area:svc; min-height:0; }
 
-  table { width:100%; border-collapse:collapse; margin-top:<?= $compact ? 8 : 14 ?>px; }
-  th { text-align:left; font-size:<?= $compact ? 15 : 17 ?>px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
-       font-weight:500; padding:<?= $compact ? '4px 6px' : '6px 8px' ?>; border-bottom:1px solid var(--hairline); }
-  td { font-size:<?= $compact ? 20 : 23 ?>px; padding:<?= $compact ? '8px 6px' : '11px 8px' ?>; border-bottom:1px solid var(--hairline);
+  table { width:100%; border-collapse:collapse; margin-top:<?= $boardH < 1080 ? 8 : 14 ?>px; }
+  th { text-align:left; font-size:<?= $boardH < 1080 ? 15 : 17 ?>px; letter-spacing:1px; text-transform:uppercase; color:var(--mist);
+       font-weight:500; padding:<?= $boardH < 1080 ? '4px 6px' : '6px 8px' ?>; border-bottom:1px solid var(--hairline); }
+  td { font-size:<?= $boardH < 1080 ? 20 : 23 ?>px; padding:<?= $boardH < 1080 ? '8px 6px' : '11px 8px' ?>; border-bottom:1px solid var(--hairline);
        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  td.mono { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); }
+  td.mono { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; color:var(--mist); }
   .dot { display:inline-block; width:16px; height:16px; border-radius:50%; margin-right:12px;
          vertical-align:-1px; }
   .ok { background:var(--up); } .bad { background:var(--down); }
   .svcrow { display:flex; align-items:center; justify-content:space-between;
-            border-bottom:1px solid var(--hairline); padding:<?= $compact ? '12px 4px' : '17px 4px' ?>; }
+            border-bottom:1px solid var(--hairline); padding:<?= $boardH < 1080 ? '12px 4px' : '17px 4px' ?>; }
   .svcrow:last-child { border-bottom:none; }
-  .svcrow .n { font-size:<?= $compact ? 24 : 28 ?>px; font-weight:500; }
-  .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 20 : 23 ?>px; color:var(--mist); }
-  .storagebars { margin-top:<?= $compact ? 8 : 14 ?>px; }
-  .notcfg { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:14px; line-height:1.5; }
+  .svcrow .n { font-size:<?= $boardH < 1080 ? 24 : 28 ?>px; font-weight:500; }
+  .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 20 : 23 ?>px; color:var(--mist); }
+  .storagebars { margin-top:<?= $boardH < 1080 ? 8 : 14 ?>px; }
+  .notcfg { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:14px; line-height:1.5; }
   .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
