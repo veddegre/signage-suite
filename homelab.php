@@ -31,10 +31,11 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('homelab.CACHE_TTL', 30));
 
 date_default_timezone_set(TIMEZONE);
-$frameH = signage_frame_height();
-$embedded = isset($_GET['noticker']);
-$compact = $frameH < 1080;
-$frameScale = $compact ? round($frameH / 1080, 5) : 1;
+$framing = signage_board_framing();
+$designH = $framing['designH'];
+$frameH = $framing['frameH'];
+$embedded = $framing['embedded'];
+$frameScale = $framing['scale'];
 $vmLimit = 8;
 $GLOBALS['diag'] = [];
 
@@ -151,11 +152,10 @@ $wanMs    = $checks['wan_ms'] ?? null;
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              height:<?= $frameH ?>px; }
-  <?php if ($compact): ?>
-  .frame { width:1920px; height:1080px; transform:scale(<?= $frameScale ?>); transform-origin:top left; }
-  <?php endif; ?>
-  .board { width:1920px; height:1080px; padding:28px 32px; display:grid; gap:24px;
+              height:<?= $embedded ? $frameH . 'px' : $designH . 'px' ?>; }
+  .frame { width:1920px; height:<?= $designH ?>px; transform-origin:top left;
+           transform:scale(<?= $embedded ? (string)$frameScale : 'var(--homelab-scale, 1)' ?>); }
+  .board { width:1920px; height:<?= $designH ?>px; padding:28px 32px; display:grid; gap:24px;
            grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 96px 300px minmax(0, 1fr) auto;
            grid-template-areas: "head head head" "node dns wan" "vms vms svc" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
@@ -202,7 +202,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
 </style>
 </head>
 <body>
-<?php if ($compact): ?><div class="frame"><?php endif; ?>
+<div class="frame">
 <div class="board">
   <div class="head">
     <h1>Homelab <span>&middot; Ops</span></h1>
@@ -292,13 +292,26 @@ $wanMs    = $checks['wan_ms'] ?? null;
   </section>
   <div class="stamp">Proxmox API &middot; AdGuard Home<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
-<?php if ($compact): ?></div><?php endif; ?>
+</div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
   <?php if (!$embedded): ?>
   setTimeout(() => location.reload(), 60 * 1000);
+  (function () {
+    function fitHomelab() {
+      var inset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--signage-ticker-inset')) || 0;
+      var h = <?= $designH ?> - inset;
+      document.documentElement.style.setProperty('--homelab-scale', String(h / <?= $designH ?>));
+      document.body.style.height = h + 'px';
+    }
+    fitHomelab();
+    setInterval(fitHomelab, 1000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') fitHomelab();
+    });
+  })();
   <?php endif; ?>
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>

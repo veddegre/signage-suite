@@ -1220,7 +1220,7 @@ function admin_field(array $f, $val, string $board): void
           <a href="<?= h(rotation_screen_preview_url('main')) ?>" target="_blank" rel="noopener">Preview main rotation ↗</a>
           · kiosk URL <code><?= h(rotation_screen_kiosk_url('main')) ?></code>
         <?php elseif (!empty($b['file'])): ?>
-          <a href="<?= h($b['file']) ?>" target="_blank" rel="noopener">Preview board ↗</a>
+          <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
         <?php endif; ?></div>
 
       <?php if ($board === 'rotator'): ?>
