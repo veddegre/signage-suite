@@ -104,6 +104,49 @@ function slide_unique_filename(string $base, string $ext, ?string $dir = null): 
     return $base . '-' . substr(bin2hex(random_bytes(3)), 0, 6) . '.' . $ext;
 }
 
+/** Validate PNG bytes are exactly 1920×1080. */
+function slide_validate_png_bytes(string $raw): bool
+{
+    if ($raw === '') {
+        return false;
+    }
+    $info = @getimagesizefromstring($raw);
+    if (!$info || (int)($info[2] ?? 0) !== IMAGETYPE_PNG) {
+        return false;
+    }
+    return (int)($info[0] ?? 0) === 1920 && (int)($info[1] ?? 0) === 1080;
+}
+
+/**
+ * Read a rendered creator PNG from base64 POST data or a multipart upload.
+ * @param array<string,mixed>|null $upload
+ */
+function slide_creator_read_png(?string $b64, ?array $upload): ?string
+{
+    if (is_string($b64) && $b64 !== '') {
+        $raw = base64_decode($b64, true);
+        if ($raw !== false && slide_validate_png_bytes($raw)) {
+            return $raw;
+        }
+    }
+    if (is_array($upload) && (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+        $tmp = (string)($upload['tmp_name'] ?? '');
+        if ($tmp !== '' && is_uploaded_file($tmp)) {
+            $raw = (string)file_get_contents($tmp);
+            if (slide_validate_png_bytes($raw)) {
+                return $raw;
+            }
+        }
+    }
+    return null;
+}
+
+function slide_creator_finish(string $filename): void
+{
+    header('Location: admin.php?board=slides&highlight=' . rawurlencode($filename));
+    exit;
+}
+
 /**
  * Gradient / color theme backgrounds for the slide creator.
  */

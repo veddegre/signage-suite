@@ -413,11 +413,57 @@ if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') ===
 }
 
 // ── Custom slides: upload / delete ──────────────────────────────────────────
-if ($authed && $board === 'slides' && csrf_ok()) {
+if ($authed && $board === 'slides') {
     $slideDir = slides_dir();
     if (!is_dir($slideDir)) @mkdir($slideDir, 0775, true);
     protect_dirs();
 
+    if (($_POST['action'] ?? '') === 'create_slide') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } else {
+            $title = trim((string)($_POST['creator_title'] ?? ''));
+            $slug  = trim((string)($_POST['creator_name'] ?? ''));
+            if ($slug === '' && $title !== '') {
+                $slug = $title;
+            }
+            if ($slug === '') {
+                $slug = 'slide';
+            }
+            $png = slide_creator_read_png(
+                (string)($_POST['creator_png'] ?? ''),
+                isset($_FILES['slide_image']) && is_array($_FILES['slide_image']) ? $_FILES['slide_image'] : null
+            );
+            if ($png === null) {
+                $flash = 'Could not read the rendered slide — try again. If it keeps failing, refresh the page first.';
+                $flashOk = false;
+            } elseif (strlen($png) > 8 * 1024 * 1024) {
+                $flash = 'Rendered slide must be under 8 MB.';
+                $flashOk = false;
+            } else {
+                $name = slide_unique_filename($slug, 'png', $slideDir);
+                if (@file_put_contents($slideDir . '/' . $name, $png) === false) {
+                    $flash = 'Could not write to ' . slides_dir() . ' — check permissions.';
+                    $flashOk = false;
+                } else {
+                    $caption = $title !== '' ? $title : trim((string)($_POST['creator_subtitle'] ?? ''));
+                    $extra = ['schedule' => 'always'];
+                    if ($caption !== '') {
+                        $extra['caption'] = $caption;
+                    }
+                    if (slide_append_to_deck($name, $extra)) {
+                        slides_deploy_to_screens(['main']);
+                        cfg_reload();
+                        slide_creator_finish($name);
+                    } else {
+                        $flash = 'Slide saved but could not update settings.json.';
+                        $flashOk = false;
+                    }
+                }
+            }
+        }
+    } elseif (csrf_ok()) {
     if (($_POST['action'] ?? '') === 'deploy_slides') {
         $screens = array_values(array_filter(array_map(
             'rotation_normalize_screen_key',
@@ -472,7 +518,7 @@ if ($authed && $board === 'slides' && csrf_ok()) {
                     if (slide_append_to_deck($name)) {
                         slides_deploy_to_screens(['main']);
                         cfg_reload();
-                        header('Location: ?board=slides&highlight=' . rawurlencode($name));
+                        header('Location: admin.php?board=slides&highlight=' . rawurlencode($name));
                         exit;
                     } else {
                         $flash = 'File saved but could not update settings.json.'; $flashOk = false;
@@ -492,7 +538,7 @@ if ($authed && $board === 'slides' && csrf_ok()) {
             $flash = $file . ' is already in the slide deck.';
         } elseif (slide_append_to_deck($file)) {
             cfg_reload();
-            header('Location: ?board=slides&highlight=' . rawurlencode($file));
+            header('Location: admin.php?board=slides&highlight=' . rawurlencode($file));
             exit;
         } else {
             $flash = 'Could not update settings.json.'; $flashOk = false;
@@ -516,52 +562,6 @@ if ($authed && $board === 'slides' && csrf_ok()) {
             $flash = 'Deleted ' . $del . '.';
         }
     }
-
-    if (($_POST['action'] ?? '') === 'create_slide' && isset($_FILES['slide_image'])) {
-        $f = $_FILES['slide_image'];
-        $title = trim((string)($_POST['creator_title'] ?? ''));
-        $slug  = trim((string)($_POST['creator_name'] ?? ''));
-        if ($slug === '' && $title !== '') {
-            $slug = $title;
-        }
-        if ($slug === '') {
-            $slug = 'slide';
-        }
-
-        if (($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            $flash = 'Could not create slide — try again.'; $flashOk = false;
-        } elseif (($f['size'] ?? 0) > 8 * 1024 * 1024) {
-            $flash = 'Rendered slide must be under 8 MB.'; $flashOk = false;
-        } else {
-            $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']) ?: '';
-            if ($mime !== 'image/png') {
-                $flash = 'Slide must be a PNG image.'; $flashOk = false;
-            } else {
-                $info = @getimagesize($f['tmp_name']);
-                if (!$info || ($info[0] ?? 0) !== 1920 || ($info[1] ?? 0) !== 1080) {
-                    $flash = 'Slide must be exactly 1920×1080 pixels.'; $flashOk = false;
-                } else {
-                    $name = slide_unique_filename($slug, 'png', $slideDir);
-                    if (@move_uploaded_file($f['tmp_name'], $slideDir . '/' . $name)) {
-                        $caption = $title !== '' ? $title : trim((string)($_POST['creator_subtitle'] ?? ''));
-                        $extra = ['schedule' => 'always'];
-                        if ($caption !== '') {
-                            $extra['caption'] = $caption;
-                        }
-                        if (slide_append_to_deck($name, $extra)) {
-                            slides_deploy_to_screens(['main']);
-                            cfg_reload();
-                            header('Location: ?board=slides&highlight=' . rawurlencode($name));
-                            exit;
-                        } else {
-                            $flash = 'Slide saved but could not update settings.json.'; $flashOk = false;
-                        }
-                    } else {
-                        $flash = 'Could not write to ' . slides_dir() . ' — check permissions.'; $flashOk = false;
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -2802,6 +2802,7 @@ function addVideoCard() {
     if (bgImageCache[url]) return Promise.resolve(bgImageCache[url]);
     return new Promise(function (resolve) {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = function () { bgImageCache[url] = img; resolve(img); };
       img.onerror = function () { resolve(null); };
       img.src = url;
@@ -2917,12 +2918,15 @@ function addVideoCard() {
   }
 
   async function ensureFonts() {
-    await Promise.all([
-      document.fonts.load('600 88px "Big Shoulders Display"'),
-      document.fonts.load('500 42px "Big Shoulders Display"'),
-      document.fonts.load('400 30px "IBM Plex Sans"'),
-      document.fonts.load('400 24px "IBM Plex Sans"'),
-    ]);
+    const specs = [
+      '600 88px "Big Shoulders Display"',
+      '500 42px "Big Shoulders Display"',
+      '400 30px "IBM Plex Sans"',
+      '400 24px "IBM Plex Sans"',
+    ];
+    await Promise.all(specs.map(function (spec) {
+      return document.fonts.load(spec).catch(function () { return null; });
+    }));
   }
 
   function selectedPreset() {
@@ -3130,6 +3134,60 @@ function addVideoCard() {
     });
   });
 
+  function canvasToBlob(targetCanvas) {
+    return new Promise(function (resolve, reject) {
+      targetCanvas.toBlob(function (blob) {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+        try {
+          const dataUrl = targetCanvas.toDataURL('image/png');
+          const parts = dataUrl.split(',');
+          if (parts.length < 2) {
+            reject(new Error('Could not export PNG from preview.'));
+            return;
+          }
+          const bin = atob(parts[1]);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          resolve(new Blob([arr], { type: 'image/png' }));
+        } catch (err) {
+          reject(err);
+        }
+      }, 'image/png');
+    });
+  }
+
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        resolve(comma >= 0 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = function () { reject(new Error('Could not encode PNG.')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function submitCreatorForm(fields) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'admin.php?board=slides';
+    form.style.display = 'none';
+    Object.keys(fields).forEach(function (key) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = fields[key];
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }
+
   document.getElementById('creatorSave').addEventListener('click', function () {
     const btn = this;
     const title = document.getElementById('creator_title').value.trim();
@@ -3139,36 +3197,26 @@ function addVideoCard() {
       return;
     }
     btn.disabled = true;
+    if (canvas.width !== W || canvas.height !== H) {
+      canvas.width = W;
+      canvas.height = H;
+    }
     renderPreview().then(function () {
-      canvas.toBlob(function (blob) {
-        if (!blob) {
-          alert('Could not render slide.');
-          btn.disabled = false;
-          return;
-        }
-        const fd = new FormData();
-        fd.append('action', 'create_slide');
-        fd.append('board', 'slides');
-        fd.append('csrf', <?= json_encode(csrf_token()) ?>);
-        fd.append('creator_title', title);
-        fd.append('creator_subtitle', document.getElementById('creator_subtitle').value.trim());
-        fd.append('creator_name', document.getElementById('creator_name').value.trim());
-        fd.append('slide_image', blob, 'slide.png');
-        fetch('?board=slides', { method: 'POST', body: fd, redirect: 'follow' })
-          .then(function (res) {
-            if (res.ok || res.redirected) {
-              location.href = res.url;
-            } else {
-              alert('Save failed — check server permissions.');
-              btn.disabled = false;
-            }
-          })
-          .catch(function () {
-            alert('Save failed — network error.');
-            btn.disabled = false;
-          });
-      }, 'image/png');
-    }).catch(function () {
+      return canvasToBlob(canvas);
+    }).then(function (blob) {
+      return blobToBase64(blob);
+    }).then(function (b64) {
+      submitCreatorForm({
+        action: 'create_slide',
+        board: 'slides',
+        csrf: <?= json_encode(csrf_token()) ?>,
+        creator_title: title,
+        creator_subtitle: document.getElementById('creator_subtitle').value.trim(),
+        creator_name: document.getElementById('creator_name').value.trim(),
+        creator_png: b64
+      });
+    }).catch(function (err) {
+      alert(err && err.message ? err.message : 'Could not create slide — try refreshing the page.');
       btn.disabled = false;
     });
   });
