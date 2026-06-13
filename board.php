@@ -149,6 +149,11 @@ if (($_GET['api'] ?? '') === 'cec') {
       f.classList.add('show');
       frames[front].classList.remove('show');
       front = back;
+      try {
+        if (f.contentWindow) {
+          f.contentWindow.postMessage({ type: 'signage-show' }, '*');
+        }
+      } catch (e) {}
       setTimeout(rotate, (+p.dwell) * 1000);
     };
 

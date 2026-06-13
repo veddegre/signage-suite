@@ -298,6 +298,8 @@ $payload = array_map(fn($i) => [
       });
     }
 
+    let carouselStarted = false;
+
     async function show() {
       idx++;
       if (idx >= STORIES.length) {
@@ -334,18 +336,29 @@ $payload = array_map(fn($i) => [
     }
 
     function startCarousel() {
-      setTimeout(show, SETTLE);
+      if (carouselStarted) return;
+      carouselStarted = true;
+      show();
     }
-    // In rotation, board.php reveals after iframe load + SETTLE — start the carousel then
-    // so the last story is not held extra seconds while the board timer catches up.
+
     if (EMBEDDED) {
-      if (document.readyState === 'complete') {
+      // Warm story images while board.php loads this frame hidden.
+      STORIES.forEach(s => { preload(s.image); });
+      window.addEventListener('message', (ev) => {
+        if (ev.source !== window.parent) return;
+        if (!ev.data || ev.data.type !== 'signage-show') return;
         startCarousel();
-      } else {
-        window.addEventListener('load', startCarousel, { once: true });
+      });
+      // noticker=1 outside the rotation shell (direct preview) — no parent message.
+      if (window.parent === window) {
+        const kick = () => setTimeout(startCarousel, SETTLE);
+        if (document.readyState === 'complete') kick();
+        else window.addEventListener('load', kick, { once: true });
       }
     } else {
-      startCarousel();
+      const kick = () => setTimeout(startCarousel, SETTLE);
+      if (document.readyState === 'complete') kick();
+      else window.addEventListener('load', kick, { once: true });
     }
 
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
