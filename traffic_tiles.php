@@ -4,18 +4,15 @@
  * Used by traffic.php Leaflet layer: traffic_tiles.php?style=…&z=&x=&y=
  */
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/security_lib.php';
+require_once __DIR__ . '/traffic_lib.php';
 
-$key = (string)cfg('traffic.TOMTOM_API_KEY', '');
-if ($key === '' || $key === 'PUT-YOUR-TOMTOM-KEY-HERE') {
+if (traffic_api_key() === null) {
     http_response_code(503);
     exit;
 }
 
-$flowStyles = ['relative0-dark', 'relative0', 'relative', 'absolute'];
 $style = (string)($_GET['style'] ?? 'relative0-dark');
-if (!in_array($style, $flowStyles, true)) {
+if (!in_array($style, traffic_flow_styles(), true)) {
     $style = 'relative0-dark';
 }
 
@@ -32,26 +29,11 @@ if ($x >= $maxTile || $y >= $maxTile) {
     exit;
 }
 
-$url = sprintf(
-    'https://api.tomtom.com/traffic/map/4/tile/flow/%s/%d/%d/%d.png?key=%s&thickness=5',
-    rawurlencode($style),
-    $z,
-    $x,
-    $y,
-    rawurlencode($key)
-);
-$policy = signage_fetch_url_allowed($url);
-if (!$policy['ok']) {
-    http_response_code(502);
-    exit;
-}
-
-$cacheDir = __DIR__ . '/cache/traffic_tiles';
+$cacheDir = traffic_cache_dir();
 if (!is_dir($cacheDir)) {
     @mkdir($cacheDir, 0775, true);
 }
 $cacheFile = $cacheDir . '/' . hash('sha256', $style . '/' . $z . '/' . $x . '/' . $y) . '.png';
-$errFile = $cacheDir . '/last_error.txt';
 $ttl = 120;
 $bust = isset($_GET['t']);
 
@@ -59,6 +41,18 @@ if (!$bust && is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
     header('Content-Type: image/png');
     header('Cache-Control: public, max-age=120');
     readfile($cacheFile);
+    exit;
+}
+
+$url = traffic_tile_url($style, $z, $x, $y);
+if ($url === null) {
+    http_response_code(503);
+    exit;
+}
+
+$policy = signage_fetch_url_allowed($url);
+if (!$policy['ok']) {
+    http_response_code(502);
     exit;
 }
 
@@ -97,9 +91,13 @@ if (function_exists('curl_init')) {
 $pngOk = is_string($data) && str_starts_with($data, "\x89PNG\r\n\x1a\n") && strlen($data) > 100;
 if (!$pngOk) {
     $snippet = is_string($data) ? substr(preg_replace('/\s+/', ' ', $data), 0, 180) : '';
-    @file_put_contents($errFile, date('c') . " HTTP $httpCode"
-        . ($fetchErr !== '' ? " curl: $fetchErr" : '')
-        . ($snippet !== '' ? " body: $snippet" : '') . "\n", LOCK_EX);
+    @file_put_contents(
+        $cacheDir . '/last_error.txt',
+        date('c') . " HTTP $httpCode"
+            . ($fetchErr !== '' ? " curl: $fetchErr" : '')
+            . ($snippet !== '' ? " body: $snippet" : '') . "\n",
+        LOCK_EX
+    );
     if (is_file($cacheFile)) {
         header('Content-Type: image/png');
         header('Cache-Control: public, max-age=60');
@@ -111,7 +109,7 @@ if (!$pngOk) {
 }
 
 @file_put_contents($cacheFile, $data, LOCK_EX);
-@unlink($errFile);
+@unlink($cacheDir . '/last_error.txt');
 header('Content-Type: image/png');
 header('Cache-Control: public, max-age=120');
 echo $data;

@@ -19,6 +19,7 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/slides_lib.php';
 require_once __DIR__ . '/rotator_lib.php';
 require_once __DIR__ . '/video_lib.php';
+require_once __DIR__ . '/traffic_lib.php';
 
 slide_background_ensure_assets();
 
@@ -240,6 +241,22 @@ if ($authed && ($_POST['action'] ?? '') === 'changepassword' && csrf_ok()) {
     }
 }
 
+// ── Traffic board: TomTom tile test ─────────────────────────────────────────
+$trafficTestResult = null;
+if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') === 'traffic_test') {
+    $trafficTestResult = traffic_test_connection();
+    if ($trafficTestResult['ok']) {
+        $flash = 'TomTom tile test OK — HTTP ' . (int)$trafficTestResult['http']
+            . ', ' . (int)$trafficTestResult['bytes'] . ' bytes PNG.';
+    } else {
+        $flash = 'TomTom tile test failed — ' . ($trafficTestResult['error'] ?? 'unknown error');
+        if (!empty($trafficTestResult['detail'])) {
+            $flash .= ': ' . $trafficTestResult['detail'];
+        }
+        $flashOk = false;
+    }
+}
+
 // ── Custom slides: upload / delete ──────────────────────────────────────────
 if ($authed && $board === 'slides' && csrf_ok()) {
     $slideDir = slides_dir();
@@ -338,6 +355,22 @@ if ($authed && $board === 'slides' && csrf_ok()) {
                 }
             }
         }
+    }
+}
+
+// ── Traffic board: TomTom tile test ─────────────────────────────────────────
+$trafficTestResult = null;
+if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') === 'traffic_test') {
+    $trafficTestResult = traffic_test_connection();
+    if ($trafficTestResult['ok']) {
+        $flash = 'TomTom tile test OK — HTTP ' . (int)$trafficTestResult['http']
+            . ', ' . (int)$trafficTestResult['bytes'] . ' bytes PNG.';
+    } else {
+        $flash = 'TomTom tile test failed — ' . ($trafficTestResult['error'] ?? 'unknown error');
+        if (!empty($trafficTestResult['detail'])) {
+            $flash .= ': ' . $trafficTestResult['detail'];
+        }
+        $flashOk = false;
     }
 }
 
@@ -874,6 +907,33 @@ function admin_field(array $f, $val, string $board): void
       </div>
         </div>
       </details>
+      <?php endif; ?>
+
+      <?php if ($board === 'traffic'):
+        $trafficKeyOk = traffic_api_key() !== null;
+        $trafficLastErr = traffic_last_error();
+      ?>
+      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">TomTom connection</div>
+        <div class="video-meta">
+          <div>API key in config: <strong><?= $trafficKeyOk ? 'yes' : 'no' ?></strong>
+            <?php if (!$trafficKeyOk): ?> — paste key below and click <strong>Save</strong><?php endif; ?></div>
+          <?php if ($trafficLastErr): ?>
+            <div>Last tile error: <code style="font-size:13px;color:var(--bad)"><?= h($trafficLastErr) ?></code></div>
+          <?php endif; ?>
+        </div>
+        <form method="post" action="?board=traffic" style="margin-bottom:14px">
+          <input type="hidden" name="action" value="traffic_test">
+          <input type="hidden" name="board" value="traffic">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <button class="secondary" type="submit">Test tile fetch</button>
+        </form>
+        <div class="help">Tiles are fetched <strong>server-side</strong> via <code>traffic_tiles.php</code>. In
+          <a href="https://developer.tomtom.com/user/me/apps" target="_blank" rel="noopener">developer.tomtom.com</a>
+          → your app → API key → enable <strong>Traffic API</strong> (Traffic Flow tiles). For this server proxy key,
+          leave <strong>domain restrictions empty</strong> — whitelisted domains block PHP/curl requests and cause HTTP 403.
+          After changing the key, Save, then run Test tile fetch.</div>
+      </div>
       <?php endif; ?>
 
       <?php if ($board === 'video' && $videoYtdlpStatus !== null): ?>

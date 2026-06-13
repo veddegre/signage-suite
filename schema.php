@@ -238,7 +238,7 @@ function admin_schema(): array
         ]],
         'traffic' => ['title' => 'Traffic Map', 'file' => 'traffic.php', 'fields' => [
             ['key' => 'TOMTOM_API_KEY', 'label' => 'TomTom API key', 'type' => 'password',
-             'help' => 'Free at developer.tomtom.com — enable Traffic API'],
+             'help' => 'Free at developer.tomtom.com — enable Traffic API on the key; no domain whitelist (server-side tiles)'],
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text'],
             ['key' => 'LAT', 'label' => 'Map center latitude', 'type' => 'number', 'step' => 'any'],
