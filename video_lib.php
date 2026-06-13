@@ -56,11 +56,55 @@ function video_duration(string $path): ?float
     return $d > 0 ? $d : null;
 }
 
+function video_ytdlp_local_bin_path(): string
+{
+    return __DIR__ . '/bin/yt-dlp';
+}
+
+function video_ytdlp_python3(): ?string
+{
+    $py = trim((string)@shell_exec('command -v python3 2>/dev/null'));
+    return $py !== '' ? $py : null;
+}
+
+/** pip/pipx launchers are ~200 B; the GitHub release is a multi-MB standalone script. */
+function video_ytdlp_local_bin_is_stub(): bool
+{
+    $local = video_ytdlp_local_bin_path();
+    if (!is_file($local)) {
+        return false;
+    }
+    $size = filesize($local);
+    return $size !== false && $size < 32768;
+}
+
+/** Local bin/yt-dlp is a Python script; run via python3 (works on noexec webroots). */
+function video_ytdlp_local_bin_usable(): bool
+{
+    $local = video_ytdlp_local_bin_path();
+    if (!is_file($local) || !is_readable($local) || video_ytdlp_python3() === null) {
+        return false;
+    }
+    return !video_ytdlp_local_bin_is_stub();
+}
+
+/** Shell prefix to invoke yt-dlp (direct exec, or python3 for local bin/). */
+function video_ytdlp_shell(string $bin): string
+{
+    if ($bin === video_ytdlp_local_bin_path()) {
+        $py = video_ytdlp_python3();
+        if ($py !== null) {
+            return escapeshellarg($py) . ' ' . escapeshellarg($bin);
+        }
+    }
+    return escapeshellarg($bin);
+}
+
 /** @return list<string> */
 function video_ytdlp_candidates(): array
 {
     $out = [];
-    $local = __DIR__ . '/bin/yt-dlp';
+    $local = video_ytdlp_local_bin_path();
     if (is_file($local)) {
         $out[] = $local;
     }
@@ -84,7 +128,13 @@ function video_ytdlp_candidates(): array
 
 function video_ytdlp_bin(): ?string
 {
+    if (video_ytdlp_local_bin_usable()) {
+        return video_ytdlp_local_bin_path();
+    }
     foreach (video_ytdlp_candidates() as $p) {
+        if ($p === video_ytdlp_local_bin_path()) {
+            continue;
+        }
         if (is_file($p) && is_executable($p)) {
             return $p;
         }
@@ -155,7 +205,7 @@ function video_ytdlp_version(?string $bin = null): ?string
     if ($bin === null) {
         return null;
     }
-    $out = @shell_exec(escapeshellarg($bin) . ' --version 2>/dev/null');
+    $out = @shell_exec(video_ytdlp_shell($bin) . ' --version 2>/dev/null');
     $v = is_string($out) ? trim($out) : '';
     return $v !== '' ? $v : null;
 }
@@ -411,6 +461,7 @@ function video_ytdlp_install_bin(array $lines = []): array
             'version' => video_ytdlp_version(),
         ];
     }
+    @chmod($target, 0755);
 
     $ver = video_ytdlp_version($target);
     video_ytdlp_latest_release(true);
@@ -545,7 +596,7 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
 
         $emit("[{$key}] fetching {$v['youtube']}");
         $out = $dir . "/$key.%(ext)s";
-        $cmd = escapeshellarg($bin)
+        $cmd = video_ytdlp_shell($bin)
             . video_ytdlp_extra_args()
             . ' -f ' . escapeshellarg($fmt)
             . ' --merge-output-format mp4 --no-progress --force-overwrites'
@@ -562,6 +613,12 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
         if ($rc !== 0) {
             $emit("[{$key}] yt-dlp failed (exit $rc)");
             $blob = implode("\n", $procOut);
+            if ($rc === 126 && (str_contains($blob, 'Permission denied') || str_contains($blob, 'cannot execute'))) {
+                $emit("[{$key}] hint: webroots are often mounted noexec — deploy latest video_lib.php (runs bin/yt-dlp via python3), or: sudo -u www-data python3 bin/yt-dlp --version");
+            }
+            if (str_contains($blob, 'ModuleNotFoundError') || str_contains($blob, 'No module named \'yt_dlp\'')) {
+                $emit("[{$key}] hint: bin/yt-dlp is a pip/pipx stub (~200 B) — use Admin → Update yt-dlp or curl the GitHub release into bin/yt-dlp");
+            }
             if (str_contains($blob, 'Sign in to confirm') || str_contains($blob, 'not a bot')) {
                 $emit("[{$key}] hint: export YouTube cookies to config/cookies/youtube.txt (see README Video Board)");
             }
@@ -613,6 +670,7 @@ function video_ytdlp_status(bool $refreshLatest = false): array
     return [
         'installed' => $installed,
         'path' => $bin,
+        'stub' => video_ytdlp_local_bin_is_stub(),
         'latest' => $latest,
         'outdated' => video_ytdlp_is_outdated($installed, $latest),
         'checked_at' => $latestInfo['checked_at'] ?? null,

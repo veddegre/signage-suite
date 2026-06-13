@@ -208,14 +208,29 @@ setup_directories() {
   chmod 775 "$WEBROOT/config" "$WEBROOT/cache" "$WEBROOT/videos" "$WEBROOT/slides" "$WEBROOT/photos" "$WEBROOT/bin"
 }
 
+fix_ytdlp_bin_perms() {
+  local target="$WEBROOT/bin/yt-dlp"
+  [[ -f "$target" ]] || return
+  chmod 755 "$target"
+  chown "$WEB_USER:$WEB_USER" "$target"
+}
+
 seed_ytdlp_bin() {
   [[ $WITH_YTDLP -eq 1 ]] || return
-  local src
-  src="$(command -v yt-dlp || true)"
-  [[ -n "$src" && -x "$src" ]] || return
-  log "Seeding $WEBROOT/bin/yt-dlp (for admin / www-data updates)"
-  install -m 755 "$src" "$WEBROOT/bin/yt-dlp"
-  chown "$WEB_USER:$WEB_USER" "$WEBROOT/bin/yt-dlp"
+  local target="$WEBROOT/bin/yt-dlp"
+  log "Downloading standalone yt-dlp → $target (GitHub release, not pipx stub)"
+  if ! curl -fsSL -o "$target" "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"; then
+    warn "Could not download yt-dlp — use Admin → Update yt-dlp after deploy"
+    return
+  fi
+  fix_ytdlp_bin_perms
+  local ver
+  ver="$(sudo -u "$WEB_USER" python3 "$target" --version 2>/dev/null || true)"
+  if [[ -z "$ver" ]]; then
+    warn "bin/yt-dlp downloaded but --version failed as $WEB_USER"
+  else
+    log "bin/yt-dlp ready ($ver)"
+  fi
 }
 
 setup_apache() {
@@ -484,6 +499,7 @@ main() {
   deploy_files
   setup_directories
   seed_ytdlp_bin
+  fix_ytdlp_bin_perms
   if [[ "$WEBSERVER" == "nginx" ]]; then
     setup_nginx
   else

@@ -974,7 +974,10 @@ function admin_field(array $f, $val, string $board): void
           <div style="padding:12px 16px 16px">
             <div class="video-meta">
               <div>Installed:
-                <?php if ($videoYtdlpStatus['installed']): ?>
+                <?php if ($videoYtdlpStatus['stub'] ?? false): ?>
+                  <span class="pill bad">Broken stub</span>
+                  <span class="help"> — pip/pipx launcher copied into bin/; click Update yt-dlp</span>
+                <?php elseif ($videoYtdlpStatus['installed']): ?>
                   <strong><?= h($videoYtdlpStatus['installed']) ?></strong>
                 <?php else: ?>
                   <span class="pill bad">Not found</span>
@@ -1013,9 +1016,9 @@ function admin_field(array $f, $val, string $board): void
               <code>yt-dlp --js-runtimes deno --remote-components ejs:github --cookies cookies.txt -F URL</code>
               — you need real video formats (720p/1080p), not just <code>sb0</code> storyboards.
               Upload to <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>, or use a <strong>local file</strong> in the video row.</div>
-            <div class="help" style="margin-top:8px">Admin updates download a verified copy to <code>bin/yt-dlp</code>
-              (not pipx — the web server runs as <code>www-data</code>). From SSH as root:
-              <code>pipx upgrade yt-dlp</code> or <code>sudo php video.php fetch</code>.</div>
+            <div class="help" style="margin-top:8px">Admin updates download the verified GitHub release to <code>bin/yt-dlp</code>
+              (~3&nbsp;MB standalone script for <code>www-data</code>, not the pipx launcher). From SSH as root:
+              <code>sudo php video.php fetch</code> after updating.</div>
             <div class="inline-actions">
               <form method="post" action="?board=video">
                 <input type="hidden" name="action" value="ytdlp_update">
