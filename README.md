@@ -98,7 +98,7 @@ Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule
 - Uploaded images live in `./slides/` (web server must write there; blocked from direct HTTP access like `config/`).
 
 ## traffic.php — Traffic Map
-Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with corridor markers and an I-96 highlight line. Defaults to the Allendale ↔ Grand Rapids area but center, zoom, and labels are all editable in admin.
+Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional city markers. Defaults to the Allendale ↔ Grand Rapids area but center, zoom, and labels are all editable in admin.
 
 - **Setup:** free TomTom Developer key at [developer.tomtom.com](https://developer.tomtom.com/) (enable Traffic API) → admin → **Traffic Map** → paste key. Tiles are fetched through `traffic_tiles.php` so the key never appears in the browser.
 - Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.

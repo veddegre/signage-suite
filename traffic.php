@@ -35,7 +35,6 @@ $markers = [
     ['name' => 'Allendale', 'lat' => 42.9720, 'lon' => -85.9536],
     ['name' => 'Grand Rapids', 'lat' => 42.9634, 'lon' => -85.6681],
 ];
-$i96 = [[42.963, -86.05], [42.963, -85.55]];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -152,7 +151,6 @@ $i96 = [[42.963, -86.05], [42.963, -85.55]];
     const FLOW = <?= json_encode($flowStyle) ?>;
     const TILE_BASE = 'traffic_tiles.php?style=' + encodeURIComponent(FLOW) + '&';
     const MARKERS = <?= json_encode($markers) ?>;
-    const I96 = <?= json_encode($i96) ?>;
     const RELOAD = <?= max(60, (int)RELOAD_SEC) ?> * 1000;
 
     const map = L.map('trafficMap', {
@@ -170,10 +168,6 @@ $i96 = [[42.963, -86.05], [42.963, -85.55]];
       TILE_BASE + 'z={z}&x={x}&y={y}',
       { opacity: 0.92, maxZoom: 19, attribution: '&copy; TomTom' }
     ).addTo(map);
-
-    L.polyline(I96, {
-      color: '#ffb347', weight: 2, opacity: 0.45, dashArray: '10 14'
-    }).addTo(map);
 
     MARKERS.forEach(function (m) {
       L.circleMarker([m.lat, m.lon], {
