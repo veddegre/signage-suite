@@ -498,20 +498,166 @@ function rotation_upsert_url(string $screen, string $url, int $dwell): array
 }
 
 /** @return array{pages:list<array<string,mixed>>,added:bool,updated:bool,screen:string} */
-function rotation_sync_slides(string $screen = 'main'): array
+function rotation_sync_slides(string $screen = 'main', ?array $deck = null): array
 {
-    $slides = cfg('slides.SLIDES', []);
-    $n = 0;
-    if (is_array($slides)) {
-        foreach ($slides as $s) {
-            if (is_array($s) && empty($s['off'])) {
-                $n++;
-            }
+    require_once __DIR__ . '/slides_lib.php';
+    $dwell = slides_recommended_rotation_dwell($deck);
+    return rotation_upsert_url($screen, 'slides.php', $dwell);
+}
+
+function slides_rotation_url(): string
+{
+    return 'slides.php';
+}
+
+function slides_in_rotation(string $screen = 'main'): bool
+{
+    $screen = rotation_normalize_screen_key($screen);
+    foreach (rotation_screen_own_pages($screen) as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        if (trim((string)($page['url'] ?? '')) === slides_rotation_url() && empty($page['off'])) {
+            return true;
         }
     }
-    $per = max(1, (int)cfg('slides.DEFAULT_DWELL', 12));
-    $dwell = max(45, $per * max(1, $n));
-    return rotation_upsert_url($screen, 'slides.php', $dwell);
+    return false;
+}
+
+/** Find slides.php on a screen's saved playlist (not inherited from main). */
+function slides_rotation_entry(string $screen = 'main'): ?array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    foreach (rotation_screen_own_pages($screen) as $i => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        if (trim((string)($page['url'] ?? '')) !== slides_rotation_url()) {
+            continue;
+        }
+        return [
+            'index' => $i + 1,
+            'dwell' => (int)($page['dwell'] ?? 0),
+            'from' => $page['from'] ?? null,
+            'to' => $page['to'] ?? null,
+            'off' => !empty($page['off']),
+        ];
+    }
+    return null;
+}
+
+/**
+ * Per-display deploy status for the slides admin panel.
+ * @return array<string,array<string,mixed>>
+ */
+function slides_deploy_status(?array $deck = null): array
+{
+    require_once __DIR__ . '/slides_lib.php';
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    $stats = slides_deck_stats($deck);
+    $recommended = $stats['recommended_dwell'];
+    $out = [];
+
+    foreach (rotation_screens() as $key => $scr) {
+        $own = rotation_screen_own_pages($key);
+        $effective = rotation_screen_effective_pages($key);
+        $mirrorsMain = ($key !== 'main' && $own === []);
+        $entry = slides_rotation_entry($key);
+
+        $onWall = null;
+        $pos = 0;
+        foreach ($effective as $page) {
+            if (!is_array($page) || empty($page['url']) || !empty($page['off'])) {
+                continue;
+            }
+            $pos++;
+            if (trim((string)$page['url']) === slides_rotation_url()) {
+                $onWall = ['position' => $pos, 'dwell' => (int)($page['dwell'] ?? 0)];
+                break;
+            }
+        }
+
+        $out[$key] = [
+            'name' => (string)($scr['name'] ?? $key),
+            'mirrors_main' => $mirrorsMain,
+            'on_playlist' => $entry !== null && empty($entry['off']),
+            'on_wall' => $onWall !== null,
+            'entry' => $entry,
+            'wall' => $onWall,
+            'recommended_dwell' => $recommended,
+            'dwell_short' => $entry !== null && !$entry['off'] && ($entry['dwell'] ?? 0) > 0
+                && ($entry['dwell'] ?? 0) < $recommended,
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * @return array{pages:list<array<string,mixed>>,removed:bool,screen:string}
+ */
+function rotation_remove_url(string $screen, string $url): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $url = trim($url);
+    $pages = rotation_screen_own_pages($screen);
+    $removed = false;
+    $pages = array_values(array_filter($pages, function ($page) use ($url, &$removed) {
+        if (!is_array($page)) {
+            return false;
+        }
+        if (trim((string)($page['url'] ?? '')) === $url) {
+            $removed = true;
+            return false;
+        }
+        return true;
+    }));
+
+    return ['pages' => $pages, 'removed' => $removed, 'screen' => $screen];
+}
+
+/**
+ * Add or update slides.php on one or more rotation screens.
+ * @param list<string> $screens
+ * @return array{added:int,updated:int,screens:list<string>}
+ */
+function slides_deploy_to_screens(array $screens, ?array $deck = null): array
+{
+    require_once __DIR__ . '/slides_lib.php';
+    $added = 0;
+    $updated = 0;
+    $done = [];
+    foreach ($screens as $screen) {
+        $screen = rotation_normalize_screen_key((string)$screen);
+        if ($screen === '' || isset($done[$screen])) {
+            continue;
+        }
+        $done[$screen] = true;
+        $sync = rotation_sync_slides($screen, $deck);
+        rotation_pages_write($sync['screen'], $sync['pages']);
+        if ($sync['added']) {
+            $added++;
+        } elseif ($sync['updated']) {
+            $updated++;
+        }
+    }
+
+    return ['added' => $added, 'updated' => $updated, 'screens' => array_keys($done)];
+}
+
+function slides_deploy_flash_message(array $result): string
+{
+    $parts = [];
+    if ($result['added'] > 0) {
+        $parts[] = 'added to ' . $result['added'] . ' playlist' . ($result['added'] === 1 ? '' : 's');
+    }
+    if ($result['updated'] > 0) {
+        $parts[] = 'updated dwell on ' . $result['updated'] . ' playlist' . ($result['updated'] === 1 ? '' : 's');
+    }
+    if ($parts === []) {
+        return 'Slides already on selected playlists with correct dwell.';
+    }
+    return 'Custom slides ' . implode('; ', $parts) . '.';
 }
 
 /**

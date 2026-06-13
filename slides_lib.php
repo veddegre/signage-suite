@@ -1016,6 +1016,88 @@ function slide_dwell(array $slide, int $default = 12): int
     return $d > 0 ? $d : $default;
 }
 
+function slides_default_dwell(): int
+{
+    return max(1, (int)cfg('slides.DEFAULT_DWELL', 12));
+}
+
+/** Human-readable schedule line for admin cards. */
+function slide_schedule_summary(array $slide): string
+{
+    if (!empty($slide['off'])) {
+        return 'Disabled';
+    }
+    $sched = strtolower(trim((string)($slide['schedule'] ?? 'always')));
+    if ($sched === '') {
+        $sched = 'always';
+    }
+    $hour = '';
+    if (($slide['hour_from'] ?? '') !== '' || ($slide['hour_to'] ?? '') !== '') {
+        $hour = ' · ' . ($slide['hour_from'] ?? '0') . '–' . ($slide['hour_to'] ?? '23') . 'h';
+    }
+    return match ($sched) {
+        'once' => 'Once · ' . trim((string)($slide['date_start'] ?? 'date?')) . $hour,
+        'range' => trim((string)($slide['date_start'] ?? '?')) . ' → ' . trim((string)($slide['date_end'] ?? '?')) . $hour,
+        'yearly' => 'Yearly · ' . trim((string)($slide['month_day'] ?? 'MM-DD')) . $hour,
+        'yearly_range' => trim((string)($slide['month_day'] ?? 'MM-DD')) . ' → ' . trim((string)($slide['month_day_end'] ?? 'MM-DD')) . $hour,
+        'monthly' => 'Monthly · day ' . trim((string)($slide['day_of_month'] ?? '?')) . $hour,
+        'weekly' => 'Weekly · ' . trim((string)($slide['weekdays'] ?? 'days?')) . $hour,
+        default => 'Always' . $hour,
+    };
+}
+
+/**
+ * Deck counters for admin deploy panel.
+ * @return array{total:int,enabled:int,on_disk:int,active_now:int,recommended_dwell:int}
+ */
+function slides_deck_stats(?array $deck = null): array
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $dir = slides_dir();
+    $default = slides_default_dwell();
+    $tz = new DateTimeZone(slides_timezone());
+    $now = new DateTime('now', $tz);
+    $total = $enabled = $onDisk = $activeNow = 0;
+    $dwellSum = 0;
+
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $total++;
+        if (!empty($slide['off'])) {
+            continue;
+        }
+        $enabled++;
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file === null || !is_file($dir . '/' . $file)) {
+            continue;
+        }
+        $onDisk++;
+        $dwellSum += slide_dwell($slide, $default);
+        if (slide_schedule_active($slide, $now)) {
+            $activeNow++;
+        }
+    }
+
+    return [
+        'total' => $total,
+        'enabled' => $enabled,
+        'on_disk' => $onDisk,
+        'active_now' => $activeNow,
+        'recommended_dwell' => max(30, $dwellSum + ($onDisk > 1 ? min(10, $onDisk * 2) : 0)),
+    ];
+}
+
+/** Rotation dwell for slides.php — sum of enabled slide dwells on disk. */
+function slides_recommended_rotation_dwell(?array $deck = null): int
+{
+    return slides_deck_stats($deck)['recommended_dwell'];
+}
+
 /** Active slides that exist on disk, in configured order. */
 function slides_active_entries(?array $entries = null, ?string $dir = null): array
 {

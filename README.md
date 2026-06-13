@@ -80,10 +80,12 @@ Allendale weather, RainViewer animated radar, sunrise arc. Needs `OWM_API_KEY`.
 ## slides.php — Custom Slides
 Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule each one independently.
 
-- **Upload:** admin → **Custom Slides** → upload box. New files default to **Always** in the deck.
+- **Upload / create:** new slides auto-deploy to **main** rotation. Use **Deploy to displays** at the top of **Custom Slides** to push `slides.php` to any screen in one click — dwell is calculated from your slide seconds.
+- **Slide deck:** drag cards to reorder. Each card shows **Active now**, schedule summary, and per-slide timing. Save the deck with **Deploy to** checkboxes to sync rotation on selected displays.
+- **Rotation:** one playlist entry (`slides.php`) per display runs the whole deck. Recommended dwell = sum of enabled slide seconds (shown in the deploy panel). Per-slide schedules control which images play inside the deck; rotation hour windows control when the deck appears at all.
 - **Slide creator:** same page — start from an occasion **template** (Birthday, Fall, Baseball, Bowling, etc.) or pick a **Photo scene** background (curated photography, dimmed for readability) or a **Theme color** gradient. Full-width edit fields, live preview at 1920×1080, **Create slide** saves into `./slides/`.
-- **Scheduling (per slide in the deck table):**
-  - **always** — show whenever this board is in rotation (optional hour window)
+- **Scheduling (per slide in the deck):**
+  - **always** — show whenever the deck is on screen (optional hour window)
   - **once** — single date in **From** (`YYYY-MM-DD`)
   - **range** — inclusive **From** … **To** (`YYYY-MM-DD`)
   - **yearly** — every **MM-DD** (birthdays, anniversaries)
@@ -94,7 +96,6 @@ Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule
   - **Priority** — when any priority slide is active, only priority slides show (emergency / takeover)
   - **Off** — bench without deleting
 - Each slide can set **Caption**, **Dwell (seconds)**, and image **fit** (`contain` / `cover`). The board reloads every 5 minutes so midnight and birthday boundaries pick up without restarting the kiosk.
-- **Rotation:** add `slides.php` to **admin → Rotation** with a dwell long enough for your active deck (e.g. three 12s slides → ~36–45s). Hour windows on the rotation entry are separate from per-slide schedules.
 - Uploaded images live in `./slides/` (web server must write there; blocked from direct HTTP access like `config/`).
 
 ## traffic.php — Traffic Map
