@@ -5,26 +5,76 @@
 
 require_once __DIR__ . '/config.php';
 
-/** @return array<string, array{name:string,shuffle?:bool}|string> */
+function rotation_normalize_screen_key(string $key): string
+{
+    $key = strtolower(preg_replace('/[^a-z0-9_\-]/i', '', $key));
+    return $key !== '' ? $key : 'main';
+}
+
+/** @return array{name:string,shuffle:bool} */
+function rotation_screen_settings(string $screen = 'main'): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $screensCfg = cfg('rotation.SCREENS', ['main' => 'Main Display']);
+    $scr = null;
+    if (is_array($screensCfg)) {
+        foreach ($screensCfg as $k => $v) {
+            if (rotation_normalize_screen_key((string)$k) === $screen) {
+                $scr = $v;
+                break;
+            }
+        }
+    }
+    if ($scr === null) {
+        return ['name' => $screen === 'main' ? 'Main Display' : $screen, 'shuffle' => false];
+    }
+    if (is_string($scr)) {
+        return ['name' => $scr, 'shuffle' => false];
+    }
+    if (!is_array($scr)) {
+        return ['name' => $screen === 'main' ? 'Main Display' : $screen, 'shuffle' => false];
+    }
+    $name = trim((string)($scr['name'] ?? ''));
+    return [
+        'name' => $name !== '' ? $name : ($screen === 'main' ? 'Main Display' : $screen),
+        'shuffle' => !empty($scr['shuffle']),
+    ];
+}
+
+/** @return array<string, array{name:string,shuffle?:bool}> */
 function rotation_screens(): array
 {
     $screens = cfg('rotation.SCREENS', ['main' => 'Main Display']);
     if (!is_array($screens) || $screens === []) {
-        return ['main' => 'Main Display'];
+        return ['main' => ['name' => 'Main Display', 'shuffle' => false]];
     }
-    if (!isset($screens['main'])) {
-        $screens = ['main' => 'Main Display'] + $screens;
+    $out = [];
+    foreach ($screens as $k => $scr) {
+        $nk = rotation_normalize_screen_key((string)$k);
+        if ($nk === '') {
+            continue;
+        }
+        if (is_string($scr)) {
+            $out[$nk] = ['name' => $scr, 'shuffle' => false];
+        } elseif (is_array($scr)) {
+            $name = trim((string)($scr['name'] ?? ''));
+            $entry = ['name' => $name !== '' ? $name : ($nk === 'main' ? 'Main Display' : $nk)];
+            if (!empty($scr['shuffle'])) {
+                $entry['shuffle'] = true;
+            }
+            $out[$nk] = $entry;
+        }
     }
-    return $screens;
+    if (!isset($out['main'])) {
+        $out = ['main' => ['name' => 'Main Display', 'shuffle' => false]] + $out;
+    }
+    return $out;
 }
 
 /** @return list<array<string,mixed>> Saved pages for one screen only (no fallback). */
 function rotation_screen_own_pages(string $screen = 'main'): array
 {
-    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
-    if ($screen === '') {
-        $screen = 'main';
-    }
+    $screen = rotation_normalize_screen_key($screen);
     $pages = cfg("rotation.PAGES_$screen", null);
     return is_array($pages) ? $pages : [];
 }
@@ -32,10 +82,7 @@ function rotation_screen_own_pages(string $screen = 'main'): array
 /** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
 function rotation_screen_effective_pages(string $screen = 'main'): array
 {
-    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
-    if ($screen === '') {
-        $screen = 'main';
-    }
+    $screen = rotation_normalize_screen_key($screen);
     $own = rotation_screen_own_pages($screen);
     if ($own !== []) {
         return $own;
@@ -89,18 +136,14 @@ function rotation_screen_active_pages(string $screen = 'main'): array
 /** Fingerprint of the saved rotation config for one screen — used by board.php polling. */
 function rotation_config_revision(string $screen = 'main'): string
 {
-    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
-    if ($screen === '') {
-        $screen = 'main';
-    }
-    $screensCfg = cfg('rotation.SCREENS', []);
-    $scr = is_array($screensCfg) ? ($screensCfg[$screen] ?? null) : null;
+    $screen = rotation_normalize_screen_key($screen);
+    $settings = rotation_screen_settings($screen);
     $mtime = is_file(cfg_path()) ? (int)filemtime(cfg_path()) : 0;
     $blob = json_encode([
         'mtime' => $mtime,
         'screen' => $screen,
         'pages' => rotation_screen_effective_pages($screen),
-        'shuffle' => is_array($scr) && !empty($scr['shuffle']),
+        'shuffle' => $settings['shuffle'],
         'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
         'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
         'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),
@@ -114,16 +157,12 @@ function rotation_config_revision(string $screen = 'main'): string
  */
 function rotation_screen_runtime(string $screen = 'main'): array
 {
-    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
-    if ($screen === '') {
-        $screen = 'main';
-    }
-    $screensCfg = cfg('rotation.SCREENS', []);
-    $scr = is_array($screensCfg) ? ($screensCfg[$screen] ?? null) : null;
+    $screen = rotation_normalize_screen_key($screen);
+    $settings = rotation_screen_settings($screen);
     return [
         'screen' => $screen,
         'pages' => rotation_screen_active_pages($screen),
-        'shuffle' => is_array($scr) && !empty($scr['shuffle']),
+        'shuffle' => $settings['shuffle'],
         'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
         'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
         'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),

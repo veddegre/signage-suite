@@ -202,6 +202,31 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
     }
     if ($board === 'rotation') {
+        $screensOut = [];
+        foreach ($_POST['SCREENS'] ?? [] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = rotation_normalize_screen_key((string)($row['_key'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            $name = trim((string)($row['name'] ?? ''));
+            $entry = ['name' => $name !== '' ? $name : ($key === 'main' ? 'Main Display' : $key)];
+            if (isset($row['shuffle'])) {
+                $entry['shuffle'] = true;
+            }
+            $screensOut[$key] = $entry;
+        }
+        if ($screensOut === []) {
+            unset($conf['rotation.SCREENS']);
+        } else {
+            if (!isset($screensOut['main'])) {
+                $screensOut = ['main' => ['name' => 'Main Display']] + $screensOut;
+            }
+            $conf['rotation.SCREENS'] = $screensOut;
+        }
+
         $schemaPageKeys = [];
         foreach ($schema[$board]['fields'] as $sf) {
             if (strpos($sf['key'], 'PAGES_') === 0) {
@@ -1237,7 +1262,7 @@ function admin_field(array $f, $val, string $board): void
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][_key]" value="<?= h((string)($srow['_key'] ?? '')) ?>" placeholder="garage"></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][name]" value="<?= h((string)($srow['name'] ?? '')) ?>" placeholder="Garage TV"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
-                         name="SCREENS[<?= (int)$sri ?>][shuffle]" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
+                         name="SCREENS[<?= (int)$sri ?>][shuffle]" value="1" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
                   <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
                 </tr>
                 <?php endforeach; ?>
@@ -1261,6 +1286,7 @@ function admin_field(array $f, $val, string $board): void
             $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
             $effectivePages = rotation_screen_effective_pages($screenKey);
             $mirrorsMain = $pageRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
+            $screenSettings = rotation_screen_settings($screenKey);
             $pageCount = 0;
             foreach ($pageRows as $prow) {
                 if (is_array($prow) && trim((string)($prow['url'] ?? '')) !== '') {
@@ -1286,6 +1312,7 @@ function admin_field(array $f, $val, string $board): void
               <span>Playlist — <?= h($screenName) ?></span>
               <code><?= h($screenKey) ?></code>
               <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
+              <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
               <span class="rotation-summary-actions">
                 <a class="secondary" href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener"
                    onclick="event.stopPropagation()">Preview ↗</a>

@@ -22,8 +22,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/rotation_lib.php';
 
 // Which screen is this device? board.php?screen=garage etc.; default 'main'.
-$SCREEN = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['screen'] ?? ''));
-if ($SCREEN === '') $SCREEN = 'main';
+$SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 
 $runtime = rotation_screen_runtime($SCREEN);
 
@@ -63,7 +62,7 @@ if (($_GET['api'] ?? '') === '1') {
   const REVISION = <?= json_encode($runtime['revision']) ?>;
   const SETTLE  = <?= (int)$runtime['settle_ms'] ?>;
   const HANG    = <?= (int)$runtime['hang_ms'] ?>;
-  const SHUFFLE = <?= $runtime['shuffle'] ? 'true' : 'false' ?>;
+  const SHUFFLE = <?= json_encode((bool)$runtime['shuffle']) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
   const POLL_MS = 30000;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
@@ -75,10 +74,7 @@ if (($_GET['api'] ?? '') === '1') {
     return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // overnight supported
   }
 
-  // Play order: identity when sequential; Fisher-Yates once per full pass when
-  // shuffled — every page still shows once per cycle, and the first page of a
-  // new pass is nudged away from the page just shown so nothing repeats
-  // back-to-back across the reshuffle boundary.
+  // Play order: sequential list order, or a shuffled order that reshuffles each full pass.
   let order = PAGES.map((_, i) => i), pos = -1;
   function reshuffle(lastShown) {
     for (let i = order.length - 1; i > 0; i--) {
@@ -89,7 +85,13 @@ if (($_GET['api'] ?? '') === '1') {
       [order[0], order[order.length - 1]] = [order[order.length - 1], order[0]];
     }
   }
-  if (SHUFFLE) reshuffle(-1);
+  if (SHUFFLE) {
+    reshuffle(-1);
+    pos = -1;
+  } else if (order.length > 1) {
+    // Sequential mode: random starting slot so kiosks don't all boot on playlist item 1.
+    pos = Math.floor(Math.random() * order.length) - 1;
+  }
 
   function nextPage() {
     for (let n = 0; n < order.length; n++) {
