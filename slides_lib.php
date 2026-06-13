@@ -300,10 +300,11 @@ function slide_photo_background_presets(): array
             'overlay' => slide_photo_overlay_vignette(0.8, 0.45, 0.88),
         ]),
         'photo_cozy_home' => array_merge($textDark, [
-            'label' => 'Cozy home',
+            'label' => 'Warm living room',
             'kind' => 'photo',
             'photo' => 'photos/cozy_home.jpg',
-            'overlay' => slide_photo_overlay_vignette(0.72, 0.4, 0.78),
+            'overlay' => slide_photo_overlay_vignette(0.66, 0.34, 0.74),
+            'subtitle' => '#ffd089',
         ]),
         'photo_fall_road' => array_merge($textDark, [
             'label' => 'Fall road',
@@ -705,9 +706,9 @@ function slide_photo_download_urls(): array
             'sha256' => '0bf83e39b5acf47a8d4aad84ee4e7585b6d0e55c62c62bb50b3b7a9d6640f6e5',
         ],
         'photos/cozy_home.jpg' => [
-            'url' => 'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg' . $pexels,
-            'min_bytes' => 250000,
-            'sha256' => '0321c10a2324a450d903e336d0d5b52f22bc677efeca027a25580285dcf62653',
+            'url' => 'https://images.pexels.com/photos/276551/pexels-photo-276551.jpeg' . $pexels,
+            'min_bytes' => 300000,
+            'sha256' => 'adec24f44f9e446b947f195aef0d7ece09649084e61f9d95bbcb4fe7375dfb5f',
         ],
         'photos/fall_road.jpg' => [
             'url' => 'https://images.pexels.com/photos/1563356/pexels-photo-1563356.jpeg' . $pexels,
