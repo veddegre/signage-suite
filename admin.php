@@ -610,10 +610,18 @@ if ($authed && $board === 'slides') {
                 $conf['slides.SLIDES'] = array_values(array_filter($deck, fn($s) =>
                     !is_array($s) || ($s['file'] ?? '') !== $del));
             }
-            cfg_write($conf);
-            cfg_reload();
-            @unlink($slideDir . '/' . $del);
-            $flash = 'Deleted ' . $del . '.';
+            if (!cfg_write($conf)) {
+                $flash = 'Could not update settings.json.'; $flashOk = false;
+            } else {
+                cfg_reload();
+                @unlink($slideDir . '/' . $del);
+                foreach (array_keys(rotation_screens()) as $scr) {
+                    $sync = rotation_sync_slides($scr, $conf['slides.SLIDES'] ?? []);
+                    rotation_pages_write($sync['screen'], $sync['pages']);
+                }
+                cfg_reload();
+                $flash = 'Deleted ' . $del . '. Rotation updated on all displays.';
+            }
         }
     }
     }
@@ -2056,13 +2064,6 @@ function admin_field(array $f, $val, string $board): void
             </div>
           </details>
 
-          <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
-            <input type="hidden" name="action" value="delete_slide">
-            <input type="hidden" name="board" value="slides">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="file" id="slideDeleteFile" value="">
-          </form>
-
           <div class="slides-save-deploy">
             <div class="deploy-checks">
               <span class="help" style="margin:0;width:100%">When you save the deck, also update rotation on:</span>
@@ -2552,10 +2553,23 @@ function initSlideDeck() {
 function submitSlideDelete(file) {
   if (!file) return;
   if (!confirm('Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.')) return;
-  const form = document.getElementById('slideDeleteForm');
-  const input = document.getElementById('slideDeleteFile');
-  if (!form || !input) return;
-  input.value = file;
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'admin.php?board=slides';
+  form.style.display = 'none';
+  [
+    ['action', 'delete_slide'],
+    ['board', 'slides'],
+    ['csrf', <?= json_encode(csrf_token()) ?>],
+    ['file', file],
+  ].forEach(function (pair) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = pair[0];
+    input.value = pair[1];
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
   form.submit();
 }
 
