@@ -335,10 +335,11 @@ function slide_photo_background_presets(): array
             'subtitle' => '#ffd089',
         ]),
         'photo_winter_trees' => array_merge($textDark, [
-            'label' => 'Winter woods',
+            'label' => 'Winter evergreens',
             'kind' => 'photo',
             'photo' => 'photos/winter_trees.jpg',
-            'overlay' => slide_photo_overlay_vignette(0.62, 0.28, 0.7),
+            'overlay' => slide_photo_overlay_vignette(0.8, 0.45, 0.86),
+            'subtitle' => '#ffd089',
         ]),
         'photo_romantic_dinner' => array_merge($textDark, [
             'label' => 'Candlelit dinner',
@@ -701,9 +702,9 @@ function slide_photo_download_urls(): array
             'sha256' => 'cd79cc3d69a651809b270aa79f8d63abed09f7c1ad0577bb02503518324957e5',
         ],
         'photos/winter_trees.jpg' => [
-            'url' => 'https://images.unsplash.com/photo-1548777123-e216912df7d8' . $unsplash,
-            'min_bytes' => 400000,
-            'sha256' => '0bf83e39b5acf47a8d4aad84ee4e7585b6d0e55c62c62bb50b3b7a9d6640f6e5',
+            'url' => 'https://images.pexels.com/photos/1179229/pexels-photo-1179229.jpeg' . $pexels,
+            'min_bytes' => 500000,
+            'sha256' => '71395ac9e1d1c891cf4d92613cd5a6bef50786abd66a46e0fbb23126910ccf88',
         ],
         'photos/cozy_home.jpg' => [
             'url' => 'https://images.pexels.com/photos/276551/pexels-photo-276551.jpeg' . $pexels,
