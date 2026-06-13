@@ -862,27 +862,51 @@ function admin_field(array $f, $val, string $board): void
                        background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
   .creator-box { background:transparent; border:0; border-radius:0;
                   padding:0; margin-bottom:0; }
-  .creator-box h3 { font-family:'Big Shoulders Display'; font-size:18px; margin-bottom:10px; }
-  .creator-grid { display:grid; grid-template-columns:1fr min(672px, 48vw); gap:28px; align-items:start; }
-  @media (max-width: 1100px) { .creator-grid { grid-template-columns:1fr; } }
-  .creator-fields label.l { margin-top:14px; }
+  .creator-box h3 { font-family:'Big Shoulders Display'; font-size:20px; margin-bottom:6px; }
+  .creator-lead { font-size:14px; color:var(--mist); line-height:1.55; margin-bottom:18px; max-width:52em; }
+  .creator-grid { display:grid; grid-template-columns:minmax(0, 1fr) min(672px, 48vw); gap:28px; align-items:start; }
+  @media (max-width: 1100px) { .creator-grid { grid-template-columns:1fr; } .creator-sticky { position:static; } }
+  .creator-fields label.l { margin-top:16px; }
   .creator-fields label.l:first-child { margin-top:0; }
-  .creator-fields textarea { max-width:100%; min-height:88px; font-family:inherit; font-size:15px; resize:vertical; }
-  .bg-pick { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
-  .bg-pick label { cursor:pointer; }
+  .creator-fields input[type=text],
+  .creator-fields textarea { width:100%; max-width:none; font-family:inherit; font-size:18px;
+                             line-height:1.5; padding:14px 16px; border-radius:10px; resize:vertical; }
+  .creator-fields input[type=text] { min-height:52px; }
+  #creator_title, #creator_subtitle, #creator_footer { min-height:88px; }
+  #creator_body { min-height:220px; }
+  .field-hint { font-size:12px; color:var(--mist); margin-top:5px; line-height:1.4; }
+  .field-hint code { font-size:11px; color:var(--snow); background:rgba(255,255,255,.06); padding:1px 5px; border-radius:4px; }
+  .template-pick { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .template-chip { appearance:none; background:var(--harbor); border:1px solid var(--line); color:var(--snow);
+                   font:inherit; font-size:14px; padding:9px 15px; border-radius:999px; cursor:pointer;
+                   transition:border-color .15s, color .15s, background .15s; }
+  .template-chip:hover { border-color:var(--beacon); color:var(--beacon); }
+  .template-chip.active { background:rgba(255,179,71,.14); border-color:var(--beacon); color:var(--beacon); font-weight:600; }
+  .bg-pick { display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:10px; margin-top:8px; }
+  .bg-pick label { cursor:pointer; min-width:0; }
   .bg-pick input { position:absolute; opacity:0; pointer-events:none; }
-  .bg-swatch { display:block; width:108px; height:62px; border-radius:8px; border:2px solid var(--line);
-               overflow:hidden; position:relative; background:#141f33 center/cover no-repeat; }
+  .bg-swatch { display:block; width:100%; aspect-ratio:16/9; border-radius:8px; border:2px solid var(--line);
+               overflow:hidden; position:relative; background:#141f33 center/cover no-repeat;
+               transition:border-color .15s, box-shadow .15s; }
   .bg-swatch img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
   .bg-pick input:checked + .bg-swatch { border-color:var(--beacon); box-shadow:0 0 0 1px var(--beacon); }
+  .bg-pick input:focus-visible + .bg-swatch { outline:2px solid var(--beacon); outline-offset:2px; }
   .bg-swatch span { position:absolute; left:8px; bottom:6px; z-index:1; font-size:11px; color:#edf2fb;
-                     text-shadow:0 1px 4px rgba(0,0,0,.8); letter-spacing:.3px; }
-  .align-row { display:flex; gap:16px; margin-top:8px; }
-  .align-row label { display:flex; align-items:center; gap:7px; font-size:15px; cursor:pointer; }
+                     text-shadow:0 1px 4px rgba(0,0,0,.8); letter-spacing:.3px; font-weight:500; }
+  .seg-control { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-top:8px; }
+  .seg-control label { display:flex; margin:0; cursor:pointer; }
+  .seg-control input { position:absolute; opacity:0; pointer-events:none; }
+  .seg-control span { display:block; padding:8px 18px; font-size:14px; color:var(--mist);
+                      background:var(--harbor); transition:background .15s, color .15s; }
+  .seg-control input:checked + span { background:var(--beacon); color:var(--lake-night); font-weight:600; }
+  .preview-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:8px; }
+  .preview-badge { font-size:11px; letter-spacing:.45px; text-transform:uppercase; color:var(--mist); }
+  .creator-sticky { position:sticky; top:20px; }
   .preview-wrap { background:#000; border-radius:10px; border:1px solid var(--line); overflow:hidden;
-                  width:672px; max-width:100%; aspect-ratio:16/9; }
+                  width:672px; max-width:100%; aspect-ratio:16/9; box-shadow:0 8px 32px rgba(0,0,0,.35); }
   .preview-wrap canvas { width:100%; height:100%; display:block; }
   .creator-actions { margin-top:18px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .creator-actions .help { margin:0; flex:1 1 180px; }
   .video-meta { display:grid; gap:8px; font-size:15px; color:var(--mist); margin:12px 0 16px; }
   .video-meta strong { color:var(--snow); font-weight:600; }
   .video-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:14px; }
@@ -1042,9 +1066,18 @@ function admin_field(array $f, $val, string $board): void
           </div>
 
           <div class="creator-box">
-            <h3>Or create a text slide</h3>
+            <h3>Create a text slide</h3>
+            <p class="creator-lead">Pick a background, add your message, and preview at full signage size. The slide saves as a PNG and joins the deck on the <strong>Always</strong> schedule — adjust timing in the table below.</p>
             <div class="creator-grid">
           <div class="creator-fields">
+            <label class="l">Template</label>
+            <div class="template-pick" id="templatePick" role="group" aria-label="Slide templates">
+              <?php foreach (slide_creator_templates() as $tid => $tpl): ?>
+                <button type="button" class="template-chip" data-template="<?= h($tid) ?>"><?= h($tpl['label']) ?></button>
+              <?php endforeach; ?>
+            </div>
+            <div class="field-hint">Prefills text and background — replace bracketed placeholders like <code>[Name]</code>.</div>
+
             <label class="l">Background</label>
             <div class="bg-pick" id="bgPick">
               <?php foreach (slide_background_presets() as $id => $preset):
@@ -1060,33 +1093,41 @@ function admin_field(array $f, $val, string $board): void
             </div>
 
             <label class="l">Alignment</label>
-            <div class="align-row">
-              <label><input type="radio" name="creator_align" value="left" checked> Left</label>
-              <label><input type="radio" name="creator_align" value="center"> Center</label>
+            <div class="seg-control" role="group" aria-label="Text alignment">
+              <label><input type="radio" name="creator_align" value="left" checked><span>Left</span></label>
+              <label><input type="radio" name="creator_align" value="center"><span>Center</span></label>
             </div>
 
             <label class="l" for="creator_title">Title</label>
-            <input type="text" id="creator_title" placeholder="Happy Birthday, Mom!">
+            <textarea id="creator_title" rows="2" placeholder="Happy Birthday, Mom!"></textarea>
+            <div class="field-hint">Large headline — up to three lines on the wall. Press Enter for a manual line break.</div>
 
             <label class="l" for="creator_subtitle">Subtitle</label>
-            <input type="text" id="creator_subtitle" placeholder="March 15">
+            <textarea id="creator_subtitle" rows="2" placeholder="March 15"></textarea>
+            <div class="field-hint">Date, occasion, or short tagline in accent color.</div>
 
             <label class="l" for="creator_body">Body</label>
-            <textarea id="creator_body" placeholder="Dinner at 6 — cake after."></textarea>
+            <textarea id="creator_body" rows="6" placeholder="Dinner at 6 — cake after."></textarea>
+            <div class="field-hint">Details, directions, or a short message. Blank lines become extra spacing.</div>
 
             <label class="l" for="creator_footer">Footer (optional)</label>
-            <input type="text" id="creator_footer" placeholder="Love, the family">
+            <textarea id="creator_footer" rows="2" placeholder="Love, the family"></textarea>
+            <div class="field-hint">Pinned to the bottom — signature, RSVP, etc.</div>
 
             <label class="l" for="creator_name">Filename</label>
             <input type="text" id="creator_name" placeholder="mom-birthday (optional — .png added)">
+            <div class="field-hint">Auto-filled from the title; edit to override.</div>
 
             <div class="creator-actions">
-              <button type="button" class="secondary" id="creatorRefresh">Refresh preview</button>
               <button type="button" class="save" id="creatorSave">Create slide</button>
+              <p class="help">Preview updates as you type. Requires a title or body.</p>
             </div>
           </div>
-          <div>
-            <label class="l">Preview</label>
+          <div class="creator-sticky">
+            <div class="preview-head">
+              <label class="l" style="margin:0">Preview</label>
+              <span class="preview-badge">1920 × 1080</span>
+            </div>
             <div class="preview-wrap"><canvas id="slidePreview" width="1920" height="1080"></canvas></div>
           </div>
         </div>
@@ -2350,6 +2391,7 @@ function addVideoCard() {
     unset($bp);
     echo json_encode($bgJs, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
   ?>;
+  const TEMPLATES = <?= json_encode(slide_creator_templates(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
   const bgImageCache = {};
 
   function loadBgImage(url) {
@@ -2415,16 +2457,22 @@ function addVideoCard() {
   }
 
   function wrapLines(c, text, maxWidth) {
-    const words = text.replace(/\s+/g, ' ').trim().split(' ');
-    if (!words[0]) return [];
+    const paragraphs = String(text).replace(/\r\n/g, '\n').split('\n');
     const lines = [];
-    let line = words[0];
-    for (let i = 1; i < words.length; i++) {
-      const test = line + ' ' + words[i];
-      if (c.measureText(test).width <= maxWidth) line = test;
-      else { lines.push(line); line = words[i]; }
-    }
-    lines.push(line);
+    paragraphs.forEach(function (para, pi) {
+      const words = para.replace(/\s+/g, ' ').trim().split(' ');
+      if (!words[0] || words[0] === '') {
+        if (pi < paragraphs.length - 1) lines.push('');
+        return;
+      }
+      let line = words[0];
+      for (let i = 1; i < words.length; i++) {
+        const test = line + ' ' + words[i];
+        if (c.measureText(test).width <= maxWidth) line = test;
+        else { lines.push(line); line = words[i]; }
+      }
+      lines.push(line);
+    });
     return lines;
   }
 
@@ -2447,6 +2495,96 @@ function addVideoCard() {
     return (el && el.value) === 'center' ? 'center' : 'left';
   }
 
+  function isLightPreset(preset) {
+    return !!preset.light;
+  }
+
+  function resetTextShadow() {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  }
+
+  function applyTextShadow() {
+    ctx.shadowColor = 'rgba(0,0,0,0.42)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2;
+  }
+
+  function drawAccentRule(preset, align, x, y, maxW) {
+    if (!preset.subtitle) return y;
+    const ruleW = align === 'center' ? Math.min(maxW * 0.38, 440) : 128;
+    const ruleX = align === 'center' ? x - ruleW / 2 : x;
+    ctx.save();
+    ctx.fillStyle = preset.subtitle;
+    ctx.globalAlpha = 0.72;
+    ctx.fillRect(ruleX, y + 4, ruleW, 4);
+    ctx.restore();
+    return y + 18;
+  }
+
+  function slugifyTitle(raw) {
+    const first = String(raw).split('\n')[0];
+    return first.trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48);
+  }
+
+  function creatorHasContent() {
+    return ['creator_title', 'creator_subtitle', 'creator_body', 'creator_footer'].some(function (id) {
+      return document.getElementById(id).value.trim() !== '';
+    });
+  }
+
+  function setBackground(id) {
+    const radio = document.querySelector('input[name="creator_bg"][value="' + id + '"]');
+    if (radio) radio.checked = true;
+  }
+
+  function setAlign(val) {
+    const radio = document.querySelector('input[name="creator_align"][value="' + val + '"]');
+    if (radio) radio.checked = true;
+  }
+
+  let filenameTouched = false;
+  let activeTemplate = '';
+  const nameEl = document.getElementById('creator_name');
+  if (nameEl) {
+    nameEl.addEventListener('input', function () { filenameTouched = true; });
+  }
+
+  function applyTemplate(id) {
+    const tpl = TEMPLATES[id];
+    if (!tpl) return;
+    if (creatorHasContent() && !window.confirm('Replace the current slide text with this template?')) {
+      return;
+    }
+    document.getElementById('creator_title').value = tpl.title || '';
+    document.getElementById('creator_subtitle').value = tpl.subtitle || '';
+    document.getElementById('creator_body').value = tpl.body || '';
+    document.getElementById('creator_footer').value = tpl.footer || '';
+    if (tpl.bg) setBackground(tpl.bg);
+    if (tpl.align) setAlign(tpl.align);
+    filenameTouched = false;
+    if (nameEl) {
+      nameEl.value = tpl.filename || slugifyTitle(tpl.title || '');
+    }
+    activeTemplate = id;
+    document.querySelectorAll('.template-chip').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-template') === id);
+    });
+    renderPreview();
+  }
+
+  document.querySelectorAll('.template-chip').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyTemplate(btn.getAttribute('data-template'));
+    });
+  });
+
   async function renderPreview() {
     await ensureFonts();
     const preset = selectedPreset();
@@ -2458,39 +2596,71 @@ function addVideoCard() {
     const footer = document.getElementById('creator_footer').value.trim();
     const maxW = align === 'center' ? W - padX * 2 : 1240;
     const x = align === 'center' ? W / 2 : padX;
+    const light = isLightPreset(preset);
 
     ctx.clearRect(0, 0, W, H);
     drawBackground(ctx, preset);
     ctx.textAlign = align;
     ctx.textBaseline = 'top';
+
+    if (!title && !subtitle && !body && !footer) {
+      ctx.font = '400 28px "IBM Plex Sans", sans-serif';
+      ctx.fillStyle = preset.body;
+      ctx.globalAlpha = 0.42;
+      ctx.textAlign = 'center';
+      ctx.fillText('Your slide preview will appear here', W / 2, H / 2 - 16);
+      ctx.globalAlpha = 1;
+      return;
+    }
+
     let y = padTop;
 
-    function drawBlock(text, font, color, lineH, maxLines) {
+    function drawBlock(text, font, color, lineH, maxLines, shadow) {
       if (!text) return;
       ctx.font = font;
       ctx.fillStyle = color;
+      if (shadow && !light) applyTextShadow();
+      else resetTextShadow();
       let lines = wrapLines(ctx, text, maxW);
       if (maxLines && lines.length > maxLines) {
         lines = lines.slice(0, maxLines);
         lines[maxLines - 1] = lines[maxLines - 1].replace(/\s+\S*$/, '') + '\u2026';
       }
       lines.forEach(function (ln) {
-        ctx.fillText(ln, x, y);
-        y += lineH;
+        if (ln === '') y += Math.round(lineH * 0.55);
+        else {
+          ctx.fillText(ln, x, y);
+          y += lineH;
+        }
       });
+      resetTextShadow();
     }
 
-    drawBlock(title, '600 88px "Big Shoulders Display", sans-serif', preset.title, 94, 3);
-    if (title && subtitle) y += 8;
-    drawBlock(subtitle, '500 42px "Big Shoulders Display", sans-serif', preset.subtitle, 50);
-    if ((title || subtitle) && body) y += 20;
-    drawBlock(body, '400 30px "IBM Plex Sans", sans-serif', preset.body, 44, 8);
+    drawBlock(title, '600 88px "Big Shoulders Display", sans-serif', preset.title, 94, 3, true);
+    if (title) y = drawAccentRule(preset, align, x, y - 8, maxW);
+    if (title && subtitle) y += 6;
+    drawBlock(subtitle, '500 42px "Big Shoulders Display", sans-serif', preset.subtitle, 50, 2, true);
+    if ((title || subtitle) && body) y += 22;
+    drawBlock(body, '400 30px "IBM Plex Sans", sans-serif', preset.body, 44, 10, false);
 
     if (footer) {
+      resetTextShadow();
       ctx.font = '400 24px "IBM Plex Sans", sans-serif';
       ctx.fillStyle = preset.footer || preset.body;
       ctx.textAlign = align;
-      ctx.fillText(footer, x, H - padBottom);
+      if (!light) {
+        ctx.globalAlpha = 0.92;
+        applyTextShadow();
+      }
+      const footerLines = wrapLines(ctx, footer, maxW);
+      const footerLineH = 32;
+      let fy = H - padBottom - (footerLines.length - 1) * footerLineH;
+      footerLines.forEach(function (ln) {
+        ctx.fillText(ln, x, fy);
+        fy += footerLineH;
+      });
+      resetTextShadow();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -2500,11 +2670,13 @@ function addVideoCard() {
 
   preloadBackgrounds().then(renderPreview);
 
-  document.getElementById('creatorRefresh').addEventListener('click', renderPreview);
   ['creator_title', 'creator_subtitle', 'creator_body', 'creator_footer'].forEach(function (id) {
     document.getElementById(id).addEventListener('input', function () {
+      if (id === 'creator_title' && nameEl && !filenameTouched) {
+        nameEl.value = slugifyTitle(this.value);
+      }
       clearTimeout(window._slidePreviewT);
-      window._slidePreviewT = setTimeout(renderPreview, 220);
+      window._slidePreviewT = setTimeout(renderPreview, 180);
     });
   });
 
