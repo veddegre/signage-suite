@@ -62,8 +62,8 @@ if (($_GET['api'] ?? '') === 'cec') {
   <h1>No pages in rotation</h1>
   <p>Add boards in admin.php → Rotation, or check hour windows and Skip flags.</p>
 </div>
-<iframe id="fA"></iframe>
-<iframe id="fB"></iframe>
+<iframe id="fA" allow="autoplay; fullscreen"></iframe>
+<iframe id="fB" allow="autoplay; fullscreen"></iframe>
 <script>
   const PAGES   = <?= json_encode($runtime['pages'], JSON_UNESCAPED_SLASHES) ?>;
   const REVISION = <?= json_encode($runtime['revision']) ?>;
@@ -101,7 +101,27 @@ if (($_GET['api'] ?? '') === 'cec') {
   }
 
   window.addEventListener('message', function (ev) {
-    if (!ev.data || ev.data.type !== 'signage-done') return;
+    if (!ev.data || !ev.data.type) return;
+    if (ev.data.type === 'signage-ready') {
+      for (var i = 0; i < frames.length; i++) {
+        try {
+          if (frames[i].classList.contains('show') && frames[i].contentWindow === ev.source) {
+            postToFrame(frames[i], { type: 'signage-show' });
+            break;
+          }
+        } catch (e) {}
+      }
+      return;
+    }
+    if (ev.data.type === 'signage-gesture') {
+      for (var j = 0; j < frames.length; j++) {
+        if (frames[j].classList.contains('show')) {
+          postToFrame(frames[j], { type: 'signage-gesture' });
+        }
+      }
+      return;
+    }
+    if (ev.data.type !== 'signage-done') return;
     var fromVisible = false;
     for (var i = 0; i < frames.length; i++) {
       try {
@@ -193,11 +213,7 @@ if (($_GET['api'] ?? '') === 'cec') {
       f.classList.add('show');
       frames[front].classList.remove('show');
       front = back;
-      try {
-        if (f.contentWindow) {
-          f.contentWindow.postMessage({ type: 'signage-show' }, '*');
-        }
-      } catch (e) {}
+      postToFrame(f, { type: 'signage-show' });
       const dwellMs = (+p.dwell) * 1000;
       // RSS boards report signage-done when their carousel finishes; dwell is only a safety cap.
       const safetyMs = isRssUrl(p.url) ? Math.max(dwellMs + 15000, 60000) : dwellMs;
@@ -205,7 +221,15 @@ if (($_GET['api'] ?? '') === 'cec') {
     };
 
     stopFrame(f);
-    f.onload = () => setTimeout(reveal, SETTLE);
+    f.onload = () => setTimeout(function () {
+      if (myGen !== gen) return;
+      if (revealed) {
+        // Frame was revealed early (HANG) before this document finished loading.
+        postToFrame(f, { type: 'signage-show' });
+        return;
+      }
+      reveal();
+    }, SETTLE);
     const sep = p.url.includes('?') ? '&' : '?';
     f.src = p.url + sep + 'noticker=1&safebottom=<?= SIGNAGE_TICKER_H ?>&settle=' + SETTLE + '&r=' + Date.now();
     setTimeout(reveal, HANG);                              // safety net for hung pages

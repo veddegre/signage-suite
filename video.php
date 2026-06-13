@@ -67,7 +67,8 @@ $src   = $path ? 'videos/' . rawurlencode(basename($path)) : null;
 $title = $video['title'] ?? '';
 $embedded = isset($_GET['noticker']);
 $settleMs = max(0, (int)($_GET['settle'] ?? 0));
-$autoplayAttr = $settleMs > 0 ? '' : 'autoplay';
+$autoplayMuted = $embedded || MUTED;
+$autoplayAttr = ($settleMs <= 0 && !$embedded) ? 'autoplay' : '';
 $loopAttr = $embedded ? '' : 'loop';
 ?>
 <!DOCTYPE html>
@@ -108,7 +109,7 @@ $loopAttr = $embedded ? '' : 'loop';
        <code>videos/<?= h($key) ?>.mp4</code>.</p>
   </div>
 <?php else: ?>
-  <video id="player" src="<?= h($src) ?>" <?= $autoplayAttr ?> <?= MUTED ? 'muted' : '' ?> <?= $loopAttr ?> playsinline></video>
+  <video id="player" src="<?= h($src) ?>" <?= $autoplayAttr ?> <?= $autoplayMuted ? 'muted' : '' ?> <?= $loopAttr ?> playsinline></video>
   <div class="chrome">
     <div class="title"><?= h($title) ?></div>
     <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
@@ -116,42 +117,79 @@ $loopAttr = $embedded ? '' : 'loop';
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const SETTLE = <?= (int)$settleMs ?>;
+    const WANT_SOUND = <?= json_encode(!MUTED) ?>;
     <?php if (SHOW_CLOCK): ?>
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
       document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
     tick(); setInterval(tick, 1000);
     <?php endif; ?>
     const v = document.getElementById('player');
-    let started = false;
-    function startVideo() {
-      if (started && !v.paused) return;
-      started = true;
-      <?php if (!MUTED): ?>
-      v.muted = false;
-      v.volume = 1;
-      <?php endif; ?>
-      v.play().catch(function () { started = false; });
+    let armed = false;
+
+    function notifyReady() {
+      if (!EMBEDDED || window.parent === window) return;
+      try { window.parent.postMessage({ type: 'signage-ready' }, '*'); } catch (e) {}
     }
+
+    function startVideo() {
+      if (!armed) return;
+      v.muted = !(WANT_SOUND && gestureSeen);
+      if (v.muted) v.setAttribute('muted', '');
+      else v.removeAttribute('muted');
+      if (v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        v.addEventListener('canplay', startVideo, { once: true });
+        return;
+      }
+      const p = v.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(function () {
+          if (!v.muted) {
+            v.muted = true;
+            v.setAttribute('muted', '');
+            v.play().catch(function () {});
+          }
+        });
+      }
+    }
+
+    let gestureSeen = false;
+
     if (EMBEDDED) {
       window.addEventListener('message', function (ev) {
         if (!ev.data) return;
         if (ev.data.type === 'signage-stop') {
-          started = false;
+          armed = false;
           v.pause();
           return;
         }
-        if (ev.data.type === 'signage-show') startVideo();
+        if (ev.data.type === 'signage-gesture') {
+          gestureSeen = true;
+          armed = true;
+          startVideo();
+          return;
+        }
+        if (ev.data.type === 'signage-show') {
+          armed = true;
+          v.muted = true;
+          v.setAttribute('muted', '');
+          startVideo();
+        }
       });
+      notifyReady();
+      if (document.readyState === 'complete') notifyReady();
+      else window.addEventListener('load', notifyReady, { once: true });
       // noticker=1 outside the rotation shell (direct preview).
       if (window.parent === window) {
+        armed = true;
         if (SETTLE > 0) setTimeout(startVideo, SETTLE);
         else startVideo();
       }
       v.addEventListener('ended', function () { v.pause(); });
       setInterval(function () {
-        if (!v.ended && v.paused) startVideo();
+        if (armed && !v.ended && v.paused) startVideo();
       }, 2000);
     } else {
+      armed = true;
       if (SETTLE > 0) setTimeout(startVideo, SETTLE);
       else startVideo();
       // Belt and suspenders: some Chromium builds pause looped video on decode

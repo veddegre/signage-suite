@@ -54,7 +54,7 @@ $src = $SCREEN !== 'main'
 </style>
 </head>
 <body>
-<div id="stage"><iframe src="<?= htmlspecialchars($src) ?>"></iframe></div>
+<div id="stage"><iframe src="<?= htmlspecialchars($src) ?>" allow="autoplay; fullscreen"></iframe></div>
 <div id="hint">Tap to toggle fullscreen</div>
 
 <script>
@@ -70,9 +70,17 @@ $src = $SCREEN !== 'main'
     screen.orientation.addEventListener('change', fit);
   }
 
-  // ── Tap toggles fullscreen (needs a user gesture in normal tabs) ──
+  // ── Tap toggles fullscreen; first tap also unlocks media autoplay in nested iframes ──
+  const boardFrame = document.querySelector('#stage iframe');
+  let gestureSent = false;
+  function sendGesture() {
+    if (gestureSent || !boardFrame || !boardFrame.contentWindow) return;
+    gestureSent = true;
+    boardFrame.contentWindow.postMessage({ type: 'signage-gesture' }, '*');
+  }
   const hint = document.getElementById('hint');
   document.body.addEventListener('click', () => {
+    sendGesture();
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
   });
