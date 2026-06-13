@@ -268,6 +268,14 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     $extra = ' Could not update main rotation.'; $flashOk = false;
                 }
             }
+            if (($flashOk ?? true) && (
+                $board === 'rotation'
+                || ($board === 'video' && isset($_POST['sync_rotation_main']))
+                || ($board === 'slides' && isset($_POST['sync_rotation_slides']))
+                || ($board === 'rss' && isset($_POST['sync_rotation_rss']))
+            )) {
+                $extra .= ($extra !== '' ? ' ' : '') . 'Wall displays refresh within 30 seconds.';
+            }
             $flash = $schema[$board]['title'] . ' saved.' . (isset($_POST['clear_cache']) ? ' Cache cleared.' : '') . $extra;
             $schema = admin_schema();   // pick up structural changes (e.g. new rotation screens)
         } else {
@@ -720,6 +728,17 @@ function admin_field(array $f, $val, string $board): void
   .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; min-height:72px; }
   .rotation-playlist-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; text-align:center; }
   .rotation-screen-tools { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 6px; }
+  .rotation-playlist-panel { margin-top:16px; }
+  .rotation-playlist-panel > summary { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding-right:48px; }
+  .rotation-playlist-panel > summary code { font-size:13px; color:var(--beacon); font-weight:400; }
+  .rotation-playlist-panel > summary .rotation-summary-note { color:var(--mist); font-size:14px; font-weight:400; }
+  .rotation-playlist-panel > summary .rotation-summary-actions { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .rotation-playlist-panel > summary .rotation-summary-actions a { padding:4px 10px; font-size:12px; text-decoration:none; }
+  .rotation-playlist-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+  .rotation-effective-list { margin:0 0 10px; padding:12px 14px; background:var(--lake-night); border:1px solid var(--line); border-radius:10px; font-size:13px; color:var(--mist); }
+  .rotation-effective-list ol { margin:6px 0 0 18px; color:var(--snow); }
+  .rotation-effective-list li { margin:4px 0; }
+  .rotation-effective-list .mirror-note { color:var(--beacon); font-size:12px; margin-bottom:4px; }
   .video-card, .rotation-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
   .video-card.dragging, .rotation-card.dragging { opacity:.55; }
   .video-card-head, .rotation-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
@@ -895,7 +914,12 @@ function admin_field(array $f, $val, string $board): void
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
       <div class="sub">Changes save to <code>config/settings.json</code>.
-        <?php if (!empty($b['file'])): ?><a href="<?= h($b['file']) ?>" target="_blank">Preview board ↗</a><?php endif; ?></div>
+        <?php if ($board === 'rotation'): ?>
+          <a href="<?= h(rotation_screen_preview_url('main')) ?>" target="_blank" rel="noopener">Preview main rotation ↗</a>
+          · kiosk URL <code><?= h(rotation_screen_kiosk_url('main')) ?></code>
+        <?php elseif (!empty($b['file'])): ?>
+          <a href="<?= h($b['file']) ?>" target="_blank" rel="noopener">Preview board ↗</a>
+        <?php endif; ?></div>
 
       <?php if ($board === 'slides'): ?>
       <details class="panel">
@@ -1222,24 +1246,82 @@ function admin_field(array $f, $val, string $board): void
           </div>
           <button type="button" class="addrow" onclick="addRow(this)">+ Add screen</button>
 
+          <?php if (count($rotationScreens) > 1): ?>
+          <div class="rotation-playlist-controls">
+            <button type="button" class="secondary" onclick="setRotationPlaylistsOpen(true)">Expand all playlists</button>
+            <button type="button" class="secondary" onclick="setRotationPlaylistsOpen(false)">Collapse all playlists</button>
+          </div>
+          <?php endif; ?>
+
           <?php foreach ($rotationScreens as $screenKey => $screenMeta):
             $fieldKey = 'PAGES_' . $screenKey;
             $pagesVal = current_val($rawConf, $board, $fieldKey);
             $pageRows = is_array($pagesVal) ? $pagesVal : [];
             $screenName = rotation_screen_display_name($screenKey, $rotationScreens);
             $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
+            $effectivePages = rotation_screen_effective_pages($screenKey);
+            $mirrorsMain = $pageRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
+            $pageCount = 0;
+            foreach ($pageRows as $prow) {
+                if (is_array($prow) && trim((string)($prow['url'] ?? '')) !== '') {
+                    $pageCount++;
+                }
+            }
+            $activeEffective = 0;
+            foreach ($effectivePages as $ep) {
+                if (is_array($ep) && !empty($ep['url']) && empty($ep['off'])) {
+                    $activeEffective++;
+                }
+            }
+            if ($mirrorsMain) {
+                $summaryNote = 'mirrors main (' . $activeEffective . ' page' . ($activeEffective === 1 ? '' : 's') . ')';
+            } elseif ($pageCount === 0) {
+                $summaryNote = 'empty';
+            } else {
+                $summaryNote = $pageCount . ' page' . ($pageCount === 1 ? '' : 's');
+            }
           ?>
-          <div class="section-title" style="margin-top:28px">Playlist — <?= h($screenName) ?> <code style="font-size:13px;color:var(--beacon)"><?= h($screenKey) ?></code></div>
+          <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $screenKey === 'main' ? ' open' : '' ?>>
+            <summary>
+              <span>Playlist — <?= h($screenName) ?></span>
+              <code><?= h($screenKey) ?></code>
+              <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
+              <span class="rotation-summary-actions">
+                <a class="secondary" href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener"
+                   onclick="event.stopPropagation()">Preview ↗</a>
+              </span>
+            </summary>
+            <div class="panel-body">
           <div class="help" style="margin-bottom:8px">Drag cards by the <strong>⋮⋮</strong> handle to reorder (top = first on the wall).
-            <?php if ($screenKey !== 'main'): ?> Leave this playlist empty to mirror main.<?php endif; ?></div>
+            <?php if ($screenKey !== 'main'): ?> Leave this playlist empty to mirror main.<?php endif; ?>
+            Preview opens the live rotation in a new tab — <strong>save first</strong>; wall displays pick up changes within 30 seconds.</div>
 
           <div class="rotation-screen-tools">
+            <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+               href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview rotation ↗</a>
+            <span class="help" style="margin:0">Kiosk: <code><?= h(rotation_screen_kiosk_url($screenKey)) ?></code></span>
             <button type="button" class="secondary" onclick="loadRotationStarter('<?= h($deckId) ?>')">Load starter playlist</button>
             <?php if ($screenKey !== 'main'): ?>
             <button type="button" class="secondary" onclick="copyRotationFromMain('<?= h($deckId) ?>')">Copy from main</button>
             <?php endif; ?>
             <button type="button" class="addrow" onclick="addRotationPage('<?= h($deckId) ?>')">+ Add page</button>
           </div>
+
+          <?php if ($effectivePages !== []): ?>
+          <div class="rotation-effective-list">
+            <?php if ($mirrorsMain): ?><div class="mirror-note">Saved playlist is empty — wall mirrors main:</div><?php else: ?>
+            <strong>On the wall now</strong> (saved playlist):
+            <?php endif; ?>
+            <ol>
+              <?php foreach ($effectivePages as $ep):
+                if (!is_array($ep) || empty($ep['url']) || !empty($ep['off'])) continue;
+                $dwell = (int)($ep['dwell'] ?? 0);
+              ?>
+              <li><?= h(rotation_page_label((string)$ep['url'])) ?> · <code><?= h((string)$ep['url']) ?></code><?= $dwell > 0 ? ' · ' . $dwell . 's' : '' ?></li>
+              <?php endforeach; ?>
+            </ol>
+          </div>
+          <?php endif; ?>
 
           <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
           <div class="quick-add-bar">
@@ -1299,6 +1381,8 @@ function admin_field(array $f, $val, string $board): void
             </div>
             <?php $pri++; endforeach; ?>
           </div>
+            </div>
+          </details>
           <?php endforeach; ?>
 
           <details class="panel panel-muted" style="margin-top:22px">
@@ -1790,6 +1874,13 @@ function bindPlaylistCardHandle(card, deck, handleSelector, reindexFn) {
     card.classList.remove('dragging');
     deck._dragCard = null;
     reindexFn(deck);
+  });
+}
+
+function setRotationPlaylistsOpen(open) {
+  document.querySelectorAll('.rotation-playlist-panel').forEach(function (el) {
+    if (open) el.setAttribute('open', '');
+    else el.removeAttribute('open');
   });
 }
 

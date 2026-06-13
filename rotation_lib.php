@@ -18,18 +18,117 @@ function rotation_screens(): array
     return $screens;
 }
 
-/** @return list<array<string,mixed>> */
-function rotation_screen_pages(string $screen = 'main'): array
+/** @return list<array<string,mixed>> Saved pages for one screen only (no fallback). */
+function rotation_screen_own_pages(string $screen = 'main'): array
 {
     $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
     if ($screen === '') {
         $screen = 'main';
     }
     $pages = cfg("rotation.PAGES_$screen", null);
-    if (!is_array($pages) || $pages === []) {
-        $pages = cfg('rotation.PAGES_main', cfg('rotation.PAGES', []));
-    }
     return is_array($pages) ? $pages : [];
+}
+
+/** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
+function rotation_screen_effective_pages(string $screen = 'main'): array
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '') {
+        $screen = 'main';
+    }
+    $own = rotation_screen_own_pages($screen);
+    if ($own !== []) {
+        return $own;
+    }
+    if ($screen !== 'main') {
+        return rotation_screen_effective_pages('main');
+    }
+    $legacy = cfg('rotation.PAGES', []);
+    if (is_array($legacy) && $legacy !== []) {
+        return $legacy;
+    }
+    return rotation_starter_pages();
+}
+
+/** @return list<array<string,mixed>> */
+function rotation_screen_pages(string $screen = 'main'): array
+{
+    return rotation_screen_effective_pages($screen);
+}
+
+function rotation_screen_preview_url(string $screen = 'main'): string
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '' || $screen === 'main') {
+        return 'player.php';
+    }
+    return 'player.php?screen=' . rawurlencode($screen);
+}
+
+function rotation_screen_kiosk_url(string $screen = 'main'): string
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '' || $screen === 'main') {
+        return 'board.php';
+    }
+    return 'board.php?screen=' . rawurlencode($screen);
+}
+
+/** @return list<array<string,mixed>> Active pages for the rotation shell (url set, dwell > 0, not skipped). */
+function rotation_screen_active_pages(string $screen = 'main'): array
+{
+    return array_values(array_filter(
+        rotation_screen_effective_pages($screen),
+        static fn($p) => is_array($p)
+            && trim((string)($p['url'] ?? '')) !== ''
+            && (int)($p['dwell'] ?? 0) > 0
+            && empty($p['off'])
+    ));
+}
+
+/** Fingerprint of the saved rotation config for one screen — used by board.php polling. */
+function rotation_config_revision(string $screen = 'main'): string
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '') {
+        $screen = 'main';
+    }
+    $screensCfg = cfg('rotation.SCREENS', []);
+    $scr = is_array($screensCfg) ? ($screensCfg[$screen] ?? null) : null;
+    $mtime = is_file(cfg_path()) ? (int)filemtime(cfg_path()) : 0;
+    $blob = json_encode([
+        'mtime' => $mtime,
+        'screen' => $screen,
+        'pages' => rotation_screen_effective_pages($screen),
+        'shuffle' => is_array($scr) && !empty($scr['shuffle']),
+        'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
+        'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
+        'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),
+    ], JSON_UNESCAPED_SLASHES);
+    return substr(sha1($blob ?: ''), 0, 12);
+}
+
+/**
+ * Runtime payload for board.php render + ?api=1 polling.
+ * @return array{screen:string,pages:list<array<string,mixed>>,shuffle:bool,fade_ms:int,settle_ms:int,hang_ms:int,revision:string}
+ */
+function rotation_screen_runtime(string $screen = 'main'): array
+{
+    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    if ($screen === '') {
+        $screen = 'main';
+    }
+    $screensCfg = cfg('rotation.SCREENS', []);
+    $scr = is_array($screensCfg) ? ($screensCfg[$screen] ?? null) : null;
+    return [
+        'screen' => $screen,
+        'pages' => rotation_screen_active_pages($screen),
+        'shuffle' => is_array($scr) && !empty($scr['shuffle']),
+        'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
+        'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
+        'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),
+        'revision' => rotation_config_revision($screen),
+    ];
 }
 
 /** Default playlist when nothing is configured yet (matches board.php fallback). */

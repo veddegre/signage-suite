@@ -25,20 +25,14 @@ require_once __DIR__ . '/rotation_lib.php';
 $SCREEN = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['screen'] ?? ''));
 if ($SCREEN === '') $SCREEN = 'main';
 
-$BUILTIN_PAGES = rotation_starter_pages();
+$runtime = rotation_screen_runtime($SCREEN);
 
-// Fallback chain: this screen's pages → main's pages → legacy single-rotation key → built-in default.
-define('PAGES', cfg("rotation.PAGES_$SCREEN",
-              cfg('rotation.PAGES_main',
-              cfg('rotation.PAGES', $BUILTIN_PAGES))));
-
-// Per-screen shuffle flag (Screens table in admin → Rotation).
-$screensCfg = cfg('rotation.SCREENS', []);
-$scr = is_array($screensCfg) ? ($screensCfg[$SCREEN] ?? null) : null;
-define('SHUFFLE', is_array($scr) && !empty($scr['shuffle']));
-define('FADE_MS',    cfg('rotation.FADE_MS', 800));        // crossfade duration
-define('SETTLE_MS',  cfg('rotation.SETTLE_MS', 1200));     // wait after load before reveal
-define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that never loads
+if (($_GET['api'] ?? '') === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo json_encode($runtime, JSON_UNESCAPED_SLASHES);
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -49,7 +43,7 @@ define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that n
   * { margin:0; padding:0; }
   html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; cursor:none; }
   iframe { position:absolute; top:0; left:0; width:1920px; height:<?= 1080 - SIGNAGE_TICKER_H ?>px; border:0;
-           opacity:0; transition:opacity <?= (int)FADE_MS ?>ms ease; }
+           opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease; }
   iframe.show { opacity:1; }
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:#8aa0c0; font-family:system-ui,sans-serif; }
@@ -65,11 +59,13 @@ define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that n
 <iframe id="fA"></iframe>
 <iframe id="fB"></iframe>
 <script>
-  const PAGES   = <?= json_encode(array_values(array_filter((array)PAGES,
-                      fn($p) => !empty($p['url']) && (int)($p['dwell'] ?? 0) > 0 && empty($p['off'])))) ?>;
-  const SETTLE  = <?= (int)SETTLE_MS ?>;
-  const HANG    = <?= (int)HANG_MS ?>;
-  const SHUFFLE = <?= SHUFFLE ? 'true' : 'false' ?>;
+  const PAGES   = <?= json_encode($runtime['pages'], JSON_UNESCAPED_SLASHES) ?>;
+  const REVISION = <?= json_encode($runtime['revision']) ?>;
+  const SETTLE  = <?= (int)$runtime['settle_ms'] ?>;
+  const HANG    = <?= (int)$runtime['hang_ms'] ?>;
+  const SHUFFLE = <?= $runtime['shuffle'] ? 'true' : 'false' ?>;
+  const SCREEN  = <?= json_encode($runtime['screen']) ?>;
+  const POLL_MS = 30000;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
   let front = 0, idx = -1, gen = 0;
 
@@ -137,6 +133,20 @@ define('HANG_MS',    cfg('rotation.HANG_MS', 20000));      // skip a page that n
   }
 
   rotate();
+
+  function pollRotationConfig() {
+    const q = SCREEN === 'main' ? 'board.php?api=1' : ('board.php?api=1&screen=' + encodeURIComponent(SCREEN));
+    fetch(q, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && data.revision && data.revision !== REVISION) location.reload();
+      })
+      .catch(function () {});
+  }
+  setInterval(pollRotationConfig, POLL_MS);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') pollRotationConfig();
+  });
 
   // Nightly reload of the shell itself to keep long kiosk sessions fresh
   setTimeout(() => location.reload(), 24 * 60 * 60 * 1000);
