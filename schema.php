@@ -31,7 +31,7 @@ function rotation_page_fields(): array
         $out[] = ['key' => 'PAGES_' . $key, 'label' => 'Pages — ' . $name . ' (?screen=' . $key . ')',
                   'type' => 'rows', 'columns' => $cols,
                   'help' => $key === 'main'
-                      ? 'Relative board URLs in display order. From/To hours (0-23) optional; blank = always. Overnight (22 to 6) works.'
+                      ? 'Edited on this page as a drag-and-drop playlist. Relative board URLs in display order.'
                       : 'Leave empty to mirror the main screen.'];
     }
     return $out;
@@ -194,7 +194,8 @@ function admin_schema(): array
                            ['key' => 'title', 'label' => 'Title (blank to hide)'],
                            ['key' => 'youtube', 'label' => 'YouTube URL', 'wide' => true],
                            ['key' => 'file', 'label' => 'or local file']],
-             'help' => 'Managed on this page via the drag-and-drop playlist below. Each video needs a unique key.'],
+             'help' => 'Managed on this page via the drag-and-drop playlist below. Each video needs a unique key. '
+                     . 'Use Admin → Rotation to order all boards on the wall, or check “Add playlist to main rotation” when saving.'],
             ['key' => 'VIDEO_DIR', 'label' => 'Video directory', 'type' => 'text'],
             ['key' => 'MUTED', 'label' => 'Muted', 'type' => 'bool', 'default' => true],
             ['key' => 'FIT', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain']],

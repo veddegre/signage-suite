@@ -19,6 +19,7 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/slides_lib.php';
 require_once __DIR__ . '/rotator_lib.php';
 require_once __DIR__ . '/video_lib.php';
+require_once __DIR__ . '/rotation_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
 
 slide_background_ensure_assets();
@@ -219,6 +220,27 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     $extra = $n > 0
                         ? " Added $n video(s) to main rotation."
                         : (count($sync['updated']) > 0 ? ' Updated rotation dwell times.' : ' Playlist already in main rotation.');
+                } else {
+                    $extra = ' Could not update main rotation.'; $flashOk = false;
+                }
+            } elseif ($board === 'slides' && isset($_POST['sync_rotation_slides'])) {
+                $sync = rotation_sync_slides('main');
+                if (rotation_pages_write($sync['screen'], $sync['pages'])) {
+                    cfg_reload();
+                    $extra = $sync['added']
+                        ? ' Added slides.php to main rotation.'
+                        : ($sync['updated'] ? ' Updated slides.php dwell on main rotation.' : ' slides.php already on main rotation.');
+                } else {
+                    $extra = ' Could not update main rotation.'; $flashOk = false;
+                }
+            } elseif ($board === 'rss' && isset($_POST['sync_rotation_rss'])) {
+                $sync = rotation_sync_rss('main');
+                if (rotation_pages_write($sync['screen'], $sync['pages'])) {
+                    cfg_reload();
+                    $n = count($sync['added']);
+                    $extra = $n > 0
+                        ? " Added $n RSS feed(s) to main rotation."
+                        : (count($sync['updated']) > 0 ? ' Updated RSS dwell times on main rotation.' : ' RSS feeds already on main rotation.');
                 } else {
                     $extra = ' Could not update main rotation.'; $flashOk = false;
                 }
@@ -522,6 +544,12 @@ $navGroups = [
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'MUTED', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
+$rotationBoardKeys = ['FADE_MS', 'SETTLE_MS', 'HANG_MS'];
+$rotationQuickAdd = rotation_quick_add_items();
+$rotationQuickGroups = [];
+foreach ($rotationQuickAdd as $item) {
+    $rotationQuickGroups[$item['group']][] = $item;
+}
 
 function admin_field(array $f, $val, string $board): void
 {
@@ -661,23 +689,26 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-flags { display:flex; flex-wrap:wrap; gap:16px; margin-top:4px; }
   .slide-card-flags label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); }
   @media (max-width: 760px) { .slide-card-grid { grid-template-columns:1fr; } .slide-card-grid .span-2 { grid-column:span 1; } }
-  .video-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
-  .video-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  .video-card.dragging { opacity:.55; }
-  .video-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
-  .video-card-head .drag-handle { cursor:grab; color:var(--mist); font-size:18px; line-height:1; padding:4px 6px 0 0; user-select:none; }
-  .video-card-head .drag-handle:active { cursor:grabbing; }
-  .video-card-title { flex:1; min-width:0; }
-  .video-card-title strong { display:block; font-size:15px; color:var(--snow); margin-bottom:4px; }
-  .video-card-title code { font-size:12px; color:var(--beacon); }
-  .video-card-grid { display:grid; grid-template-columns:120px 1fr 1fr; gap:12px 14px; }
-  .video-card-grid label.mini { display:block; font-size:11px; letter-spacing:.8px; text-transform:uppercase;
+  .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
+  .video-card, .rotation-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .video-card.dragging, .rotation-card.dragging { opacity:.55; }
+  .video-card-head, .rotation-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
+  .video-card-head .drag-handle, .rotation-card-head .drag-handle { cursor:grab; color:var(--mist); font-size:18px; line-height:1; padding:4px 6px 0 0; user-select:none; }
+  .video-card-head .drag-handle:active, .rotation-card-head .drag-handle:active { cursor:grabbing; }
+  .video-card-title, .rotation-card-title { flex:1; min-width:0; }
+  .video-card-title strong, .rotation-card-title strong { display:block; font-size:15px; color:var(--snow); margin-bottom:4px; }
+  .video-card-title code, .rotation-card-title code { font-size:12px; color:var(--beacon); }
+  .video-card-grid, .rotation-card-grid { display:grid; grid-template-columns:120px 1fr 1fr; gap:12px 14px; }
+  .rotation-card-grid.cols-4 { grid-template-columns:1fr 100px 80px 80px; }
+  .video-card-grid label.mini, .rotation-card-grid label.mini { display:block; font-size:11px; letter-spacing:.8px; text-transform:uppercase;
                                   color:var(--mist); margin-bottom:4px; }
-  .video-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
+  .video-card-grid input, .rotation-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
                             background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
-  .video-card-meta { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:12px; font-size:13px; color:var(--mist); align-items:center; }
-  .video-card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; align-items:center; }
-  @media (max-width: 900px) { .video-card-grid { grid-template-columns:1fr; } }
+  .video-card-meta, .rotation-card-meta { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:12px; font-size:13px; color:var(--mist); align-items:center; }
+  .video-card-actions, .rotation-card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; align-items:center; }
+  .quick-add-bar { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; align-items:center; }
+  .quick-add-bar .group-label { font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--mist); margin-right:4px; }
+  @media (max-width: 900px) { .video-card-grid, .rotation-card-grid, .rotation-card-grid.cols-4 { grid-template-columns:1fr; } }
   .inline-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
   .video-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-top:14px; }
   .video-toolbar .help { margin:0; max-width:420px; }
@@ -1123,7 +1154,123 @@ function admin_field(array $f, $val, string $board): void
         <?php
         $scheduleOptions = ['always', 'once', 'range', 'yearly', 'yearly_range', 'monthly', 'weekly'];
 
-        if ($board === 'video'):
+        if ($board === 'rotation'):
+          $rotationScreens = rotation_screens();
+          $scrVal = current_val($rawConf, $board, 'SCREENS');
+          $scrRows = [];
+          if (is_array($scrVal)) {
+              foreach ($scrVal as $rk => $rv) {
+                  $scrRows[] = ['_key' => $rk] + (is_array($rv) ? $rv : ['name' => $rv]);
+              }
+          }
+        ?>
+          <div class="section-title">Displays</div>
+          <div class="help" style="margin-bottom:12px">One row per physical screen. Each kiosk uses <code>board.php?screen=KEY</code>
+            (plain <code>board.php</code> = main). Save after adding a screen — its playlist section appears below.</div>
+          <div class="rows-scroll">
+            <table class="rows" data-field="SCREENS">
+              <thead><tr>
+                <th>Key</th><th>Display name</th><th>Shuffle</th><th></th>
+              </tr></thead>
+              <tbody>
+                <?php foreach ($scrRows as $sri => $srow): ?>
+                <tr>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][_key]" value="<?= h((string)($srow['_key'] ?? '')) ?>" placeholder="garage"></td>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][name]" value="<?= h((string)($srow['name'] ?? '')) ?>" placeholder="Garage TV"></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][shuffle]" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
+                  <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
+                </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+          <button type="button" class="addrow" onclick="addRow(this)">+ Add screen</button>
+
+          <?php foreach ($b['fields'] as $f):
+            if (strpos($f['key'], 'PAGES_') !== 0) continue;
+            $screenKey = substr($f['key'], 6);
+            $pagesVal = current_val($rawConf, $board, $f['key']);
+            $pageRows = is_array($pagesVal) ? $pagesVal : [];
+            $screenName = rotation_screen_display_name($screenKey, $rotationScreens);
+            $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
+          ?>
+          <div class="section-title" style="margin-top:28px">Playlist — <?= h($screenName) ?></div>
+          <div class="help" style="margin-bottom:8px">Drag cards to set wall order (top = first). Use quick-add for weather, RSS, slides, rotator, videos, and more.
+            <?php if ($screenKey !== 'main'): ?> Leave empty to mirror the main screen.<?php endif; ?></div>
+
+          <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
+          <div class="quick-add-bar">
+            <span class="group-label"><?= h($groupName) ?></span>
+            <?php foreach ($groupItems as $qa): ?>
+            <button type="button" class="secondary quick-add-rotation" style="padding:6px 12px;font-size:13px"
+                    data-field="<?= h($f['key']) ?>" data-deck="<?= h($deckId) ?>"
+                    data-url="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>"><?= h($qa['label']) ?></button>
+            <?php endforeach; ?>
+          </div>
+          <?php endforeach; ?>
+
+          <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($f['key']) ?>">
+            <?php $pri = 0; foreach ($pageRows as $prow):
+              if (!is_array($prow)) continue;
+              $purl = trim((string)($prow['url'] ?? ''));
+            ?>
+            <div class="rotation-card" data-rotation-card draggable="true">
+              <div class="rotation-card-head">
+                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <div class="rotation-card-title">
+                  <strong data-rotation-label><?= h(rotation_page_label($purl)) ?></strong>
+                  <code data-rotation-url-display><?= h($purl !== '' ? $purl : 'board URL') ?></code>
+                </div>
+                <button type="button" class="rowdel" onclick="this.closest('[data-rotation-card]').remove(); reindexRotationDeck(document.getElementById('<?= h($deckId) ?>'));" title="Remove">×</button>
+              </div>
+              <div class="rotation-card-grid">
+                <div style="grid-column:1 / -1">
+                  <label class="mini">URL</label>
+                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
+                         placeholder="slides.php or rss.php?feed=ars" data-rotation-url required>
+                </div>
+                <div>
+                  <label class="mini">Dwell (s)</label>
+                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="60">
+                </div>
+                <div>
+                  <label class="mini">From hr</label>
+                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
+                </div>
+                <div>
+                  <label class="mini">To hr</label>
+                  <input type="text" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                </div>
+              </div>
+              <div class="rotation-card-meta">
+                <label class="check" style="margin:0"><input type="checkbox" name="<?= h($f['key']) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this page</label>
+                <?php if ($purl !== ''): ?>
+                <div class="rotation-card-actions">
+                  <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                </div>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php $pri++; endforeach; ?>
+          </div>
+          <button type="button" class="addrow" style="margin-top:12px" onclick="addRotationPage('<?= h($deckId) ?>')">+ Add page</button>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px">
+            <summary>Transition settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $rotationBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'video'):
           $videoVal = current_val($rawConf, $board, 'VIDEOS');
           $videoRows = is_array($videoVal) ? $videoVal : [];
         ?>
@@ -1299,6 +1446,11 @@ function admin_field(array $f, $val, string $board): void
           </div>
           <button type="button" class="addrow" style="margin-top:12px" onclick="addSlideCard()">+ Add slide</button>
 
+          <div class="actions" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
+            <label class="check"><input type="checkbox" name="sync_rotation_slides" checked> Add <code>slides.php</code> to main rotation on save</label>
+            <span class="help">One rotation entry for the whole slide deck; dwell scales with slide count.</span>
+          </div>
+
           <details class="panel panel-muted" style="margin-top:22px">
             <summary>Board settings</summary>
             <div class="panel-body">
@@ -1377,6 +1529,13 @@ function admin_field(array $f, $val, string $board): void
             endif; ?>
           </div>
         <?php endforeach; endif; ?>
+
+        <?php if ($board === 'rss'): ?>
+        <div class="actions" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
+          <label class="check"><input type="checkbox" name="sync_rotation_rss" checked> Add all feeds to main rotation on save</label>
+          <span class="help">Adds <code>rss.php?feed=KEY</code> for each feed with dwell from stories × seconds per story.</span>
+        </div>
+        <?php endif; ?>
 
         <div class="actions">
           <button class="save">Save</button>
@@ -1530,7 +1689,149 @@ function addSlideCard() {
 document.addEventListener('DOMContentLoaded', function () {
   initSlideDeck();
   initVideoPlaylist();
+  initRotationDecks();
+  document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const deckId = btn.dataset.deck;
+      const deck = deckId ? document.getElementById(deckId) : null;
+      if (!deck) return;
+      addRotationPage(deck.id, btn.dataset.url || '', btn.dataset.dwell || '60');
+    });
+  });
 });
+
+function rotationLabelFromUrl(url) {
+  url = (url || '').trim();
+  if (!url) return 'New page';
+  if (/^video\.php\?v=/.test(url)) return 'Video — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'video');
+  if (/^rss\.php\?feed=/.test(url)) return 'RSS — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'feed');
+  if (/^grafana\.php\?d=/.test(url)) return 'Grafana — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'dashboard');
+  const boards = {
+    'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'photo.php': 'Photo conditions',
+    'family.php': 'Family calendar', 'traffic.php': 'Traffic map', 'homelab.php': 'Homelab status',
+    'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
+    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard'
+  };
+  const base = url.split('?')[0];
+  return boards[base] || base;
+}
+
+function reindexRotationDeck(deck) {
+  if (!deck || !deck.dataset.field) return;
+  const field = deck.dataset.field;
+  deck.querySelectorAll('[data-rotation-card]').forEach(function (card, i) {
+    card.querySelectorAll('[name^="' + field + '["]').forEach(function (inp) {
+      inp.name = inp.name.replace(new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\[[^\\]]+\\]'), field + '[' + i + ']');
+    });
+  });
+}
+
+function bindRotationCard(card, deck) {
+  const urlInp = card.querySelector('[data-rotation-url]');
+  const labelEl = card.querySelector('[data-rotation-label]');
+  const codeEl = card.querySelector('[data-rotation-url-display]');
+  const preview = card.querySelector('[data-rotation-preview]');
+  function syncHead() {
+    const u = urlInp ? urlInp.value.trim() : '';
+    if (labelEl) labelEl.textContent = rotationLabelFromUrl(u);
+    if (codeEl) codeEl.textContent = u || 'board URL';
+    if (preview) {
+      if (u) { preview.href = u; preview.style.display = ''; }
+      else { preview.style.display = 'none'; }
+    } else if (u) {
+      let actions = card.querySelector('.rotation-card-actions');
+      if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'rotation-card-actions';
+        const meta = card.querySelector('.rotation-card-meta');
+        if (meta) meta.appendChild(actions);
+      }
+      actions.innerHTML = '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="' +
+        u.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" data-rotation-preview>Preview</a>';
+    }
+  }
+  if (urlInp && !urlInp.dataset.bound) {
+    urlInp.dataset.bound = '1';
+    urlInp.addEventListener('input', syncHead);
+  }
+  syncHead();
+}
+
+function bindRotationCardDrag(card, deck) {
+  card.addEventListener('dragstart', function (e) {
+    deck._dragCard = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  card.addEventListener('dragend', function () {
+    card.classList.remove('dragging');
+    deck._dragCard = null;
+    reindexRotationDeck(deck);
+  });
+  card.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  });
+  card.addEventListener('drop', function (e) {
+    e.preventDefault();
+    const dragEl = deck._dragCard;
+    if (!dragEl || dragEl === card) return;
+    const cards = Array.from(deck.querySelectorAll('[data-rotation-card]'));
+    const from = cards.indexOf(dragEl);
+    const to = cards.indexOf(card);
+    if (from < 0 || to < 0) return;
+    if (from < to) card.after(dragEl); else card.before(dragEl);
+    reindexRotationDeck(deck);
+  });
+}
+
+function initRotationDecks() {
+  document.querySelectorAll('.rotation-playlist').forEach(function (deck) {
+    deck.querySelectorAll('[data-rotation-card]').forEach(function (card) {
+      bindRotationCard(card, deck);
+      if (!card.dataset.dragBound) {
+        card.dataset.dragBound = '1';
+        bindRotationCardDrag(card, deck);
+      }
+    });
+  });
+}
+
+function addRotationPage(deckId, url, dwell) {
+  const deck = typeof deckId === 'string' ? document.getElementById(deckId) : deckId;
+  if (!deck || !deck.dataset.field) return;
+  const field = deck.dataset.field;
+  reindexRotationDeck(deck);
+  const idx = deck.querySelectorAll('[data-rotation-card]').length;
+  url = (url || '').trim();
+  dwell = (dwell || '').toString().trim() || '60';
+  const card = document.createElement('div');
+  card.className = 'rotation-card';
+  card.setAttribute('data-rotation-card', '');
+  card.setAttribute('draggable', 'true');
+  card.innerHTML =
+    '<div class="rotation-card-head">' +
+      '<span class="drag-handle" title="Drag to reorder">⋮⋮</span>' +
+      '<div class="rotation-card-title"><strong data-rotation-label>' + rotationLabelFromUrl(url) + '</strong>' +
+      '<code data-rotation-url-display>' + (url || 'board URL') + '</code></div>' +
+      '<button type="button" class="rowdel" onclick="this.closest(\'[data-rotation-card]\').remove(); reindexRotationDeck(document.getElementById(\'' +
+      deck.id + '\'));" title="Remove">×</button>' +
+    '</div>' +
+    '<div class="rotation-card-grid">' +
+      '<div style="grid-column:1 / -1"><label class="mini">URL</label>' +
+      '<input type="text" name="' + field + '[' + idx + '][url]" value="' + url.replace(/"/g, '&quot;') + '" placeholder="slides.php" data-rotation-url required></div>' +
+      '<div><label class="mini">Dwell (s)</label><input type="text" name="' + field + '[' + idx + '][dwell]" value="' + dwell.replace(/"/g, '&quot;') + '" placeholder="60"></div>' +
+      '<div><label class="mini">From hr</label><input type="text" name="' + field + '[' + idx + '][from]" placeholder="0-23"></div>' +
+      '<div><label class="mini">To hr</label><input type="text" name="' + field + '[' + idx + '][to]" placeholder="0-23"></div>' +
+    '</div>' +
+    '<div class="rotation-card-meta"><label class="check" style="margin:0"><input type="checkbox" name="' + field + '[' + idx + '][off]"> Skip this page</label></div>';
+  deck.appendChild(card);
+  bindRotationCard(card, deck);
+  bindRotationCardDrag(card, deck);
+  card.dataset.dragBound = '1';
+  reindexRotationDeck(deck);
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
 function reindexVideoPlaylist() {
   const deck = document.getElementById('videoPlaylist');
