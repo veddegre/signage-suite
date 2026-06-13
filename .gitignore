@@ -7,6 +7,10 @@ cache/
 # Downloaded video files (php video.php fetch)
 videos/
 
+# Local yt-dlp copy installed from admin
+bin/yt-dlp
+bin/yt-dlp.new
+
 # Uploaded custom slide images
 slides/
 

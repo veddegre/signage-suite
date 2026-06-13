@@ -2,10 +2,15 @@
 /**
  * CUSTOM SLIDES — 1920×1080 signage
  * Upload JPG/PNG/WebP slides in admin and schedule each one:
- *   always — show whenever this board is in rotation
- *   range  — date_start … date_end (YYYY-MM-DD)
- *   yearly — month_day MM-DD (birthdays, anniversaries)
- *   weekly — every Monday, Tuesday, …
+ *   always       — show whenever this board is in rotation
+ *   once         — single calendar date (date_start)
+ *   range        — date_start … date_end (YYYY-MM-DD)
+ *   yearly       — month_day MM-DD (birthdays, anniversaries)
+ *   yearly_range — month_day … month_day_end every year (Dec 24–Jan 6)
+ *   monthly      — day_of_month (1–31)
+ *   weekly       — weekday and/or weekdays (Mon,Wed,Fri)
+ *   hour_from/to — optional 0–23 window on any schedule (overnight OK)
+ *   priority     — when any priority slide is active, only those show
  *
  * Add slides.php to the rotation in admin (dwell = longest slide or a comfortable average).
  */
@@ -88,8 +93,8 @@ $playlist = array_map(fn($s) => [
 <?php if (!$playlist): ?>
   <div class="empty">
     <h1>No slides scheduled</h1>
-    <p>Upload images in <code>admin.php → Custom Slides</code>, set each slide's schedule
-       (always, date range, birthday, or weekday), then add <code>slides.php</code> to the rotation.</p>
+    <p>Upload images in <code>admin.php → Custom Slides</code>, set each slide's schedule,
+       then add <code>slides.php</code> to the rotation.</p>
   </div>
 <?php else: ?>
   <div class="layer" id="layerA"></div>
@@ -139,7 +144,7 @@ $playlist = array_map(fn($s) => [
     tick();
     setInterval(tick, 1000);
 
-    // Reload periodically so schedule boundaries (midnight, birthdays) pick up
+    // Reload periodically so schedule boundaries (midnight, hours, birthdays) pick up
     setTimeout(function () { location.reload(); }, 5 * 60 * 1000);
   </script>
 <?php endif; ?>

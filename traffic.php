@@ -7,7 +7,7 @@
  * Setup: free TomTom Developer key → admin.php → Traffic → paste API key.
  *   https://developer.tomtom.com/  (Traffic API / Maps API on the free tier)
  *
- * Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.
+ * Tiles load via traffic_tiles.php so the TomTom key stays on the server.
  */
 
 require_once __DIR__ . '/config.php';
@@ -149,8 +149,8 @@ $i96 = [[42.963, -86.05], [42.963, -85.55]];
   (function () {
     const CENTER = [<?= LAT ?>, <?= LON ?>];
     const ZOOM = <?= (int)ZOOM ?>;
-    const API_KEY = <?= json_encode(TOMTOM_API_KEY) ?>;
     const FLOW = <?= json_encode($flowStyle) ?>;
+    const TILE_BASE = 'traffic_tiles.php?style=' + encodeURIComponent(FLOW) + '&';
     const MARKERS = <?= json_encode($markers) ?>;
     const I96 = <?= json_encode($i96) ?>;
     const RELOAD = <?= max(60, (int)RELOAD_SEC) ?> * 1000;
@@ -167,7 +167,7 @@ $i96 = [[42.963, -86.05], [42.963, -85.55]];
     }).addTo(map);
 
     let trafficLayer = L.tileLayer(
-      'https://api.tomtom.com/traffic/map/4/tile/flow/' + FLOW + '/{z}/{x}/{y}.png?key=' + encodeURIComponent(API_KEY) + '&thickness=5',
+      TILE_BASE + 'z={z}&x={x}&y={y}',
       { opacity: 0.92, maxZoom: 19, attribution: '&copy; TomTom' }
     ).addTo(map);
 
@@ -200,8 +200,7 @@ $i96 = [[42.963, -86.05], [42.963, -85.55]];
     setInterval(function () {
       map.removeLayer(trafficLayer);
       trafficLayer = L.tileLayer(
-        'https://api.tomtom.com/traffic/map/4/tile/flow/' + FLOW + '/{z}/{x}/{y}.png?key='
-          + encodeURIComponent(API_KEY) + '&thickness=5&t=' + Date.now(),
+        TILE_BASE + 'z={z}&x={x}&y={y}&t=' + Date.now(),
         { opacity: 0.92, maxZoom: 19, attribution: '&copy; TomTom' }
       ).addTo(map);
     }, RELOAD);

@@ -13,8 +13,10 @@
  *                                     prints each video's duration so you can
  *                                     set the matching Anthias asset length
  *
- * Requirements on the server: yt-dlp in PATH for fetching (pipx install
- * yt-dlp), and optionally ffprobe (apt install ffmpeg) for duration readout.
+ * Admin can also download/update from Video Board in admin.php.
+ *
+ * Requirements on the server: yt-dlp in PATH or bin/yt-dlp for fetching,
+ * and optionally ffprobe (apt install ffmpeg) for duration readout.
  * Videos land in ./videos/ next to this file so the web server itself serves
  * the media with proper range support — easy on a Pi's CPU.
  *
@@ -28,87 +30,30 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/video_lib.php';
 
-define('VIDEOS', cfg('video.VIDEOS', [
-
-
-    'drone'   => ['title' => 'Grand Haven Drone Reel', 'youtube' => 'https://www.youtube.com/watch?v=REPLACE_ME'],
-    'ambient' => ['title' => '',                       'youtube' => 'https://www.youtube.com/watch?v=REPLACE_ME_TOO'],
-
-]));
-
-define('VIDEO_DIR', cfg('video.VIDEO_DIR', __DIR__ . '/videos'));
+define('VIDEOS', video_registry());
+define('VIDEO_DIR', video_dir());
 define('MUTED', cfg('video.MUTED', true));
 define('FIT', cfg('video.FIT', 'cover'));
 define('SHOW_CLOCK', cfg('video.SHOW_CLOCK', true));
-define('MAX_HEIGHT', cfg('video.MAX_HEIGHT', 1080));
+define('MAX_HEIGHT', video_max_height());
 define('TIMEZONE', cfg('video.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
-
-function video_path(string $key, array $v): ?string
-{
-    if (isset($v['file'])) {
-        $p = VIDEO_DIR . '/' . basename($v['file']);
-        return is_file($p) ? $p : null;
-    }
-    foreach (['mp4', 'webm', 'mkv'] as $ext) {
-        $p = VIDEO_DIR . "/$key.$ext";
-        if (is_file($p)) return $p;
-    }
-    return null;
-}
-
-function video_duration(string $path): ?float
-{
-    $out = @shell_exec('ffprobe -v error -show_entries format=duration -of csv=p=0 '
-        . escapeshellarg($path) . ' 2>/dev/null');
-    $d = is_string($out) ? (float)trim($out) : 0;
-    return $d > 0 ? $d : null;
-}
 
 // ── CLI fetcher: php video.php fetch ─────────────────────────────────────────
 // (bare `php video.php` with no argument falls through and renders the player)
 if (PHP_SAPI === 'cli' && isset($argv[1])) {
     if ($argv[1] !== 'fetch') {
-        fwrite(STDERR, "Usage: php video.php fetch\n");
+        fwrite(STDERR, "Usage: php video.php fetch [key]\n");
         exit(1);
     }
-    if (!is_dir(VIDEO_DIR)) mkdir(VIDEO_DIR, 0775, true);
-    $fmt = sprintf('bv*[ext=mp4][height<=%d]+ba[ext=m4a]/b[ext=mp4][height<=%d]/b',
-        MAX_HEIGHT, MAX_HEIGHT);
-
-    $report = function (string $key, array $v): void {
-        $p = video_path($key, $v);
-        if ($p === null) { echo "[$key] no local file yet\n"; return; }
-        if ($d = video_duration($p)) {
-            printf("[%s] %s — duration %s  → Anthias asset length: %d s\n",
-                $key, basename($p), gmdate('i:s', (int)$d), (int)ceil($d));
-        } else {
-            echo "[$key] " . basename($p) . " — install ffmpeg/ffprobe for a duration readout\n";
-        }
-    };
-
-    foreach (VIDEOS as $key => $v) {
-        if (!isset($v['youtube'])) {
-            $report($key, $v);
-            continue;
-        }
-        if (str_contains($v['youtube'], 'REPLACE_ME')) {
-            echo "[$key] skipped — put a real YouTube URL in VIDEOS\n";
-            $report($key, $v);
-            continue;
-        }
-        echo "[$key] fetching {$v['youtube']}\n";
-        $out = VIDEO_DIR . "/$key.%(ext)s";
-        passthru('yt-dlp -f ' . escapeshellarg($fmt)
-            . ' --merge-output-format mp4 --no-progress --force-overwrites'
-            . ' -o ' . escapeshellarg($out)
-            . ' ' . escapeshellarg($v['youtube']), $rc);
-        if ($rc !== 0) { echo "[$key] yt-dlp failed (exit $rc)\n"; continue; }
-        $report($key, $v);
-    }
-    exit(0);
+    $only = isset($argv[2]) ? preg_replace('/[^a-z0-9_\-]/i', '', (string)$argv[2]) : '';
+    $result = $only !== ''
+        ? video_fetch_one($only, fn($line) => print($line . "\n"))
+        : video_fetch_all(fn($line) => print($line . "\n"));
+    exit($result['ok'] ? 0 : 1);
 }
 
 // ── Player ───────────────────────────────────────────────────────────────────
@@ -154,8 +99,8 @@ $title = $video['title'] ?? '';
 <?php if ($src === null): ?>
   <div class="empty">
     <h2>No video downloaded for &ldquo;<?= h($key) ?>&rdquo;</h2>
-    <p>Run <code>php video.php fetch</code> on the server to download the entries
-       in <code>VIDEOS</code>, or drop a file at
+    <p>Use <strong>Download YouTube videos</strong> in admin, run
+       <code>php video.php fetch</code> on the server, or drop a file at
        <code>videos/<?= h($key) ?>.mp4</code>.</p>
   </div>
 <?php else: ?>

@@ -12,6 +12,7 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security_lib.php';
 
 define('PVE_HOST', cfg('homelab.PVE_HOST', 'https://192.168.86.2:8006'));
 define('PVE_TOKEN_ID', cfg('homelab.PVE_TOKEN_ID', 'signage@pve!signage'));
@@ -34,6 +35,10 @@ $GLOBALS['diag'] = [];
 
 function http_get(string $url, array $headers = [], ?string $userpass = null, bool $verify = true, int $timeout = 6): array
 {
+    $policy = signage_fetch_url_allowed($url, true);
+    if (!$policy['ok']) {
+        return ['body' => false, 'code' => 0, 'ms' => 0, 'err' => $policy['error'] ?? 'blocked URL'];
+    }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,

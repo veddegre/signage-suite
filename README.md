@@ -6,7 +6,7 @@ Fourteen self-contained PHP pages, all 1920×1080, all sharing the same dark-nav
 
 **Server** — run once on the box that hosts the boards:
 
-    sudo bash setup-server.sh --with-ytdlp --with-video-cron
+    sudo bash setup-server.sh --with-video-cron
 
 **Display** — run once on each Pi or kiosk PC (after the server is up):
 
@@ -33,14 +33,17 @@ If you prefer not to use `setup-server.sh`, you need PHP 8.1+ with curl, xml, mb
 (Adjust the path to wherever the boards live. On nginx: `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }`.) Verify after deploying: `curl -I http://server/boards/config/settings.json` should return 403.
 
 ## Configuration: admin.php (start here)
-All settings are managed through **admin.php** — a web frontend covering every board. On first visit it asks you to create an admin password (stored as a hash in `config/admin.json`; delete that file to reset it). Settings save to `config/settings.json`; **the board PHP files are never modified**, so the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
+All settings are managed through **admin.php** — a web frontend covering every board. On first visit it asks you to create an admin password (stored as a hash in `config/admin.json`). Change it anytime under **Tools → Change admin password**; delete `admin.json` on the server to fully reset (a new `setup.key` is required for setup). Settings save to `config/settings.json`; **the board PHP files are never modified**, so the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
 
 How it works: each board's old `const` values are now built-in defaults. A blank field in the admin means "use the default"; anything you enter overrides it. Password and API-key fields are left blank on save to mean "unchanged" — the admin never echoes secrets back into the HTML. The Tools page can clear the API cache (handy after changing keys) and shows the raw JSON, which you can also edit by hand.
 
 Notes for the security-minded:
 - `config/settings.json` holds your API tokens. The admin drops a deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` automatically (Apache). **On nginx add:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }` (adjust the path).
-- Login is session-based with CSRF protection on all saves; failed logins are rate-dampened. It's built for your LAN — if you expose it further, put real auth (Cloudflare Access, VPN) in front.
-- `php video.php fetch` still runs from the CLI; the admin edits the video registry, the fetcher downloads what's in it.
+- Login is session-based with CSRF protection, strict session cookies, idle timeout, and login lockout after repeated failures.
+- **First admin setup** requires a one-time key from `config/setup.key` on the server (created automatically, blocked from HTTP). SSH in to read it — prevents a stranger from claiming admin on a public host.
+- **Outbound fetch policy:** RSS/ICS URLs block private IPs unless **Admin → Security → Allow private URL fetches** is enabled. YouTube downloads only accept `youtube.com` / `youtu.be`. yt-dlp updates verify SHA-256 from the official GitHub release.
+- Still put **HTTPS** in front if admin is reachable from the internet (reverse proxy or Cloudflare Tunnel). For defense in depth, VPN or Cloudflare Access is recommended on semi-public hosts.
+- `php video.php fetch` still works from the CLI; admin can download YouTube entries and update yt-dlp from the Video Board page.
 
 ## index.php — Weather (built previously)
 Allendale weather, RainViewer animated radar, sunrise arc. Needs `OWM_API_KEY`.
@@ -80,10 +83,15 @@ Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule
 - **Upload:** admin → **Custom Slides** → upload box. New files default to **Always** in the deck.
 - **Slide creator:** same page — pick a themed background from `slide_backgrounds/` (Lake Night, Beacon Bar, Harbor Glow, Celebration, Frost, Forest), enter title/subtitle/body/footer, preview at 1920×1080, and **Create slide** to save a PNG into `./slides/`.
 - **Scheduling (per slide in the deck table):**
-  - **always** — show whenever this board is in rotation
-  - **range** — inclusive `date_start` … `date_end` (`YYYY-MM-DD`)
-  - **yearly** — every `MM-DD` (birthdays, anniversaries)
-  - **weekly** — every Monday, Tuesday, …
+  - **always** — show whenever this board is in rotation (optional hour window)
+  - **once** — single date in **From** (`YYYY-MM-DD`)
+  - **range** — inclusive **From** … **To** (`YYYY-MM-DD`)
+  - **yearly** — every **MM-DD** (birthdays, anniversaries)
+  - **yearly_range** — **MM-DD** through **MM-DD end** every year (e.g. `12-24` … `01-06` for the holidays)
+  - **monthly** — every month on **Day** (1–31)
+  - **weekly** — **Weekday** dropdown and/or **Days** text (`Mon,Wed,Fri` or full names)
+  - **Hr from / Hr to** — optional 0–23 window on any schedule (overnight like 22→6 works)
+  - **Priority** — when any priority slide is active, only priority slides show (emergency / takeover)
   - **Off** — bench without deleting
 - Each slide can set **Caption**, **Dwell (seconds)**, and image **fit** (`contain` / `cover`). The board reloads every 5 minutes so midnight and birthday boundaries pick up without restarting the kiosk.
 - **Rotation:** add `slides.php` to **admin → Rotation** with a dwell long enough for your active deck (e.g. three 12s slides → ~36–45s). Hour windows on the rotation entry are separate from per-slide schedules.
@@ -92,7 +100,7 @@ Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule
 ## traffic.php — Traffic Map
 Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with corridor markers and an I-96 highlight line. Defaults to the Allendale ↔ Grand Rapids area but center, zoom, and labels are all editable in admin.
 
-- **Setup:** free TomTom Developer key at [developer.tomtom.com](https://developer.tomtom.com/) (enable Traffic API) → admin → **Traffic Map** → paste key.
+- **Setup:** free TomTom Developer key at [developer.tomtom.com](https://developer.tomtom.com/) (enable Traffic API) → admin → **Traffic Map** → paste key. Tiles are fetched through `traffic_tiles.php` so the key never appears in the browser.
 - Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.
 - **Flow style** `relative0-dark` matches the dark basemap best. Map reloads on a configurable interval (default 5 min).
 
@@ -115,11 +123,12 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with corridor 
 Mimics Anthias's native video handling for web assets: videos are **downloaded locally with yt-dlp** and played fullscreen from disk — no live YouTube embed, so no ads, buffering, or embed-blocked failures on the Pi.
 
 - **Registry:** define entries in `VIDEOS` — either `'youtube' => URL` or `'file' => 'name.mp4'` for videos you copy in yourself. Each Anthias asset is `video.php?v=drone`, `video.php?v=ambient`, etc.
-- **Fetching:** run `php video.php fetch` on the server. It downloads/updates every YouTube entry into `./videos/` (capped at 1080p mp4) and **prints each video's duration with the exact Anthias asset length to set**. Re-run it any time you change a URL; cron it weekly if the source videos update:
+- **Fetching:** use **Admin → Video Board → Download / refresh YouTube videos**, or run `php video.php fetch` on the server. Downloads land in `./videos/` (capped at 1080p mp4); admin shows each video's duration for rotation dwell. Re-fetch after URL changes; optional weekly cron if sources update:
   `0 4 * * 1 cd /var/www/boards && php video.php fetch >> /var/log/video-fetch.log 2>&1`
+- **yt-dlp upkeep:** admin shows installed vs latest GitHub release and can update yt-dlp (pipx or `bin/yt-dlp`).
 - The player loops, so an asset duration slightly longer than the video wraps to the start instead of going black.
 - `FIT` = `'cover'` (fill) or `'contain'` (letterbox); `MUTED` defaults to true — Chromium blocks un-muted autoplay unless the kiosk runs with `--autoplay-policy=no-user-gesture-required`.
-- **Requires:** `yt-dlp` in PATH for fetching (`pipx install yt-dlp` — keep it updated, YouTube breaks old versions), `ffmpeg`/`ffprobe` for merged downloads and duration readouts.
+- **Requires:** `yt-dlp` in PATH or `bin/yt-dlp` for fetching (`setup-server.sh` installs via pipx by default), `ffmpeg`/`ffprobe` for merged downloads and duration readouts.
 - Videos live inside the webroot (`./videos/`) so Apache/nginx serves them directly with range support — easy on a Pi.
 
 ## grafana.php — Grafana Board (kiosk iframe wrapper)
@@ -170,16 +179,17 @@ Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed
 Onboards a fresh Ubuntu / Debian / Raspberry Pi OS machine as the signage **server** (Apache, PHP, permissions, hardening):
 
     sudo bash setup-server.sh
-    sudo bash setup-server.sh --webroot /var/www/html/boards --with-ytdlp --with-video-cron
+    sudo bash setup-server.sh --webroot /var/www/html/boards --with-video-cron
     sudo bash setup-server.sh --clone https://github.com/you/signage-suite.git
     sudo bash setup-server.sh --domain signage.lan          # dedicated vhost
     sudo bash setup-server.sh --nginx                       # nginx snippet instead of Apache
 
 What it installs and configures:
 - Apache (or an nginx snippet), PHP 8.x with curl, xml, mbstring, and gd, plus ffmpeg
-- Optional **yt-dlp** via pipx (`--with-ytdlp`) and a weekly **`php video.php fetch`** cron (`--with-video-cron`)
+- **yt-dlp** via pipx (default; use `--no-ytdlp` to skip) and optional weekly **`php video.php fetch`** cron (`--with-video-cron`)
 - Deploys board files to the web root, creates `config/`, `cache/`, `videos/`, and `slides/` owned by `www-data`
 - Blocks direct HTTP access to `config/`, `cache/`, and `slides/` (Apache `DirectoryMatch` or nginx `location`)
+- Raises PHP / Apache / nginx timeouts to **1 hour** for admin YouTube downloads (`99-signage-timeouts.ini`)
 - Generates `slide_backgrounds/` PNGs if missing
 
 Re-run safely after pulling updates (preserves your config and uploads):

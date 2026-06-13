@@ -43,6 +43,12 @@ function admin_schema(): array
     $ttl = fn($h = '') => ['key' => 'CACHE_TTL', 'label' => 'Cache TTL (seconds)', 'type' => 'number', 'help' => $h ?: 'How long API responses are cached'];
 
     return [
+        'security' => ['title' => 'Security', 'fields' => [
+            ['key' => 'ALLOW_PRIVATE_FETCH', 'label' => 'Allow private URL fetches', 'type' => 'bool', 'default' => false,
+             'help' => 'Lets RSS/ICS boards fetch http(s) URLs on private LAN IPs. Leave off on public servers.'],
+            ['key' => 'ADMIN_IDLE_MINUTES', 'label' => 'Admin idle timeout (minutes)', 'type' => 'number', 'default' => 480,
+             'help' => 'Auto-logout after inactivity (minimum 15). Default 480 = 8 hours.'],
+        ]],
         'rotation' => ['title' => 'Rotation', 'file' => 'board.php', 'fields' => array_merge([
             ['key' => 'SCREENS', 'label' => 'Screens', 'type' => 'rows', 'keyed' => true,
              'columns' => [['key' => '_key', 'label' => 'Key', 'help' => 'used in ?screen='],
@@ -132,15 +138,21 @@ function admin_schema(): array
                  ['key' => 'caption', 'label' => 'Caption', 'wide' => true],
                  ['key' => 'dwell', 'label' => 'Dwell (s)', 'cast' => 'int'],
                  ['key' => 'schedule', 'label' => 'Schedule', 'type' => 'select',
-                  'options' => ['always', 'range', 'yearly', 'weekly']],
-                 ['key' => 'date_start', 'label' => 'From', 'placeholder' => 'YYYY-MM-DD'],
+                  'options' => ['always', 'once', 'range', 'yearly', 'yearly_range', 'monthly', 'weekly']],
+                 ['key' => 'date_start', 'label' => 'From', 'placeholder' => 'YYYY-MM-DD or once'],
                  ['key' => 'date_end', 'label' => 'To', 'placeholder' => 'YYYY-MM-DD'],
-                 ['key' => 'month_day', 'label' => 'Birthday', 'placeholder' => 'MM-DD'],
+                 ['key' => 'month_day', 'label' => 'MM-DD', 'placeholder' => 'MM-DD start'],
+                 ['key' => 'month_day_end', 'label' => 'MM-DD end', 'placeholder' => 'yearly range'],
+                 ['key' => 'day_of_month', 'label' => 'Day', 'placeholder' => '1-31', 'cast' => 'int'],
                  ['key' => 'weekday', 'label' => 'Weekday', 'type' => 'select',
                   'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']],
+                 ['key' => 'weekdays', 'label' => 'Days', 'placeholder' => 'Mon,Wed,Fri'],
+                 ['key' => 'hour_from', 'label' => 'Hr from', 'placeholder' => '0-23', 'cast' => 'int'],
+                 ['key' => 'hour_to', 'label' => 'Hr to', 'placeholder' => '0-23', 'cast' => 'int'],
+                 ['key' => 'priority', 'label' => 'Priority', 'type' => 'check'],
                  ['key' => 'off', 'label' => 'Off', 'type' => 'check'],
              ],
-             'help' => 'always = whenever the board runs · range = inclusive dates · yearly = every MM-DD · weekly = every that weekday'],
+             'help' => 'Use cards below — schedule fields appear based on type.'],
             $tz,
         ]],
         'family' => ['title' => 'Family Board', 'file' => 'family.php', 'fields' => [
@@ -182,7 +194,7 @@ function admin_schema(): array
                            ['key' => 'title', 'label' => 'Title (blank to hide)'],
                            ['key' => 'youtube', 'label' => 'YouTube URL', 'wide' => true],
                            ['key' => 'file', 'label' => 'or local file']],
-             'help' => 'After changing URLs run: php video.php fetch'],
+             'help' => 'Save URL changes, then use Download / refresh YouTube videos above (or run php video.php fetch)'],
             ['key' => 'VIDEO_DIR', 'label' => 'Video directory', 'type' => 'text'],
             ['key' => 'MUTED', 'label' => 'Muted', 'type' => 'bool', 'default' => true],
             ['key' => 'FIT', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain']],

@@ -320,9 +320,107 @@ function slides_timezone(): string
     return cfg('slides.TIMEZONE', 'America/Detroit');
 }
 
+/** @return array{0:int,1:int}|null month and day */
+function slide_parse_mmdd(string $raw): ?array
+{
+    if (!preg_match('/^(\d{1,2})-(\d{1,2})$/', trim($raw), $m)) {
+        return null;
+    }
+    $month = (int)$m[1];
+    $day = (int)$m[2];
+    if ($month < 1 || $month > 12 || $day < 1 || $day > 31) {
+        return null;
+    }
+    return [$month, $day];
+}
+
+function slide_mmdd_int(int $month, int $day): int
+{
+    return $month * 100 + $day;
+}
+
+function slide_today_mmdd_int(DateTimeInterface $now): int
+{
+    return slide_mmdd_int((int)$now->format('n'), (int)$now->format('j'));
+}
+
+/** @return list<string> Full weekday names */
+function slide_parse_weekdays(string $raw): array
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+    $full = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    $out = [];
+    foreach (preg_split('/\s*,\s*/', $raw) as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+        foreach ($full as $name) {
+            if (strcasecmp($part, $name) === 0
+                || (strlen($part) >= 3 && strncasecmp($part, $name, strlen($part)) === 0)) {
+                $out[] = $name;
+                break;
+            }
+        }
+    }
+    return array_values(array_unique($out));
+}
+
+function slide_weekday_active(array $slide, DateTimeInterface $now): bool
+{
+    $days = slide_parse_weekdays((string)($slide['weekdays'] ?? ''));
+    if ($days === []) {
+        $wd = (string)($slide['weekday'] ?? '');
+        return $wd !== '' && strcasecmp($now->format('l'), $wd) === 0;
+    }
+    $today = $now->format('l');
+    foreach ($days as $d) {
+        if (strcasecmp($today, $d) === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function slide_yearly_range_active(string $startRaw, string $endRaw, DateTimeInterface $now): bool
+{
+    $start = slide_parse_mmdd($startRaw);
+    $end = slide_parse_mmdd($endRaw);
+    if ($start === null || $end === null) {
+        return false;
+    }
+    $today = slide_today_mmdd_int($now);
+    $s = slide_mmdd_int($start[0], $start[1]);
+    $e = slide_mmdd_int($end[0], $end[1]);
+    if ($s <= $e) {
+        return $today >= $s && $today <= $e;
+    }
+    return $today >= $s || $today <= $e;
+}
+
+/** Optional hour_from / hour_to (0–23). Empty = all day. Overnight windows supported. */
+function slide_time_window_active(array $slide, DateTimeInterface $now): bool
+{
+    $hasFrom = isset($slide['hour_from']) && $slide['hour_from'] !== '' && $slide['hour_from'] !== null;
+    $hasTo = isset($slide['hour_to']) && $slide['hour_to'] !== '' && $slide['hour_to'] !== null;
+    if (!$hasFrom && !$hasTo) {
+        return true;
+    }
+    $from = $hasFrom ? max(0, min(23, (int)$slide['hour_from'])) : 0;
+    $to = $hasTo ? max(0, min(23, (int)$slide['hour_to'])) : 23;
+    $h = (int)$now->format('G');
+    if ($from <= $to) {
+        return $h >= $from && $h <= $to;
+    }
+    return $h >= $from || $h <= $to;
+}
+
 /**
- * Whether a slide entry should show right now.
- * schedule: always | range (date_start–date_end) | yearly (month_day MM-DD) | weekly (weekday)
+ * Whether a slide entry should show right now (date schedule only — not priority).
+ * schedule: always | once | range | yearly | yearly_range | monthly | weekly | off
  */
 function slide_schedule_active(array $slide, ?DateTimeInterface $now = null): bool
 {
@@ -335,34 +433,48 @@ function slide_schedule_active(array $slide, ?DateTimeInterface $now = null): bo
 
     $sched = strtolower((string)($slide['schedule'] ?? 'always'));
     if ($sched === '' || $sched === 'always') {
-        return true;
+        return slide_time_window_active($slide, $now);
     }
 
-    if ($sched === 'range') {
+    $dateOk = true;
+
+    if ($sched === 'once') {
+        $d = (string)($slide['date_start'] ?? '');
+        $dateOk = $d !== '' && $now->format('Y-m-d') === $d;
+    } elseif ($sched === 'range') {
         $start = (string)($slide['date_start'] ?? '');
         $end   = (string)($slide['date_end'] ?? '');
         if ($start === '' || $end === '') {
-            return false;
+            $dateOk = false;
+        } else {
+            $today = $now->format('Y-m-d');
+            $dateOk = $today >= $start && $today <= $end;
         }
-        $today = $now->format('Y-m-d');
-        return $today >= $start && $today <= $end;
+    } elseif ($sched === 'yearly') {
+        $md = slide_parse_mmdd((string)($slide['month_day'] ?? ''));
+        $dateOk = $md !== null
+            && slide_today_mmdd_int($now) === slide_mmdd_int($md[0], $md[1]);
+    } elseif ($sched === 'yearly_range') {
+        $dateOk = slide_yearly_range_active(
+            (string)($slide['month_day'] ?? ''),
+            (string)($slide['month_day_end'] ?? ''),
+            $now
+        );
+    } elseif ($sched === 'monthly') {
+        $dom = (int)($slide['day_of_month'] ?? 0);
+        $dateOk = $dom >= 1 && $dom <= 31 && (int)$now->format('j') === $dom;
+    } elseif ($sched === 'weekly') {
+        $dateOk = slide_weekday_active($slide, $now);
+    } else {
+        $dateOk = true;
     }
 
-    if ($sched === 'yearly') {
-        $md = (string)($slide['month_day'] ?? '');
-        if (!preg_match('/^(\d{1,2})-(\d{1,2})$/', $md, $m)) {
-            return false;
-        }
-        $want = sprintf('%02d-%02d', (int)$m[1], (int)$m[2]);
-        return $now->format('m-d') === $want;
-    }
+    return $dateOk && slide_time_window_active($slide, $now);
+}
 
-    if ($sched === 'weekly') {
-        $wd = (string)($slide['weekday'] ?? '');
-        return $wd !== '' && strcasecmp($now->format('l'), $wd) === 0;
-    }
-
-    return true;
+function slide_is_priority(array $slide): bool
+{
+    return !empty($slide['priority']);
 }
 
 function slide_dwell(array $slide, int $default = 12): int
@@ -382,7 +494,7 @@ function slides_active_entries(?array $entries = null, ?string $dir = null): arr
 
     $tz  = new DateTimeZone(slides_timezone());
     $now = new DateTime('now', $tz);
-    $out = [];
+    $candidates = [];
 
     foreach ($entries as $slide) {
         if (!is_array($slide)) {
@@ -396,8 +508,13 @@ function slides_active_entries(?array $entries = null, ?string $dir = null): arr
             continue;
         }
         $slide['file'] = $file;
-        $out[] = $slide;
+        $candidates[] = $slide;
     }
 
-    return $out;
+    $priority = array_values(array_filter($candidates, 'slide_is_priority'));
+    if ($priority !== []) {
+        return $priority;
+    }
+
+    return $candidates;
 }

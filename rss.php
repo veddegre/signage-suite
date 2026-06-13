@@ -17,6 +17,7 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/security_lib.php';
 
 define('FEEDS', cfg('rss.FEEDS', [
     'ars'        => ['name' => 'Ars Technica',      'url' => 'https://feeds.arstechnica.com/arstechnica/index'],
@@ -45,6 +46,11 @@ $dwell   = max(3, (int)($feed['dwell'] ?? DEFAULT_DWELL));
 
 function cached_get(string $url, string $key): ?string
 {
+    $policy = signage_fetch_url_allowed($url, signage_allow_private_fetch());
+    if (!$policy['ok']) {
+        $GLOBALS['diag'][$key] = $policy['error'] ?? 'blocked URL';
+        return null;
+    }
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
     $f = CACHE_DIR . "/$key.dat";
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) return (string)file_get_contents($f);
