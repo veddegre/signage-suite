@@ -123,11 +123,13 @@ function video_ytdlp_extra_args(): string
         } elseif (trim((string)@shell_exec('command -v node 2>/dev/null')) !== '') {
             $args .= ' --js-runtimes node';
         }
-        return $args;
-    }
-    if (in_array($runtime, ['deno', 'node'], true)
+    } elseif (in_array($runtime, ['deno', 'node'], true)
         && trim((string)@shell_exec('command -v ' . escapeshellarg($runtime) . ' 2>/dev/null')) !== '') {
         $args .= ' --js-runtimes ' . $runtime;
+    }
+    if (str_contains($args, '--js-runtimes')) {
+        // YouTube n/signature challenges (2025+); harmless on older yt-dlp.
+        $args .= ' --remote-components ejs:github';
     }
     return $args;
 }

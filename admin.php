@@ -1007,8 +1007,12 @@ function admin_field(array $f, $val, string $board): void
               </div>
             </div>
             <div class="help" style="margin-top:10px">YouTube often blocks headless servers (“Sign in to confirm you’re not a bot”).
-              Export a logged-in browser’s cookies (Netscape format) to the path above, then re-fetch.
-              <code>setup-server.sh</code> installs <strong>deno</strong> for yt-dlp’s JS runtime.</div>
+              On <strong>Mac + Chrome</strong>, <code>yt-dlp --cookies-from-browser</code> usually does not export usable auth cookies — use the
+              <strong>Get cookies.txt LOCALLY</strong> extension on youtube.com instead. Then on your Mac:
+              <code>brew install deno && yt-dlp -U</code>, test with
+              <code>yt-dlp --js-runtimes deno --remote-components ejs:github --cookies cookies.txt -F URL</code>
+              — you need real video formats (720p/1080p), not just <code>sb0</code> storyboards.
+              Upload to <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>, or use a <strong>local file</strong> in the video row.</div>
             <div class="help" style="margin-top:8px">Admin updates download a verified copy to <code>bin/yt-dlp</code>
               (not pipx — the web server runs as <code>www-data</code>). From SSH as root:
               <code>pipx upgrade yt-dlp</code> or <code>sudo php video.php fetch</code>.</div>

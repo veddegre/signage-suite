@@ -134,8 +134,24 @@ Mimics Anthias's native video handling for web assets: videos are **downloaded l
   `0 4 * * 1 cd /var/www/boards && php video.php fetch >> /var/log/video-fetch.log 2>&1`
 - **yt-dlp upkeep:** admin shows installed vs latest GitHub release and can update yt-dlp (`bin/yt-dlp` download from admin).
 - **YouTube bot checks:** headless servers often get “Sign in to confirm you’re not a bot”. Fix:
-  1. Install **deno** (`setup-server.sh` does this) — yt-dlp needs a JS runtime for YouTube.
-  2. Export cookies while logged into YouTube in your browser (extension such as “Get cookies.txt LOCALLY”, or `yt-dlp --cookies-from-browser chrome` once on a desktop), save as `config/cookies/youtube.txt` on the server (HTTP-blocked with the rest of `config/`), readable by `www-data`. Re-export every few months when fetches fail again.
+  1. Install **deno** on the server (`setup-server.sh` does this) — yt-dlp needs a JS runtime for YouTube.
+  2. Export **Netscape-format** cookies while logged into YouTube:
+     - **Mac + Chrome:** `yt-dlp --cookies-from-browser chrome` often fails (Chrome v10/v11 cookie encryption). Use a browser extension instead — e.g. **Get cookies.txt LOCALLY** — open [youtube.com](https://www.youtube.com) signed in, export cookies for that site, save as `cookies.txt`.
+     - **Firefox** export via extension also works well.
+     - Test on your Mac **before** uploading (needs **yt-dlp 2025.10+** — Homebrew is often older; check with `yt-dlp --version`):
+       ```bash
+       brew install deno
+       # Upgrade yt-dlp — pick one:
+       brew upgrade yt-dlp
+       # or: pip3 install -U "yt-dlp[default]"
+       # or: curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o ~/bin/yt-dlp && chmod +x ~/bin/yt-dlp
+       yt-dlp --js-runtimes deno --remote-components ejs:github \
+         --cookies cookies.txt -F 'https://www.youtube.com/watch?v=VIDEO_ID'
+       ```
+       If you see `no such option: --js-runtimes`, your yt-dlp is too old — use pip or the GitHub binary above.
+       You must see **mp4/webm** rows (720p, 1080p, …) — not just `sb0` storyboard lines.
+  3. Copy to the server: `scp cookies.txt server:/var/www/html/boards/config/cookies/youtube.txt` then `sudo chown www-data:www-data …/youtube.txt && sudo chmod 640 …/youtube.txt`. Re-export when fetches fail again.
+  4. **Fallback:** download the video on your Mac (`yt-dlp … -o lantern.mp4`), `scp` to `videos/` on the server, and set the video row to **local file** `lantern.mp4` instead of a YouTube URL — no cookies needed on the server.
 - The player loops, so an asset duration slightly longer than the video wraps to the start instead of going black.
 - **Requires:** `yt-dlp` in PATH or `bin/yt-dlp`, **deno** (or node) for YouTube, optional `config/cookies/youtube.txt`, plus `ffmpeg`/`ffprobe` for merged downloads and duration readouts.
 - Videos live inside the webroot (`./videos/`) so Apache/nginx serves them directly with range support — easy on a Pi.
