@@ -81,7 +81,7 @@ Allendale weather, RainViewer animated radar, sunrise arc. Needs `OWM_API_KEY`.
 Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule each one independently.
 
 - **Upload:** admin → **Custom Slides** → upload box. New files default to **Always** in the deck.
-- **Slide creator:** same page — start from an occasion **template** (Birthday, Anniversary, etc.) or pick a **Photo scene** background (curated photography, dimmed for readability) or a **Theme color** gradient. Full-width edit fields, live preview at 1920×1080, **Create slide** saves into `./slides/`.
+- **Slide creator:** same page — start from an occasion **template** (Birthday, Fall, Baseball, Bowling, etc.) or pick a **Photo scene** background (curated photography, dimmed for readability) or a **Theme color** gradient. Full-width edit fields, live preview at 1920×1080, **Create slide** saves into `./slides/`.
 - **Scheduling (per slide in the deck table):**
   - **always** — show whenever this board is in rotation (optional hour window)
   - **once** — single date in **From** (`YYYY-MM-DD`)
