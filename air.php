@@ -3,7 +3,8 @@
  * AIR & POLLEN — 1920×1080 signage
  * US AQI, PM2.5/PM10, ozone, and pollen levels for your location.
  *
- * Data: Open-Meteo Air Quality API (free, no API key).
+ * Data: Open-Meteo Air Quality API for US AQI + pollutants (free, no key).
+ * Pollen: Google Pollen API for the US (optional key in admin); Open-Meteo pollen is Europe-only.
  *   https://open-meteo.com/en/docs/air-quality-api
  *
  * Configure lat/lon and place name in admin.php → Air & Pollen.
@@ -17,6 +18,7 @@ define('LAT', cfg('air.LAT', 42.9720));
 define('LON', cfg('air.LON', -85.9536));
 define('TIMEZONE', cfg('air.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('air.RELOAD_SEC', 900));
+define('GOOGLE_POLLEN_API_KEY', cfg('air.GOOGLE_POLLEN_API_KEY', ''));
 const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('air.CACHE_TTL', 900));
 
@@ -25,7 +27,7 @@ $GLOBALS['diag'] = [];
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-function air_cached_json(string $url, string $key): ?array
+function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'): ?array
 {
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
     $f = CACHE_DIR . '/' . $key . '.json';
@@ -51,7 +53,7 @@ function air_cached_json(string $url, string $key): ?array
             return $d;
         }
     }
-    $GLOBALS['diag']['openmeteo'] = $err !== '' ? "curl: $err" : "HTTP $code";
+    $GLOBALS['diag'][$diagKey] = $err !== '' ? "curl: $err" : "HTTP $code";
     if (is_file($f)) {
         $d = json_decode((string)file_get_contents($f), true);
         return is_array($d) ? $d : null;
@@ -79,6 +81,30 @@ function air_pollen_band(?float $grains): array
     if ($grains < 50)  return ['Moderate', 'var(--beacon)'];
     if ($grains < 200) return ['High', '#ff9d4d'];
     return ['Very high', '#ff5d5d'];
+}
+
+/** Google Universal Pollen Index (1–5) → label and color. */
+function air_upi_band(?int $upi, bool $inSeason = true): array
+{
+    if (!$inSeason) return ['Off season', 'var(--mist)'];
+    if ($upi === null) return ['—', 'var(--mist)'];
+    return match (max(1, min(5, $upi))) {
+        1       => ['Very low', '#39c46d'],
+        2       => ['Low', '#39c46d'],
+        3       => ['Moderate', 'var(--beacon)'],
+        4       => ['High', '#ff9d4d'],
+        default => ['Very high', '#ff5d5d'],
+    };
+}
+
+function air_openmeteo_has_pollen(array $hourly): bool
+{
+    foreach (['grass_pollen', 'ragweed_pollen', 'birch_pollen', 'alder_pollen'] as $field) {
+        foreach ($hourly[$field] ?? [] as $v) {
+            if ($v !== null) return true;
+        }
+    }
+    return false;
 }
 
 function air_day_key(string $isoTime): string
@@ -113,36 +139,115 @@ function air_forecast_days(array $hourly, int $limit = 3): array
     return array_slice($keys, 0, $limit);
 }
 
-function air_pollen_rows(array $hourly, string $dayKey): array
+function air_pollen_rows_openmeteo(array $hourly, string $dayKey): array
 {
     $tree = max(
         air_day_max($hourly, 'birch_pollen', $dayKey) ?? 0,
         air_day_max($hourly, 'alder_pollen', $dayKey) ?? 0
     );
     $types = [
-        ['name' => 'Grass', 'val' => air_day_max($hourly, 'grass_pollen', $dayKey)],
-        ['name' => 'Ragweed', 'val' => air_day_max($hourly, 'ragweed_pollen', $dayKey)],
-        ['name' => 'Tree', 'val' => $tree > 0 ? $tree : null],
+        ['name' => 'Grass', 'val' => air_day_max($hourly, 'grass_pollen', $dayKey), 'unit' => 'grains'],
+        ['name' => 'Ragweed', 'val' => air_day_max($hourly, 'ragweed_pollen', $dayKey), 'unit' => 'grains'],
+        ['name' => 'Tree', 'val' => $tree > 0 ? $tree : null, 'unit' => 'grains'],
     ];
     usort($types, fn($a, $b) => ($b['val'] ?? 0) <=> ($a['val'] ?? 0));
     return $types;
 }
 
-function air_verdict(?int $aqi, array $pollenRows): array
+/** @return list<array{name:string,val:?float,unit:string,label:string,color:string}> */
+function air_pollen_rows_google(?array $data, int $dayIndex): array
 {
-    $maxPollen = 0.0;
-    foreach ($pollenRows as $p) {
-        $maxPollen = max($maxPollen, (float)($p['val'] ?? 0));
+    if (!$data) return [];
+    $day = $data['dailyInfo'][$dayIndex] ?? null;
+    if (!$day) return [];
+    $labels = ['GRASS' => 'Grass', 'WEED' => 'Weed', 'TREE' => 'Tree'];
+    $rows = [];
+    foreach ($day['pollenTypeInfo'] ?? [] as $pt) {
+        $code = (string)($pt['code'] ?? '');
+        if (!isset($labels[$code])) continue;
+        $inSeason = (bool)($pt['inSeason'] ?? false);
+        $upi = isset($pt['indexInfo']['value']) ? (int)$pt['indexInfo']['value'] : null;
+        [$label, $color] = air_upi_band($upi, $inSeason);
+        if (isset($pt['indexInfo']['category']) && $inSeason) {
+            $label = (string)$pt['indexInfo']['category'];
+        }
+        $rows[] = [
+            'name' => $labels[$code],
+            'val' => $upi !== null ? (float)$upi : null,
+            'unit' => 'upi',
+            'label' => $label,
+            'color' => $color,
+        ];
     }
+    usort($rows, fn($a, $b) => ($b['val'] ?? 0) <=> ($a['val'] ?? 0));
+    return $rows;
+}
+
+function air_fetch_google_pollen(): ?array
+{
+    $key = trim((string)GOOGLE_POLLEN_API_KEY);
+    if ($key === '') return null;
+    $cacheKey = 'google_pollen_' . md5(sprintf('%.4F_%.4F', LAT, LON));
+    $url = 'https://pollen.googleapis.com/v1/forecast:lookup?' . http_build_query([
+        'key' => $key,
+        'location.latitude' => LAT,
+        'location.longitude' => LON,
+        'days' => 3,
+    ]);
+    return air_cached_json($url, $cacheKey, 'google_pollen');
+}
+
+function air_pollen_rows_for_day(string $source, array $hourly, ?array $google, int $dayIndex, string $dayKey): array
+{
+    if ($source === 'google') {
+        return air_pollen_rows_google($google, $dayIndex);
+    }
+    if ($source === 'openmeteo') {
+        return air_pollen_rows_openmeteo($hourly, $dayKey);
+    }
+    return [
+        ['name' => 'Grass', 'val' => null, 'unit' => 'none', 'label' => '—', 'color' => 'var(--mist)'],
+        ['name' => 'Weed', 'val' => null, 'unit' => 'none', 'label' => '—', 'color' => 'var(--mist)'],
+        ['name' => 'Tree', 'val' => null, 'unit' => 'none', 'label' => '—', 'color' => 'var(--mist)'],
+    ];
+}
+
+function air_pollen_max_score(array $rows, string $source): float
+{
+    $max = 0.0;
+    foreach ($rows as $p) {
+        if ($p['val'] === null) continue;
+        if ($source === 'google') {
+            $max = max($max, (float)$p['val']); // UPI 1–5
+        } else {
+            $max = max($max, (float)$p['val']); // grains/m³
+        }
+    }
+    return $max;
+}
+
+function air_verdict(?int $aqi, array $pollenRows, string $pollenSource): array
+{
+    $maxScore = air_pollen_max_score($pollenRows, $pollenSource);
     $aqiBad = $aqi !== null && $aqi > 100;
     $aqiWarn = $aqi !== null && $aqi > 50;
-    $pollenBad = $maxPollen >= 50;
-    $pollenWarn = $maxPollen >= 10;
+    if ($pollenSource === 'google') {
+        $pollenBad = $maxScore >= 4;
+        $pollenWarn = $maxScore >= 3;
+    } elseif ($pollenSource === 'openmeteo') {
+        $pollenBad = $maxScore >= 50;
+        $pollenWarn = $maxScore >= 10;
+    } else {
+        $pollenBad = $pollenWarn = false;
+    }
 
     if ($aqi !== null && $aqi > 150) {
         return ['Keep windows closed', 'Poor air quality — limit time outside', '#ff5d5d'];
     }
-    if ($maxPollen >= 200) {
+    if ($pollenSource === 'google' && $maxScore >= 5) {
+        return ['High pollen', 'Close windows — allergy sufferers stay indoors', '#ff5d5d'];
+    }
+    if ($pollenSource === 'openmeteo' && $maxScore >= 200) {
         return ['High pollen', 'Close windows — allergy sufferers stay indoors', '#ff5d5d'];
     }
     if ($aqiBad || $pollenBad) {
@@ -152,6 +257,9 @@ function air_verdict(?int $aqi, array $pollenRows): array
         return ['Mostly fine', 'OK for most people — watch symptoms if you are sensitive', 'var(--beacon)'];
     }
     if ($aqi !== null) {
+        if ($pollenSource === 'none') {
+            return ['Fresh air day', 'Good air quality — add Google Pollen key for allergy outlook', '#39c46d'];
+        }
         return ['Fresh air day', 'Good air and low pollen — open windows, enjoy outside', '#39c46d'];
     }
     return ['—', 'Forecast unavailable', 'var(--mist)'];
@@ -181,22 +289,25 @@ $ozone = isset($current['ozone']) ? round((float)$current['ozone'], 0) : null;
 $no2 = isset($current['nitrogen_dioxide']) ? round((float)$current['nitrogen_dioxide'], 1) : null;
 
 $todayKey = date('Y-m-d');
-$pollenToday = air_pollen_rows($hourly, $todayKey);
-$pollenMax = 0.0;
-foreach ($pollenToday as $p) {
-    $pollenMax = max($pollenMax, (float)($p['val'] ?? 0));
+$googlePollen = air_fetch_google_pollen();
+$pollenSource = 'none';
+if ($googlePollen) {
+    $pollenSource = 'google';
+} elseif (air_openmeteo_has_pollen($hourly)) {
+    $pollenSource = 'openmeteo';
 }
-$pollenBarPct = min(100, (int)round($pollenMax / 2)); // 200 grains ≈ full bar
+$pollenUnitLabel = $pollenSource === 'google' ? 'UPI index' : ($pollenSource === 'openmeteo' ? 'grains/m³' : 'unavailable');
+$pollenToday = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, 0, $todayKey);
+$pollenNeedsKey = $pollenSource === 'none';
 
 $forecastDays = air_forecast_days($hourly, 3);
 $forecast = [];
 foreach ($forecastDays as $i => $dayKey) {
     $dayAqi = air_day_max($hourly, 'us_aqi', $dayKey);
     $dayPm = air_day_max($hourly, 'pm2_5', $dayKey);
-    $dayPollen = air_pollen_rows($hourly, $dayKey);
+    $dayPollen = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, $i, $dayKey);
     $topPollen = $dayPollen[0]['name'] ?? '—';
-    $topVal = $dayPollen[0]['val'] ?? null;
-    [$pLabel] = air_pollen_band($topVal);
+    $topLabel = $dayPollen[0]['label'] ?? '—';
     $label = $dayKey === $todayKey ? 'Today'
         : ($dayKey === date('Y-m-d', strtotime('+1 day')) ? 'Tomorrow' : date('D', strtotime($dayKey . ' 12:00:00')));
     $forecast[] = [
@@ -204,11 +315,11 @@ foreach ($forecastDays as $i => $dayKey) {
         'aqi' => $dayAqi !== null ? (int)round($dayAqi) : null,
         'pm25' => $dayPm !== null ? round($dayPm, 1) : null,
         'pollen' => $topPollen,
-        'pollen_level' => $pLabel,
+        'pollen_level' => $topLabel,
     ];
 }
 
-[$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $pollenToday);
+[$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $pollenToday, $pollenSource);
 
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
@@ -217,7 +328,7 @@ $heightCss = $embedded
     : 'calc(1080px - var(--signage-ticker-inset, 0px))';
 $rowHead = max(72, (int)round(88 * $boardH / 1080));
 $rowAqi  = max(300, (int)round(360 * $boardH / 1080));
-$rowMid  = max(240, (int)round(300 * $boardH / 1080));
+$rowMid  = max(260, (int)round(320 * $boardH / 1080));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -281,13 +392,19 @@ $rowMid  = max(240, (int)round(300 * $boardH / 1080));
   .prow .c { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 18 : 21 ?>px; color:var(--mist); text-align:right; }
   .prow .lvl { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; font-weight:600; text-align:right; text-transform:uppercase; letter-spacing:1px; }
 
-  .forecast { grid-area:forecast; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 16 ?>px; }
-  .fday { flex:1; background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-          padding:<?= $boardH < 1080 ? '14px 16px' : '18px 20px' ?>; min-height:0; }
-  .fday .d { font-size:17px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:10px; }
-  .fday .aqi-num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 42 : 50 ?>px;
-               color:var(--beacon); line-height:1; }
-  .fday .line { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; color:var(--mist); margin-top:8px; }
+  .forecast { grid-area:forecast; display:flex; flex-direction:column; min-height:0; }
+  .forecast .days { flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr);
+                   gap:<?= $boardH < 1080 ? 10 : 12 ?>px; align-items:stretch; }
+  .fday { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
+          padding:<?= $boardH < 1080 ? '12px 14px' : '16px 18px' ?>; min-height:0;
+          display:flex; flex-direction:column; justify-content:flex-start; }
+  .fday .d { font-size:15px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
+  .fday .aqi-num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 36 : 44 ?>px;
+               line-height:1.15; margin:0; }
+  .fday .line { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); margin-top:8px; line-height:1.35; }
+
+  .pollen-note { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; color:var(--mist); margin-top:12px; line-height:1.45; }
+  .pollen-note code { background:var(--lake-night); padding:2px 6px; border-radius:6px; }
 
   .verdict { grid-area:verdict; border-radius:14px; border:1px solid var(--hairline);
              padding:<?= $boardH < 1080 ? '18px 24px' : '22px 32px' ?>; display:flex;
@@ -340,24 +457,43 @@ $rowMid  = max(240, (int)round(300 * $boardH / 1080));
   </section>
 
   <section class="panel pollen">
-    <div class="k">Pollen today · grains/m³</div>
+    <div class="k">Pollen today · <?= h($pollenUnitLabel) ?></div>
     <?php foreach ($pollenToday as $p):
       $val = $p['val'];
-      [$pLabel, $pColor] = air_pollen_band($val);
-      $pct = $val !== null ? min(100, (int)round((float)$val / 2)) : 0;
-      $hot = $val !== null && (float)$val >= 50;
+      if ($pollenSource === 'google') {
+          $pLabel = $p['label'];
+          $pColor = $p['color'];
+          $pct = $val !== null ? min(100, (int)round((float)$val / 5 * 100)) : 0;
+          $display = $val !== null ? (string)(int)$val : '—';
+          $hot = $val !== null && (float)$val >= 4;
+      } elseif ($pollenSource === 'openmeteo') {
+          [$pLabel, $pColor] = air_pollen_band($val);
+          $pct = $val !== null ? min(100, (int)round((float)$val / 2)) : 0;
+          $display = $val !== null ? (string)round((float)$val, 1) : '—';
+          $hot = $val !== null && (float)$val >= 50;
+      } else {
+          $pLabel = $p['label'];
+          $pColor = $p['color'];
+          $pct = 0;
+          $display = '—';
+          $hot = false;
+      }
     ?>
     <div class="prow">
       <span class="n"><?= h($p['name']) ?></span>
       <div class="track"><div class="fill<?= $hot ? ' hot' : '' ?>" style="width:<?= $pct ?>%;background:<?= h($pColor) ?>"></div></div>
-      <span class="c"><?= $val !== null ? h((string)round((float)$val, 1)) : '—' ?></span>
+      <span class="c"><?= h($display) ?></span>
       <span class="lvl" style="color:<?= h($pColor) ?>"><?= h($pLabel) ?></span>
     </div>
     <?php endforeach; ?>
+    <?php if ($pollenNeedsKey): ?>
+    <div class="pollen-note">Open-Meteo pollen is Europe-only. Add a <strong>Google Pollen API key</strong> in admin → Air &amp; Pollen for US forecasts (free tier: 5,000 calls/mo).</div>
+    <?php endif; ?>
   </section>
 
   <section class="panel forecast">
     <div class="k">Outlook</div>
+    <div class="days">
     <?php foreach ($forecast as $fd):
       [, $fdColor] = air_aqi_band($fd['aqi']);
     ?>
@@ -367,6 +503,7 @@ $rowMid  = max(240, (int)round(300 * $boardH / 1080));
       <div class="line">PM2.5 <?= $fd['pm25'] ?? '—' ?> · <?= h($fd['pollen']) ?> <?= h($fd['pollen_level']) ?></div>
     </div>
     <?php endforeach; ?>
+    </div>
   </section>
 
   <div class="verdict">
@@ -380,7 +517,11 @@ $rowMid  = max(240, (int)round(300 * $boardH / 1080));
   </section>
   <?php endif; ?>
 
-  <div class="stamp">Open-Meteo Air Quality<?= $GLOBALS['diag'] ? ' · ' . h($GLOBALS['diag']['openmeteo']) : '' ?></div>
+  <div class="stamp"><?= h(implode(' · ', array_filter([
+    'Open-Meteo Air Quality',
+    $pollenSource === 'google' ? 'Google Pollen' : '',
+    $GLOBALS['diag'] ? implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag'])) : '',
+  ]))) ?></div>
 </div>
 <script>
   function tick() {

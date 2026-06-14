@@ -99,9 +99,11 @@ function admin_schema(): array
             ['key' => 'PLACE', 'label' => 'Place name', 'type' => 'text'],
             ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
             ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
+            ['key' => 'GOOGLE_POLLEN_API_KEY', 'label' => 'Google Pollen API key', 'type' => 'password',
+             'help' => 'Required for US pollen — Open-Meteo pollen is Europe-only. Enable Pollen API in Google Cloud; free tier is 5,000 calls/month.'],
             ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
-            $tz, $ttl('Open-Meteo responses — default 900s (15 min)'),
+            $tz, $ttl('Open-Meteo + Google Pollen responses — default 900s (15 min)'),
         ]],
         'signaltrace' => ['title' => 'SignalTrace', 'file' => 'signaltrace.php', 'fields' => [
             ['key' => 'ST_BASE_URL', 'label' => 'SignalTrace base URL', 'type' => 'text'],
