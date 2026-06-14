@@ -394,6 +394,15 @@ function rotation_page_label(string $url): string
         return 'Grafana — ' . urldecode($m[1]);
     }
 
+    if (preg_match('/^splunkdash\.php\?d=([^&]+)/', $url, $m)) {
+        $key = urldecode($m[1]);
+        $dashboards = cfg('splunkdash.DASHBOARDS', []);
+        $d = is_array($dashboards[$key] ?? null) ? $dashboards[$key] : null;
+        $title = is_array($d) ? trim((string)($d['title'] ?? '')) : '';
+
+        return 'Splunk published — ' . ($title !== '' ? $title : $key);
+    }
+
     if (preg_match('/^splunk\.php(?:\?d=([^&]+))?/', $url, $m)) {
         require_once __DIR__ . '/splunk_lib.php';
         $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(splunk_pages_config()) ?: 'main');
@@ -556,7 +565,27 @@ function rotation_quick_add_items(): array
             $title = trim((string)($d['title'] ?? $key));
             $items[] = [
                 'label' => 'Grafana — ' . $title,
-                'url' => 'grafana.php?d=' . rawurlencode((string)$key),
+                'url' => grafana_page_url((string)$key),
+                'dwell' => 60,
+                'group' => 'Dashboards',
+            ];
+        }
+    }
+
+    $dashboards = cfg('splunkdash.DASHBOARDS', []);
+    if (is_array($dashboards)) {
+        foreach ($dashboards as $key => $d) {
+            if (!is_array($d)) {
+                continue;
+            }
+            $url = trim((string)($d['url'] ?? ''));
+            if ($url === '' || str_contains($url, 'REPLACE')) {
+                continue;
+            }
+            $title = trim((string)($d['title'] ?? $key));
+            $items[] = [
+                'label' => 'Splunk published — ' . $title,
+                'url' => splunkdash_page_url((string)$key),
                 'dwell' => 60,
                 'group' => 'Dashboards',
             ];
