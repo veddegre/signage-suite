@@ -24,7 +24,6 @@ $GLOBALS['diag'] = [];
 $teams = sports_default_teams();
 $baseTtl = max(60, (int)CACHE_TTL);
 
-// Scoreboards — one per league (shared across teams).
 $scoreboardsByLeague = [];
 foreach (['nfl', 'mlb', 'nba', 'nhl'] as $lg) {
     $sport = match ($lg) {
@@ -45,7 +44,7 @@ foreach ($teams as $teamCfg) {
     $cards[] = $card;
 }
 
-[$bannerTitle, $bannerSub, $bannerColor] = sports_board_summary($cards);
+$nextStrip = sports_next_game_strip($cards, $tz);
 $hasData = $cards !== [];
 
 $embedded = isset($_GET['noticker']);
@@ -54,7 +53,8 @@ $heightCss = $embedded
     ? $boardH . 'px'
     : 'calc(1080px - var(--signage-ticker-inset, 0px))';
 $rowHead = max(72, (int)round(88 * $boardH / 1080));
-$rowCards = max(520, (int)round(640 * $boardH / 1080));
+$rowCards = max(480, (int)round(600 * $boardH / 1080));
+$rowNext = max(96, (int)round(118 * $boardH / 1080));
 $reloadSec = $anyLive ? max(45, (int)RELOAD_SEC) : max(300, (int)RELOAD_SEC);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -77,13 +77,13 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
-           display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
+           display:grid; gap:<?= $boardH < 1080 ? 14 : 18 ?>px;
            grid-template-columns:1fr 1fr;
-           grid-template-rows: <?= $rowHead ?>px <?= $rowCards ?>px auto auto;
+           grid-template-rows: <?= $rowHead ?>px <?= $rowCards ?>px <?= $rowNext ?>px auto;
            grid-template-areas:
              "head head"
              "cards cards"
-             "banner banner"
+             "next next"
              "meta meta"; min-height:0; }
 
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; min-height:0; }
@@ -95,39 +95,65 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .cards { grid-area:cards; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr;
            gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0; }
-  .card { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-          padding:<?= $boardH < 1080 ? '18px 22px' : '22px 28px' ?>; min-height:0;
-          display:flex; flex-direction:column; overflow:hidden; border-top:4px solid var(--accent, var(--beacon)); }
+  .card { position:relative; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+          padding:<?= $boardH < 1080 ? '16px 18px' : '18px 22px' ?>; min-height:0; overflow:hidden;
+          border-top:4px solid var(--accent, var(--beacon)); display:flex; flex-direction:column; }
   .card.live { border-top-color:var(--down); box-shadow:0 0 0 1px rgba(255,93,93,.25); }
-  .card-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+  .card-watermark { position:absolute; right:<?= $boardH < 1080 ? 12 : 16 ?>px; bottom:<?= $boardH < 1080 ? 8 : 12 ?>px;
+                    width:<?= $boardH < 1080 ? 88 : 104 ?>px; height:<?= $boardH < 1080 ? 88 : 104 ?>px;
+                    color:var(--accent, var(--beacon)); opacity:.08; pointer-events:none; }
+  .card-watermark svg { width:100%; height:100%; display:block; }
+
+  .card-row { display:flex; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0; flex:1; align-items:stretch; }
+  .logo-wrap { flex:0 0 <?= $boardH < 1080 ? 92 : 108 ?>px; display:flex; align-items:center; justify-content:center;
+               background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px; padding:10px;
+               position:relative; overflow:hidden; }
+  .logo-wrap .sport-fallback { position:absolute; inset:8px; color:var(--mist); opacity:.35; }
+  .logo-wrap .sport-fallback svg { width:100%; height:100%; display:block; }
+  .logo-wrap img { position:relative; z-index:1; max-width:100%; max-height:100%; object-fit:contain; }
+
+  .card-copy { flex:1; min-width:0; display:flex; flex-direction:column; min-height:0; }
+  .card-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
   .card-top .team { font-family:'Big Shoulders Display'; font-weight:700;
-                    font-size:<?= $boardH < 1080 ? 34 : 40 ?>px; letter-spacing:.5px; }
-  .card-top .meta { display:flex; align-items:center; gap:10px; flex-shrink:0; }
-  .pill { font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--mist);
-          border:1px solid var(--hairline); border-radius:999px; padding:4px 10px; }
-  .badge { font-size:13px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600;
-           border-radius:999px; padding:5px 12px; background:var(--lake-night); color:var(--mist); }
+                    font-size:<?= $boardH < 1080 ? 32 : 38 ?>px; letter-spacing:.5px; }
+  .card-top .meta { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .pill { font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--mist);
+          border:1px solid var(--hairline); border-radius:999px; padding:3px 9px; }
+  .badge { font-size:12px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600;
+           border-radius:999px; padding:4px 10px; background:var(--lake-night); color:var(--mist); }
   .badge.live { background:rgba(255,93,93,.18); color:var(--down); animation:pulse 1.6s ease-in-out infinite; }
   .badge.next { background:rgba(255,179,71,.12); color:var(--beacon); }
   .badge.off { opacity:.85; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
 
   .headline { font-family:'Big Shoulders Display'; font-weight:700;
-              font-size:<?= $boardH < 1080 ? 56 : 68 ?>px; line-height:1.05; margin:8px 0 6px;
-              font-variant-numeric:tabular-nums; flex:1; display:flex; align-items:center; }
-  .card.live .headline { color:var(--snow); }
-  .card.final .headline { color:var(--snow); }
-  .card.offseason .headline { color:var(--mist); font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; }
-  .detail { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); line-height:1.35;
+              font-size:<?= $boardH < 1080 ? 50 : 60 ?>px; line-height:1.05; margin:4px 0;
+              font-variant-numeric:tabular-nums; }
+  .card.offseason .headline { color:var(--mist); font-size:<?= $boardH < 1080 ? 40 : 48 ?>px; }
+  .detail { font-size:<?= $boardH < 1080 ? 19 : 22 ?>px; color:var(--mist); line-height:1.35;
             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .standings { margin-top:auto; padding-top:8px; font-size:<?= $boardH < 1080 ? 17 : 20 ?>px;
+               color:var(--beacon); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  .banner { grid-area:banner; border-radius:14px; border:1px solid var(--hairline);
-            padding:<?= $boardH < 1080 ? '16px 22px' : '20px 28px' ?>; display:flex;
-            align-items:baseline; justify-content:space-between; gap:24px;
-            background:linear-gradient(90deg, rgba(20,31,51,.95), rgba(12,20,34,.95)); min-height:0; }
-  .banner .t { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 36 : 44 ?>px;
-               letter-spacing:1px; color:<?= h($bannerColor) ?>; }
-  .banner .s { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); text-align:right; }
+  .nextup { grid-area:next; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+            padding:<?= $boardH < 1080 ? '14px 18px' : '16px 22px' ?>; min-height:0; display:flex;
+            flex-direction:column; gap:10px; }
+  .nextup .k { font-size:15px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .next-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:<?= $boardH < 1080 ? 10 : 12 ?>px; flex:1; min-height:0; }
+  .next-item { background:var(--lake-night); border:1px solid var(--hairline); border-radius:10px;
+               padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; display:flex; align-items:center;
+               gap:12px; min-width:0; }
+  .next-item .mini-logo { flex:0 0 42px; width:42px; height:42px; display:flex; align-items:center;
+                          justify-content:center; position:relative; }
+  .next-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; position:relative; z-index:1; }
+  .next-item .mini-logo .sport-fallback { position:absolute; inset:2px; color:var(--mist); opacity:.45; }
+  .next-item .mini-logo .sport-fallback svg { width:100%; height:100%; display:block; }
+  .next-copy { min-width:0; flex:1; }
+  .next-copy .n { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px;
+                  line-height:1.1; }
+  .next-copy .m { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); line-height:1.3;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .next-copy .w { font-size:<?= $boardH < 1080 ? 15 : 17 ?>px; color:var(--beacon); margin-top:2px; }
 
   .empty { grid-area:cards; display:flex; align-items:center; justify-content:center;
            background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
@@ -154,26 +180,61 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           'Off season' => 'off',
           default => '',
       };
+      $icon = (string)($c['icon'] ?? 'default');
+      $logo = $c['logo_url'] ?? null;
+      $standings = (string)($c['standings_line'] ?? '');
     ?>
     <article class="card <?= h($mode) ?><?= $badge === 'Off season' ? ' offseason' : '' ?>"
              style="--accent:<?= h($c['accent'] ?? '#ffb347') ?>">
-      <div class="card-top">
-        <div class="team"><?= h($c['name']) ?></div>
-        <div class="meta">
-          <span class="pill"><?= h($c['league']) ?></span>
-          <span class="badge <?= h($badgeClass) ?>"><?= h($badge) ?></span>
+      <div class="card-watermark"><?= sports_sport_icon_svg($icon) ?></div>
+      <div class="card-row">
+        <div class="logo-wrap">
+          <div class="sport-fallback"><?= sports_sport_icon_svg($icon) ?></div>
+          <?php if ($logo): ?>
+          <img src="<?= h($logo) ?>" alt="" loading="lazy">
+          <?php endif; ?>
+        </div>
+        <div class="card-copy">
+          <div class="card-top">
+            <div class="team"><?= h($c['name']) ?></div>
+            <div class="meta">
+              <span class="pill"><?= h($c['league']) ?></span>
+              <span class="badge <?= h($badgeClass) ?>"><?= h($badge) ?></span>
+            </div>
+          </div>
+          <div class="headline"><?= h($c['headline']) ?></div>
+          <div class="detail"><?= h($c['detail']) ?></div>
+          <?php if ($standings !== ''): ?>
+          <div class="standings"><?= h($standings) ?></div>
+          <?php endif; ?>
         </div>
       </div>
-      <div class="headline"><?= h($c['headline']) ?></div>
-      <div class="detail"><?= h($c['detail']) ?></div>
     </article>
     <?php endforeach; ?>
   </div>
 
-  <div class="banner">
-    <div class="t"><?= h($bannerTitle) ?></div>
-    <div class="s"><?= h($bannerSub) ?></div>
-  </div>
+  <section class="nextup">
+    <div class="k">Next games</div>
+    <div class="next-grid">
+      <?php foreach ($nextStrip as $n): ?>
+      <div class="next-item">
+        <div class="mini-logo">
+          <div class="sport-fallback"><?= sports_sport_icon_svg((string)$n['icon']) ?></div>
+          <?php if (!empty($n['logo'])): ?>
+          <img src="<?= h((string)$n['logo']) ?>" alt="" loading="lazy">
+          <?php endif; ?>
+        </div>
+        <div class="next-copy">
+          <div class="n"><?= h($n['team']) ?></div>
+          <div class="m"><?= h($n['text']) ?></div>
+          <?php if ($n['when'] !== ''): ?>
+          <div class="w"><?= h($n['when']) ?></div>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </section>
   <?php else: ?>
   <div class="empty">Sports data unavailable — check network or try again shortly.</div>
   <?php endif; ?>

@@ -8,10 +8,10 @@
 function sports_default_teams(): array
 {
     return [
-        ['key' => 'lions',  'name' => 'Lions',     'abbrev' => 'DET', 'sport' => 'football',   'league' => 'nfl', 'team_id' => '8', 'accent' => '#0076B6', 'label' => 'NFL'],
-        ['key' => 'tigers', 'name' => 'Tigers',    'abbrev' => 'DET', 'sport' => 'baseball',   'league' => 'mlb', 'team_id' => '6', 'accent' => '#0C2340', 'label' => 'MLB'],
-        ['key' => 'pistons','name' => 'Pistons',   'abbrev' => 'DET', 'sport' => 'basketball', 'league' => 'nba', 'team_id' => '8', 'accent' => '#C8102E', 'label' => 'NBA'],
-        ['key' => 'wings',  'name' => 'Red Wings', 'abbrev' => 'DET', 'sport' => 'hockey',     'league' => 'nhl', 'team_id' => '5', 'accent' => '#CE1126', 'label' => 'NHL'],
+        ['key' => 'lions',  'name' => 'Lions',     'abbrev' => 'DET', 'sport' => 'football',   'league' => 'nfl', 'team_id' => '8', 'accent' => '#0076B6', 'label' => 'NFL', 'icon' => 'football'],
+        ['key' => 'tigers', 'name' => 'Tigers',    'abbrev' => 'DET', 'sport' => 'baseball',   'league' => 'mlb', 'team_id' => '6', 'accent' => '#0C2340', 'label' => 'MLB', 'icon' => 'baseball'],
+        ['key' => 'pistons','name' => 'Pistons',   'abbrev' => 'DET', 'sport' => 'basketball', 'league' => 'nba', 'team_id' => '8', 'accent' => '#C8102E', 'label' => 'NBA', 'icon' => 'basketball'],
+        ['key' => 'wings',  'name' => 'Red Wings', 'abbrev' => 'DET', 'sport' => 'hockey',     'league' => 'nhl', 'team_id' => '5', 'accent' => '#CE1126', 'label' => 'NHL', 'icon' => 'hockey'],
     ];
 }
 
@@ -281,6 +281,101 @@ function sports_format_game_time(string $iso, DateTimeZone $tz): string
     }
 }
 
+/** Prefer scoreboard/dark logos — readable on navy signage backgrounds. */
+function sports_team_logo_url(array $teamNode): ?string
+{
+    $logos = $teamNode['logos'] ?? [];
+    if (!is_array($logos)) {
+        return null;
+    }
+    $preferred = [];
+    $fallback = null;
+    foreach ($logos as $logo) {
+        if (!is_array($logo)) {
+            continue;
+        }
+        $href = trim((string)($logo['href'] ?? ''));
+        if ($href === '') {
+            continue;
+        }
+        if ($fallback === null) {
+            $fallback = $href;
+        }
+        if (str_contains($href, 'scoreboard') || str_contains($href, '500-dark')) {
+            $preferred[] = $href;
+        }
+    }
+    return $preferred[0] ?? $fallback;
+}
+
+function sports_standings_line(string $record, string $standing): string
+{
+    if ($record !== '' && $standing !== '') {
+        return $record . ' · ' . $standing;
+    }
+    return $record !== '' ? $record : $standing;
+}
+
+/** Next scheduled game only — independent of the featured live/final card. */
+function sports_pick_next_event(array $events, array $teamCfg, DateTimeInterface $now): ?array
+{
+    $nowTs = $now->getTimestamp();
+    $next = null;
+    $nextTs = PHP_INT_MAX;
+    foreach ($events as $event) {
+        if (!is_array($event)) {
+            continue;
+        }
+        $parsed = sports_parse_event($event, $teamCfg);
+        if ($parsed === null || $parsed['state'] !== 'pre') {
+            continue;
+        }
+        $ts = strtotime($parsed['date']) ?: 0;
+        if ($ts >= $nowTs && $ts < $nextTs) {
+            $next = $parsed;
+            $nextTs = $ts;
+        }
+    }
+    return $next;
+}
+
+/** Decorative sport glyph for cards (inline SVG). */
+function sports_sport_icon_svg(string $icon): string
+{
+    return match ($icon) {
+        'football' => '<svg viewBox="0 0 64 64" aria-hidden="true"><ellipse cx="32" cy="32" rx="26" ry="16" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M20 24c8 4 16 4 24 0M20 40c8-4 16-4 24 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="32" y1="16" x2="32" y2="48" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        'baseball' => '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M18 18c6 10 6 18 0 28M46 18c-6 10-6 18 0 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        'basketball' => '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M8 32h48M32 8v48M14 14c12 10 24 10 36 0M14 50c12-10 24-10 36 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        'hockey' => '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="10" y="28" width="34" height="8" rx="2" fill="currentColor" opacity=".9"/><path d="M44 32h8l4 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="18" cy="32" r="3" fill="currentColor"/></svg>',
+        default => '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="24" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>',
+    };
+}
+
+/** @param list<array<string,mixed>> $cards @return list<array{team:string,league:string,logo:?string,icon:string,text:string,when:string}> */
+function sports_next_game_strip(array $cards, DateTimeZone $tz): array
+{
+    $out = [];
+    foreach ($cards as $card) {
+        $next = is_array($card['next_game'] ?? null) ? $card['next_game'] : null;
+        if ($next !== null) {
+            $when = sports_format_game_time((string)$next['date'], $tz);
+            $text = (string)$next['matchup'];
+        } else {
+            $when = '';
+            $text = sports_league_opens_label((string)($card['league_key'] ?? ''));
+        }
+        $out[] = [
+            'team' => (string)($card['name'] ?? ''),
+            'league' => (string)($card['league'] ?? ''),
+            'logo' => $card['logo_url'] ?? null,
+            'icon' => (string)($card['icon'] ?? 'default'),
+            'text' => $text,
+            'when' => $when,
+        ];
+    }
+    return $out;
+}
+
 /** @param array<string,mixed> $teamCfg @param array<string,array> $scoreboardsByLeague */
 function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int $ttl, DateTimeZone $tz): array
 {
@@ -297,6 +392,19 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
     $schedule = sports_fetch_schedule_events($teamCfg, $ttl);
     $sb = $scoreboardsByLeague[$league][$teamId] ?? null;
     $game = sports_pick_event($schedule, $teamCfg, $sb, $now);
+    $nextGame = sports_pick_next_event($schedule, $teamCfg, $now);
+    $logoUrl = sports_team_logo_url($teamNode);
+    $icon = (string)($teamCfg['icon'] ?? 'default');
+
+    if ($nextGame === null && !empty($teamNode['nextEvent'][0]) && is_array($teamNode['nextEvent'][0])) {
+        $fallbackNext = sports_parse_event($teamNode['nextEvent'][0], $teamCfg);
+        if ($fallbackNext !== null && $fallbackNext['state'] === 'pre') {
+            $fbTs = strtotime($fallbackNext['date']) ?: 0;
+            if ($fbTs >= $now->getTimestamp()) {
+                $nextGame = $fallbackNext;
+            }
+        }
+    }
 
     if ($game === null && !empty($teamNode['nextEvent'][0]) && is_array($teamNode['nextEvent'][0])) {
         $fallback = sports_parse_event($teamNode['nextEvent'][0], $teamCfg);
@@ -352,13 +460,15 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
             $mode = 'next';
             $headline = $game['matchup'];
             $detail = sports_format_game_time($game['date'], $tz);
-            if ($record !== '') {
-                $detail .= ' · ' . $record;
-            }
         }
     } elseif ($record !== '') {
         $headline = $record;
         $detail = $standing !== '' ? $standing : sports_league_opens_label($league);
+    }
+
+    $standingsLine = '';
+    if ($activeSeason && ($record !== '' || $standing !== '')) {
+        $standingsLine = sports_standings_line($record, $standing);
     }
 
     $badge = match (true) {
@@ -373,37 +483,19 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
         'key' => (string)$teamCfg['key'],
         'name' => (string)$teamCfg['name'],
         'league' => (string)($teamCfg['label'] ?? strtoupper($league)),
+        'league_key' => $league,
         'accent' => (string)($teamCfg['accent'] ?? '#ffb347'),
+        'icon' => $icon,
+        'logo_url' => $logoUrl,
         'badge' => $badge,
         'mode' => $mode,
         'active_season' => $activeSeason,
         'headline' => $headline,
         'detail' => $detail,
+        'standings_line' => $standingsLine,
         'record' => $record,
         'standing' => $standing,
         'game' => $game,
+        'next_game' => $nextGame,
     ];
-}
-
-/** @param list<array<string,mixed>> $teams */
-function sports_board_summary(array $cards): array
-{
-    $live = [];
-    $active = [];
-    foreach ($cards as $c) {
-        if (($c['mode'] ?? '') === 'live') {
-            $live[] = $c['name'];
-        }
-        if (!empty($c['active_season'])) {
-            $active[] = $c['name'];
-        }
-    }
-    if ($live !== []) {
-        return ['Live now', implode(' · ', $live) . ' on the air', '#ff5d5d'];
-    }
-    if ($active !== []) {
-        $names = implode(', ', $active);
-        return ['In season', $names, 'var(--beacon)'];
-    }
-    return ['Off season', 'All four teams between seasons — records shown where available', 'var(--mist)'];
 }
