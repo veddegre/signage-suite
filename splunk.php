@@ -19,13 +19,15 @@
  * Optional per panel: 'earliest'/'latest' (Splunk time modifiers, default
  * -24h@h/now), 'unit' (suffix on singles), 'wide' => true (span 2 columns).
  *
- * Configure panels in admin.php → Splunk Panels (drag-and-drop cards).
+ * Configure pages and panels in admin.php → Splunk Panels (drag-and-drop cards).
+ * Multiple pages: splunk.php?d=soc — same pattern as grafana.php.
  */
 
 require_once __DIR__ . '/splunk_lib.php';
 
-define('BOARD_TITLE', cfg('splunk.BOARD_TITLE', 'Splunk'));
-define('BOARD_SUB', cfg('splunk.BOARD_SUB', 'Home SOC'));
+$page = splunk_resolve_page((string)($_GET['d'] ?? ''));
+define('BOARD_TITLE', (string)($page['title'] ?? splunk_default_page_title()));
+define('BOARD_SUB', (string)($page['sub'] ?? splunk_default_page_sub()));
 define('TIMEZONE', cfg('splunk.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
@@ -35,7 +37,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
 $configured = splunk_configured();
 $panels = [];
-foreach (splunk_wall_panels() as $p) {
+foreach (splunk_wall_panels($page['key']) as $p) {
     $diag = null;
     $rows = $configured
         ? splunk_oneshot(

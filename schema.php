@@ -267,8 +267,8 @@ function admin_schema(): array
             ['key' => 'SPLUNK_BASE', 'label' => 'Splunk management URL', 'type' => 'text', 'help' => 'Port 8089, not Splunk Web'],
             ['key' => 'SPLUNK_TOKEN', 'label' => 'Auth token', 'type' => 'password'],
             ['key' => 'SPLUNK_VERIFY_TLS', 'label' => 'Verify TLS', 'type' => 'bool', 'default' => false],
-            ['key' => 'BOARD_TITLE', 'label' => 'Board title', 'type' => 'text'],
-            ['key' => 'BOARD_SUB', 'label' => 'Board subtitle', 'type' => 'text'],
+            ['key' => 'BOARD_TITLE', 'label' => 'Default page title', 'type' => 'text', 'help' => 'Used for the main page when no per-page title is set'],
+            ['key' => 'BOARD_SUB', 'label' => 'Default page subtitle', 'type' => 'text'],
             $tz, $ttl(),
         ]],
         'splunkdash' => ['title' => 'Splunk Published', 'file' => 'splunkdash.php', 'fields' => [

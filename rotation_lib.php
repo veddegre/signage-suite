@@ -394,6 +394,13 @@ function rotation_page_label(string $url): string
         return 'Grafana — ' . urldecode($m[1]);
     }
 
+    if (preg_match('/^splunk\.php(?:\?d=([^&]+))?/', $url, $m)) {
+        require_once __DIR__ . '/splunk_lib.php';
+        $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(splunk_pages_config()) ?: 'main');
+
+        return 'Splunk — ' . splunk_page_label($key);
+    }
+
     require_once __DIR__ . '/slides_lib.php';
     $slideFile = slide_rotation_parse_file($url);
     if ($slideFile !== null) {
@@ -512,6 +519,20 @@ function rotation_quick_add_items(): array
                 'group' => 'Dashboards',
             ];
         }
+    }
+
+    require_once __DIR__ . '/splunk_lib.php';
+    foreach (splunk_pages_config() as $key => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $title = trim((string)($page['title'] ?? $key));
+        $items[] = [
+            'label' => 'Splunk — ' . $title,
+            'url' => splunk_page_url((string)$key),
+            'dwell' => 60,
+            'group' => 'Dashboards',
+        ];
     }
 
     return $items;
