@@ -167,7 +167,6 @@ function admin_schema(): array
             ['key' => 'DEFAULT_DWELL', 'label' => 'Default seconds per slide', 'type' => 'number'],
             ['key' => 'SHUFFLE', 'label' => 'Shuffle active slides', 'type' => 'bool', 'default' => false],
             ['key' => 'FIT', 'label' => 'Image fit', 'type' => 'select', 'options' => ['contain', 'cover']],
-            ['key' => 'SHOW_CLOCK', 'label' => 'Show clock', 'type' => 'bool', 'default' => true],
             ['key' => 'SLIDES', 'label' => 'Slide deck', 'type' => 'rows',
              'columns' => [
                  ['key' => 'file', 'label' => 'File', 'wide' => true, 'placeholder' => 'name.jpg'],

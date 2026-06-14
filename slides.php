@@ -20,7 +20,6 @@ require_once __DIR__ . '/slides_lib.php';
 define('DEFAULT_DWELL', cfg('slides.DEFAULT_DWELL', 12));
 define('SHUFFLE', cfg('slides.SHUFFLE', false));
 define('FIT', cfg('slides.FIT', 'contain'));
-define('SHOW_CLOCK', cfg('slides.SHOW_CLOCK', true));
 define('TIMEZONE', slides_timezone());
 
 date_default_timezone_set(TIMEZONE);
@@ -29,6 +28,40 @@ $dir     = slides_dir();
 $frameH = signage_frame_height();
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+/** Wall clock overlay — fixed above slide layers (and rotation iframes). */
+function slides_clock_css(): string
+{
+    return '#clock{position:fixed;top:36px;right:48px;z-index:9000;pointer-events:none;'
+         . 'font-family:\'Big Shoulders Display\',system-ui,sans-serif;font-weight:600;font-size:48px;'
+         . 'color:var(--snow);font-variant-numeric:tabular-nums;'
+         . 'padding:6px 18px;border-radius:10px;background:rgba(12,20,34,.78);'
+         . 'box-shadow:0 2px 24px rgba(0,0,0,.55);}';
+}
+
+function slides_clock_html(): void
+{
+    echo '<div id="clock">--:--</div>';
+}
+
+function slides_clock_js(): void
+{
+    echo <<<'JS'
+    (function () {
+      function tick() {
+        const el = document.getElementById('clock');
+        if (!el) return;
+        const n = new Date();
+        let h = n.getHours();
+        const ap = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        el.textContent = h + ':' + String(n.getMinutes()).padStart(2, '0') + ' ' + ap;
+      }
+      tick();
+      setInterval(tick, 1000);
+    })();
+    JS;
+}
 
 // ── Image endpoint ───────────────────────────────────────────────────────────
 if (isset($_GET['img'])) {
@@ -81,11 +114,7 @@ if (isset($_GET['slide'])) {
               height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
   .layer { position:absolute; inset:0; z-index:1; background-position:center; background-repeat:no-repeat;
            background-color:#000; background-size:<?= $fit === 'cover' ? 'cover' : 'contain' ?>; }
-  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:20;
-            display:flex; justify-content:flex-end; align-items:baseline; pointer-events:none; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
-           text-shadow:0 1px 12px rgba(0,0,0,.85), 0 0 32px rgba(0,0,0,.55);
-           font-variant-numeric:tabular-nums; }
+  <?= slides_clock_css() ?>
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
@@ -95,22 +124,9 @@ if (isset($_GET['slide'])) {
 <body>
 <?php if ($active): ?>
   <div class="layer" style="background-image:url('?img=<?= rawurlencode((string)$name) ?>')"></div>
-  <?php if (SHOW_CLOCK): ?>
-  <div class="chrome"><div id="clock">--:--</div></div>
-  <?php endif; ?>
+  <?php slides_clock_html(); ?>
   <script>
-    <?php if (SHOW_CLOCK): ?>
-    function tick() {
-      const n = new Date();
-      let h = n.getHours();
-      const ap = h >= 12 ? 'PM' : 'AM';
-      h = h % 12 || 12;
-      document.getElementById('clock').textContent =
-        h + ':' + String(n.getMinutes()).padStart(2, '0') + ' ' + ap;
-    }
-    tick();
-    setInterval(tick, 1000);
-    <?php endif; ?>
+    <?php slides_clock_js(); ?>
     setTimeout(function () { location.reload(); }, 5 * 60 * 1000);
   </script>
 <?php else: ?>
@@ -157,11 +173,7 @@ $playlist = array_map(fn($s) => [
            background-size:<?= FIT === 'cover' ? 'cover' : 'contain' ?>; }
   .layer.show { opacity:1; }
   @media (prefers-reduced-motion: reduce) { .layer { transition:none; } }
-  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:20;
-            display:flex; justify-content:flex-end; align-items:baseline; pointer-events:none; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
-           text-shadow:0 1px 12px rgba(0,0,0,.85), 0 0 32px rgba(0,0,0,.55);
-           font-variant-numeric:tabular-nums; }
+  <?= slides_clock_css() ?>
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
@@ -179,7 +191,7 @@ $playlist = array_map(fn($s) => [
 <?php else: ?>
   <div class="layer" id="layerA"></div>
   <div class="layer" id="layerB"></div>
-  <?php if (SHOW_CLOCK): ?><div class="chrome"><div id="clock">--:--</div></div><?php endif; ?>
+  <?php slides_clock_html(); ?>
   <script>
     const SLIDES = <?= json_encode(array_values($playlist)) ?>;
     const layers = [document.getElementById('layerA'), document.getElementById('layerB')];
@@ -210,18 +222,7 @@ $playlist = array_map(fn($s) => [
 
     showNext();
 
-    <?php if (SHOW_CLOCK): ?>
-    function tick() {
-      const n = new Date();
-      let h = n.getHours();
-      const ap = h >= 12 ? 'PM' : 'AM';
-      h = h % 12 || 12;
-      document.getElementById('clock').textContent =
-        h + ':' + String(n.getMinutes()).padStart(2, '0') + ' ' + ap;
-    }
-    tick();
-    setInterval(tick, 1000);
-    <?php endif; ?>
+    <?php slides_clock_js(); ?>
 
     // Reload periodically so schedule boundaries (midnight, hours, birthdays) pick up
     setTimeout(function () { location.reload(); }, 5 * 60 * 1000);

@@ -88,7 +88,7 @@ function slide_preview_url(string $file): ?string
     if ($safe === null) {
         return null;
     }
-    return 'slides.php?slide=' . rawurlencode($safe) . '&preview=1';
+    return signage_board_preview_url('slides.php?slide=' . rawurlencode($safe) . '&preview=1');
 }
 
 /** Human label for a slide file (caption from deck, else filename). */
