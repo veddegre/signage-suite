@@ -23,6 +23,7 @@ require_once __DIR__ . '/video_lib.php';
 require_once __DIR__ . '/rotation_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
 require_once __DIR__ . '/splunk_lib.php';
+require_once __DIR__ . '/web_lib.php';
 
 slide_background_ensure_assets();
 slide_background_ensure_photos();
@@ -1288,6 +1289,667 @@ function admin_field(array $f, $val, string $board): void
           <a href="<?= h(rotation_screen_preview_url('main')) ?>" target="_blank" rel="noopener">Preview main rotation ↗</a>
           · kiosk URL <code><?= h(rotation_screen_kiosk_url('main')) ?></code>
         <?php elseif ($board === 'splunk'): ?>
+          Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
+        <?php elseif ($board === 'web'): ?>
+          Each site is <code>web.php?d=<em>key</em></code> in rotation — preview per row below.
+        <?php elseif (!empty($b['file'])): ?>
+          <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
+        <?php endif; ?></div>
+
+      <?php if ($board === 'rotator'): ?>
+      <details class="panel" open>
+        <summary>Upload photos</summary>
+        <div class="panel-body">
+      <div class="upload-box">
+        <h3>Upload photos</h3>
+        <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=rotator">
+          <input type="hidden" name="action" value="upload_photo">
+          <input type="hidden" name="board" value="rotator">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <input type="file" name="photo[]" accept="image/jpeg,image/png" multiple>
+          <button class="secondary" type="submit">Upload</button>
+        </form>
+        <div class="help" style="margin-top:10px">JPG or PNG, up to 25 MB each.</div>
+        <?php $photoFiles = rotator_list_photos();
+        if ($photoFiles): ?>
+        <ul class="filelist">
+          <?php foreach ($photoFiles as $pf): ?>
+            <li>
+              <code><?= h($pf) ?></code>
+              <form method="post" action="?board=rotator" onsubmit="return confirm('Delete <?= h($pf) ?>?');">
+                <input type="hidden" name="action" value="delete_photo">
+                <input type="hidden" name="board" value="rotator">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="file" value="<?= h($pf) ?>">
+                <button class="secondary" type="submit">Delete</button>
+              </form>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+      </div>
+        </div>
+      </details>
+      <?php endif; ?>
+
+      <?php if ($board === 'traffic'):
+        $trafficKeyOk = traffic_api_key() !== null;
+        $trafficLastErr = traffic_last_error();
+      ?>
+      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">TomTom connection</div>
+        <div class="video-meta">
+          <div>API key in config: <strong><?= $trafficKeyOk ? 'yes' : 'no' ?></strong>
+            <?php if (!$trafficKeyOk): ?> — paste key below and click <strong>Save</strong><?php endif; ?></div>
+          <?php $trafficMode = traffic_cached_api_mode(); ?>
+          <div>Working tile API: <strong><?= $trafficMode ? h($trafficMode) : 'not detected yet' ?></strong>
+            (auto tries Orbis, then legacy)</div>
+          <?php if ($trafficLastErr): ?>
+            <div>Last tile error: <code style="font-size:13px;color:var(--bad)"><?= h($trafficLastErr) ?></code></div>
+          <?php endif; ?>
+        </div>
+        <form method="post" action="?board=traffic" style="margin-bottom:14px">
+          <input type="hidden" name="action" value="traffic_test">
+          <input type="hidden" name="board" value="traffic">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <button class="secondary" type="submit">Test tile fetch</button>
+        </form>
+        <div class="help">Tiles are fetched <strong>server-side</strong> via <code>traffic_tiles.php</code>. Enable
+          <strong>Traffic Flow API</strong> on your key at
+          <a href="https://developer.tomtom.com/user/me/apps" target="_blank" rel="noopener">developer.tomtom.com</a>.
+          New keys often require the <strong>Orbis</strong> tile API — leave <strong>Tile API</strong> on Auto (default).
+          Leave <strong>domain whitelisting off</strong> for server-side PHP. After changing the key, Save, then Test tile fetch.</div>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($board === 'video' && $videoYtdlpStatus !== null): ?>
+      <?php if ($videoFetchLog): ?>
+        <pre class="video-log"><?= h($videoFetchLog) ?></pre>
+      <?php endif; ?>
+
+      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">YouTube downloads</div>
+        <div class="help" style="margin-bottom:12px">Build your playlist below, <strong>Save</strong>, then fetch files into <code>videos/</code>.
+          Check <strong>Add playlist to main rotation</strong> to put each video on the wall automatically
+          (<code>video.php?v=KEY</code> with dwell from video length).</div>
+        <form method="post" class="inline-actions" action="?board=video">
+          <input type="hidden" name="action" value="video_fetch">
+          <input type="hidden" name="board" value="video">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <button class="save" type="submit">Download all</button>
+        </form>
+        <span class="help">Large downloads may take several minutes — keep this tab open.</span>
+
+        <details class="panel-muted" style="margin-top:16px;border:1px solid var(--line);border-radius:10px"<?= ($videoMaintOpen ?? false) ? ' open' : '' ?>>
+          <summary>yt-dlp maintenance</summary>
+          <div style="padding:12px 16px 16px">
+            <div class="video-meta">
+              <div>yt-dlp installed:
+                <?php if ($videoYtdlpStatus['stub'] ?? false): ?>
+                  <span class="pill bad">Broken stub</span>
+                  <span class="help"> — pip/pipx launcher copied into bin/; click Update yt-dlp</span>
+                <?php elseif ($videoYtdlpStatus['installed']): ?>
+                  <strong><?= h($videoYtdlpStatus['installed']) ?></strong>
+                <?php else: ?>
+                  <span class="pill bad">Not found</span>
+                <?php endif; ?>
+              </div>
+              <div>yt-dlp latest:
+                <?php if ($videoYtdlpStatus['latest']): ?>
+                  <strong><?= h($videoYtdlpStatus['latest']) ?></strong>
+                  <?php if ($videoYtdlpStatus['outdated'] === true): ?>
+                    <span class="pill warn">Update available</span>
+                  <?php elseif ($videoYtdlpStatus['outdated'] === false): ?>
+                    <span class="pill ok">Up to date</span>
+                  <?php endif; ?>
+                <?php elseif ($videoYtdlpStatus['latest_error']): ?>
+                  <span class="help"><?= h($videoYtdlpStatus['latest_error']) ?></span>
+                <?php else: ?>
+                  <span class="help">Unknown</span>
+                <?php endif; ?>
+              </div>
+              <div>Deno installed:
+                <?php if ($videoDenoStatus['installed'] ?? false): ?>
+                  <strong><?= h($videoDenoStatus['installed']) ?></strong>
+                  <?php if (!empty($videoDenoStatus['path'])): ?>
+                    <code><?= h($videoDenoStatus['path']) ?></code>
+                    <?php if ($videoDenoStatus['system'] ?? false): ?>
+                      <span class="help">(system)</span>
+                    <?php endif; ?>
+                  <?php endif; ?>
+                  <?php if ($videoDenoStatus['installed'] && !($videoYtdlpSupport['deno_ok'] ?? false)): ?>
+                    <span class="pill warn">below <?= h(video_ytdlp_deno_min_version()) ?></span>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <span class="pill warn">missing</span>
+                <?php endif; ?>
+              </div>
+              <div>Deno latest:
+                <?php if ($videoDenoStatus['latest'] ?? false): ?>
+                  <strong><?= h($videoDenoStatus['latest']) ?></strong>
+                  <?php if ($videoDenoStatus['outdated'] === true): ?>
+                    <span class="pill warn">Update available</span>
+                  <?php elseif ($videoDenoStatus['outdated'] === false): ?>
+                    <span class="pill ok">Up to date</span>
+                  <?php endif; ?>
+                <?php elseif ($videoDenoStatus['latest_error'] ?? false): ?>
+                  <span class="help"><?= h($videoDenoStatus['latest_error']) ?></span>
+                <?php else: ?>
+                  <span class="help">Unknown — click Check versions</span>
+                <?php endif; ?>
+              </div>
+              <div>YouTube cookies:
+                <?php if ($videoYtdlpSupport['cookies']): ?>
+                  <span class="pill ok">found</span>
+                  (<?= number_format((int)($videoYtdlpSupport['cookies_bytes'] ?? 0)) ?> bytes)
+                <?php else: ?>
+                  <span class="pill bad">missing</span>
+                <?php endif; ?>
+                — <code><?= h($videoYtdlpSupport['cookies_path']) ?></code>
+              </div>
+            </div>
+            <form method="post" enctype="multipart/form-data" class="upload-row" style="margin-top:12px" action="?board=video">
+              <input type="hidden" name="action" value="upload_youtube_cookies">
+              <input type="hidden" name="board" value="video">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="file" name="youtube_cookies" accept=".txt,text/plain" required>
+              <button class="secondary" type="submit">Upload cookies.txt</button>
+            </form>
+            <div class="help" style="margin-top:10px">YouTube often blocks headless servers (“Sign in to confirm you’re not a bot”).
+              Export from youtube.com while signed in using <strong>Get cookies.txt LOCALLY</strong>, test on your Mac with
+              <code>yt-dlp --js-runtimes deno --remote-components ejs:github --cookies cookies.txt -F URL</code>
+              (need 720p/1080p rows), then upload above — or use a <strong>local file</strong> in the video row.</div>
+            <div class="help" style="margin-top:8px"><strong>Update deno</strong> downloads the latest release to
+              <code>bin/deno</code> (no root) and uses it when newer than the system copy at
+              <code>/usr/local/bin/deno</code>. To upgrade system deno instead: SSH as root
+              <code>curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh</code></div>
+            <div class="inline-actions">
+              <form method="post" action="?board=video">
+                <input type="hidden" name="action" value="ytdlp_update">
+                <input type="hidden" name="board" value="video">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button class="secondary" type="submit">Update yt-dlp</button>
+              </form>
+              <form method="post" action="?board=video">
+                <input type="hidden" name="action" value="deno_update">
+                <input type="hidden" name="board" value="video">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button class="secondary" type="submit">Update deno</button>
+              </form>
+              <form method="post" action="?board=video">
+                <input type="hidden" name="action" value="ytdlp_refresh">
+                <input type="hidden" name="board" value="video">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button class="secondary" type="submit">Check versions</button>
+              </form>
+            </div>
+          </div>
+        </details>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($board === 'slides'): ?>
+          <div class="slides-deploy-panel">
+            <div class="section-title" style="margin-top:0">Deploy to displays</div>
+            <p class="help" style="margin-bottom:12px">Each enabled slide becomes its own rotation entry with its own dwell time. Pick which displays include your deck — order and schedules are edited here; deploy pushes one playlist row per slide.</p>
+            <div class="deploy-stats">
+              <span><strong><?= (int)$slidesDeckStats['on_disk'] ?></strong> slide<?= $slidesDeckStats['on_disk'] === 1 ? '' : 's' ?> in deck</span>
+              <span><strong><?= (int)$slidesDeckStats['active_now'] ?></strong> active now</span>
+              <span><strong><?= (int)$slidesDeckStats['playlist_entries'] ?></strong> playlist entr<?= $slidesDeckStats['playlist_entries'] === 1 ? 'y' : 'ies' ?> per display</span>
+              <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="slides.php" target="_blank" rel="noopener">Preview deck ↗</a>
+            </div>
+            <form method="post" action="?board=slides">
+              <input type="hidden" name="board" value="slides">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <div class="slides-deploy-grid">
+                <?php foreach ($slidesDeployStatus as $screenKey => $dep):
+                  $checked = $dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0);
+                ?>
+                <div class="slides-deploy-row">
+                  <label class="check">
+                    <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $checked ? 'checked' : '' ?>>
+                    <?= h($dep['name']) ?> <code><?= h($screenKey) ?></code>
+                  </label>
+                  <div class="deploy-detail">
+                    <?php if ($dep['mirrors_main']): ?>
+                      <span class="pill">Mirrors main</span>
+                      <?php if ($dep['on_wall']): ?>
+                        on wall via main<?= $dep['wall'] ? ' · from #' . (int)$dep['wall']['position'] . ' · ' . (int)$dep['wall']['slide_count'] . ' slide' . ((int)$dep['wall']['slide_count'] === 1 ? '' : 's') : '' ?>
+                      <?php else: ?>
+                        not on wall (main has no slides)
+                      <?php endif; ?>
+                    <?php elseif ($dep['on_playlist']): ?>
+                      <span class="pill ok">Synced</span>
+                      <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?> slides
+                      <?php if ($dep['entry'] !== null && ($dep['entry']['first_index'] ?? null)): ?>
+                        · #<?= (int)$dep['entry']['first_index'] ?><?= ($dep['entry']['last_index'] ?? 0) > ($dep['entry']['first_index'] ?? 0) ? '–#' . (int)$dep['entry']['last_index'] : '' ?>
+                      <?php endif; ?>
+                      <?php if ($dep['dwell_mismatch'] > 0): ?>
+                        <span class="pill warn">Redeploy to refresh dwell</span>
+                      <?php endif; ?>
+                    <?php elseif ($dep['partial'] ?? false): ?>
+                      <span class="pill warn">Partial</span>
+                      <?= (int)($dep['sync']['synced'] ?? 0) ?>/<?= (int)$dep['expected'] ?> slides synced
+                    <?php else: ?>
+                      <span class="pill warn">Not deployed</span>
+                    <?php endif; ?>
+                  </div>
+                  <div class="deploy-actions">
+                    <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+                       href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+                    <?php if (($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
+                    <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+                            name="action" value="remove_slides_rotation"
+                            onclick="this.form.remove_screen.value='<?= h($screenKey) ?>'; return confirm('Remove slides from <?= h($dep['name']) ?>?');">Remove</button>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+              <input type="hidden" name="remove_screen" value="">
+              <div class="slides-deploy-tools">
+                <button class="save" type="submit" name="action" value="deploy_slides">Deploy now</button>
+                <span class="help" style="margin:0">Syncs one rotation entry per slide on checked displays, with each slide's dwell seconds.</span>
+              </div>
+            </form>
+          </div>
+      <?php endif; ?>
+
+      <?php if ($board === 'slides'): ?>
+      <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="delete_slide">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideDeleteFile" value="">
+      </form>
+      <form id="slideAddForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="add_slide_to_deck">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideAddFile" value="">
+      </form>
+      <?php endif; ?>
+
+      <form method="post" id="boardform" action="?board=<?= h($board) ?>">
+        <input type="hidden" name="action" value="save">
+        <input type="hidden" name="board" value="<?= h($board) ?>">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+
+        <?php
+        $scheduleOptions = ['always', 'once', 'range', 'yearly', 'yearly_range', 'monthly', 'weekly'];
+
+        if ($board === 'rotation'):
+          $rotationScreens = rotation_screens();
+          $scrVal = current_val($rawConf, $board, 'SCREENS');
+          $scrRows = [];
+          if (is_array($scrVal)) {
+              foreach ($scrVal as $rk => $rv) {
+                  $scrRows[] = rotation_admin_screen_row((string)$rk, $rv);
+              }
+          }
+          if ($scrRows === []) {
+              foreach ($rotationScreens as $rk => $rv) {
+                  $scrRows[] = rotation_admin_screen_row((string)$rk, $rv);
+              }
+          }
+        ?>
+          <div class="section-title">Displays</div>
+          <div class="help" style="margin-bottom:12px">Each screen has its own playlist below. Kiosks use <code>board.php?screen=KEY</code>
+            (plain <code>board.php</code> = main). <strong>CEC</strong> sends HDMI standby/wake on player boxes running
+            <code>setup-kiosk.sh</code> (requires TV CEC enabled). Schedule uses the rotation timezone below.</div>
+          <div class="rows-scroll">
+            <table class="rows" data-field="SCREENS">
+              <thead><tr>
+                <th>Key</th><th>Display name</th><th>Shuffle</th><th>CEC</th><th>Off hr</th><th>On hr</th><th></th>
+              </tr></thead>
+              <tbody>
+                <?php foreach ($scrRows as $sri => $srow): ?>
+                <tr>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][_key]" value="<?= h((string)($srow['_key'] ?? '')) ?>" placeholder="garage"></td>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][name]" value="<?= h((string)($srow['name'] ?? '')) ?>" placeholder="Garage TV"></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][shuffle]" value="1" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_off]" value="<?= h((string)($srow['cec_off'] ?? '23')) ?>" placeholder="23" style="width:52px"></td>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_on]" value="<?= h((string)($srow['cec_on'] ?? '6')) ?>" placeholder="6" style="width:52px"></td>
+                  <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
+                </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+          <button type="button" class="addrow" onclick="addRow(this)">+ Add screen</button>
+
+          <?php if (count($rotationScreens) > 1): ?>
+          <div class="rotation-playlist-controls">
+            <button type="button" class="secondary" onclick="setRotationPlaylistsOpen(true)">Expand all playlists</button>
+            <button type="button" class="secondary" onclick="setRotationPlaylistsOpen(false)">Collapse all playlists</button>
+          </div>
+          <?php endif; ?>
+
+          <?php foreach ($rotationScreens as $screenKey => $screenMeta):
+            $fieldKey = 'PAGES_' . $screenKey;
+            $pagesVal = current_val($rawConf, $board, $fieldKey);
+            $pageRows = is_array($pagesVal) ? $pagesVal : [];
+            $screenName = rotation_screen_display_name($screenKey, $rotationScreens);
+            $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
+            $effectivePages = rotation_screen_effective_pages($screenKey);
+            $mirrorsMain = $pageRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
+            $screenSettings = rotation_screen_settings($screenKey);
+            $pageCount = rotation_playlist_counts($pageRows)['total'];
+            $slideEntryCount = rotation_playlist_counts($pageRows)['slide_entries'];
+            $activeEffective = count(rotation_effective_playlist_lines(
+                array_values(array_filter($effectivePages, static fn($ep) => is_array($ep) && !empty($ep['url']) && empty($ep['off'])))
+            ));
+            if ($mirrorsMain) {
+                $summaryNote = 'mirrors main (' . $activeEffective . ' page' . ($activeEffective === 1 ? '' : 's') . ')';
+            } elseif ($pageCount === 0) {
+                $summaryNote = 'empty';
+            } else {
+                $summaryNote = $pageCount . ' page' . ($pageCount === 1 ? '' : 's');
+                if ($slideEntryCount > 0) {
+                    $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
+                }
+            }
+          ?>
+          <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $screenKey === 'main' ? ' open' : '' ?>>
+            <summary>
+              <span>Playlist — <?= h($screenName) ?></span>
+              <code><?= h($screenKey) ?></code>
+              <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
+              <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
+              <?php if ($screenSettings['cec']['enabled']): ?><span class="pill ok">CEC <?= (int)$screenSettings['cec']['off'] ?>→<?= (int)$screenSettings['cec']['on'] ?></span><?php endif; ?>
+              <span class="rotation-summary-actions">
+                <a class="secondary" href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener"
+                   onclick="event.stopPropagation()">Preview ↗</a>
+              </span>
+            </summary>
+            <div class="panel-body">
+          <div class="help" style="margin-bottom:8px">Drag cards by the <strong>⋮⋮</strong> handle to reorder (top = first on the wall).
+            Custom slides appear as a grouped block — edit order and dwell in <strong>Custom Slides</strong>, then deploy to sync.
+            <?php if ($screenKey !== 'main'): ?> Leave this playlist empty to mirror main.<?php endif; ?>
+            Preview opens the live rotation in a new tab — <strong>save first</strong>; wall displays pick up changes within 30 seconds.</div>
+
+          <div class="rotation-screen-tools">
+            <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+               href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview rotation ↗</a>
+            <span class="help" style="margin:0">Kiosk: <code><?= h(rotation_screen_kiosk_url($screenKey)) ?></code></span>
+            <button type="button" class="secondary" onclick="loadRotationStarter('<?= h($deckId) ?>')">Load starter playlist</button>
+            <?php if ($screenKey !== 'main'): ?>
+            <button type="button" class="secondary" onclick="copyRotationFromMain('<?= h($deckId) ?>')">Copy from main</button>
+            <?php endif; ?>
+            <button type="button" class="addrow" onclick="addRotationPage('<?= h($deckId) ?>')">+ Add page</button>
+          </div>
+
+          <?php if ($effectivePages !== []): ?>
+          <div class="rotation-effective-list">
+            <?php if ($mirrorsMain): ?><div class="mirror-note">Saved playlist is empty — wall mirrors main:</div><?php else: ?>
+            <strong>On the wall now</strong> (saved playlist):
+            <?php endif; ?>
+            <ol>
+              <?php foreach (rotation_effective_playlist_lines($effectivePages) as $line): ?>
+              <li><?= h($line['label']) ?> · <?= h($line['detail']) ?></li>
+              <?php endforeach; ?>
+            </ol>
+          </div>
+          <?php endif; ?>
+
+          <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
+          <div class="quick-add-bar">
+            <span class="group-label"><?= h($groupName) ?></span>
+            <?php foreach ($groupItems as $qa): ?>
+            <button type="button" class="secondary quick-add-rotation" style="padding:6px 12px;font-size:13px"
+                    data-field="<?= h($fieldKey) ?>" data-deck="<?= h($deckId) ?>"
+                    data-url="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>"><?= h($qa['label']) ?></button>
+            <?php endforeach; ?>
+          </div>
+          <?php endforeach; ?>
+
+          <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
+            <?php if ($pageRows === []): ?>
+            <div class="rotation-playlist-empty" data-rotation-empty>No pages yet — quick-add a board above, load the starter playlist, or add a blank page.</div>
+            <?php endif; ?>
+            <?php $pri = 0;
+            $playlistSegments = rotation_playlist_segments($pageRows);
+            foreach ($playlistSegments as $segment):
+              if (($segment['type'] ?? '') === 'slides'):
+                $slideItems = $segment['items'] ?? [];
+                $slideCount = count($slideItems);
+                $legacyOnly = $slideCount === 1 && rotation_is_legacy_slides_url((string)($slideItems[0]['url'] ?? ''));
+            ?>
+            <details class="rotation-slides-group" open>
+              <summary>
+                <span class="drag-handle rotation-slides-group-handle" title="Drag slide block" draggable="true">⋮⋮</span>
+                <strong><?= $legacyOnly ? 'Custom slides (legacy)' : 'Custom slides (' . (int)$slideCount . ')' ?></strong>
+                <span class="help" style="margin:0">Managed from Custom Slides — deploy or save deck to sync dwell &amp; order</span>
+                <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="?board=slides">Edit deck ↗</a>
+              </summary>
+              <div class="rotation-slides-group-body">
+                <?php foreach ($slideItems as $item):
+                  $prow = $item['row'];
+                  $purl = (string)$item['url'];
+                  if ($legacyOnly):
+                ?>
+                <div class="rotation-card rotation-card-legacy" data-rotation-card>
+                  <div class="rotation-card-head">
+                    <div class="rotation-card-title">
+                      <strong>Legacy single entry</strong>
+                      <code>slides.php</code>
+                    </div>
+                  </div>
+                  <div class="rotation-card-meta">
+                    <span class="pill warn">Deploy from Custom Slides to split into per-slide entries</span>
+                  </div>
+                  <input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>">
+                  <input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>">
+                  <?php if (!empty($prow['from'])): ?><input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)$prow['from']) ?>"><?php endif; ?>
+                  <?php if (!empty($prow['to'])): ?><input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)$prow['to']) ?>"><?php endif; ?>
+                  <?php if (!empty($prow['off'])): ?><input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" value="1"><?php endif; ?>
+                </div>
+                <?php $pri++; continue; endif;
+                  $slideFile = slide_rotation_parse_file($purl);
+                  $slideMeta = $slideFile !== null ? slide_deck_by_file($slideFile, $rawConf['slides.SLIDES'] ?? null) : null;
+                  $slideLabel = rotation_page_label($purl);
+                ?>
+                <div class="rotation-card rotation-card-slide" data-rotation-card>
+                  <div class="rotation-card-head">
+                    <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                    <div class="rotation-card-title">
+                      <strong data-rotation-label><?= h($slideLabel) ?></strong>
+                      <code data-rotation-url-display><?= h($purl) ?></code>
+                    </div>
+                  </div>
+                  <div class="rotation-card-grid rotation-card-grid-compact">
+                    <div style="grid-column:1 / -1">
+                      <label class="mini">URL</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>" data-rotation-url readonly>
+                    </div>
+                    <div>
+                      <label class="mini">Dwell (s)</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="12" readonly>
+                    </div>
+                    <div>
+                      <label class="mini">From hr</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
+                    </div>
+                    <div>
+                      <label class="mini">To hr</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                    </div>
+                  </div>
+                  <div class="rotation-card-meta">
+                    <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this slide</label>
+                    <?php if (is_array($slideMeta)): ?>
+                      <span><?= h(slide_schedule_summary($slideMeta)) ?></span>
+                    <?php endif; ?>
+                    <div class="rotation-card-actions">
+                      <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                    </div>
+                  </div>
+                </div>
+                <?php $pri++; endforeach; ?>
+              </div>
+            </details>
+            <?php continue; endif;
+              $prow = $segment['row'] ?? [];
+              $purl = (string)($segment['url'] ?? '');
+            ?>
+            <div class="rotation-card" data-rotation-card>
+              <div class="rotation-card-head">
+                <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                <div class="rotation-card-title">
+                  <strong data-rotation-label><?= h(rotation_page_label($purl)) ?></strong>
+                  <code data-rotation-url-display><?= h($purl !== '' ? $purl : 'board URL') ?></code>
+                </div>
+                <button type="button" class="rowdel" onclick="removeRotationCard(this, '<?= h($deckId) ?>')" title="Remove">×</button>
+              </div>
+              <div class="rotation-card-grid">
+                <div style="grid-column:1 / -1">
+                  <label class="mini">URL</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
+                         placeholder="index.php or rss.php?feed=ars" data-rotation-url required>
+                </div>
+                <div>
+                  <label class="mini">Dwell (s)</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="60">
+                </div>
+                <div>
+                  <label class="mini">From hr</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
+                </div>
+                <div>
+                  <label class="mini">To hr</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                </div>
+              </div>
+              <div class="rotation-card-meta">
+                <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this page</label>
+                <?php if ($purl !== ''): ?>
+                <div class="rotation-card-actions">
+                  <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                </div>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php $pri++; endforeach; ?>
+          </div>
+            </div>
+          </details>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px">
+            <summary>Transition settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $rotationBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'video'):
+          $videoVal = current_val($rawConf, $board, 'VIDEOS');
+          $videoRows = is_array($videoVal) ? $videoVal : [];
+          $mutedVal = current_val($rawConf, $board, 'MUTED');
+        ?>
+          <div class="field" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--harbor)">
+            <label class="check"><input type="checkbox" name="MUTED"
+              <?= ($mutedVal ?? true) ? 'checked' : '' ?>> Mute all videos</label>
+            <div class="help" style="margin-top:8px;margin-bottom:0">Leave checked for silent wall displays. Uncheck to play audio —
+              Pi/kiosk boxes must be set up with <code>setup-kiosk.sh</code> (autoplay policy is already included).</div>
+          </div>
+
+          <div class="section-title">Video playlist</div>
+          <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
+            and either a YouTube URL or a local filename in <code>videos/</code>. After saving, videos appear on the wall only when
+            listed in <strong>Admin → Rotation</strong> as <code>video.php?v=KEY</code> — or check the box below to add them automatically.</div>
+
+          <div class="video-playlist" id="videoPlaylist" data-field="VIDEOS">
+            <?php $vri = 0; foreach ($videoRows as $vk => $row):
+              if (!is_array($row)) $row = [];
+              $st = $videoStatusByKey[$vk] ?? null;
+              $label = trim((string)($row['title'] ?? ''));
+              if ($label === '') $label = (string)$vk;
+            ?>
+            <div class="video-card" data-video-card>
+              <div class="video-card-head">
+                <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                <div class="video-card-title">
+                  <strong><?= h($label) ?></strong>
+                  <code><?= h(video_rotation_url($vk)) ?></code>
+                </div>
+                <button type="button" class="rowdel" onclick="this.closest('[data-video-card]').remove(); reindexVideoPlaylist();" title="Remove">×</button>
+              </div>
+              <div class="video-card-grid">
+                <div>
+                  <label class="mini">Key</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][_key]" value="<?= h((string)$vk) ?>" placeholder="lantern" required data-video-key>
+                </div>
+                <div>
+                  <label class="mini">Title (optional)</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][title]" value="<?= h((string)($row['title'] ?? '')) ?>" placeholder="On-screen title" data-video-title>
+                </div>
+                <div>
+                  <label class="mini">YouTube URL</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/watch?v=…">
+                </div>
+                <div style="grid-column:2 / -1">
+                  <label class="mini">or local file</label>
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="lantern.mp4 in videos/">
+                </div>
+              </div>
+              <div class="video-card-meta">
+                <?php if ($st): ?>
+                  <?php if ($st['file']): ?>
+                    <span>File: <code><?= h($st['file']) ?></code></span>
+                  <?php else: ?>
+                    <span>Not downloaded yet</span>
+                  <?php endif; ?>
+                  <?php if ($st['duration_label']): ?>
+                    <span>Length: <?= h($st['duration_label']) ?></span>
+                    <span>Dwell: <?= h((string)$st['rotation_dwell']) ?> s</span>
+                  <?php endif; ?>
+                  <?php if ($st['in_rotation']): ?>
+                    <span class="pill ok">On main rotation</span>
+                  <?php else: ?>
+                    <span class="pill warn">Not on rotation</span>
+                  <?php endif; ?>
+                <?php endif; ?>
+                <div class="video-card-actions">
+                  <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(video_rotation_url($vk)) ?>" target="_blank" rel="noopener">Preview</a>
+                  <?php if ($st && $st['fetchable']): ?>
+                    <button type="submit" class="secondary" form="video-fetch-<?= h(preg_replace('/[^a-z0-9_\-]/i', '', $vk)) ?>">Fetch</button>
+                  <?php endif; ?>
+                </div>
+              </div>
+            </div>
+            <?php $vri++; endforeach; ?>
+          </div>
+          <button type="button" class="addrow" style="margin-top:12px" onclick="addVideoCard()">+ Add video</button>
+
+          <div class="actions" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
+            <label class="check"><input type="checkbox" name="sync_rotation_main" checked> Add playlist to main rotation on save</label>
+            <span class="help">Adds <code>video.php?v=KEY</code> entries to the main screen with dwell from each video length.</span>
+          </div>
+
+          <details class="panel panel-muted" style="margin-top:22px">
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if ($f['key'] === 'VIDEOS' || !in_array($f['key'], $videoBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'splunk'): ?>
           <div class="section-title">Splunk panel pages</div>
           <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
             <code>splunk.php?d=<em>key</em></code> (like Grafana). Drag panels to reorder within a page.</div>
@@ -1631,7 +2293,7 @@ function admin_field(array $f, $val, string $board): void
               <table class="rows" data-field="<?= h($f['key']) ?>">
                 <thead><tr>
                   <?php foreach ($cols as $c): ?><th><?= h($c['label']) ?></th><?php endforeach; ?>
-                  <?php if ($board === 'rss' && $f['key'] === 'FEEDS'): ?><th></th><?php endif; ?>
+                  <?php if (($board === 'rss' && $f['key'] === 'FEEDS') || ($board === 'web' && $f['key'] === 'SITES')): ?><th></th><?php endif; ?>
                   <th></th>
                 </tr></thead>
                 <tbody>
@@ -1690,6 +2352,14 @@ function admin_field(array $f, $val, string $board): void
                       <td>
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $rssPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($rssPrev !== '' ? $rssPrev : '#') ?>" target="_blank" rel="noopener" data-rss-preview>Preview ↗</a>
+                      </td>
+                      <?php elseif ($board === 'web' && $f['key'] === 'SITES'):
+                        $siteKey = trim((string)($row['_key'] ?? ''));
+                        $webPrev = $siteKey !== '' ? web_preview_url($siteKey) : '';
+                      ?>
+                      <td>
+                        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $webPrev === '' ? ';display:none' : '' ?>"
+                           href="<?= h($webPrev !== '' ? $webPrev : '#') ?>" target="_blank" rel="noopener" data-web-preview>Preview ↗</a>
                       </td>
                       <?php endif; ?>
                       <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
@@ -1889,6 +2559,33 @@ function initRssFeedPreviews() {
   document.querySelectorAll('table.rows[data-field="FEEDS"] tbody tr').forEach(bindRssFeedRow);
 }
 
+function webPreviewUrl(key) {
+  key = (key || '').replace(/[^a-z0-9_\-]/gi, '').toLowerCase();
+  if (!key) return '';
+  return 'web.php?d=' + encodeURIComponent(key) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function syncWebPreviewLink(tr) {
+  const a = tr.querySelector('[data-web-preview]');
+  const keyInp = tr.querySelector('input[name*="[_key]"]');
+  if (!a || !keyInp) return;
+  const u = webPreviewUrl(keyInp.value.trim());
+  if (u) { a.href = u; a.style.display = ''; }
+  else { a.href = '#'; a.style.display = 'none'; }
+}
+
+function bindWebSiteRow(tr) {
+  const keyInp = tr.querySelector('input[name*="[_key]"]');
+  if (!keyInp || keyInp.dataset.webPreviewBound) return;
+  keyInp.dataset.webPreviewBound = '1';
+  keyInp.addEventListener('input', function () { syncWebPreviewLink(tr); });
+  syncWebPreviewLink(tr);
+}
+
+function initWebSitePreviews() {
+  document.querySelectorAll('table.rows[data-field="SITES"] tbody tr').forEach(bindWebSiteRow);
+}
+
 function addRow(btn) {
   const wrap = btn.previousElementSibling;
   const table = wrap && wrap.classList && wrap.classList.contains('rows-scroll')
@@ -1955,7 +2652,7 @@ function addRow(btn) {
     inp.name = field + '[' + idx + '][' + c.key + ']';
     td.appendChild(inp); tr.appendChild(td);
   });
-  if (field === 'FEEDS') {
+  if (field === 'FEEDS' || field === 'SITES') {
     const prevTd = document.createElement('td');
     const prevA = document.createElement('a');
     prevA.className = 'secondary';
@@ -1963,7 +2660,7 @@ function addRow(btn) {
     prevA.href = '#';
     prevA.target = '_blank';
     prevA.rel = 'noopener';
-    prevA.setAttribute('data-rss-preview', '');
+    prevA.setAttribute(field === 'FEEDS' ? 'data-rss-preview' : 'data-web-preview', '');
     prevA.textContent = 'Preview ↗';
     prevTd.appendChild(prevA);
     tr.appendChild(prevTd);
@@ -1973,6 +2670,7 @@ function addRow(btn) {
   tr.appendChild(td);
   table.querySelector('tbody').appendChild(tr);
   if (field === 'FEEDS') bindRssFeedRow(tr);
+  if (field === 'SITES') bindWebSiteRow(tr);
   const palSel = tr.querySelector('.cal-palette-select');
   if (palSel) syncCalSwatch(palSel);
   updateCalLegendPreview();
@@ -2206,6 +2904,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initVideoPlaylist();
   initSplunkPanels();
   initRssFeedPreviews();
+  initWebSitePreviews();
   initRotationDecks();
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
     btn.addEventListener('click', function () {
