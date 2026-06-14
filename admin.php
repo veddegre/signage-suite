@@ -1290,6 +1290,10 @@ function admin_field(array $f, $val, string $board): void
           · kiosk URL <code><?= h(rotation_screen_kiosk_url('main')) ?></code>
         <?php elseif ($board === 'splunk'): ?>
           Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
+        <?php elseif ($board === 'grafana'): ?>
+          Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — preview per row below.
+        <?php elseif ($board === 'splunkdash'): ?>
+          Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'web'): ?>
           Each site is <code>web.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif (!empty($b['file'])): ?>
@@ -2290,10 +2294,18 @@ function admin_field(array $f, $val, string $board): void
             ?>
               <label class="l"><?= h($f['label']) ?></label>
               <div class="rows-scroll">
-              <table class="rows" data-field="<?= h($f['key']) ?>">
+              <table class="rows" data-field="<?= h($f['key']) ?>"<?php
+                if ($board === 'grafana' && $f['key'] === 'DASHBOARDS') {
+                    echo ' data-preview-script="grafana.php"';
+                } elseif ($board === 'splunkdash' && $f['key'] === 'DASHBOARDS') {
+                    echo ' data-preview-script="splunkdash.php"';
+                }
+              ?>>
                 <thead><tr>
                   <?php foreach ($cols as $c): ?><th><?= h($c['label']) ?></th><?php endforeach; ?>
-                  <?php if (($board === 'rss' && $f['key'] === 'FEEDS') || ($board === 'web' && $f['key'] === 'SITES')): ?><th></th><?php endif; ?>
+                  <?php if (($board === 'rss' && $f['key'] === 'FEEDS')
+                      || ($board === 'web' && $f['key'] === 'SITES')
+                      || (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS')): ?><th></th><?php endif; ?>
                   <th></th>
                 </tr></thead>
                 <tbody>
@@ -2360,6 +2372,14 @@ function admin_field(array $f, $val, string $board): void
                       <td>
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $webPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($webPrev !== '' ? $webPrev : '#') ?>" target="_blank" rel="noopener" data-web-preview>Preview ↗</a>
+                      </td>
+                      <?php elseif (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS'):
+                        $dashKey = trim((string)($row['_key'] ?? ''));
+                        $dashPrev = $dashKey !== '' ? ($board === 'grafana' ? grafana_preview_url($dashKey) : splunkdash_preview_url($dashKey)) : '';
+                      ?>
+                      <td>
+                        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $dashPrev === '' ? ';display:none' : '' ?>"
+                           href="<?= h($dashPrev !== '' ? $dashPrev : '#') ?>" target="_blank" rel="noopener" data-board-preview>Preview ↗</a>
                       </td>
                       <?php endif; ?>
                       <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
@@ -2586,6 +2606,35 @@ function initWebSitePreviews() {
   document.querySelectorAll('table.rows[data-field="SITES"] tbody tr').forEach(bindWebSiteRow);
 }
 
+function keyedBoardPreviewUrl(script, key) {
+  key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
+  if (!key || !script) return '';
+  return script + '?d=' + encodeURIComponent(key) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function syncKeyedBoardPreviewLink(tr) {
+  const table = tr.closest('table.rows');
+  const script = table && table.getAttribute('data-preview-script');
+  const a = tr.querySelector('[data-board-preview]');
+  const keyInp = tr.querySelector('input[name*="[_key]"]');
+  if (!a || !keyInp) return;
+  const u = keyedBoardPreviewUrl(script, keyInp.value.trim());
+  if (u) { a.href = u; a.style.display = ''; }
+  else { a.href = '#'; a.style.display = 'none'; }
+}
+
+function bindKeyedBoardRow(tr) {
+  const keyInp = tr.querySelector('input[name*="[_key]"]');
+  if (!keyInp || keyInp.dataset.boardPreviewBound) return;
+  keyInp.dataset.boardPreviewBound = '1';
+  keyInp.addEventListener('input', function () { syncKeyedBoardPreviewLink(tr); });
+  syncKeyedBoardPreviewLink(tr);
+}
+
+function initKeyedBoardPreviews() {
+  document.querySelectorAll('table.rows[data-preview-script] tbody tr').forEach(bindKeyedBoardRow);
+}
+
 function addRow(btn) {
   const wrap = btn.previousElementSibling;
   const table = wrap && wrap.classList && wrap.classList.contains('rows-scroll')
@@ -2652,7 +2701,7 @@ function addRow(btn) {
     inp.name = field + '[' + idx + '][' + c.key + ']';
     td.appendChild(inp); tr.appendChild(td);
   });
-  if (field === 'FEEDS' || field === 'SITES') {
+  if (field === 'FEEDS' || field === 'SITES' || table.getAttribute('data-preview-script')) {
     const prevTd = document.createElement('td');
     const prevA = document.createElement('a');
     prevA.className = 'secondary';
@@ -2660,7 +2709,9 @@ function addRow(btn) {
     prevA.href = '#';
     prevA.target = '_blank';
     prevA.rel = 'noopener';
-    prevA.setAttribute(field === 'FEEDS' ? 'data-rss-preview' : 'data-web-preview', '');
+    if (field === 'FEEDS') prevA.setAttribute('data-rss-preview', '');
+    else if (field === 'SITES') prevA.setAttribute('data-web-preview', '');
+    else prevA.setAttribute('data-board-preview', '');
     prevA.textContent = 'Preview ↗';
     prevTd.appendChild(prevA);
     tr.appendChild(prevTd);
@@ -2670,7 +2721,8 @@ function addRow(btn) {
   tr.appendChild(td);
   table.querySelector('tbody').appendChild(tr);
   if (field === 'FEEDS') bindRssFeedRow(tr);
-  if (field === 'SITES') bindWebSiteRow(tr);
+  else if (field === 'SITES') bindWebSiteRow(tr);
+  else if (table.getAttribute('data-preview-script')) bindKeyedBoardRow(tr);
   const palSel = tr.querySelector('.cal-palette-select');
   if (palSel) syncCalSwatch(palSel);
   updateCalLegendPreview();
@@ -2905,6 +2957,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initSplunkPanels();
   initRssFeedPreviews();
   initWebSitePreviews();
+  initKeyedBoardPreviews();
   initRotationDecks();
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
     btn.addEventListener('click', function () {

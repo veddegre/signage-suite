@@ -454,6 +454,40 @@ function rss_preview_url(string $feedKey): string
     return signage_board_preview_url(rss_feed_url($feedKey));
 }
 
+function grafana_normalize_key(string $key): string
+{
+    $key = preg_replace('/[^a-z0-9_\-]/i', '', $key);
+
+    return $key !== '' ? $key : 'main';
+}
+
+function grafana_page_url(string $key): string
+{
+    return 'grafana.php?d=' . rawurlencode(grafana_normalize_key($key));
+}
+
+function grafana_preview_url(string $key): string
+{
+    return signage_board_preview_url(grafana_page_url($key));
+}
+
+function splunkdash_normalize_key(string $key): string
+{
+    $key = preg_replace('/[^a-z0-9_\-]/i', '', $key);
+
+    return $key !== '' ? $key : 'main';
+}
+
+function splunkdash_page_url(string $key): string
+{
+    return 'splunkdash.php?d=' . rawurlencode(splunkdash_normalize_key($key));
+}
+
+function splunkdash_preview_url(string $key): string
+{
+    return signage_board_preview_url(splunkdash_page_url($key));
+}
+
 /** Total rotation dwell for one RSS feed pass (per-story seconds × story count). */
 function rotation_rss_feed_dwell(array $feed): int
 {
