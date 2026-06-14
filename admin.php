@@ -2138,7 +2138,9 @@ function admin_field(array $f, $val, string $board): void
               <div class="rows-scroll">
               <table class="rows" data-field="<?= h($f['key']) ?>">
                 <thead><tr>
-                  <?php foreach ($cols as $c): ?><th><?= h($c['label']) ?></th><?php endforeach; ?><th></th>
+                  <?php foreach ($cols as $c): ?><th><?= h($c['label']) ?></th><?php endforeach; ?>
+                  <?php if ($board === 'rss' && $f['key'] === 'FEEDS'): ?><th></th><?php endif; ?>
+                  <th></th>
                 </tr></thead>
                 <tbody>
                   <?php foreach ($rows as $ri => $row):
@@ -2189,6 +2191,15 @@ function admin_field(array $f, $val, string $board): void
                           <?php endif; ?>
                         </td>
                       <?php endforeach; ?>
+                      <?php if ($board === 'rss' && $f['key'] === 'FEEDS'):
+                        $feedKey = trim((string)($row['_key'] ?? ''));
+                        $rssPrev = $feedKey !== '' ? rss_preview_url($feedKey) : '';
+                      ?>
+                      <td>
+                        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $rssPrev === '' ? ';display:none' : '' ?>"
+                           href="<?= h($rssPrev !== '' ? $rssPrev : '#') ?>" target="_blank" rel="noopener" data-rss-preview>Preview ↗</a>
+                      </td>
+                      <?php endif; ?>
                       <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
                     </tr>
                   <?php endforeach; ?>
@@ -2357,6 +2368,35 @@ function admin_field(array $f, $val, string $board): void
 </div>
 
 <script>
+const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1&safebottom=' . SIGNAGE_TICKER_H) ?>;
+
+function rssPreviewUrl(key) {
+  key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
+  if (!key) return '';
+  return 'rss.php?feed=' + encodeURIComponent(key) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function syncRssPreviewLink(tr) {
+  const a = tr.querySelector('[data-rss-preview]');
+  const keyInp = tr.querySelector('input[name*="[_key]"]');
+  if (!a || !keyInp) return;
+  const u = rssPreviewUrl(keyInp.value.trim());
+  if (u) { a.href = u; a.style.display = ''; }
+  else { a.href = '#'; a.style.display = 'none'; }
+}
+
+function bindRssFeedRow(tr) {
+  const keyInp = tr.querySelector('input[name*="[_key]"]');
+  if (!keyInp || keyInp.dataset.rssPreviewBound) return;
+  keyInp.dataset.rssPreviewBound = '1';
+  keyInp.addEventListener('input', function () { syncRssPreviewLink(tr); });
+  syncRssPreviewLink(tr);
+}
+
+function initRssFeedPreviews() {
+  document.querySelectorAll('table.rows[data-field="FEEDS"] tbody tr').forEach(bindRssFeedRow);
+}
+
 function addRow(btn) {
   const wrap = btn.previousElementSibling;
   const table = wrap && wrap.classList && wrap.classList.contains('rows-scroll')
@@ -2423,10 +2463,24 @@ function addRow(btn) {
     inp.name = field + '[' + idx + '][' + c.key + ']';
     td.appendChild(inp); tr.appendChild(td);
   });
+  if (field === 'FEEDS') {
+    const prevTd = document.createElement('td');
+    const prevA = document.createElement('a');
+    prevA.className = 'secondary';
+    prevA.style.cssText = 'padding:4px 10px;text-decoration:none;font-size:12px;display:none';
+    prevA.href = '#';
+    prevA.target = '_blank';
+    prevA.rel = 'noopener';
+    prevA.setAttribute('data-rss-preview', '');
+    prevA.textContent = 'Preview ↗';
+    prevTd.appendChild(prevA);
+    tr.appendChild(prevTd);
+  }
   const td = document.createElement('td');
   td.innerHTML = '<button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button>';
   tr.appendChild(td);
   table.querySelector('tbody').appendChild(tr);
+  if (field === 'FEEDS') bindRssFeedRow(tr);
   const palSel = tr.querySelector('.cal-palette-select');
   if (palSel) syncCalSwatch(palSel);
   updateCalLegendPreview();
@@ -2658,6 +2712,7 @@ function addSlideCard() {
 document.addEventListener('DOMContentLoaded', function () {
   initSlideDeck();
   initVideoPlaylist();
+  initRssFeedPreviews();
   initRotationDecks();
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
     btn.addEventListener('click', function () {

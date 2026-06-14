@@ -425,6 +425,20 @@ function rotation_page_label(string $url): string
     return $boards[$base] ?? $base;
 }
 
+/** Board URL for one RSS feed (`rss.php?feed=KEY`). */
+function rss_feed_url(string $feedKey): string
+{
+    $key = preg_replace('/[^a-z0-9_\-]/i', '', $feedKey);
+
+    return 'rss.php?feed=' . rawurlencode($key);
+}
+
+/** Admin preview URL for one RSS feed (no ticker, safe bottom inset). */
+function rss_preview_url(string $feedKey): string
+{
+    return signage_board_preview_url(rss_feed_url($feedKey));
+}
+
 /** Total rotation dwell for one RSS feed pass (per-story seconds × story count). */
 function rotation_rss_feed_dwell(array $feed): int
 {
@@ -461,8 +475,8 @@ function rotation_quick_add_items(): array
                 continue;
             }
             $items[] = [
-                'label' => 'RSS — ' . $name,
-                'url' => 'rss.php?feed=' . rawurlencode((string)$key),
+                'label' => 'RSS — ' . trim((string)($feed['name'] ?? $key)),
+                'url' => rss_feed_url((string)$key),
                 'dwell' => rotation_rss_feed_dwell($feed),
                 'group' => 'RSS feeds',
             ];
@@ -1033,7 +1047,7 @@ function rotation_sync_rss(string $screen = 'main'): array
         if (!is_array($feed)) {
             continue;
         }
-        $url = 'rss.php?feed=' . rawurlencode((string)$key);
+        $url = rss_feed_url((string)$key);
         $dwell = rotation_rss_feed_dwell($feed);
         $found = false;
         foreach ($pages as &$page) {
