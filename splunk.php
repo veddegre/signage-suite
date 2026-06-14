@@ -9,7 +9,7 @@
  * Splunk-side setup (one time):
  *   1. Create a low-privilege user for signage (can run the searches it needs,
  *      nothing else).
- *   2. Settings → Tokens → New Token for that user; paste it below.
+ *   2. Settings → Tokens → New Token for that user; paste it in admin.
  *   3. SPLUNK_BASE is the management port (8089), not Splunk Web.
  *
  * Panel types:
@@ -19,121 +19,39 @@
  * Optional per panel: 'earliest'/'latest' (Splunk time modifiers, default
  * -24h@h/now), 'unit' (suffix on singles), 'wide' => true (span 2 columns).
  *
- * The grid is 3 columns; panels flow in order. Six normal panels, or four
- * with one wide trend, fills 1080p nicely.
+ * Configure panels in admin.php → Splunk Panels (drag-and-drop cards).
  */
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/splunk_lib.php';
 
-define('SPLUNK_BASE', cfg('splunk.SPLUNK_BASE', 'https://192.168.86.30:8089'));
-define('SPLUNK_TOKEN', cfg('splunk.SPLUNK_TOKEN', 'PUT-YOUR-SPLUNK-AUTH-TOKEN-HERE'));
-define('SPLUNK_VERIFY_TLS', cfg('splunk.SPLUNK_VERIFY_TLS', false));
 define('BOARD_TITLE', cfg('splunk.BOARD_TITLE', 'Splunk'));
 define('BOARD_SUB', cfg('splunk.BOARD_SUB', 'Home SOC'));
-
-define('PANELS', cfg('splunk.PANELS', [
-    ['title' => 'Events Today', 'type' => 'single', 'field' => 'count', 'earliest' => '@d',
-     'spl' => 'index=network | stats count'],
-    ['title' => 'Blocked Today', 'type' => 'single', 'field' => 'count', 'earliest' => '@d',
-     'spl' => 'index=network action=denied | stats count'],
-    ['title' => 'Active Sources (1h)', 'type' => 'single', 'field' => 'dc', 'earliest' => '-1h',
-     'spl' => 'index=network | stats dc(src_ip) as dc'],
-    ['title' => 'Top Blocked Countries (24h)', 'type' => 'list', 'label' => 'country', 'value' => 'count',
-     'spl' => 'index=network action=denied | stats count by country | sort -count | head 6'],
-    ['title' => 'Events Over Time (24h)', 'type' => 'trend', 'value' => 'count', 'wide' => true,
-     'spl' => 'index=network | timechart span=1h count'],
-]));
-
 define('TIMEZONE', cfg('splunk.TIMEZONE', 'America/Detroit'));
-const CACHE_DIR = __DIR__ . '/cache';
-define('CACHE_TTL', cfg('splunk.CACHE_TTL', 120));
 
 date_default_timezone_set(TIMEZONE);
-$frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
-function splunk_oneshot(string $spl, string $earliest, string $latest): ?array
-{
-    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
-    $key = 'splunk_' . md5($spl . $earliest . $latest);
-    $f = CACHE_DIR . "/$key.json";
-    if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
-        $d = json_decode((string)file_get_contents($f), true);
-        if (is_array($d)) return $d;
-    }
-    $search = stripos(ltrim($spl), 'search ') === 0 || ltrim($spl)[0] === '|' ? $spl : 'search ' . $spl;
-    $ch = curl_init(rtrim(SPLUNK_BASE, '/') . '/services/search/jobs?output_mode=json');
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 25,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => http_build_query([
-            'exec_mode'     => 'oneshot',
-            'search'        => $search,
-            'earliest_time' => $earliest,
-            'latest_time'   => $latest,
-            'count'         => 0,
-        ]),
-        CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . SPLUNK_TOKEN],
-        CURLOPT_SSL_VERIFYPEER => SPLUNK_VERIFY_TLS,
-        CURLOPT_SSL_VERIFYHOST => SPLUNK_VERIFY_TLS ? 2 : 0,
-    ]);
-    $body = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    $err = curl_error($ch); curl_close($ch);
-    if ($body !== false && $code === 200) {
-        $j = json_decode($body, true);
-        if (isset($j['results']) && is_array($j['results'])) {
-            @file_put_contents($f, json_encode($j['results']), LOCK_EX);
-            return $j['results'];
-        }
-        $GLOBALS['diag'][substr(md5($spl), 0, 6)] = 'no results array in response';
-    } else {
-        $GLOBALS['diag'][substr(md5($spl), 0, 6)] = $err !== '' ? "curl: $err" : "HTTP $code";
-    }
-    if (is_file($f)) { $d = json_decode((string)file_get_contents($f), true); return is_array($d) ? $d : null; }
-    return null;
-}
-
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function fmt_num($n): string
-{
-    $n = (float)$n;
-    if ($n >= 1e6) return number_format($n / 1e6, 1) . 'M';
-    if ($n >= 1e4) return number_format($n / 1e3, 1) . 'k';
-    return number_format($n);
-}
 
-$configured = SPLUNK_TOKEN !== 'PUT-YOUR-SPLUNK-AUTH-TOKEN-HERE';
+$configured = splunk_configured();
 $panels = [];
-foreach (PANELS as $p) {
+foreach (splunk_wall_panels() as $p) {
+    $diag = null;
     $rows = $configured
-        ? splunk_oneshot($p['spl'], $p['earliest'] ?? '-24h@h', $p['latest'] ?? 'now')
+        ? splunk_oneshot(
+            (string)$p['spl'],
+            (string)($p['earliest'] ?? '-24h@h'),
+            (string)($p['latest'] ?? 'now'),
+            $diag
+        )
         : null;
+    if ($diag !== null) {
+        $GLOBALS['diag'][substr(md5((string)($p['spl'] ?? '')), 0, 6)] = $diag;
+    }
     $panels[] = $p + ['rows' => $rows];
 }
 
-/** Build an SVG area chart from timechart rows. */
-function trend_svg(array $rows, string $valueField, int $w = 1140, int $hgt = 240): string
-{
-    $pts = [];
-    foreach ($rows as $r) {
-        if (isset($r[$valueField]) && is_numeric($r[$valueField])) $pts[] = (float)$r[$valueField];
-    }
-    $n = count($pts);
-    if ($n < 2) return '<div class="nodata">not enough data</div>';
-    $max = max($pts); $max = $max > 0 ? $max : 1;
-    $coords = [];
-    foreach ($pts as $i => $v) {
-        $x = round($i / ($n - 1) * $w, 1);
-        $y = round($hgt - ($v / $max) * ($hgt - 14) - 4, 1);
-        $coords[] = "$x,$y";
-    }
-    $line = implode(' ', $coords);
-    $area = "0,$hgt " . $line . " $w,$hgt";
-    return '<svg viewBox="0 0 ' . $w . ' ' . $hgt . '" preserveAspectRatio="none">'
-         . '<polygon points="' . $area . '" fill="rgba(255,179,71,.16)"/>'
-         . '<polyline points="' . $line . '" fill="none" stroke="#ffb347" stroke-width="3" '
-         . 'stroke-linejoin="round" stroke-linecap="round"/></svg>';
-}
+$cacheTtl = splunk_cache_ttl();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -192,7 +110,7 @@ function trend_svg(array $rows, string $valueField, int $w = 1140, int $hgt = 24
     <?php if (!$configured): ?>
       <div class="panel wide"><div class="k">Setup</div>
         <div class="setupmsg">Set <code>SPLUNK_BASE</code> (management port 8089) and
-        <code>SPLUNK_TOKEN</code> at the top of this file. Create the token under
+        <code>SPLUNK_TOKEN</code> in <strong>admin.php → Splunk Panels</strong>. Create the token under
         Settings &rarr; Tokens for a low-privilege signage user.</div></div>
     <?php endif; ?>
     <?php foreach ($panels as $p): ?>
@@ -202,33 +120,33 @@ function trend_svg(array $rows, string $valueField, int $w = 1140, int $hgt = 24
         if ($rows === null): ?>
           <div class="err"><?= $configured ? 'no data — see diagnostics' : '—' ?></div>
         <?php elseif ($p['type'] === 'single'):
-            $v = $rows[0][$p['field']] ?? null; ?>
-          <div class="single"><div class="v"><?= $v !== null ? fmt_num($v) : '—'
+            $v = $rows[0][$p['field'] ?? 'count'] ?? null; ?>
+          <div class="single"><div class="v"><?= $v !== null ? splunk_fmt_num($v) : '—'
             ?><?= !empty($p['unit']) ? '<small> ' . h($p['unit']) . '</small>' : '' ?></div></div>
         <?php elseif ($p['type'] === 'list'):
-            $vals = array_map(fn($r) => (float)($r[$p['value']] ?? 0), $rows);
+            $vals = array_map(fn($r) => (float)($r[$p['value'] ?? 'count'] ?? 0), $rows);
             $maxV = max(1, $vals ? max($vals) : 1);
             foreach ($rows as $r): ?>
           <div class="lrow">
-            <span class="n"><?= h((string)($r[$p['label']] ?? '?')) ?></span>
-            <div class="track"><div class="fill" style="width:<?= (int)round((float)($r[$p['value']] ?? 0) / $maxV * 100) ?>%"></div></div>
-            <span class="c"><?= fmt_num($r[$p['value']] ?? 0) ?></span>
+            <span class="n"><?= h((string)($r[$p['label'] ?? 'label'] ?? '?')) ?></span>
+            <div class="track"><div class="fill" style="width:<?= (int)round((float)($r[$p['value'] ?? 'count'] ?? 0) / $maxV * 100) ?>%"></div></div>
+            <span class="c"><?= splunk_fmt_num($r[$p['value'] ?? 'count'] ?? 0) ?></span>
           </div>
         <?php endforeach;
               if (!$rows): ?><div class="nodata">no results</div><?php endif;
         elseif ($p['type'] === 'trend'): ?>
-          <div class="trend"><?= trend_svg($rows, $p['value']) ?></div>
+          <div class="trend"><?= splunk_trend_svg($rows, (string)($p['value'] ?? 'count')) ?></div>
         <?php endif; ?>
       </div>
     <?php endforeach; ?>
   </div>
-  <div class="stamp">Splunk REST &middot; refresh <?= CACHE_TTL ?>s<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
+  <div class="stamp">Splunk REST &middot; refresh <?= $cacheTtl ?>s<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
-  setTimeout(() => location.reload(), <?= CACHE_TTL ?> * 1000);
+  setTimeout(() => location.reload(), <?= $cacheTtl ?> * 1000);
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>
 </body>

@@ -269,9 +269,6 @@ function admin_schema(): array
             ['key' => 'SPLUNK_VERIFY_TLS', 'label' => 'Verify TLS', 'type' => 'bool', 'default' => false],
             ['key' => 'BOARD_TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'BOARD_SUB', 'label' => 'Board subtitle', 'type' => 'text'],
-            ['key' => 'PANELS', 'label' => 'Panels (JSON)', 'type' => 'json',
-             'help' => 'List of panels. Types: single (field), list (label/value), trend (value). '
-                     . 'Optional: earliest, latest, unit, wide. See README for examples.'],
             $tz, $ttl(),
         ]],
         'splunkdash' => ['title' => 'Splunk Published', 'file' => 'splunkdash.php', 'fields' => [

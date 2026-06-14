@@ -22,6 +22,7 @@ require_once __DIR__ . '/rotator_lib.php';
 require_once __DIR__ . '/video_lib.php';
 require_once __DIR__ . '/rotation_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
+require_once __DIR__ . '/splunk_lib.php';
 
 slide_background_ensure_assets();
 slide_background_ensure_photos();
@@ -140,6 +141,22 @@ if ($authed && $board === 'slides' && isset($_GET['deleted'])) {
     if ($deleted !== null) {
         $flash = 'Deleted ' . $deleted . '. Rotation updated on all displays.';
     }
+}
+
+if ($authed && $board === 'splunk' && ($_POST['action'] ?? '') === 'splunk_test_panel' && csrf_ok()) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(splunk_test_panel([
+        'title' => $_POST['title'] ?? '',
+        'type' => $_POST['type'] ?? 'single',
+        'spl' => $_POST['spl'] ?? '',
+        'field' => $_POST['field'] ?? '',
+        'label' => $_POST['label'] ?? '',
+        'value' => $_POST['value'] ?? '',
+        'unit' => $_POST['unit'] ?? '',
+        'earliest' => $_POST['earliest'] ?? '',
+        'latest' => $_POST['latest'] ?? '',
+    ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
 if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
@@ -316,6 +333,25 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             unset($conf['slides.SLIDES']);
         } else {
             $conf['slides.SLIDES'] = $outV;
+        }
+    }
+    if ($board === 'splunk') {
+        if (!empty($_POST['splunk_use_json'])) {
+            $parsed = splunk_panels_from_json_string((string)($_POST['PANELS_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Panels JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['splunk.PANELS']);
+            } else {
+                $conf['splunk.PANELS'] = $parsed;
+            }
+        } else {
+            $outV = splunk_panels_from_post($_POST['PANELS'] ?? []);
+            if ($outV === []) {
+                unset($conf['splunk.PANELS']);
+            } else {
+                $conf['splunk.PANELS'] = $outV;
+            }
         }
     }
     if ($board === 'rotation') {
@@ -773,6 +809,7 @@ $navGroups = [
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
+$splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
@@ -794,6 +831,14 @@ $slidesOrphanFiles = ($board === 'slides')
 $slidesLibrary = ($board === 'slides')
     ? slides_library_entries($rawConf['slides.SLIDES'] ?? null)
     : [];
+$splunkPanelRows = [];
+if ($board === 'splunk') {
+    if (array_key_exists('splunk.PANELS', $rawConf)) {
+        $splunkPanelRows = splunk_admin_panels(is_array($rawConf['splunk.PANELS']) ? $rawConf['splunk.PANELS'] : []);
+    } else {
+        $splunkPanelRows = splunk_admin_panels(null);
+    }
+}
 
 function admin_field(array $f, $val, string $board): void
 {
@@ -1008,6 +1053,19 @@ function admin_field(array $f, $val, string $board): void
   .video-card-grid input, .rotation-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
                             background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
   .video-card-meta, .rotation-card-meta { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:12px; font-size:13px; color:var(--mist); align-items:center; }
+  .splunk-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
+  .splunk-panel-card.is-off { opacity:.62; }
+  .splunk-panel-card-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px 14px; }
+  .splunk-panel-card-grid .span-3 { grid-column:1 / -1; }
+  .splunk-panel-card-grid textarea { width:100%; min-width:0; padding:8px 10px; font-size:13px; font-family:'IBM Plex Mono',monospace;
+    background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); min-height:72px; resize:vertical; }
+  .splunk-panel-card-grid select, .splunk-panel-card-grid input[type=text] { width:100%; min-width:0; padding:8px 10px; font-size:14px;
+    background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .splunk-panel-card-grid label.mini { display:block; font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
+  .splunk-test-result { font-size:13px; color:var(--mist); min-height:1.2em; }
+  .splunk-test-result.ok { color:#7dd3a8; }
+  .splunk-test-result.err { color:#ff9d9d; }
+  @media (max-width: 900px) { .splunk-panel-card-grid { grid-template-columns:1fr; } .splunk-panel-card-grid .span-3 { grid-column:span 1; } }
   .rotation-slides-group { background:var(--lake-night); border:1px solid var(--line); border-radius:12px; padding:0; margin:0; }
   .rotation-slides-group > summary { list-style:none; display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding:14px 16px; cursor:pointer; }
   .rotation-slides-group > summary::-webkit-details-marker { display:none; }
@@ -1873,6 +1931,111 @@ function admin_field(array $f, $val, string $board): void
             </div>
           </details>
 
+        <?php elseif ($board === 'splunk'): ?>
+          <div class="section-title">Splunk panels</div>
+          <div class="help" style="margin-bottom:12px">Drag to reorder. The wall uses a <strong>3-column grid</strong> — six normal panels, or four plus one <strong>Wide</strong> trend, fills 1080p.
+            Set connection details in <strong>Board settings</strong> below, then use <strong>Test search</strong> on each panel before saving.</div>
+
+          <div class="splunk-playlist video-playlist" id="splunkPanels">
+            <?php if ($splunkPanelRows === []): ?>
+            <div class="rotation-playlist-empty">No panels yet — add one below.</div>
+            <?php endif; ?>
+            <?php foreach ($splunkPanelRows as $spi => $row):
+              if (!is_array($row)) continue;
+              $ptype = strtolower((string)($row['type'] ?? 'single'));
+              if (!in_array($ptype, splunk_panel_type_options(), true)) $ptype = 'single';
+              $ptitle = trim((string)($row['title'] ?? 'Panel'));
+            ?>
+            <div class="video-card splunk-panel-card<?= !empty($row['off']) ? ' is-off' : '' ?>" data-splunk-panel-card>
+              <div class="video-card-head">
+                <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                <div class="video-card-title">
+                  <strong data-splunk-title-display><?= h($ptitle) ?></strong>
+                  <code><?= h(splunk_panel_type_label($ptype)) ?><?= !empty($row['wide']) ? ' · wide' : '' ?></code>
+                </div>
+                <button type="button" class="rowdel" onclick="this.closest('[data-splunk-panel-card]').remove(); reindexSplunkPanels();" title="Remove">×</button>
+              </div>
+              <div class="splunk-panel-card-grid">
+                <div>
+                  <label class="mini">Title</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][title]" value="<?= h($ptitle) ?>" placeholder="Events Today" data-splunk-title>
+                </div>
+                <div>
+                  <label class="mini">Type</label>
+                  <select name="PANELS[<?= (int)$spi ?>][type]" data-splunk-type>
+                    <?php foreach (splunk_panel_type_options() as $opt): ?>
+                    <option value="<?= h($opt) ?>" <?= $ptype === $opt ? 'selected' : '' ?>><?= h(splunk_panel_type_label($opt)) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+                <div data-splunk-field="single">
+                  <label class="mini">Unit (single)</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][unit]" value="<?= h((string)($row['unit'] ?? '')) ?>" placeholder="events">
+                </div>
+                <div class="span-3">
+                  <label class="mini">SPL</label>
+                  <textarea name="PANELS[<?= (int)$spi ?>][spl]" placeholder="index=main | stats count" data-splunk-spl><?= h((string)($row['spl'] ?? '')) ?></textarea>
+                </div>
+                <div data-splunk-field="single">
+                  <label class="mini">Value field (single)</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][field]" value="<?= h((string)($row['field'] ?? '')) ?>" placeholder="count">
+                </div>
+                <div data-splunk-field="list">
+                  <label class="mini">Label field (list)</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][label]" value="<?= h((string)($row['label'] ?? '')) ?>" placeholder="country">
+                </div>
+                <div data-splunk-field="list,trend">
+                  <label class="mini">Value field (list / trend)</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][value]" value="<?= h((string)($row['value'] ?? '')) ?>" placeholder="count">
+                </div>
+                <div>
+                  <label class="mini">Earliest</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][earliest]" value="<?= h((string)($row['earliest'] ?? '')) ?>" placeholder="-24h@h">
+                </div>
+                <div>
+                  <label class="mini">Latest</label>
+                  <input type="text" name="PANELS[<?= (int)$spi ?>][latest]" value="<?= h((string)($row['latest'] ?? '')) ?>" placeholder="now">
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
+                  <label class="check" style="margin:0"><input type="checkbox" name="PANELS[<?= (int)$spi ?>][wide]" <?= !empty($row['wide']) ? 'checked' : '' ?>> Wide (2 cols)</label>
+                  <label class="check" style="margin:0"><input type="checkbox" name="PANELS[<?= (int)$spi ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?> data-splunk-off> Off wall</label>
+                </div>
+              </div>
+              <div class="video-card-meta">
+                <div class="splunk-test-result" data-splunk-test-result></div>
+                <div class="video-card-actions">
+                  <button type="button" class="secondary" style="padding:6px 12px;font-size:13px" data-splunk-test>Test search</button>
+                </div>
+              </div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <button type="button" class="addrow" style="margin-top:12px" onclick="addSplunkPanelCard()">+ Add panel</button>
+
+          <details class="panel panel-muted" style="margin-top:22px">
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="splunk_use_json"> Replace all panels from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Same format as before: array of objects with <code>title</code>, <code>type</code>, <code>spl</code>, plus type-specific fields.</div>
+              <textarea name="PANELS_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($splunkPanelRows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px">
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $splunkBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
         <?php elseif ($board === 'slides'):
           $rotationScreens = rotation_screens();
           $slideVal = current_val($rawConf, $board, 'SLIDES');
@@ -2709,6 +2872,7 @@ function addSlideCard() {
 document.addEventListener('DOMContentLoaded', function () {
   initSlideDeck();
   initVideoPlaylist();
+  initSplunkPanels();
   initRssFeedPreviews();
   initRotationDecks();
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
@@ -3018,6 +3182,158 @@ function addVideoCard() {
   bindVideoCard(card);
   bindVideoCardDrag(card, deck);
   reindexVideoPlaylist();
+}
+
+function splunkCsrf() {
+  const el = document.querySelector('#boardform input[name=csrf]');
+  return el ? el.value : '';
+}
+
+function reindexSplunkPanels() {
+  const deck = document.getElementById('splunkPanels');
+  if (!deck) return;
+  deck.querySelectorAll('[data-splunk-panel-card]').forEach(function (card, i) {
+    card.querySelectorAll('[name^="PANELS["]').forEach(function (inp) {
+      inp.name = inp.name.replace(/PANELS\[[^\]]+\]/, 'PANELS[' + i + ']');
+    });
+  });
+  const empty = deck.querySelector('.rotation-playlist-empty');
+  if (empty) empty.style.display = deck.querySelector('[data-splunk-panel-card]') ? 'none' : '';
+}
+
+function syncSplunkPanelTypeFields(card) {
+  const type = (card.querySelector('[data-splunk-type]') || {}).value || 'single';
+  card.querySelectorAll('[data-splunk-field]').forEach(function (el) {
+    const types = (el.getAttribute('data-splunk-field') || '').split(',');
+    el.style.display = types.indexOf(type) >= 0 ? '' : 'none';
+  });
+}
+
+function syncSplunkPanelHead(card) {
+  const titleInp = card.querySelector('[data-splunk-title]');
+  const typeSel = card.querySelector('[data-splunk-type]');
+  const strong = card.querySelector('[data-splunk-title-display]');
+  const code = card.querySelector('.video-card-title code');
+  const wide = card.querySelector('[name*="[wide]"]');
+  const off = card.querySelector('[data-splunk-off]');
+  if (strong) strong.textContent = (titleInp && titleInp.value.trim()) || 'New panel';
+  if (code && typeSel) {
+    const labels = { single: 'Single stat', list: 'Bar list', trend: 'Trend chart' };
+    let t = labels[typeSel.value] || typeSel.value;
+    if (wide && wide.checked) t += ' · wide';
+    code.textContent = t;
+  }
+  card.classList.toggle('is-off', !!(off && off.checked));
+  syncSplunkPanelTypeFields(card);
+}
+
+function bindSplunkPanelCard(card) {
+  if (card.dataset.bound) return;
+  card.dataset.bound = '1';
+  ['[data-splunk-title]', '[data-splunk-type]'].forEach(function (sel) {
+    const el = card.querySelector(sel);
+    if (el) el.addEventListener('input', function () { syncSplunkPanelHead(card); });
+    if (el) el.addEventListener('change', function () { syncSplunkPanelHead(card); });
+  });
+  const wide = card.querySelector('[name*="[wide]"]');
+  const off = card.querySelector('[data-splunk-off]');
+  if (wide) wide.addEventListener('change', function () { syncSplunkPanelHead(card); });
+  if (off) off.addEventListener('change', function () { syncSplunkPanelHead(card); });
+  const testBtn = card.querySelector('[data-splunk-test]');
+  if (testBtn) testBtn.addEventListener('click', function () { testSplunkPanel(testBtn); });
+  syncSplunkPanelHead(card);
+}
+
+function bindSplunkPanelDrag(card, deck) {
+  bindPlaylistCardHandle(card, deck, '.drag-handle', reindexSplunkPanels);
+}
+
+function initSplunkPanels() {
+  const deck = document.getElementById('splunkPanels');
+  if (!deck) return;
+  bindPlaylistDeckDrag(deck, '[data-splunk-panel-card]', '.drag-handle', reindexSplunkPanels, function (card, d) {
+    bindSplunkPanelCard(card);
+    bindSplunkPanelDrag(card, d);
+  });
+}
+
+function addSplunkPanelCard() {
+  const deck = document.getElementById('splunkPanels');
+  if (!deck) return;
+  reindexSplunkPanels();
+  const idx = deck.querySelectorAll('[data-splunk-panel-card]').length;
+  const empty = deck.querySelector('.rotation-playlist-empty');
+  if (empty) empty.style.display = 'none';
+  const card = document.createElement('div');
+  card.className = 'video-card splunk-panel-card';
+  card.setAttribute('data-splunk-panel-card', '');
+  card.innerHTML =
+    '<div class="video-card-head">' +
+      '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
+      '<div class="video-card-title"><strong data-splunk-title-display>New panel</strong><code>Single stat</code></div>' +
+      '<button type="button" class="rowdel" onclick="this.closest(\'[data-splunk-panel-card]\').remove(); reindexSplunkPanels();" title="Remove">×</button>' +
+    '</div>' +
+    '<div class="splunk-panel-card-grid">' +
+      '<div><label class="mini">Title</label><input type="text" name="PANELS[' + idx + '][title]" placeholder="Events Today" data-splunk-title></div>' +
+      '<div><label class="mini">Type</label><select name="PANELS[' + idx + '][type]" data-splunk-type>' +
+        '<option value="single">Single stat</option><option value="list">Bar list</option><option value="trend">Trend chart</option>' +
+      '</select></div>' +
+      '<div data-splunk-field="single"><label class="mini">Unit (single)</label><input type="text" name="PANELS[' + idx + '][unit]" placeholder="events"></div>' +
+      '<div class="span-3"><label class="mini">SPL</label><textarea name="PANELS[' + idx + '][spl]" placeholder="index=main | stats count" data-splunk-spl></textarea></div>' +
+      '<div data-splunk-field="single"><label class="mini">Value field (single)</label><input type="text" name="PANELS[' + idx + '][field]" placeholder="count"></div>' +
+      '<div data-splunk-field="list"><label class="mini">Label field (list)</label><input type="text" name="PANELS[' + idx + '][label]" placeholder="country"></div>' +
+      '<div data-splunk-field="list,trend"><label class="mini">Value field (list / trend)</label><input type="text" name="PANELS[' + idx + '][value]" placeholder="count"></div>' +
+      '<div><label class="mini">Earliest</label><input type="text" name="PANELS[' + idx + '][earliest]" placeholder="-24h@h"></div>' +
+      '<div><label class="mini">Latest</label><input type="text" name="PANELS[' + idx + '][latest]" placeholder="now"></div>' +
+      '<div style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PANELS[' + idx + '][wide]"> Wide (2 cols)</label>' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PANELS[' + idx + '][off]" data-splunk-off> Off wall</label>' +
+      '</div>' +
+    '</div>' +
+    '<div class="video-card-meta"><div class="splunk-test-result" data-splunk-test-result></div>' +
+      '<div class="video-card-actions"><button type="button" class="secondary" style="padding:6px 12px;font-size:13px" data-splunk-test>Test search</button></div></div>';
+  deck.appendChild(card);
+  bindSplunkPanelCard(card);
+  bindSplunkPanelDrag(card, deck);
+  reindexSplunkPanels();
+}
+
+function testSplunkPanel(btn) {
+  const card = btn.closest('[data-splunk-panel-card]');
+  if (!card) return;
+  const resultEl = card.querySelector('[data-splunk-test-result]');
+  const fd = new FormData();
+  fd.append('action', 'splunk_test_panel');
+  fd.append('csrf', splunkCsrf());
+  fd.append('board', 'splunk');
+  ['title', 'type', 'spl', 'field', 'label', 'value', 'unit', 'earliest', 'latest'].forEach(function (k) {
+    const el = card.querySelector('[name*="[' + k + ']"]');
+    if (el) fd.append(k, el.value);
+  });
+  if (resultEl) {
+    resultEl.className = 'splunk-test-result';
+    resultEl.textContent = 'Testing…';
+  }
+  btn.disabled = true;
+  fetch('?board=splunk', { method: 'POST', body: fd })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!resultEl) return;
+      if (data.ok) {
+        resultEl.className = 'splunk-test-result ok';
+        resultEl.textContent = (data.rows || 0) + ' rows — ' + (data.preview || 'OK');
+      } else {
+        resultEl.className = 'splunk-test-result err';
+        resultEl.textContent = data.error || 'Search failed';
+      }
+    })
+    .catch(function () {
+      if (resultEl) {
+        resultEl.className = 'splunk-test-result err';
+        resultEl.textContent = 'Request failed';
+      }
+    })
+    .finally(function () { btn.disabled = false; });
 }
 </script>
 <?php if ($authed && $board === 'slides'): ?>
