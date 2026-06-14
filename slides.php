@@ -79,12 +79,13 @@ if (isset($_GET['slide'])) {
   html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
               font-family:'IBM Plex Sans',sans-serif; cursor:none;
               height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
-  .layer { position:absolute; inset:0; background-position:center; background-repeat:no-repeat;
+  .layer { position:absolute; inset:0; z-index:1; background-position:center; background-repeat:no-repeat;
            background-color:#000; background-size:<?= $fit === 'cover' ? 'cover' : 'contain' ?>; }
-  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:10;
+  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:20;
             display:flex; justify-content:flex-end; align-items:baseline; pointer-events:none; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--snow);
-           opacity:.88; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
+           text-shadow:0 1px 12px rgba(0,0,0,.85), 0 0 32px rgba(0,0,0,.55);
+           font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
@@ -151,15 +152,16 @@ $playlist = array_map(fn($s) => [
   html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
               font-family:'IBM Plex Sans',sans-serif; cursor:none;
               height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
-  .layer { position:absolute; inset:0; background-position:center; background-repeat:no-repeat;
+  .layer { position:absolute; inset:0; z-index:1; background-position:center; background-repeat:no-repeat;
            background-color:#000; opacity:0; transition:opacity 1.4s ease;
            background-size:<?= FIT === 'cover' ? 'cover' : 'contain' ?>; }
   .layer.show { opacity:1; }
   @media (prefers-reduced-motion: reduce) { .layer { transition:none; } }
-  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:10;
+  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:20;
             display:flex; justify-content:flex-end; align-items:baseline; pointer-events:none; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--snow);
-           opacity:.88; text-shadow:0 1px 12px rgba(0,0,0,.85); font-variant-numeric:tabular-nums; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
+           text-shadow:0 1px 12px rgba(0,0,0,.85), 0 0 32px rgba(0,0,0,.55);
+           font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
