@@ -39,7 +39,9 @@ function web_sites_config(?array $rawConf = null): array
         if (!is_array($row)) {
             continue;
         }
-        $key = web_normalize_key(is_string($key) ? $key : (string)($row['_key'] ?? ''));
+        $rawKey = is_string($key) ? $key : (string)$key;
+        $rowKey = trim((string)($row['_key'] ?? ''));
+        $key = web_normalize_key($rowKey !== '' ? $rowKey : $rawKey);
         if ($key === '') {
             continue;
         }
@@ -76,7 +78,7 @@ function web_resolve_site(?string $siteKey = null): array
 
     $key = web_normalize_key($siteKey ?? '');
     if ($key === '' || !isset($sites[$key])) {
-        $key = (string)(array_key_first($sites) ?: 'main');
+        $key = (string)(array_key_first($sites) ?? 'main');
     }
     $site = $sites[$key];
     $title = trim((string)($site['title'] ?? ''));
@@ -106,7 +108,7 @@ function web_preview_url(?string $key = null): string
 {
     $sites = web_sites_config();
     if ($key === null || $key === '') {
-        $key = (string)(array_key_first($sites) ?: 'main');
+        $key = (string)(array_key_first($sites) ?? 'main');
     }
 
     return signage_board_preview_url(web_page_url($key));
