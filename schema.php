@@ -282,6 +282,17 @@ function admin_schema(): array
             ['key' => 'DEFAULT_RELOAD', 'label' => 'Default iframe reload (s)', 'type' => 'number', 'help' => '0 disables'],
             $tz,
         ]],
+        'web' => ['title' => 'Websites', 'file' => 'web.php', 'fields' => [
+            ['key' => 'SITES', 'label' => 'Sites', 'type' => 'rows', 'keyed' => true,
+             'columns' => [
+                 ['key' => '_key', 'label' => 'Key', 'help' => 'used in ?d='],
+                 ['key' => 'title', 'label' => 'Title'],
+                 ['key' => 'url', 'label' => 'URL', 'wide' => true, 'help' => 'https://… — must allow iframe embed'],
+                 ['key' => 'reload', 'label' => 'Reload (s)', 'cast' => 'int', 'help' => '0 = no iframe refresh backstop'],
+             ]],
+            ['key' => 'DEFAULT_RELOAD', 'label' => 'Default reload (s)', 'type' => 'number', 'help' => '0 disables; used when a site leaves reload blank'],
+            $tz,
+        ]],
         'traffic' => ['title' => 'Traffic Map', 'file' => 'traffic.php', 'fields' => [
             ['key' => 'TOMTOM_API_KEY', 'label' => 'TomTom API key', 'type' => 'password',
              'help' => 'Enable Traffic Flow API on the key; no domain whitelist (server-side tiles)'],

@@ -401,6 +401,13 @@ function rotation_page_label(string $url): string
         return 'Splunk — ' . splunk_page_label($key);
     }
 
+    if (preg_match('/^web\.php(?:\?d=([^&]+))?/', $url, $m)) {
+        require_once __DIR__ . '/web_lib.php';
+        $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(web_sites_config()) ?: 'main');
+
+        return 'Web — ' . web_site_label($key);
+    }
+
     require_once __DIR__ . '/slides_lib.php';
     $slideFile = slide_rotation_parse_file($url);
     if ($slideFile !== null) {
@@ -426,6 +433,7 @@ function rotation_page_label(string $url): string
         'video.php' => 'Video board',
         'splunk.php' => 'Splunk panels',
         'splunkdash.php' => 'Splunk dashboard',
+        'web.php' => 'Website',
     ];
 
     $base = strtok($url, '?') ?: $url;
@@ -530,6 +538,20 @@ function rotation_quick_add_items(): array
         $items[] = [
             'label' => 'Splunk — ' . $title,
             'url' => splunk_page_url((string)$key),
+            'dwell' => 60,
+            'group' => 'Dashboards',
+        ];
+    }
+
+    require_once __DIR__ . '/web_lib.php';
+    foreach (web_sites_config() as $key => $site) {
+        if (!is_array($site)) {
+            continue;
+        }
+        $title = trim((string)($site['title'] ?? $key));
+        $items[] = [
+            'label' => 'Web — ' . $title,
+            'url' => web_page_url((string)$key),
             'dwell' => 60,
             'group' => 'Dashboards',
         ];

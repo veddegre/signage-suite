@@ -808,7 +808,7 @@ $navGroups = [
     'Weather & home'  => ['index', 'lake', 'webcam', 'photo', 'air', 'sports', 'family', 'traffic'],
     'Monitoring'      => ['homelab', 'signaltrace'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
-    'Dashboards'      => ['grafana', 'splunk', 'splunkdash'],
+    'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
 $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
@@ -2283,13 +2283,18 @@ function rotationLabelFromUrl(url) {
     const m = url.match(/[?&]d=([^&]+)/);
     return 'Splunk — ' + decodeURIComponent((m && m[1]) || 'main');
   }
+  if (/^web\.php/.test(url)) {
+    const m = url.match(/[?&]d=([^&]+)/);
+    return 'Web — ' + decodeURIComponent((m && m[1]) || 'main');
+  }
   const slideMatch = url.match(/(?:^|\?|&)slide=([^&]+)/);
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'photo.php': 'Photo conditions',
     'family.php': 'Family calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
-    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard'
+    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
+    'web.php': 'Website'
   };
   const base = url.split('?')[0];
   return boards[base] || base;
