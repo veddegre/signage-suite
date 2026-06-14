@@ -402,7 +402,8 @@ function sports_board_summary(array $cards): array
         return ['Live now', implode(' · ', $live) . ' on the air', '#ff5d5d'];
     }
     if ($active !== []) {
-        return ['In season', implode(', ', $active) . ' — check matchups below', 'var(--beacon)'];
+        $names = implode(', ', $active);
+        return ['In season', $names, 'var(--beacon)'];
     }
     return ['Off season', 'All four teams between seasons — records shown where available', 'var(--mist)'];
 }
