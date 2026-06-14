@@ -115,6 +115,50 @@ function slide_save_upload(array $file, ?string $dir = null): array
     return ['ok' => true, 'name' => $name];
 }
 
+/**
+ * Replace an existing slide file in place (keeps filename, deck, and rotation URLs).
+ * @return array{ok:bool,file?:string,error?:string}
+ */
+function slide_replace_upload(string $file, array $upload, ?string $dir = null): array
+{
+    $dir = $dir ?? slides_dir();
+    $safe = slide_safe_filename($file);
+    if ($safe === null) {
+        return ['ok' => false, 'error' => 'Invalid filename.'];
+    }
+    $path = $dir . '/' . $safe;
+    if (!is_file($path)) {
+        return ['ok' => false, 'error' => 'Slide file not found.'];
+    }
+
+    $max = slide_upload_max_bytes();
+    $err = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($err !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'error' => slide_upload_error_message($err)];
+    }
+    if (($upload['size'] ?? 0) > $max) {
+        return ['ok' => false, 'error' => 'Image must be under ' . slide_upload_max_label() . '.'];
+    }
+    $tmp = (string)($upload['tmp_name'] ?? '');
+    $orig = (string)($upload['name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) {
+        return ['ok' => false, 'error' => 'Upload did not arrive — try again.'];
+    }
+    if (slide_upload_extension($tmp, $orig) === null) {
+        return ['ok' => false, 'error' => 'Only JPG, PNG, or WebP images are allowed.'];
+    }
+
+    $data = @file_get_contents($tmp);
+    if ($data === false || $data === '') {
+        return ['ok' => false, 'error' => 'Could not read uploaded image.'];
+    }
+    if (@file_put_contents($path, $data) === false) {
+        return ['ok' => false, 'error' => 'Could not replace ' . $safe . ' — check permissions.'];
+    }
+
+    return ['ok' => true, 'file' => $safe];
+}
+
 /** List image filenames present in the slide directory. */
 function slides_list_files(?string $dir = null): array
 {
@@ -167,7 +211,10 @@ function slide_thumb_url(string $file): ?string
     if ($safe === null || !is_file(slides_dir() . '/' . $safe)) {
         return null;
     }
-    return 'slides.php?img=' . rawurlencode($safe);
+    $path = slides_dir() . '/' . $safe;
+    $mtime = @filemtime($path);
+
+    return 'slides.php?img=' . rawurlencode($safe) . ($mtime ? '&v=' . $mtime : '');
 }
 
 /** Single-slide preview URL (admin / library — shows file even if not on deck). */

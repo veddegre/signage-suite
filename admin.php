@@ -144,6 +144,14 @@ if ($authed && $board === 'slides' && isset($_GET['deleted'])) {
     }
 }
 
+if ($authed && $board === 'slides' && isset($_GET['replaced'])) {
+    $replaced = slide_safe_filename((string)$_GET['replaced']);
+    if ($replaced !== null) {
+        $flash = 'Replaced ' . $replaced . '. Schedule and rotation URLs are unchanged.';
+        $flashOk = true;
+    }
+}
+
 if ($authed && $board === 'splunk' && ($_POST['action'] ?? '') === 'splunk_test_panel' && csrf_ok()) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(splunk_test_panel([
@@ -541,6 +549,24 @@ if ($authed && $board === 'slides') {
                 exit;
             }
             $flash = (string)($result['error'] ?? 'Could not delete slide.');
+            $flashOk = false;
+        }
+    } elseif ($slideAction === 'replace_slide') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } elseif (!isset($_FILES['slide'])) {
+            $flash = 'Upload did not arrive — the file may exceed PHP post_max_size ('
+                . ini_get('post_max_size') . '). Slides allow up to ' . slide_upload_max_label()
+                . '; raise post_max_size and upload_max_filesize on the server.';
+            $flashOk = false;
+        } else {
+            $result = slide_replace_upload((string)($_POST['file'] ?? ''), $_FILES['slide']);
+            if (!empty($result['ok'])) {
+                header('Location: ?board=slides&replaced=' . rawurlencode((string)$result['file']));
+                exit;
+            }
+            $flash = (string)($result['error'] ?? 'Could not replace slide.');
             $flashOk = false;
         }
     } elseif ($slideAction === 'create_slide') {
@@ -1572,6 +1598,13 @@ function admin_field(array $f, $val, string $board): void
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="file" id="slideAddFile" value="">
       </form>
+      <form id="slideReplaceForm" method="post" enctype="multipart/form-data" action="?board=slides" hidden>
+        <input type="hidden" name="action" value="replace_slide">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="slideReplaceFile" value="">
+        <input type="file" name="slide" id="slideReplaceUpload" accept="image/jpeg,image/png,image/webp">
+      </form>
       <?php endif; ?>
 
       <form method="post" id="boardform" action="?board=<?= h($board) ?>">
@@ -2041,7 +2074,7 @@ function admin_field(array $f, $val, string $board): void
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
         ?>
           <div class="section-title">Slide deck</div>
-          <div class="help" style="margin-bottom:12px">These slides play on your displays (after you deploy). Drag to reorder. <strong>×</strong> removes a slide from the deck but keeps the file in the <strong>Slide library</strong> below. Use <strong>Delete file</strong> to remove it permanently. Save after changes.</div>
+          <div class="help" style="margin-bottom:12px">These slides play on your displays (after you deploy). Drag to reorder. <strong>×</strong> removes a slide from the deck but keeps the file in the <strong>Slide library</strong> below. Use <strong>Replace image</strong> to swap the file in place (schedule and rotation stay the same). Use <strong>Delete file</strong> to remove it permanently. Save after schedule changes.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule below, then Save.</div>
           <?php endif; ?>
@@ -2172,6 +2205,8 @@ function admin_field(array $f, $val, string $board): void
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
                 <?php endif; ?>
                 <?php if ($deleteFile !== null): ?>
+                <button type="button" class="secondary slide-replace-btn" style="padding:6px 12px;font-size:13px"
+                        data-replace-file="<?= h($deleteFile) ?>">Replace image</button>
                 <button type="button" class="secondary slide-delete-btn" style="padding:6px 12px;font-size:13px"
                         data-delete-file="<?= h($deleteFile) ?>">Delete file</button>
                 <?php endif; ?>
@@ -2195,7 +2230,7 @@ function admin_field(array $f, $val, string $board): void
               <span class="help" style="margin:0;font-weight:400"><?= count($slidesLibrary) ?> file<?= count($slidesLibrary) === 1 ? '' : 's' ?> on disk<?php if ($slidesOrphanFiles !== []): ?> · <?= count($slidesOrphanFiles) ?> not in deck<?php endif; ?></span>
             </summary>
             <div class="panel-body" style="padding-top:8px">
-              <div class="help" style="margin-bottom:8px">Every image in <code>slides/</code>, whether or not it is on the deck. Preview thumbnails, add removed slides back to the deck, or delete files permanently.</div>
+              <div class="help" style="margin-bottom:8px">Every image in <code>slides/</code>, whether or not it is on the deck. Preview thumbnails, replace images in place, add removed slides back to the deck, or delete files permanently.</div>
               <?php if ($slidesLibrary === []): ?>
               <div class="slide-deck-empty">No slide files yet — upload or create one in <strong>Add slides</strong> below.</div>
               <?php else: ?>
@@ -2222,6 +2257,7 @@ function admin_field(array $f, $val, string $board): void
                       <?php if ($lib['preview']): ?>
                       <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
                       <?php endif; ?>
+                      <button type="button" class="secondary slide-replace-btn" data-replace-file="<?= h($lib['file']) ?>">Replace</button>
                       <?php if (!$lib['in_deck']): ?>
                       <button type="button" class="secondary slide-add-btn" data-add-file="<?= h($lib['file']) ?>">Add to deck</button>
                       <?php endif; ?>
@@ -2884,11 +2920,34 @@ function submitSlideAddToDeck(file) {
   form.submit();
 }
 
+function submitSlideReplace(file) {
+  if (!file) return;
+  const form = document.getElementById('slideReplaceForm');
+  const fileInput = document.getElementById('slideReplaceFile');
+  const uploadInput = document.getElementById('slideReplaceUpload');
+  if (!form || !fileInput || !uploadInput) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  fileInput.value = file;
+  uploadInput.value = '';
+  uploadInput.onchange = function () {
+    if (uploadInput.files && uploadInput.files.length) form.submit();
+  };
+  uploadInput.click();
+}
+
 document.addEventListener('click', function (e) {
   const delBtn = e.target.closest('.slide-delete-btn');
   if (delBtn) {
     e.preventDefault();
     submitSlideDelete(delBtn.getAttribute('data-delete-file') || '');
+    return;
+  }
+  const replaceBtn = e.target.closest('.slide-replace-btn');
+  if (replaceBtn) {
+    e.preventDefault();
+    submitSlideReplace(replaceBtn.getAttribute('data-replace-file') || '');
     return;
   }
   const addBtn = e.target.closest('.slide-add-btn');
