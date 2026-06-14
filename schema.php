@@ -87,6 +87,17 @@ function admin_schema(): array
             ['key' => 'NWS_UA', 'label' => 'NWS User-Agent', 'type' => 'text', 'help' => 'Include a contact email — NWS asks for it'],
             $tz, $ttl(),
         ]],
+        'webcam' => ['title' => 'Webcam', 'file' => 'webcam.php', 'fields' => [
+            ['key' => 'TITLE', 'label' => 'Overlay title', 'type' => 'text'],
+            ['key' => 'EMBED_URL', 'label' => 'Embed URL', 'type' => 'text',
+             'help' => 'iframe src URL — for Surf Grand Haven use the EarthCam share link, not surfgrandhaven.com'],
+            ['key' => 'ATTRIBUTION', 'label' => 'Attribution line', 'type' => 'text',
+             'help' => 'Small credit bottom-right; leave blank to hide'],
+            ['key' => 'SHOW_OVERLAY', 'label' => 'Show title + clock overlay', 'type' => 'bool', 'default' => true],
+            ['key' => 'RELOAD_SEC', 'label' => 'Iframe reload (seconds)', 'type' => 'number',
+             'help' => 'Backstop against stalled streams in long kiosk sessions — 0 disables (default 3600)'],
+            $tz,
+        ]],
         'photo' => ['title' => 'Photo Conditions', 'file' => 'photo.php', 'fields' => [
             ['key' => 'OWM_API_KEY', 'label' => 'OpenWeatherMap API key', 'type' => 'password'],
             ['key' => 'PLACE', 'label' => 'Place name', 'type' => 'text'],

@@ -1,6 +1,6 @@
 # Home Signage Boards
 
-Fourteen self-contained PHP pages, all 1920×1080, all sharing the same dark-navy/amber design language. Drop them in one web directory with PHP 8+ and php-curl. Each page caches API responses in `./cache/` (created automatically — make sure the web user can write there) and falls back to stale cache on API failure, so a flaky API never blanks the wall.
+Seventeen self-contained PHP pages, all 1920×1080, all sharing the same dark-navy/amber design language. Drop them in one web directory with PHP 8+ and php-curl. Each page caches API responses in `./cache/` (created automatically — make sure the web user can write there) and falls back to stale cache on API failure, so a flaky API never blanks the wall.
 
 ## Quick start (Ubuntu / Debian / Raspberry Pi OS)
 
@@ -54,10 +54,36 @@ Allendale weather, RainViewer animated radar, sunrise arc. Needs `OWM_API_KEY`.
 - Nearshore buoys are pulled for winter (~Nov–Apr); the board says so and keeps NWS alerts live.
 - Swim risk is a wave-height heuristic, escalated to HIGH automatically when a Beach Hazards Statement or Rip Current alert is active.
 
+## webcam.php — Grand Haven Beach Webcam
+Live beach view full-screen on the wall — embeds the EarthCam stream used by [Surf Grand Haven](https://surfgrandhaven.com) (presented by MACkite).
+
+- **Data:** third-party embed URL (default is the EarthCam **share** link from surfgrandhaven.com — not the WordPress page itself). No API key.
+- **Setup:** admin → **Webcam** — paste the iframe `src` URL if the default ever breaks. Optional overlay title + clock; attribution line defaults to `EarthCam · MACkite · Surf Grand Haven`.
+- **Rotation:** use a long dwell (120s+); the stream is live video. Default iframe reload every hour (`RELOAD_SEC`) clears memory if EarthCam stalls in a long kiosk session — set `0` to disable.
+- EarthCam may show its own controls/branding around the video; that is normal for share embeds.
+
 ## photo.php — Photo Conditions
 - **Data:** PHP sun math (golden/blue hour), synodic moon-phase calc with drawn SVG moon, OpenWeatherMap cloud cover at sunset (tonight + next 3 evenings), NOAA SWPC Kp index + 24h forecast.
 - **Setup:** set `OWM_API_KEY` (same key as the weather board). SWPC needs no key.
 - Verdict heuristic: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY. Aurora callout appears at Kp ≥ 6.
+
+## air.php — Air & Pollen
+US air quality and pollen on one board — AQI, PM2.5/PM10, ozone, NO₂, pollen bars, and a three-day outlook.
+
+- **Data:** [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) for US AQI and pollutants — **free, no API key.** Pollen for US locations uses the **Google Pollen API** (optional key in admin); Open-Meteo pollen is Europe-only and returns empty for most US coordinates.
+- **Setup:** admin → **Air & Pollen** — set place name, lat/lon, timezone. For US pollen, enable **Pollen API** in Google Cloud, create a key, and paste it under **Google Pollen API key** (free tier is 5,000 calls/month; default 15-minute cache keeps usage low).
+- **Layout:** large US AQI panel, pollutant stats, today's pollen (Grass / Weed / Tree UPI when Google is configured), three-day AQI outlook, and a plain-language verdict banner.
+- Without a Google key, air quality still works; the pollen section shows a short setup note instead of dashes.
+- Default cache TTL 900s (15 min). Direct view can auto-reload on an interval; in rotation the shell reloads with the playlist.
+
+## sports.php — Detroit Sports
+Lions, Tigers, Pistons, and Red Wings on a single 2×2 board with a **Next games** strip across the bottom.
+
+- **Data:** ESPN public site API (`site.api.espn.com`) — **no API key.** All fetches are server-side with file cache (default 300s; scoreboards refresh sooner).
+- **Setup:** admin → **Detroit Sports** — title/subtitle and timezone only; the four teams are built in. Add `sports.php` to rotation via the quick-add preset or playlist editor (~75s dwell is a reasonable default).
+- **Season logic:** calendar windows per league (NFL/MLB/NBA/NHL) plus nearby games — live games, finals within a week, or a game in the next ~3 weeks count as in-season. Distant openers stay **Off season** with the actual date (e.g. `Sep 13 · vs NO`), not a vague “this Sunday.” Preseason games appear automatically when ESPN lists them.
+- **Live games:** card shows score + period/inning; direct view auto-refreshes every ~2 minutes while any team is live.
+- Team logos come from ESPN; sport-icon fallbacks appear only when a logo is unavailable.
 
 ## signaltrace.php — Threat Wall
 - **Data:** your SignalTrace instance via `GET /export/stats/extended` and `GET /export/json` with a 24h `from`/`to` window.
@@ -200,7 +226,7 @@ Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's bo
 
 **Multiple displays:** define screens on the Rotation page (one row per display — e.g. `main` / Living Room, `garage` / Garage Bench); after saving, each screen gets its own page-list editor. Point each device at its URL: plain `board.php` is the `main` screen, `board.php?screen=garage` is the garage. Any number of devices can share one URL (they render independently; the shared server-side cache means ten screens cost the same API usage as one), and a screen with no pages of its own — or an unknown `?screen=` value — falls back to the main rotation, so a freshly provisioned kiosk always shows something.
 
-Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
+Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `webcam.php`, `air.php`, `sports.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
 
 ### setup-server.sh — the web host
 Onboards a fresh Ubuntu / Debian / Raspberry Pi OS machine as the signage **server** (Apache, PHP, permissions, hardening):
@@ -262,7 +288,7 @@ Capture tools like **chrome-capture-for-channels** load a webpage in headless Ch
 URL-encode the source URL, and use `...board.php%3Fscreen%3Dgarage` for a specific screen — each screen can be its own channel. If your capture app records at a non-1080p resolution, point it at `player.php` instead and it'll scale to fit. Boards are silent by design; the video board is the only source that could contribute audio.
 
 ### Still want Anthias instead?
-Every board works unchanged as an Anthias web asset (`lake.php`, `rss.php?feed=ars`, ...) — set per-asset durations there and skip board.php. The per-board ticker includes handle slide cuts seamlessly either way.
+Every board works unchanged as an Anthias web asset (`lake.php`, `air.php`, `sports.php`, `rss.php?feed=ars`, ...) — set per-asset durations there and skip board.php. The per-board ticker includes handle slide cuts seamlessly either way.
 
 ## General notes
 - Keep all files in one folder so they share `config/` and `cache/`.

@@ -329,6 +329,7 @@ function rotation_starter_pages(): array
     return [
         ['url' => 'index.php',   'dwell' => 180],
         ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
+        ['url' => 'webcam.php',  'dwell' => 120, 'from' => 7,  'to' => 22],
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
         ['url' => 'air.php',     'dwell' => 60,  'from' => 6,  'to' => 22],
         ['url' => 'sports.php',  'dwell' => 75,  'from' => 8,  'to' => 23],
@@ -404,6 +405,7 @@ function rotation_page_label(string $url): string
     static $boards = [
         'index.php' => 'Weather',
         'lake.php' => 'Lake Michigan',
+        'webcam.php' => 'Grand Haven webcam',
         'photo.php' => 'Photo conditions',
         'air.php' => 'Air & pollen',
         'sports.php' => 'Detroit sports',
@@ -441,6 +443,7 @@ function rotation_quick_add_items(): array
     $items = [
         ['label' => 'Weather', 'url' => 'index.php', 'dwell' => 180, 'group' => 'Boards'],
         ['label' => 'Lake Michigan', 'url' => 'lake.php', 'dwell' => 60, 'group' => 'Boards'],
+        ['label' => 'Grand Haven webcam', 'url' => 'webcam.php', 'dwell' => 120, 'group' => 'Boards'],
         ['label' => 'Photo conditions', 'url' => 'photo.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Air & pollen', 'url' => 'air.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Detroit sports', 'url' => 'sports.php', 'dwell' => 75, 'group' => 'Boards'],
