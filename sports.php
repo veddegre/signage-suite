@@ -52,9 +52,13 @@ $boardH = signage_frame_height();
 $heightCss = $embedded
     ? $boardH . 'px'
     : 'calc(1080px - var(--signage-ticker-inset, 0px))';
+$gap = $boardH < 1080 ? 14 : 18;
+$padY = ($boardH < 1080 ? 20 : 24) * 2;
+$stampH = 22;
 $rowHead = max(72, (int)round(88 * $boardH / 1080));
-$rowCards = max(480, (int)round(600 * $boardH / 1080));
-$rowNext = max(96, (int)round(118 * $boardH / 1080));
+$rowNext = max(128, (int)round(148 * $boardH / 1080));
+$rowCards = $boardH - $padY - ($gap * 3) - $stampH - $rowHead - $rowNext;
+$rowCards = max(400, $rowCards);
 $reloadSec = $anyLive ? max(45, (int)RELOAD_SEC) : max(300, (int)RELOAD_SEC);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -77,7 +81,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
-           display:grid; gap:<?= $boardH < 1080 ? 14 : 18 ?>px;
+           display:grid; gap:<?= $gap ?>px;
            grid-template-columns:1fr 1fr;
            grid-template-rows: <?= $rowHead ?>px <?= $rowCards ?>px <?= $rowNext ?>px auto;
            grid-template-areas:
@@ -99,18 +103,15 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           padding:<?= $boardH < 1080 ? '16px 18px' : '18px 22px' ?>; min-height:0; overflow:hidden;
           border-top:4px solid var(--accent, var(--beacon)); display:flex; flex-direction:column; }
   .card.live { border-top-color:var(--down); box-shadow:0 0 0 1px rgba(255,93,93,.25); }
-  .card-watermark { position:absolute; right:<?= $boardH < 1080 ? 12 : 16 ?>px; bottom:<?= $boardH < 1080 ? 8 : 12 ?>px;
-                    width:<?= $boardH < 1080 ? 88 : 104 ?>px; height:<?= $boardH < 1080 ? 88 : 104 ?>px;
-                    color:var(--accent, var(--beacon)); opacity:.08; pointer-events:none; }
-  .card-watermark svg { width:100%; height:100%; display:block; }
 
   .card-row { display:flex; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0; flex:1; align-items:stretch; }
   .logo-wrap { flex:0 0 <?= $boardH < 1080 ? 92 : 108 ?>px; display:flex; align-items:center; justify-content:center;
                background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px; padding:10px;
-               position:relative; overflow:hidden; }
-  .logo-wrap .sport-fallback { position:absolute; inset:8px; color:var(--mist); opacity:.35; }
-  .logo-wrap .sport-fallback svg { width:100%; height:100%; display:block; }
-  .logo-wrap img { position:relative; z-index:1; max-width:100%; max-height:100%; object-fit:contain; }
+               overflow:hidden; }
+  .logo-wrap img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .logo-wrap .sport-fallback { width:100%; height:100%; color:var(--mist); opacity:.55; display:flex;
+                               align-items:center; justify-content:center; }
+  .logo-wrap .sport-fallback svg { width:72%; height:72%; display:block; }
 
   .card-copy { flex:1; min-width:0; display:flex; flex-direction:column; min-height:0; }
   .card-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
@@ -136,24 +137,27 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                color:var(--beacon); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   .nextup { grid-area:next; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-            padding:<?= $boardH < 1080 ? '14px 18px' : '16px 22px' ?>; min-height:0; display:flex;
-            flex-direction:column; gap:10px; }
-  .nextup .k { font-size:15px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .next-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:<?= $boardH < 1080 ? 10 : 12 ?>px; flex:1; min-height:0; }
+            padding:<?= $boardH < 1080 ? '12px 16px' : '14px 20px' ?>; min-height:0; overflow:hidden;
+            display:flex; flex-direction:column; gap:8px; }
+  .nextup .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); flex-shrink:0; }
+  .next-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:<?= $boardH < 1080 ? 10 : 12 ?>px;
+               flex:1; min-height:0; align-items:stretch; }
   .next-item { background:var(--lake-night); border:1px solid var(--hairline); border-radius:10px;
-               padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; display:flex; align-items:center;
-               gap:12px; min-width:0; }
-  .next-item .mini-logo { flex:0 0 42px; width:42px; height:42px; display:flex; align-items:center;
-                          justify-content:center; position:relative; }
-  .next-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; position:relative; z-index:1; }
-  .next-item .mini-logo .sport-fallback { position:absolute; inset:2px; color:var(--mist); opacity:.45; }
+               padding:<?= $boardH < 1080 ? '8px 10px' : '10px 12px' ?>; display:flex; align-items:center;
+               gap:10px; min-width:0; min-height:0; overflow:hidden; }
+  .next-item .mini-logo { flex:0 0 38px; width:38px; height:38px; display:flex; align-items:center;
+                          justify-content:center; }
+  .next-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  .next-item .mini-logo .sport-fallback { width:100%; height:100%; color:var(--mist); opacity:.55; display:flex;
+                                          align-items:center; justify-content:center; }
   .next-item .mini-logo .sport-fallback svg { width:100%; height:100%; display:block; }
-  .next-copy { min-width:0; flex:1; }
-  .next-copy .n { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px;
+  .next-copy { min-width:0; flex:1; overflow:hidden; }
+  .next-copy .n { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 20 : 24 ?>px;
                   line-height:1.1; }
-  .next-copy .m { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); line-height:1.3;
+  .next-copy .m { font-size:<?= $boardH < 1080 ? 15 : 17 ?>px; color:var(--mist); line-height:1.25;
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .next-copy .w { font-size:<?= $boardH < 1080 ? 15 : 17 ?>px; color:var(--beacon); margin-top:2px; }
+  .next-copy .w { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; color:var(--beacon); margin-top:1px;
+                  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   .empty { grid-area:cards; display:flex; align-items:center; justify-content:center;
            background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
@@ -186,12 +190,12 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     ?>
     <article class="card <?= h($mode) ?><?= $badge === 'Off season' ? ' offseason' : '' ?>"
              style="--accent:<?= h($c['accent'] ?? '#ffb347') ?>">
-      <div class="card-watermark"><?= sports_sport_icon_svg($icon) ?></div>
       <div class="card-row">
         <div class="logo-wrap">
-          <div class="sport-fallback"><?= sports_sport_icon_svg($icon) ?></div>
           <?php if ($logo): ?>
-          <img src="<?= h($logo) ?>" alt="" loading="lazy">
+          <img src="<?= h($logo) ?>" alt="">
+          <?php else: ?>
+          <div class="sport-fallback"><?= sports_sport_icon_svg($icon) ?></div>
           <?php endif; ?>
         </div>
         <div class="card-copy">
@@ -219,9 +223,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <?php foreach ($nextStrip as $n): ?>
       <div class="next-item">
         <div class="mini-logo">
-          <div class="sport-fallback"><?= sports_sport_icon_svg((string)$n['icon']) ?></div>
           <?php if (!empty($n['logo'])): ?>
-          <img src="<?= h((string)$n['logo']) ?>" alt="" loading="lazy">
+          <img src="<?= h((string)$n['logo']) ?>" alt="">
+          <?php else: ?>
+          <div class="sport-fallback"><?= sports_sport_icon_svg((string)$n['icon']) ?></div>
           <?php endif; ?>
         </div>
         <div class="next-copy">
