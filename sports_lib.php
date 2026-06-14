@@ -371,6 +371,9 @@ function sports_next_game_strip(array $cards, DateTimeZone $tz): array
         if ($next !== null) {
             $when = sports_format_game_time((string)$next['date'], $tz);
             $text = (string)$next['matchup'];
+            if (empty($card['active_season'])) {
+                $text = 'Opener · ' . $text;
+            }
         } else {
             $when = '';
             $text = sports_league_opens_label((string)($card['league_key'] ?? ''));
@@ -468,9 +471,18 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
                 $detail = $result . ' · ' . $game['status'];
             }
         } else {
-            $mode = 'next';
-            $headline = $game['matchup'];
-            $detail = sports_format_game_time($game['date'], $tz);
+            $gameTs = strtotime($game['date']) ?: 0;
+            $daysAway = $gameTs > 0 ? (int)round(($gameTs - $now->getTimestamp()) / 86400) : 999;
+            if (!$activeSeason && $daysAway > 21) {
+                $mode = 'off';
+                $headline = $record !== '' ? $record : sports_league_opens_label($league);
+                $opener = 'Opener · ' . $game['matchup'] . ' · ' . sports_format_game_time($game['date'], $tz);
+                $detail = $standing !== '' ? $standing . ' · ' . $opener : $opener;
+            } else {
+                $mode = 'next';
+                $headline = $game['matchup'];
+                $detail = sports_format_game_time($game['date'], $tz);
+            }
         }
     } elseif ($record !== '') {
         $headline = $record;
@@ -485,8 +497,8 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
     $badge = match (true) {
         $mode === 'live' => 'Live',
         $mode === 'final' => 'Final',
-        $mode === 'next' => 'Up next',
         !$activeSeason => 'Off season',
+        $mode === 'next' => 'Up next',
         default => 'In season',
     };
 
