@@ -125,6 +125,16 @@ if ($authed && !signage_admin_idle_check()) {
 $board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));
 if ($board === '' || !isset($schema[$board])) $board = array_key_first($schema);
 
+if ($authed && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $contentLen = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($contentLen > 0 && $_POST === [] && $_FILES === []) {
+        $flash = 'Request body too large for PHP post_max_size (' . ini_get('post_max_size')
+            . '). Slides allow up to ' . slide_upload_max_label()
+            . ' — raise post_max_size and upload_max_filesize on the server.';
+        $flashOk = false;
+    }
+}
+
 if ($authed && $board === 'slides' && isset($_GET['deleted'])) {
     $deleted = slide_safe_filename((string)$_GET['deleted']);
     if ($deleted !== null) {
@@ -571,37 +581,24 @@ if ($authed && $board === 'slides') {
         }
     }
 
-    if (($_POST['action'] ?? '') === 'upload_slide' && isset($_FILES['slide'])) {
-        $f = $_FILES['slide'];
-        if (($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            $flash = 'Upload failed — try again.'; $flashOk = false;
-        } elseif (($f['size'] ?? 0) > 15 * 1024 * 1024) {
-            $flash = 'Image must be under 15 MB.'; $flashOk = false;
+    if (($_POST['action'] ?? '') === 'upload_slide') {
+        if (!isset($_FILES['slide'])) {
+            $flash = 'Upload did not arrive — the file may exceed PHP post_max_size ('
+                . ini_get('post_max_size') . '). Slides allow up to ' . slide_upload_max_label()
+                . '; raise post_max_size and upload_max_filesize on the server.';
+            $flashOk = false;
         } else {
-            $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']) ?: '';
-            $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-            if (!isset($extMap[$mime])) {
-                $flash = 'Only JPG, PNG, or WebP images are allowed.'; $flashOk = false;
+            $saved = slide_save_upload($_FILES['slide'], $slideDir);
+            if (empty($saved['ok'])) {
+                $flash = (string)($saved['error'] ?? 'Upload failed — try again.');
+                $flashOk = false;
+            } elseif (slide_append_to_deck((string)$saved['name'])) {
+                slides_deploy_to_screens(['main']);
+                cfg_reload();
+                header('Location: ?board=slides&highlight=' . rawurlencode((string)$saved['name']));
+                exit;
             } else {
-                $base = preg_replace('/[^a-zA-Z0-9._-]+/', '-', pathinfo($f['name'], PATHINFO_FILENAME));
-                $base = trim($base, '-._');
-                if ($base === '') $base = 'slide';
-                $name = $base . '.' . $extMap[$mime];
-                if (is_file($slideDir . '/' . $name)) {
-                    $name = $base . '-' . substr(bin2hex(random_bytes(3)), 0, 6) . '.' . $extMap[$mime];
-                }
-                if (@move_uploaded_file($f['tmp_name'], $slideDir . '/' . $name)) {
-                    if (slide_append_to_deck($name)) {
-                        slides_deploy_to_screens(['main']);
-                        cfg_reload();
-                        header('Location: ?board=slides&highlight=' . rawurlencode($name));
-                        exit;
-                    } else {
-                        $flash = 'File saved but could not update settings.json.'; $flashOk = false;
-                    }
-                } else {
-                    $flash = 'Could not write to ' . slides_dir() . ' — check permissions.'; $flashOk = false;
-                }
+                $flash = 'File saved but could not update settings.json.'; $flashOk = false;
             }
         }
     }
@@ -2243,7 +2240,7 @@ function admin_field(array $f, $val, string $board): void
               <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
               <button class="secondary" type="submit">Upload</button>
             </form>
-            <div class="help" style="margin-top:8px">JPG, PNG, or WebP. Uploaded files are added to the deck automatically. All files also appear in the <strong>Slide library</strong> above.</div>
+            <div class="help" style="margin-top:8px">JPG, PNG, or WebP up to <?= h(slide_upload_max_label()) ?>. Uploaded files are added to the deck automatically. All files also appear in the <strong>Slide library</strong> above. Large uploads need PHP <code>upload_max_filesize</code> and <code>post_max_size</code> at least 20M/22M — re-run <code>setup-server.sh --skip-apt</code> on the server (Apache reloads automatically).</div>
           </div>
 
           <div class="creator-box">

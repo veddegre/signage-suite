@@ -259,6 +259,8 @@ setup_apache() {
 
 # Admin video downloads (yt-dlp) can exceed the default 300 s.
 Timeout ${PHP_VIDEO_TIMEOUT_SEC}
+# Slide uploads allow up to 15 MB in admin (PHP post_max_size is set separately).
+LimitRequestBody 23068672
 
 <Directory "$WEBROOT">
     Options -Indexes +FollowSymLinks
@@ -322,6 +324,7 @@ location ${loc_path}/ {
 
 location ~ ^${loc_path}/(.+\.php)$ {
     alias $WEBROOT/\$1;
+    client_max_body_size 22m;
     include snippets/fastcgi-php.conf;
     fastcgi_pass unix:/run/php/php-fpm.sock;
     fastcgi_read_timeout ${PHP_VIDEO_TIMEOUT_SEC}s;
@@ -408,6 +411,8 @@ setup_php_timeouts() {
 max_execution_time = ${PHP_VIDEO_TIMEOUT_SEC}
 max_input_time = ${PHP_VIDEO_TIMEOUT_SEC}
 default_socket_timeout = 600
+upload_max_filesize = 20M
+post_max_size = 22M
 "
 
   for sapi in apache2 fpm; do
@@ -431,6 +436,11 @@ EOF
   if systemctl is-enabled "$svc" >/dev/null 2>&1; then
     log "Reloading $svc"
     systemctl reload "$svc" || warn "Could not reload $svc — restart it manually after setup"
+  fi
+
+  if [[ "$WEBSERVER" == "apache" ]] && systemctl is-enabled apache2 >/dev/null 2>&1; then
+    log "Reloading apache2 (mod_php picks up ini changes on reload)"
+    systemctl reload apache2 || warn "Could not reload apache2 — restart it manually after setup"
   fi
 }
 

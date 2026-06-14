@@ -26,6 +26,95 @@ function slide_safe_filename(string $name): ?string
     return $name;
 }
 
+/** Max upload size enforced by admin (bytes). */
+function slide_upload_max_bytes(): int
+{
+    return 15 * 1024 * 1024;
+}
+
+function slide_upload_max_label(): string
+{
+    return '15 MB';
+}
+
+function slide_upload_error_message(int $code): string
+{
+    return match ($code) {
+        UPLOAD_ERR_INI_SIZE => 'Image exceeds PHP upload_max_filesize ('
+            . ini_get('upload_max_filesize') . '). Slides allow up to '
+            . slide_upload_max_label() . ' — raise upload_max_filesize and post_max_size on the server.',
+        UPLOAD_ERR_FORM_SIZE => 'Image exceeds the form upload limit.',
+        UPLOAD_ERR_PARTIAL => 'Upload was interrupted — try again.',
+        UPLOAD_ERR_NO_FILE => 'No file was selected.',
+        UPLOAD_ERR_NO_TMP_DIR => 'Server temp directory missing — check PHP upload_tmp_dir.',
+        UPLOAD_ERR_CANT_WRITE => 'Server could not write the upload — check disk permissions.',
+        UPLOAD_ERR_EXTENSION => 'A PHP extension blocked the upload.',
+        default => 'Upload failed (error ' . $code . ') — try again.',
+    };
+}
+
+/** Detect slide file extension from temp file MIME, with extension fallback. */
+function slide_upload_extension(string $tmpPath, string $origName): ?string
+{
+    $extMap = [
+        'image/jpeg' => 'jpg',
+        'image/jpg' => 'jpg',
+        'image/pjpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/x-png' => 'png',
+        'image/webp' => 'webp',
+        'image/x-webp' => 'webp',
+    ];
+    if ($tmpPath !== '' && is_file($tmpPath)) {
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmpPath) ?: '';
+        if (isset($extMap[$mime])) {
+            return $extMap[$mime];
+        }
+    }
+    return match (strtolower(pathinfo($origName, PATHINFO_EXTENSION))) {
+        'jpg', 'jpeg' => 'jpg',
+        'png' => 'png',
+        'webp' => 'webp',
+        default => null,
+    };
+}
+
+/**
+ * Save one uploaded slide image into slides/.
+ * @return array{ok:bool,name?:string,error?:string}
+ */
+function slide_save_upload(array $file, ?string $dir = null): array
+{
+    $dir = $dir ?? slides_dir();
+    $max = slide_upload_max_bytes();
+    $err = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($err !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'error' => slide_upload_error_message($err)];
+    }
+    if (($file['size'] ?? 0) > $max) {
+        return ['ok' => false, 'error' => 'Image must be under ' . slide_upload_max_label() . '.'];
+    }
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        return ['ok' => false, 'error' => 'Could not create ' . $dir . ' — check permissions.'];
+    }
+    $tmp = (string)($file['tmp_name'] ?? '');
+    $orig = (string)($file['name'] ?? '');
+    $ext = slide_upload_extension($tmp, $orig);
+    if ($ext === null) {
+        return ['ok' => false, 'error' => 'Only JPG, PNG, or WebP images are allowed.'];
+    }
+    $base = preg_replace('/[^a-zA-Z0-9._-]+/', '-', pathinfo($orig, PATHINFO_FILENAME));
+    $base = trim($base, '-._');
+    if ($base === '') {
+        $base = 'slide';
+    }
+    $name = slide_unique_filename($base, $ext, $dir);
+    if (!@move_uploaded_file($tmp, $dir . '/' . $name)) {
+        return ['ok' => false, 'error' => 'Could not write to ' . $dir . ' — check permissions.'];
+    }
+    return ['ok' => true, 'name' => $name];
+}
+
 /** List image filenames present in the slide directory. */
 function slides_list_files(?string $dir = null): array
 {
