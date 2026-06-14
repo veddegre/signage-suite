@@ -9,9 +9,9 @@ function sports_default_teams(): array
 {
     return [
         ['key' => 'lions',  'name' => 'Lions',     'abbrev' => 'DET', 'sport' => 'football',   'league' => 'nfl', 'team_id' => '8', 'accent' => '#0076B6', 'label' => 'NFL', 'icon' => 'football'],
-        ['key' => 'tigers', 'name' => 'Tigers',    'abbrev' => 'DET', 'sport' => 'baseball',   'league' => 'mlb', 'team_id' => '6', 'accent' => '#0C2340', 'label' => 'MLB', 'icon' => 'baseball'],
+        ['key' => 'tigers', 'name' => 'Tigers',    'abbrev' => 'DET', 'sport' => 'baseball',   'league' => 'mlb', 'team_id' => '6', 'accent' => '#FA4616', 'label' => 'MLB', 'icon' => 'baseball'],
         ['key' => 'pistons','name' => 'Pistons',   'abbrev' => 'DET', 'sport' => 'basketball', 'league' => 'nba', 'team_id' => '8', 'accent' => '#C8102E', 'label' => 'NBA', 'icon' => 'basketball'],
-        ['key' => 'wings',  'name' => 'Red Wings', 'abbrev' => 'DET', 'sport' => 'hockey',     'league' => 'nhl', 'team_id' => '5', 'accent' => '#CE1126', 'label' => 'NHL', 'icon' => 'hockey'],
+        ['key' => 'wings',  'name' => 'Red Wings', 'abbrev' => 'DET', 'sport' => 'hockey',     'league' => 'nhl', 'team_id' => '5', 'accent' => '#FFFFFF', 'label' => 'NHL', 'icon' => 'hockey'],
     ];
 }
 
