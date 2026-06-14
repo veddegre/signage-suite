@@ -29,12 +29,25 @@ function sports_league_season_months(string $league): array
 function sports_league_opens_label(string $league): string
 {
     return match ($league) {
-        'nfl' => 'Opens August',
+        'nfl' => 'Opens late August',
         'mlb' => 'Opens late March',
         'nba' => 'Opens October',
         'nhl' => 'Opens October',
         default => 'Season TBD',
     };
+}
+
+/** Human label for a future game when the team is still off-season. */
+function sports_future_game_label(array $game): string
+{
+    $type = strtolower((string)($game['season_type'] ?? ''));
+    if (str_contains($type, 'preseason') || str_contains($type, 'pre-season')) {
+        return 'Preseason';
+    }
+    if (str_contains($type, 'regular')) {
+        return 'Season opener';
+    }
+    return 'Next game';
 }
 
 function sports_league_in_season(string $league, ?DateTimeInterface $when = null): bool
@@ -185,6 +198,7 @@ function sports_parse_event(array $event, array $teamCfg): ?array
     $home = ($us['homeAway'] ?? '') === 'home';
     $oppAbbr = (string)($them['team']['abbreviation'] ?? '?');
     $oppName = (string)($them['team']['displayName'] ?? $oppAbbr);
+    $seasonType = (string)($event['seasonType']['name'] ?? $comp['seasonType']['name'] ?? '');
 
     return [
         'state' => $state,
@@ -198,6 +212,7 @@ function sports_parse_event(array $event, array $teamCfg): ?array
         'them_score' => $themScore,
         'won' => $won,
         'short_name' => (string)($event['shortName'] ?? $event['name'] ?? ''),
+        'season_type' => $seasonType,
     ];
 }
 
@@ -372,7 +387,7 @@ function sports_next_game_strip(array $cards, DateTimeZone $tz): array
             $when = sports_format_game_time((string)$next['date'], $tz);
             $text = (string)$next['matchup'];
             if (empty($card['active_season'])) {
-                $text = 'Opener · ' . $text;
+                $text = sports_future_game_label($next) . ' · ' . $text;
             }
         } else {
             $when = '';
@@ -475,9 +490,15 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
             $daysAway = $gameTs > 0 ? (int)round(($gameTs - $now->getTimestamp()) / 86400) : 999;
             if (!$activeSeason && $daysAway > 21) {
                 $mode = 'off';
-                $headline = $record !== '' ? $record : sports_league_opens_label($league);
-                $opener = 'Opener · ' . $game['matchup'] . ' · ' . sports_format_game_time($game['date'], $tz);
-                $detail = $standing !== '' ? $standing . ' · ' . $opener : $opener;
+                $when = sports_format_game_time($game['date'], $tz);
+                $label = sports_future_game_label($game);
+                $headline = $label . ' · ' . $game['matchup'];
+                $detail = $when;
+                if ($standing !== '') {
+                    $detail .= ' · ' . $standing;
+                } elseif ($record !== '') {
+                    $detail .= ' · ' . $record;
+                }
             } else {
                 $mode = 'next';
                 $headline = $game['matchup'];
