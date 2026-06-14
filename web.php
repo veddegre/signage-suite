@@ -15,6 +15,7 @@
 require_once __DIR__ . '/web_lib.php';
 
 define('TIMEZONE', cfg('web.TIMEZONE', 'America/Detroit'));
+define('SHOW_CLOCK', cfg('web.SHOW_CLOCK', true));
 
 date_default_timezone_set(TIMEZONE);
 
@@ -32,6 +33,9 @@ $reload = $site['reload'];
 <head>
 <meta charset="UTF-8">
 <title><?= h($site['title']) ?> — Signage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600&display=swap" rel="stylesheet">
 <style>
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
@@ -39,6 +43,11 @@ $reload = $site['reload'];
   html,body { width:1920px; overflow:hidden; background:var(--lake-night); cursor:none;
               font-family:system-ui,sans-serif; <?= signage_viewport_css() ?> }
   iframe { width:1920px; height:100%; border:0; display:block; background:var(--lake-night); }
+  #clock { position:fixed; top:36px; right:48px; z-index:9000; pointer-events:none;
+           font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600; font-size:48px;
+           color:var(--snow); font-variant-numeric:tabular-nums;
+           padding:6px 18px; border-radius:10px; background:rgba(12,20,34,.78);
+           box-shadow:0 2px 24px rgba(0,0,0,.55); }
   .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:40px; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; text-align:center; }
@@ -55,8 +64,23 @@ $reload = $site['reload'];
        If the frame stays blank after that, the remote site may block iframe embedding.</p>
   </div>
 <?php else: ?>
+  <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
   <iframe id="site" src="<?= h($site['url']) ?>" allow="autoplay; fullscreen"></iframe>
   <script>
+    <?php if (SHOW_CLOCK): ?>
+    (function () {
+      const tz = <?= json_encode(TIMEZONE) ?>;
+      function tick() {
+        const el = document.getElementById('clock');
+        if (!el) return;
+        el.textContent = new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
+        });
+      }
+      tick();
+      setInterval(tick, 1000);
+    })();
+    <?php endif; ?>
     <?php if ($reload > 0): ?>
     setInterval(function () {
       const f = document.getElementById('site');

@@ -291,6 +291,8 @@ function admin_schema(): array
                  ['key' => 'reload', 'label' => 'Reload (s)', 'cast' => 'int', 'help' => '0 = no iframe refresh backstop'],
              ]],
             ['key' => 'DEFAULT_RELOAD', 'label' => 'Default reload (s)', 'type' => 'number', 'help' => '0 disables; used when a site leaves reload blank'],
+            ['key' => 'SHOW_CLOCK', 'label' => 'Show clock overlay', 'type' => 'bool', 'default' => true,
+             'help' => 'Fixed top-right over the iframe; uses the timezone below'],
             $tz,
         ]],
         'traffic' => ['title' => 'Traffic Map', 'file' => 'traffic.php', 'fields' => [
