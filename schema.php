@@ -94,6 +94,15 @@ function admin_schema(): array
             ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
             $tz, $ttl(),
         ]],
+        'air' => ['title' => 'Air & Pollen', 'file' => 'air.php', 'fields' => [
+            ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
+            ['key' => 'PLACE', 'label' => 'Place name', 'type' => 'text'],
+            ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
+            ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
+            ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
+             'help' => 'Direct view only — rotation iframe reloads with the shell'],
+            $tz, $ttl('Open-Meteo responses — default 900s (15 min)'),
+        ]],
         'signaltrace' => ['title' => 'SignalTrace', 'file' => 'signaltrace.php', 'fields' => [
             ['key' => 'ST_BASE_URL', 'label' => 'SignalTrace base URL', 'type' => 'text'],
             ['key' => 'ST_EXPORT_TOKEN', 'label' => 'Export API token', 'type' => 'password',
