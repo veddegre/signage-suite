@@ -56,6 +56,9 @@ $reloadSec = max(0, (int)RELOAD_SEC);
 <head>
 <meta charset="UTF-8">
 <title><?= h(TITLE) ?></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
@@ -66,14 +69,16 @@ $reloadSec = max(0, (int)RELOAD_SEC);
   iframe { position:absolute; inset:0; width:100%; height:100%; border:0; display:block;
             background:var(--lake-night); }
   .overlay { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 24 : 32 ?>px;
-             z-index:2; pointer-events:none; display:flex; align-items:baseline; gap:18px;
+             z-index:2; pointer-events:none;
              padding:12px 18px; border-radius:12px; background:rgba(12,20,34,.72);
              border:1px solid var(--hairline); backdrop-filter:blur(6px); }
   .overlay h1 { font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:700;
                 font-size:<?= $boardH < 1080 ? 40 : 48 ?>px; letter-spacing:.5px; }
-  #clock { font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600;
-           font-size:<?= $boardH < 1080 ? 34 : 40 ?>px; color:var(--mist);
-           font-variant-numeric:tabular-nums; margin-left:auto; }
+  #clock { position:fixed; top:36px; right:48px; z-index:9000; pointer-events:none;
+           font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600; font-size:48px;
+           color:var(--snow); font-variant-numeric:tabular-nums;
+           padding:6px 18px; border-radius:10px; background:rgba(12,20,34,.78);
+           box-shadow:0 2px 24px rgba(0,0,0,.55); }
   .stamp { position:absolute; right:<?= $boardH < 1080 ? 20 : 28 ?>px; bottom:<?= $boardH < 1080 ? 10 : 14 ?>px;
            z-index:2; text-align:right; font-size:15px; color:var(--mist); opacity:.85;
            pointer-events:none; max-width:70%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -89,9 +94,9 @@ $reloadSec = max(0, (int)RELOAD_SEC);
   <?php if ($embed): ?>
   <iframe id="cam" src="<?= h($embed) ?>" allow="autoplay; fullscreen" loading="eager"></iframe>
   <?php if (SHOW_OVERLAY): ?>
+  <div id="clock">--:--</div>
   <div class="overlay">
     <h1><?= h(TITLE) ?></h1>
-    <div id="clock">--:--</div>
   </div>
   <?php endif; ?>
   <?php if (ATTRIBUTION !== ''): ?>
@@ -113,7 +118,9 @@ $reloadSec = max(0, (int)RELOAD_SEC);
   function tick(){
     const el = document.getElementById('clock');
     if (!el) return;
-    el.textContent = new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', timeZone: tz });
+    el.textContent = new Date().toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
+    });
   }
   tick(); setInterval(tick, 1000);
 })();
