@@ -105,6 +105,14 @@ function admin_schema(): array
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
             $tz, $ttl('Open-Meteo + Google Pollen responses — default 900s (15 min)'),
         ]],
+        'sports' => ['title' => 'Detroit Sports', 'file' => 'sports.php', 'fields' => [
+            ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
+            ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text',
+             'help' => 'Shown beside the title — default lists all four teams'],
+            ['key' => 'RELOAD_SEC', 'label' => 'Live-game reload (seconds)', 'type' => 'number',
+             'help' => 'Direct view only — auto-refresh while a game is live (rotation reloads with the shell)'],
+            $tz, $ttl('ESPN responses — default 300s; live games refresh sooner'),
+        ]],
         'signaltrace' => ['title' => 'SignalTrace', 'file' => 'signaltrace.php', 'fields' => [
             ['key' => 'ST_BASE_URL', 'label' => 'SignalTrace base URL', 'type' => 'text'],
             ['key' => 'ST_EXPORT_TOKEN', 'label' => 'Export API token', 'type' => 'password',

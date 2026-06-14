@@ -770,7 +770,7 @@ if ($authed && $board === 'video') {
 
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
-    'Weather & home'  => ['index', 'lake', 'photo', 'air', 'family', 'traffic'],
+    'Weather & home'  => ['index', 'lake', 'photo', 'air', 'sports', 'family', 'traffic'],
     'Monitoring'      => ['homelab', 'signaltrace'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash'],
@@ -2735,7 +2735,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'photo.php': 'Photo conditions',
-    'family.php': 'Family calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'homelab.php': 'Homelab status',
+    'family.php': 'Family calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard'
   };
