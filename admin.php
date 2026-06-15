@@ -1011,6 +1011,14 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-meta-line .schedule-summary { color:var(--mist); }
   .slide-card-head .rowdel { width:32px; height:32px; font-size:16px; flex-shrink:0; }
   .slides-deploy-panel { margin:0 0 22px; padding:18px 20px; border:1px solid var(--line); border-radius:12px; background:var(--harbor); }
+  .slides-section-nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 18px;
+                        padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--lake-night); }
+  .slides-section-nav .nav-label { font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--mist); margin-right:4px; }
+  .slides-section-nav a { padding:6px 14px; border-radius:8px; border:1px solid var(--line); background:var(--harbor);
+                          color:var(--snow); text-decoration:none; font-size:13px; font-weight:500; }
+  .slides-section-nav a:hover { border-color:var(--beacon); color:var(--beacon); }
+  .slides-section-nav a.is-active { border-color:var(--beacon); color:var(--beacon); }
+  #slide-deck-panel, #slide-library-panel, #add-slides-panel, #slides-deploy-panel { scroll-margin-top:12px; }
   .slides-deploy-panel .deploy-stats { display:flex; flex-wrap:wrap; gap:8px 16px; margin-bottom:14px; font-size:14px; color:var(--mist); }
   .slides-deploy-panel .deploy-stats strong { color:var(--snow); }
   .slides-deploy-grid { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
@@ -1519,7 +1527,7 @@ function admin_field(array $f, $val, string $board): void
       <?php endif; ?>
 
       <?php if ($board === 'slides'): ?>
-          <div class="slides-deploy-panel">
+          <div class="slides-deploy-panel" id="slides-deploy-panel">
             <div class="section-title" style="margin-top:0">Deploy to displays</div>
             <p class="help" style="margin-bottom:12px">Each enabled slide becomes its own rotation entry with its own dwell time. Pick which displays include your deck — order and schedules are edited here; deploy pushes one playlist row per slide.</p>
             <div class="deploy-stats">
@@ -1583,9 +1591,14 @@ function admin_field(array $f, $val, string $board): void
               </div>
             </form>
           </div>
-      <?php endif; ?>
+      <nav class="slides-section-nav" aria-label="Slide page sections">
+        <span class="nav-label">Jump to</span>
+        <a href="#slides-deploy-panel" class="slides-jump">Deploy</a>
+        <a href="#slide-deck-panel" class="slides-jump">Slide deck</a>
+        <a href="#slide-library-panel" class="slides-jump">Slide library</a>
+        <a href="#add-slides-panel" class="slides-jump">Add slides</a>
+      </nav>
 
-      <?php if ($board === 'slides'): ?>
       <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
         <input type="hidden" name="action" value="delete_slide">
         <input type="hidden" name="board" value="slides">
@@ -2072,8 +2085,14 @@ function admin_field(array $f, $val, string $board): void
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = is_array($slideVal) ? $slideVal : [];
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
+          $slideDeckOpen = $slideHighlight !== null || count($slideRows) > 0;
         ?>
-          <div class="section-title">Slide deck</div>
+          <details class="panel" id="slide-deck-panel"<?= $slideDeckOpen ? ' open' : '' ?>>
+            <summary>
+              <span>Slide deck</span>
+              <span class="help" style="margin:0;font-weight:400"><?= count($slideRows) ?> slide<?= count($slideRows) === 1 ? '' : 's' ?> · drag to reorder</span>
+            </summary>
+            <div class="panel-body" style="padding-top:12px">
           <div class="help" style="margin-bottom:12px">These slides play on your displays (after you deploy). Drag to reorder. <strong>×</strong> removes a slide from the deck but keeps the file in the <strong>Slide library</strong> below. Use <strong>Replace image</strong> to swap the file in place (schedule and rotation stay the same). Use <strong>Delete file</strong> to remove it permanently. Save after schedule changes.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule below, then Save.</div>
@@ -2223,6 +2242,8 @@ function admin_field(array $f, $val, string $board): void
           </datalist>
           <?php endif; ?>
           <button type="button" class="addrow" style="margin-top:12px" onclick="addSlideCard()">+ Add blank deck row</button>
+            </div>
+          </details>
 
           <details class="panel slide-library-panel" id="slide-library-panel"<?= $slidesOrphanFiles !== [] ? ' open' : '' ?>>
             <summary>
@@ -2891,7 +2912,35 @@ function initSlideDeck() {
   });
   const hl = deck.querySelector('.slide-card-highlight');
   if (hl) {
+    const panel = document.getElementById('slide-deck-panel');
+    if (panel) panel.open = true;
     setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
+  }
+}
+
+function jumpToSlidesSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tagName === 'DETAILS') el.open = true;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('.slides-jump').forEach(function (a) {
+    a.classList.toggle('is-active', (a.getAttribute('href') || '') === '#' + id);
+  });
+}
+
+function initSlidesSectionNav() {
+  document.querySelectorAll('.slides-jump').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      const id = (a.getAttribute('href') || '').replace(/^#/, '');
+      if (!id) return;
+      e.preventDefault();
+      jumpToSlidesSection(id);
+      if (history.replaceState) history.replaceState(null, '', '#' + id);
+    });
+  });
+  const hash = (location.hash || '').replace(/^#/, '');
+  if (hash && document.getElementById(hash)) {
+    setTimeout(function () { jumpToSlidesSection(hash); }, 80);
   }
 }
 
@@ -3012,6 +3061,7 @@ function addSlideCard() {
 
 document.addEventListener('DOMContentLoaded', function () {
   initSlideDeck();
+  initSlidesSectionNav();
   initVideoPlaylist();
   initSplunkPanels();
   initRssFeedPreviews();
