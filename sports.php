@@ -18,6 +18,7 @@ const SPORTS_CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('sports.CACHE_TTL', 300));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $tz = new DateTimeZone(TIMEZONE);
 $GLOBALS['diag'] = [];
 
@@ -168,7 +169,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 <div class="board">
   <div class="head">
     <h1><?= h(TITLE) ?><span class="sub"><?= h(SUBTITLE) ?></span></h1>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <?php if ($hasData): ?>
@@ -249,6 +250,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   ]))) ?></div>
 </div>
 <script>
+<?php if ($showClock): ?>
 (function(){
   const tz = <?= json_encode(TIMEZONE) ?>;
   function tick(){
@@ -258,6 +260,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   }
   tick(); setInterval(tick, 1000);
 })();
+<?php endif; ?>
 </script>
 </body>
 </html>

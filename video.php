@@ -36,7 +36,7 @@ define('VIDEOS', video_registry());
 define('VIDEO_DIR', video_dir());
 define('MUTED', cfg('video.MUTED', true));
 define('FIT', cfg('video.FIT', 'cover'));
-define('SHOW_CLOCK', cfg('video.SHOW_CLOCK', true));
+define('SHOW_CLOCK', signage_show_clock((bool)cfg('video.SHOW_CLOCK', true)));
 define('MAX_HEIGHT', video_max_height());
 define('TIMEZONE', cfg('video.TIMEZONE', 'America/Detroit'));
 

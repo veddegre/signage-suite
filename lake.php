@@ -21,6 +21,7 @@ const CACHE_DIR    = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('lake.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
@@ -209,7 +210,7 @@ $sun = date_sun_info(time(), LAT, LON);
 <div class="board">
   <div class="head">
     <h1>Lake Michigan <span>&middot; <?= h(BEACH_NAME) ?></span></h1>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <section class="wave">
@@ -274,9 +275,11 @@ $sun = date_sun_info(time(), LAT, LON);
   <div class="stamp">NDBC <?= h(NDBC_STATION) ?> &middot; NWS API<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
+  <?php if ($showClock): ?>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
+  <?php endif; ?>
   setTimeout(() => location.reload(), 10 * 60 * 1000);
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>

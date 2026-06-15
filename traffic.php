@@ -23,6 +23,7 @@ define('TIMEZONE', cfg('traffic.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('traffic.RELOAD_SEC', 300));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 
 $configured = TOMTOM_API_KEY !== '' && TOMTOM_API_KEY !== 'PUT-YOUR-TOMTOM-KEY-HERE';
 $frameH = signage_frame_height();
@@ -104,7 +105,7 @@ $markers = [
       <h1><?= h(TITLE) ?> <span>&middot; Live</span></h1>
       <span class="sub"><?= h(SUBTITLE) ?></span>
     </div>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <?php if ($configured): ?>
@@ -140,6 +141,7 @@ $markers = [
 </div>
 
 <script>
+  <?php if ($showClock): ?>
   function tick() {
     const n = new Date();
     let h = n.getHours();
@@ -150,6 +152,7 @@ $markers = [
   }
   tick();
   setInterval(tick, 1000);
+  <?php endif; ?>
 
   <?php if ($configured): ?>
   (function () {

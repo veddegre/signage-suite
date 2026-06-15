@@ -28,6 +28,7 @@ define('CACHE_TTL', cfg('index.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
+$showClock = signage_show_clock();
 
 // ── Data layer ───────────────────────────────────────────────────────────────
 
@@ -460,7 +461,7 @@ $todayKey = date('Y-m-d');
 
   <!-- NOW -->
   <section class="now">
-    <div class="clock-line"><div id="clock">--:--<span class="ampm">--</span></div></div>
+    <?php if ($showClock): ?><div class="clock-line"><div id="clock">--:--<span class="ampm">--</span></div></div><?php endif; ?>
     <div id="dateline">&nbsp;</div>
     <div class="location"><?= h(LOCATION) ?></div>
 
@@ -533,12 +534,14 @@ $todayKey = date('Y-m-d');
   // ── Live clock ─────────────────────────────────────────────────────────
   function tick() {
     const now = new Date();
+    <?php if ($showClock): ?>
     let h = now.getHours();
     const ampm = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     const m = String(now.getMinutes()).padStart(2, '0');
     document.getElementById('clock').innerHTML =
       h + ':' + m + '<span class="ampm">' + ampm + '</span>';
+    <?php endif; ?>
     document.getElementById('dateline').textContent =
       now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   }

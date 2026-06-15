@@ -19,6 +19,7 @@ define('SHOW_EXIF', cfg('rotator.SHOW_EXIF', true));
 define('TIMEZONE', cfg('rotator.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 
 $photos = rotator_list_photos(PHOTO_DIR);
 
@@ -107,7 +108,7 @@ if (SHUFFLE) shuffle($photos);
   <div class="caption" id="caption"></div>
   <?php [$brandFirst, $brandRest] = array_pad(explode(' ', BRAND, 2), 2, ''); ?>
   <div class="brand"><b><?= htmlspecialchars($brandFirst) ?></b><?= $brandRest !== '' ? '&nbsp;' . htmlspecialchars($brandRest) : '' ?></div>
-  <div id="clock">--:--</div>
+  <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
 
   <script>
     const PHOTOS   = <?= json_encode(array_values($photos)) ?>;
@@ -148,9 +149,11 @@ if (SHUFFLE) shuffle($photos);
     showNext();
     setInterval(showNext, INTERVAL);
 
+    <?php if ($showClock): ?>
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
       document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
     tick(); setInterval(tick, 1000);
+    <?php endif; ?>
 
     // Pick up newly added photos a few times a day
     setTimeout(() => location.reload(), 6 * 60 * 60 * 1000);

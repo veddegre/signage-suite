@@ -20,6 +20,7 @@ define('RELOAD_SEC', cfg('webcam.RELOAD_SEC', 3600));
 define('TIMEZONE', cfg('webcam.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -92,7 +93,7 @@ $reloadSec = max(0, (int)RELOAD_SEC);
   <?php if ($embed): ?>
   <iframe id="cam" src="<?= h($embed) ?>" allow="autoplay; fullscreen" loading="eager"></iframe>
   <?php if (SHOW_OVERLAY): ?>
-  <div id="clock">--:--</div>
+  <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   <div class="overlay">
     <h1><?= h(TITLE) ?></h1>
   </div>
@@ -111,6 +112,7 @@ $reloadSec = max(0, (int)RELOAD_SEC);
 </div>
 <?php if ($embed && SHOW_OVERLAY): ?>
 <script>
+<?php if ($showClock): ?>
 (function(){
   const tz = <?= json_encode(TIMEZONE) ?>;
   function tick(){
@@ -122,6 +124,7 @@ $reloadSec = max(0, (int)RELOAD_SEC);
   }
   tick(); setInterval(tick, 1000);
 })();
+<?php endif; ?>
 </script>
 <?php endif; ?>
 <?php if ($embed && $reloadSec > 0): ?>

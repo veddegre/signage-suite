@@ -31,6 +31,7 @@ define('BOARD_SUB', (string)($page['sub'] ?? splunk_default_page_sub()));
 define('TIMEZONE', cfg('splunk.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $GLOBALS['diag'] = [];
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -106,7 +107,7 @@ $cacheTtl = splunk_cache_ttl();
 <div class="board">
   <div class="head">
     <h1><?= h(BOARD_TITLE) ?> <span>&middot; <?= h(BOARD_SUB) ?></span></h1>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
   <div class="grid">
     <?php if (!$configured): ?>
@@ -145,9 +146,11 @@ $cacheTtl = splunk_cache_ttl();
   <div class="stamp">Splunk REST &middot; refresh <?= $cacheTtl ?>s<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
+  <?php if ($showClock): ?>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
+  <?php endif; ?>
   setTimeout(() => location.reload(), <?= $cacheTtl ?> * 1000);
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>

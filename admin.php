@@ -21,6 +21,7 @@ require_once __DIR__ . '/slides_lib.php';
 require_once __DIR__ . '/rotator_lib.php';
 require_once __DIR__ . '/video_lib.php';
 require_once __DIR__ . '/rotation_lib.php';
+require_once __DIR__ . '/presence_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
 require_once __DIR__ . '/splunk_lib.php';
 require_once __DIR__ . '/web_lib.php';
@@ -165,6 +166,13 @@ if ($authed && $board === 'splunk' && ($_POST['action'] ?? '') === 'splunk_test_
         'earliest' => $_POST['earliest'] ?? '',
         'latest' => $_POST['latest'] ?? '',
     ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'presence') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo json_encode(signage_presence_dashboard(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -380,13 +388,28 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             if (isset($row['shuffle'])) {
                 $entry['shuffle'] = true;
             }
+            $entry['show_ticker'] = isset($row['show_ticker']);
+            $entry['show_clock'] = isset($row['show_clock']);
+            $entry['show_debug'] = isset($row['show_debug']);
+            if (isset($row['weighted'])) {
+                $entry['weighted'] = true;
+            }
+            $off = trim((string)($row['cec_off'] ?? ''));
+            $on = trim((string)($row['cec_on'] ?? ''));
+            $offH = $off !== '' ? max(0, min(23, (int)$off)) : 23;
+            $onH = $on !== '' ? max(0, min(23, (int)$on)) : 6;
+            if (isset($row['schedule_enabled'])) {
+                $entry['schedule'] = [
+                    'enabled' => true,
+                    'off' => $offH,
+                    'on' => $onH,
+                ];
+            }
             if (isset($row['cec_enabled'])) {
-                $off = trim((string)($row['cec_off'] ?? ''));
-                $on = trim((string)($row['cec_on'] ?? ''));
                 $entry['cec'] = [
                     'enabled' => true,
-                    'off' => $off !== '' ? max(0, min(23, (int)$off)) : 23,
-                    'on' => $on !== '' ? max(0, min(23, (int)$on)) : 6,
+                    'off' => $offH,
+                    'on' => $onH,
                     'device' => 0,
                 ];
             }
@@ -837,7 +860,7 @@ $navGroups = [
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
-$slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'TIMEZONE'];
+$slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
@@ -1018,6 +1041,30 @@ function admin_field(array $f, $val, string $board): void
                           color:var(--snow); text-decoration:none; font-size:13px; font-weight:500; }
   .slides-section-nav a:hover { border-color:var(--beacon); color:var(--beacon); }
   .slides-section-nav a.is-active { border-color:var(--beacon); color:var(--beacon); }
+  .admin-tabs { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 16px; }
+  .admin-tab { appearance:none; background:var(--harbor); border:1px solid var(--line); color:var(--mist);
+               padding:8px 16px; border-radius:8px; cursor:pointer; font:inherit; font-size:14px; }
+  .admin-tab:hover { border-color:var(--beacon); color:var(--snow); }
+  .admin-tab.active { border-color:var(--beacon); color:var(--beacon); font-weight:600; background:rgba(255,179,71,.08); }
+  .admin-tab .tab-count { font-size:12px; opacity:.75; margin-left:4px; }
+  .admin-tab-panel { display:none; }
+  .admin-tab-panel.active { display:block; }
+  .slides-form-footer { margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
+  .slide-card-quick { display:flex; align-items:flex-end; gap:10px; margin:0 0 10px; max-width:120px; }
+  .slide-card-edit { margin-top:0; }
+  .slide-card-edit > summary { cursor:pointer; color:var(--mist); font-size:13px; padding:6px 0; list-style:none; }
+  .slide-card-edit > summary::-webkit-details-marker { display:none; }
+  .slide-card-edit[open] > summary { color:var(--beacon); margin-bottom:8px; }
+  .rotation-global-add { background:var(--lake-night); border:1px solid var(--line); border-radius:12px;
+                         padding:14px 16px; margin:16px 0; }
+  .rotation-global-add-row { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:flex-end; margin-bottom:10px; }
+  .rotation-global-add-row label.mini { display:block; margin-bottom:4px; }
+  .rotation-global-add-row select { min-width:180px; padding:8px 10px; font-size:14px; background:var(--harbor);
+                                    border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .rotation-card-edit > summary { cursor:pointer; color:var(--mist); font-size:13px; padding:4px 0 8px; list-style:none; }
+  .rotation-card-edit > summary::-webkit-details-marker { display:none; }
+  .rotation-card-edit[open] > summary { color:var(--beacon); }
+  .rotation-card-head .rotation-card-head-meta { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin-left:auto; }
   #slide-deck-panel, #slide-library-panel, #add-slides-panel, #slides-deploy-panel { scroll-margin-top:12px; }
   .slides-deploy-panel .deploy-stats { display:flex; flex-wrap:wrap; gap:8px 16px; margin-bottom:14px; font-size:14px; color:var(--mist); }
   .slides-deploy-panel .deploy-stats strong { color:var(--snow); }
@@ -1220,6 +1267,29 @@ function admin_field(array $f, $val, string $board): void
   pre.video-log { background:#0a101b; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
                   font-family:'IBM Plex Mono',monospace; font-size:13px; line-height:1.45; color:var(--mist);
                   overflow:auto; max-height:320px; white-space:pre-wrap; margin-top:14px; }
+  .presence-panel { margin-bottom:22px; }
+  table.presence-status { width:100%; border-collapse:collapse; font-size:14px; }
+  table.presence-status th { text-align:left; font-size:12px; letter-spacing:1px; text-transform:uppercase;
+                             color:var(--mist); padding:0 10px 8px 0; font-weight:500; }
+  table.presence-status td { padding:10px 10px 10px 0; border-top:1px solid var(--line); vertical-align:top; }
+  .presence-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px;
+                  background:var(--bad); vertical-align:middle; }
+  .presence-dot.online { background:var(--ok); box-shadow:0 0 0 3px rgba(57,196,109,.18); }
+  .presence-now { color:var(--snow); font-weight:500; }
+  .presence-now.muted { color:var(--mist); font-weight:400; font-size:13px; }
+  .presence-stats { font-size:12px; color:var(--mist); font-weight:400; }
+  .presence-top { font-size:12px; color:var(--mist); margin-top:5px; line-height:1.45; }
+  .pill.play-proof { color:var(--ok); border-color:rgba(57,196,109,.35); text-transform:none; letter-spacing:0; }
+  .play-log-panel { margin-top:14px; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .play-log-panel summary { cursor:pointer; padding:10px 14px; font-size:13px; color:var(--mist);
+                             background:rgba(255,255,255,.02); list-style:none; }
+  .play-log-panel summary::-webkit-details-marker { display:none; }
+  .play-log-panel[open] summary { border-bottom:1px solid var(--line); }
+  table.play-log { width:100%; border-collapse:collapse; font-size:13px; }
+  table.play-log th { text-align:left; font-size:11px; letter-spacing:.8px; text-transform:uppercase;
+                      color:var(--mist); padding:8px 12px; font-weight:500; }
+  table.play-log td { padding:8px 12px; border-top:1px solid var(--line); vertical-align:top; color:var(--snow); }
+  table.play-log td code { font-size:12px; color:var(--mist); word-break:break-all; }
 </style>
 </head>
 <body>
@@ -1527,78 +1597,6 @@ function admin_field(array $f, $val, string $board): void
       <?php endif; ?>
 
       <?php if ($board === 'slides'): ?>
-          <div class="slides-deploy-panel" id="slides-deploy-panel">
-            <div class="section-title" style="margin-top:0">Deploy to displays</div>
-            <p class="help" style="margin-bottom:12px">Each enabled slide becomes its own rotation entry with its own dwell time. Pick which displays include your deck — order and schedules are edited here; deploy pushes one playlist row per slide.</p>
-            <div class="deploy-stats">
-              <span><strong><?= (int)$slidesDeckStats['on_disk'] ?></strong> slide<?= $slidesDeckStats['on_disk'] === 1 ? '' : 's' ?> in deck</span>
-              <span><strong><?= (int)$slidesDeckStats['active_now'] ?></strong> active now</span>
-              <span><strong><?= (int)$slidesDeckStats['playlist_entries'] ?></strong> playlist entr<?= $slidesDeckStats['playlist_entries'] === 1 ? 'y' : 'ies' ?> per display</span>
-              <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="slides.php" target="_blank" rel="noopener">Preview deck ↗</a>
-            </div>
-            <form method="post" action="?board=slides">
-              <input type="hidden" name="board" value="slides">
-              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-              <div class="slides-deploy-grid">
-                <?php foreach ($slidesDeployStatus as $screenKey => $dep):
-                  $checked = $dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0);
-                ?>
-                <div class="slides-deploy-row">
-                  <label class="check">
-                    <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $checked ? 'checked' : '' ?>>
-                    <?= h($dep['name']) ?> <code><?= h($screenKey) ?></code>
-                  </label>
-                  <div class="deploy-detail">
-                    <?php if ($dep['mirrors_main']): ?>
-                      <span class="pill">Mirrors main</span>
-                      <?php if ($dep['on_wall']): ?>
-                        on wall via main<?= $dep['wall'] ? ' · from #' . (int)$dep['wall']['position'] . ' · ' . (int)$dep['wall']['slide_count'] . ' slide' . ((int)$dep['wall']['slide_count'] === 1 ? '' : 's') : '' ?>
-                      <?php else: ?>
-                        not on wall (main has no slides)
-                      <?php endif; ?>
-                    <?php elseif ($dep['on_playlist']): ?>
-                      <span class="pill ok">Synced</span>
-                      <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?> slides
-                      <?php if ($dep['entry'] !== null && ($dep['entry']['first_index'] ?? null)): ?>
-                        · #<?= (int)$dep['entry']['first_index'] ?><?= ($dep['entry']['last_index'] ?? 0) > ($dep['entry']['first_index'] ?? 0) ? '–#' . (int)$dep['entry']['last_index'] : '' ?>
-                      <?php endif; ?>
-                      <?php if ($dep['dwell_mismatch'] > 0): ?>
-                        <span class="pill warn">Redeploy to refresh dwell</span>
-                      <?php endif; ?>
-                    <?php elseif ($dep['partial'] ?? false): ?>
-                      <span class="pill warn">Partial</span>
-                      <?= (int)($dep['sync']['synced'] ?? 0) ?>/<?= (int)$dep['expected'] ?> slides synced
-                    <?php else: ?>
-                      <span class="pill warn">Not deployed</span>
-                    <?php endif; ?>
-                  </div>
-                  <div class="deploy-actions">
-                    <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
-                       href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
-                    <?php if (($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
-                    <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
-                            name="action" value="remove_slides_rotation"
-                            onclick="this.form.remove_screen.value='<?= h($screenKey) ?>'; return confirm('Remove slides from <?= h($dep['name']) ?>?');">Remove</button>
-                    <?php endif; ?>
-                  </div>
-                </div>
-                <?php endforeach; ?>
-              </div>
-              <input type="hidden" name="remove_screen" value="">
-              <div class="slides-deploy-tools">
-                <button class="save" type="submit" name="action" value="deploy_slides">Deploy now</button>
-                <span class="help" style="margin:0">Syncs one rotation entry per slide on checked displays, with each slide's dwell seconds.</span>
-              </div>
-            </form>
-          </div>
-      <nav class="slides-section-nav" aria-label="Slide page sections">
-        <span class="nav-label">Jump to</span>
-        <a href="#slides-deploy-panel" class="slides-jump">Deploy</a>
-        <a href="#slide-deck-panel" class="slides-jump">Slide deck</a>
-        <a href="#slide-library-panel" class="slides-jump">Slide library</a>
-        <a href="#add-slides-panel" class="slides-jump">Add slides</a>
-      </nav>
-
       <form id="slideDeleteForm" method="post" action="?board=slides" hidden>
         <input type="hidden" name="action" value="delete_slide">
         <input type="hidden" name="board" value="slides">
@@ -1630,6 +1628,7 @@ function admin_field(array $f, $val, string $board): void
 
         if ($board === 'rotation'):
           $rotationScreens = rotation_screens();
+          $presenceAll = signage_presence_read_all();
           $scrVal = current_val($rawConf, $board, 'SCREENS');
           $scrRows = [];
           if (is_array($scrVal)) {
@@ -1643,14 +1642,25 @@ function admin_field(array $f, $val, string $board): void
               }
           }
         ?>
-          <div class="section-title">Displays</div>
-          <div class="help" style="margin-bottom:12px">Each screen has its own playlist below. Kiosks use <code>board.php?screen=KEY</code>
-            (plain <code>board.php</code> = main). <strong>CEC</strong> sends HDMI standby/wake on player boxes running
-            <code>setup-kiosk.sh</code> (requires TV CEC enabled). Schedule uses the rotation timezone below.</div>
+          <details class="panel" open style="margin-bottom:16px">
+            <summary>Sign status &amp; play log</summary>
+            <div class="panel-body" style="padding-top:8px">
+          <div class="help" style="margin-bottom:10px">Kiosks report while <code>board.php</code> is open (~30s). Offline = no heartbeat in <?= (int)SIGNAGE_PRESENCE_STALE_SEC ?>s.</div>
+          <div id="presencePanel" class="presence-panel">
+            <p class="help">Loading sign status…</p>
+          </div>
+          <div id="playLogPanel"></div>
+            </div>
+          </details>
+
+          <details class="panel" style="margin-bottom:16px">
+            <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
+            <div class="panel-body" style="padding-top:8px">
+          <div class="help" style="margin-bottom:12px">Per-display ticker, clock, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main).</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Shuffle</th><th>CEC</th><th>Off hr</th><th>On hr</th><th></th>
+                <th>Key</th><th>Display name</th><th>Ticker</th><th>Clock</th><th>Debug</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow): ?>
@@ -1658,11 +1668,21 @@ function admin_field(array $f, $val, string $board): void
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][_key]" value="<?= h((string)($srow['_key'] ?? '')) ?>" placeholder="garage"></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][name]" value="<?= h((string)($srow['name'] ?? '')) ?>" placeholder="Garage TV"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][show_ticker]" value="1" <?= !empty($srow['show_ticker']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][show_clock]" value="1" <?= !empty($srow['show_clock']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][show_debug]" value="1" <?= !empty($srow['show_debug']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][weighted]" value="1" <?= !empty($srow['weighted']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][shuffle]" value="1" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
-                         name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
+                         name="SCREENS[<?= (int)$sri ?>][schedule_enabled]" value="1" <?= !empty($srow['schedule_enabled']) ? 'checked' : '' ?>></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_off]" value="<?= h((string)($srow['cec_off'] ?? '23')) ?>" placeholder="23" style="width:52px"></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_on]" value="<?= h((string)($srow['cec_on'] ?? '6')) ?>" placeholder="6" style="width:52px"></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
                   <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
                 </tr>
                 <?php endforeach; ?>
@@ -1670,6 +1690,36 @@ function admin_field(array $f, $val, string $board): void
             </table>
           </div>
           <button type="button" class="addrow" onclick="addRow(this)">+ Add screen</button>
+            </div>
+          </details>
+
+          <div class="section-title">Playlists</div>
+          <div class="rotation-global-add" id="rotationGlobalAdd">
+            <div class="rotation-global-add-row">
+              <div>
+                <label class="mini" for="rotationTargetScreen">Add to display</label>
+                <select id="rotationTargetScreen">
+                  <?php foreach ($rotationScreens as $sk => $sm):
+                    $did = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', (string)$sk);
+                  ?>
+                  <option value="<?= h($did) ?>"<?= $sk === 'main' ? ' selected' : '' ?>><?= h(rotation_screen_display_name((string)$sk, $rotationScreens)) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <button type="button" class="addrow" onclick="addRotationPage(document.getElementById('rotationTargetScreen').value)">+ Page</button>
+              <button type="button" class="secondary" onclick="loadRotationStarter(document.getElementById('rotationTargetScreen').value)">Starter playlist</button>
+              <button type="button" class="secondary" id="rotationCopyMainBtn" onclick="copyRotationFromMain(document.getElementById('rotationTargetScreen').value)">Copy from main</button>
+            </div>
+            <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
+            <div class="quick-add-bar">
+              <span class="group-label"><?= h($groupName) ?></span>
+              <?php foreach ($groupItems as $qa): ?>
+              <button type="button" class="secondary quick-add-rotation" style="padding:6px 12px;font-size:13px"
+                      data-url="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>"><?= h($qa['label']) ?></button>
+              <?php endforeach; ?>
+            </div>
+            <?php endforeach; ?>
+          </div>
 
           <?php if (count($rotationScreens) > 1): ?>
           <div class="rotation-playlist-controls">
@@ -1687,6 +1737,7 @@ function admin_field(array $f, $val, string $board): void
             $effectivePages = rotation_screen_effective_pages($screenKey);
             $mirrorsMain = $pageRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
             $screenSettings = rotation_screen_settings($screenKey);
+            $screenPresence = is_array($presenceAll[$screenKey] ?? null) ? $presenceAll[$screenKey] : null;
             $pageCount = rotation_playlist_counts($pageRows)['total'];
             $slideEntryCount = rotation_playlist_counts($pageRows)['slide_entries'];
             $activeEffective = count(rotation_effective_playlist_lines(
@@ -1702,59 +1753,38 @@ function admin_field(array $f, $val, string $board): void
                     $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
                 }
             }
+            $playlistOpen = $screenKey === 'main' && $pageCount <= 6;
           ?>
-          <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $screenKey === 'main' ? ' open' : '' ?>>
+          <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $playlistOpen ? ' open' : '' ?>>
             <summary>
               <span>Playlist — <?= h($screenName) ?></span>
               <code><?= h($screenKey) ?></code>
               <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
               <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
-              <?php if ($screenSettings['cec']['enabled']): ?><span class="pill ok">CEC <?= (int)$screenSettings['cec']['off'] ?>→<?= (int)$screenSettings['cec']['on'] ?></span><?php endif; ?>
+              <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok">Weighted</span><?php endif; ?>
+              <?php if ($screenSettings['show_debug']): ?><span class="pill">Debug</span><?php endif; ?>
+              <?php if ($screenSettings['schedule']['enabled']): ?><span class="pill ok">Blank <?= (int)$screenSettings['schedule']['off'] ?>→<?= (int)$screenSettings['schedule']['on'] ?></span><?php endif; ?>
+              <?php if ($screenSettings['cec']['enabled']): ?><span class="pill">CEC</span><?php endif; ?>
               <span class="rotation-summary-actions">
                 <a class="secondary" href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener"
                    onclick="event.stopPropagation()">Preview ↗</a>
               </span>
             </summary>
             <div class="panel-body">
-          <div class="help" style="margin-bottom:8px">Drag cards by the <strong>⋮⋮</strong> handle to reorder (top = first on the wall).
-            Custom slides appear as a grouped block — edit order and dwell in <strong>Custom Slides</strong>, then deploy to sync.
-            <?php if ($screenKey !== 'main'): ?> Leave this playlist empty to mirror main.<?php endif; ?>
-            Preview opens the live rotation in a new tab — <strong>save first</strong>; wall displays pick up changes within 30 seconds.</div>
+          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Expand a card for URL, dwell, and hour windows. Save — kiosks pick up changes within ~30s.</div>
 
           <div class="rotation-screen-tools">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
-               href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview rotation ↗</a>
-            <span class="help" style="margin:0">Kiosk: <code><?= h(rotation_screen_kiosk_url($screenKey)) ?></code></span>
-            <button type="button" class="secondary" onclick="loadRotationStarter('<?= h($deckId) ?>')">Load starter playlist</button>
+               href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+            <span class="help" style="margin:0"><code><?= h(rotation_screen_kiosk_url($screenKey)) ?></code></span>
             <?php if ($screenKey !== 'main'): ?>
-            <button type="button" class="secondary" onclick="copyRotationFromMain('<?= h($deckId) ?>')">Copy from main</button>
+            <button type="button" class="secondary" onclick="document.getElementById('rotationTargetScreen').value='<?= h($deckId) ?>'; copyRotationFromMain('<?= h($deckId) ?>')">Copy from main</button>
             <?php endif; ?>
-            <button type="button" class="addrow" onclick="addRotationPage('<?= h($deckId) ?>')">+ Add page</button>
           </div>
 
-          <?php if ($effectivePages !== []): ?>
-          <div class="rotation-effective-list">
-            <?php if ($mirrorsMain): ?><div class="mirror-note">Saved playlist is empty — wall mirrors main:</div><?php else: ?>
-            <strong>On the wall now</strong> (saved playlist):
-            <?php endif; ?>
-            <ol>
-              <?php foreach (rotation_effective_playlist_lines($effectivePages) as $line): ?>
-              <li><?= h($line['label']) ?> · <?= h($line['detail']) ?></li>
-              <?php endforeach; ?>
-            </ol>
-          </div>
+          <?php if ($effectivePages !== [] && $mirrorsMain): ?>
+          <div class="rotation-effective-list mirror-note">Mirrors main — <?= (int)$activeEffective ?> page<?= $activeEffective === 1 ? '' : 's' ?> on wall</div>
           <?php endif; ?>
-
-          <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
-          <div class="quick-add-bar">
-            <span class="group-label"><?= h($groupName) ?></span>
-            <?php foreach ($groupItems as $qa): ?>
-            <button type="button" class="secondary quick-add-rotation" style="padding:6px 12px;font-size:13px"
-                    data-field="<?= h($fieldKey) ?>" data-deck="<?= h($deckId) ?>"
-                    data-url="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>"><?= h($qa['label']) ?></button>
-            <?php endforeach; ?>
-          </div>
-          <?php endforeach; ?>
 
           <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
             <?php if ($pageRows === []): ?>
@@ -1768,7 +1798,7 @@ function admin_field(array $f, $val, string $board): void
                 $slideCount = count($slideItems);
                 $legacyOnly = $slideCount === 1 && rotation_is_legacy_slides_url((string)($slideItems[0]['url'] ?? ''));
             ?>
-            <details class="rotation-slides-group" open>
+            <details class="rotation-slides-group">
               <summary>
                 <span class="drag-handle rotation-slides-group-handle" title="Drag slide block" draggable="true">⋮⋮</span>
                 <strong><?= $legacyOnly ? 'Custom slides (legacy)' : 'Custom slides (' . (int)$slideCount . ')' ?></strong>
@@ -1823,13 +1853,22 @@ function admin_field(array $f, $val, string $board): void
                       <label class="mini">From hr</label>
                       <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
                     </div>
-                    <div>
-                      <label class="mini">To hr</label>
-                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
-                    </div>
-                  </div>
-                  <div class="rotation-card-meta">
-                    <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this slide</label>
+                <div>
+                  <label class="mini">To hr</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                </div>
+                <div>
+                  <label class="mini">Weight</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="Used when Weighted is on for this display (1–20)">
+                </div>
+              </div>
+              <div class="rotation-card-meta">
+                <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this slide</label>
+                    <?php
+                    $slideProof = signage_presence_page_proof_label($screenPresence, $purl);
+                    if ($slideProof !== ''): ?>
+                      <span class="pill play-proof" title="Proof of play (kiosk reported on screen)"><?= h($slideProof) ?></span>
+                    <?php endif; ?>
                     <?php if (is_array($slideMeta)): ?>
                       <span><?= h(slide_schedule_summary($slideMeta)) ?></span>
                     <?php endif; ?>
@@ -1852,8 +1891,32 @@ function admin_field(array $f, $val, string $board): void
                   <strong data-rotation-label><?= h(rotation_page_label($purl)) ?></strong>
                   <code data-rotation-url-display><?= h($purl !== '' ? $purl : 'board URL') ?></code>
                 </div>
-                <button type="button" class="rowdel" onclick="removeRotationCard(this, '<?= h($deckId) ?>')" title="Remove">×</button>
+                <div class="rotation-card-head-meta">
+                  <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip</label>
+                  <?php
+                  $pageProof = signage_presence_page_proof_label($screenPresence, $purl);
+                  if ($pageProof !== ''): ?>
+                    <span class="pill play-proof" title="Proof of play"><?= h($pageProof) ?></span>
+                  <?php endif; ?>
+                  <?php if ($purl !== ''): ?>
+                  <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                  <?php endif; ?>
+                  <button type="button" class="rowdel" onclick="removeRotationCard(this, '<?= h($deckId) ?>')" title="Remove">×</button>
+                </div>
               </div>
+              <?php
+              $dwellShow = trim((string)($prow['dwell'] ?? ''));
+              $weightShow = trim((string)($prow['weight'] ?? ''));
+              $editSummary = 'Dwell ' . ($dwellShow !== '' ? $dwellShow : '60') . 's';
+              if ($weightShow !== '' && (int)$weightShow > 1) {
+                  $editSummary .= ' · weight ' . (int)$weightShow;
+              }
+              if (!empty($prow['from']) || !empty($prow['to'])) {
+                  $editSummary .= ' · hrs';
+              }
+              ?>
+              <details class="rotation-card-edit">
+                <summary><?= h($editSummary) ?></summary>
               <div class="rotation-card-grid">
                 <div style="grid-column:1 / -1">
                   <label class="mini">URL</label>
@@ -1872,15 +1935,12 @@ function admin_field(array $f, $val, string $board): void
                   <label class="mini">To hr</label>
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
                 </div>
-              </div>
-              <div class="rotation-card-meta">
-                <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this page</label>
-                <?php if ($purl !== ''): ?>
-                <div class="rotation-card-actions">
-                  <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                <div>
+                  <label class="mini">Weight</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="Used when Weighted is on for this display (1–20)">
                 </div>
-                <?php endif; ?>
               </div>
+              </details>
             </div>
             <?php $pri++; endforeach; ?>
           </div>
@@ -2085,21 +2145,29 @@ function admin_field(array $f, $val, string $board): void
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = is_array($slideVal) ? $slideVal : [];
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
-          $slideDeckOpen = $slideHighlight !== null || count($slideRows) > 0;
+          $slidesTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
+          if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
+              $slidesTab = 'deck';
+          }
+          if ($slideHighlight !== null) {
+              $slidesTab = 'deck';
+          }
         ?>
-          <details class="panel" id="slide-deck-panel"<?= $slideDeckOpen ? ' open' : '' ?>>
-            <summary>
-              <span>Slide deck</span>
-              <span class="help" style="margin:0;font-weight:400"><?= count($slideRows) ?> slide<?= count($slideRows) === 1 ? '' : 's' ?> · drag to reorder</span>
-            </summary>
-            <div class="panel-body" style="padding-top:12px">
-          <div class="help" style="margin-bottom:12px">These slides play on your displays (after you deploy). Drag to reorder. <strong>×</strong> removes a slide from the deck but keeps the file in the <strong>Slide library</strong> below. Use <strong>Replace image</strong> to swap the file in place (schedule and rotation stay the same). Use <strong>Delete file</strong> to remove it permanently. Save after schedule changes.</div>
+          <div class="admin-tabs" id="slidesTabs" role="tablist">
+            <button type="button" class="admin-tab<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab="deck">Deck<span class="tab-count"><?= count($slideRows) ?></span></button>
+            <button type="button" class="admin-tab<?= $slidesTab === 'library' ? ' active' : '' ?>" data-tab="library">Library<span class="tab-count"><?= count($slidesLibrary) ?></span></button>
+            <button type="button" class="admin-tab<?= $slidesTab === 'create' ? ' active' : '' ?>" data-tab="create">Add / Create</button>
+            <button type="button" class="admin-tab<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab="deploy">Deploy</button>
+          </div>
+
+          <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
+          <div class="help" style="margin-bottom:12px">Drag to reorder. Set <strong>Sec</strong> on each card; expand for schedule and display targeting. New images go on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
           <?php if ($slideHighlight !== null): ?>
-          <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule below, then Save.</div>
+          <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
           <div class="deck-list" id="slideDeck" data-field="SLIDES">
             <?php if ($slideRows === []): ?>
-            <div class="slide-deck-empty">No slides yet. Open <strong>Add slides</strong> below to upload or create one — it will appear here ready to schedule.</div>
+            <div class="slide-deck-empty">No slides yet — use <strong>Add / Create</strong> to upload or design one.</div>
             <?php endif; ?>
             <?php foreach ($slideRows as $ri => $row):
               if (!is_array($row)) continue;
@@ -2138,14 +2206,18 @@ function admin_field(array $f, $val, string $board): void
                 </div>
                 <button type="button" class="rowdel" onclick="this.closest('[data-slide-card]').remove(); reindexSlideDeck();" title="Remove from deck (file stays in library)">×</button>
               </div>
+              <div class="slide-card-quick">
+                <div>
+                  <label class="mini">Sec</label>
+                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][dwell]" value="<?= h((string)($row['dwell'] ?? '')) ?>" placeholder="12">
+                </div>
+              </div>
+              <details class="slide-card-edit">
+                <summary>Schedule &amp; options</summary>
               <div class="slide-card-grid">
                 <div class="span-2">
                   <label class="mini">Image file</label>
                   <input type="text" name="SLIDES[<?= h((string)$ri) ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="filename.png" list="slide-file-options">
-                </div>
-                <div>
-                  <label class="mini">Seconds</label>
-                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][dwell]" value="<?= h((string)($row['dwell'] ?? '')) ?>" placeholder="12">
                 </div>
                 <div class="span-3">
                   <label class="mini">Label</label>
@@ -2183,19 +2255,15 @@ function admin_field(array $f, $val, string $board): void
                   <label class="mini">Weekdays</label>
                   <input type="text" name="SLIDES[<?= h((string)$ri) ?>][weekdays]" value="<?= h((string)($row['weekdays'] ?? '')) ?>" placeholder="Mon,Wed or Saturday,Sunday">
                 </div>
-              </div>
-              <details class="slide-card-advanced">
-                <summary>Time window &amp; flags</summary>
-                <div class="slide-card-grid" style="margin-top:10px">
-                  <div>
-                    <label class="mini">Hour from</label>
-                    <input type="text" name="SLIDES[<?= h((string)$ri) ?>][hour_from]" value="<?= h((string)($row['hour_from'] ?? '')) ?>" placeholder="0-23">
-                  </div>
-                  <div>
-                    <label class="mini">Hour to</label>
-                    <input type="text" name="SLIDES[<?= h((string)$ri) ?>][hour_to]" value="<?= h((string)($row['hour_to'] ?? '')) ?>" placeholder="0-23">
-                  </div>
+                <div>
+                  <label class="mini">Hour from</label>
+                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][hour_from]" value="<?= h((string)($row['hour_from'] ?? '')) ?>" placeholder="0-23">
                 </div>
+                <div>
+                  <label class="mini">Hour to</label>
+                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][hour_to]" value="<?= h((string)($row['hour_to'] ?? '')) ?>" placeholder="0-23">
+                </div>
+              </div>
                 <div class="slide-card-flags">
                   <label><input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][priority]" <?= !empty($row['priority']) ? 'checked' : '' ?>> Priority override</label>
                   <label><input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?>> Disabled</label>
@@ -2212,7 +2280,6 @@ function admin_field(array $f, $val, string $board): void
                     </label>
                     <?php endforeach; ?>
                   </div>
-                  <span class="help" style="margin:6px 0 0">Uncheck a display to keep this slide off that screen. All checked = deploys wherever you save below. None checked = slide stays out of rotation.</span>
                 </div>
                 <?php endif; ?>
               </details>
@@ -2242,18 +2309,12 @@ function admin_field(array $f, $val, string $board): void
           </datalist>
           <?php endif; ?>
           <button type="button" class="addrow" style="margin-top:12px" onclick="addSlideCard()">+ Add blank deck row</button>
-            </div>
-          </details>
+          </div>
 
-          <details class="panel slide-library-panel" id="slide-library-panel"<?= $slidesOrphanFiles !== [] ? ' open' : '' ?>>
-            <summary>
-              <span>Slide library</span>
-              <span class="help" style="margin:0;font-weight:400"><?= count($slidesLibrary) ?> file<?= count($slidesLibrary) === 1 ? '' : 's' ?> on disk<?php if ($slidesOrphanFiles !== []): ?> · <?= count($slidesOrphanFiles) ?> not in deck<?php endif; ?></span>
-            </summary>
-            <div class="panel-body" style="padding-top:8px">
-              <div class="help" style="margin-bottom:8px">Every image in <code>slides/</code>, whether or not it is on the deck. Preview thumbnails, replace images in place, add removed slides back to the deck, or delete files permanently.</div>
+          <div class="admin-tab-panel<?= $slidesTab === 'library' ? ' active' : '' ?>" data-tab-panel="library" id="slide-library-panel">
+              <div class="help" style="margin-bottom:8px">All images in <code>slides/</code>. Add orphans back to the deck or delete files here.</div>
               <?php if ($slidesLibrary === []): ?>
-              <div class="slide-deck-empty">No slide files yet — upload or create one in <strong>Add slides</strong> below.</div>
+              <div class="slide-deck-empty">No slide files yet — use <strong>Add / Create</strong>.</div>
               <?php else: ?>
               <div class="slide-library-grid">
                 <?php foreach ($slidesLibrary as $lib): ?>
@@ -2289,12 +2350,11 @@ function admin_field(array $f, $val, string $board): void
                 <?php endforeach; ?>
               </div>
               <?php endif; ?>
-            </div>
-          </details>
+          </div>
 
-          <div class="slides-save-deploy">
+          <div class="slides-form-footer slides-save-deploy">
             <div class="deploy-checks">
-              <span class="help" style="margin:0;width:100%">When you save the deck, also update rotation on:</span>
+              <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
               <?php foreach ($slidesDeployStatus as $screenKey => $dep):
                 $saveChecked = $dep['on_playlist'] || $screenKey === 'main';
               ?>
@@ -2304,11 +2364,10 @@ function admin_field(array $f, $val, string $board): void
               </label>
               <?php endforeach; ?>
             </div>
-            <span class="help">Checked displays get one rotation entry per slide, each with that slide's dwell seconds.</span>
           </div>
 
-          <details class="panel panel-muted" style="margin-top:22px">
-            <summary>Board settings</summary>
+          <details class="panel panel-muted" style="margin-top:8px">
+            <summary>Slide board settings</summary>
             <div class="panel-body">
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
@@ -2470,9 +2529,55 @@ function admin_field(array $f, $val, string $board): void
         </div>
       </form>
       <?php if ($board === 'slides'): ?>
-      <details class="panel" id="add-slides-panel" style="margin-top:22px"<?= $slideHighlight !== null ? ' open' : '' ?>>
-        <summary>Add slides</summary>
-        <div class="panel-body">
+      <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
+            <p class="help" style="margin-bottom:12px">Push slides to rotation immediately. Or check displays in the Save bar above and click <strong>Save</strong>.</p>
+            <div class="deploy-stats">
+              <span><strong><?= (int)$slidesDeckStats['on_disk'] ?></strong> in deck</span>
+              <span><strong><?= (int)$slidesDeckStats['active_now'] ?></strong> active now</span>
+              <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="slides.php" target="_blank" rel="noopener">Preview deck ↗</a>
+            </div>
+            <form method="post" action="?board=slides" class="slides-deploy-form">
+              <input type="hidden" name="board" value="slides">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <div class="slides-deploy-grid">
+                <?php foreach ($slidesDeployStatus as $screenKey => $dep):
+                  $checked = $dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0);
+                ?>
+                <div class="slides-deploy-row">
+                  <label class="check">
+                    <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $checked ? 'checked' : '' ?>>
+                    <?= h($dep['name']) ?> <code><?= h($screenKey) ?></code>
+                  </label>
+                  <div class="deploy-detail">
+                    <?php if ($dep['mirrors_main']): ?>
+                      <span class="pill">Mirrors main</span>
+                    <?php elseif ($dep['on_playlist']): ?>
+                      <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
+                    <?php elseif ($dep['partial'] ?? false): ?>
+                      <span class="pill warn">Partial</span>
+                    <?php else: ?>
+                      <span class="pill warn">Not deployed</span>
+                    <?php endif; ?>
+                  </div>
+                  <div class="deploy-actions">
+                    <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+                       href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+                    <?php if (($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
+                    <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+                            name="action" value="remove_slides_rotation"
+                            onclick="this.form.remove_screen.value='<?= h($screenKey) ?>'; return confirm('Remove slides from <?= h($dep['name']) ?>?');">Remove</button>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+              <input type="hidden" name="remove_screen" value="">
+              <div class="slides-deploy-tools">
+                <button class="save" type="submit" name="action" value="deploy_slides">Deploy now</button>
+              </div>
+            </form>
+      </div>
+      <div class="admin-tab-panel<?= $slidesTab === 'create' ? ' active' : '' ?>" data-tab-panel="create" id="add-slides-panel" style="margin-top:0">
           <div class="upload-box">
             <h3>Upload an image</h3>
             <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=slides">
@@ -2482,12 +2587,12 @@ function admin_field(array $f, $val, string $board): void
               <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
               <button class="secondary" type="submit">Upload</button>
             </form>
-            <div class="help" style="margin-top:8px">JPG, PNG, or WebP up to <?= h(slide_upload_max_label()) ?>. Uploaded files are added to the deck automatically. All files also appear in the <strong>Slide library</strong> above. Large uploads need PHP <code>upload_max_filesize</code> and <code>post_max_size</code> at least 20M/22M — re-run <code>setup-server.sh --skip-apt</code> on the server (Apache reloads automatically).</div>
+            <div class="help" style="margin-top:8px">JPG, PNG, or WebP — added to the deck automatically. Then Save or Deploy.</div>
           </div>
 
-          <div class="creator-box">
+          <div class="creator-box" style="margin-top:22px">
             <h3>Create a text slide</h3>
-            <p class="creator-lead">Pick a template or background, add your message, and preview at full signage size. <strong>Create slide</strong> saves a PNG and adds it to the <strong>Slide deck</strong> above — set schedule there, then Save.</p>
+            <p class="creator-lead">Design a PNG slide and add it to the deck. Set schedule on the <strong>Deck</strong> tab, then Save.</p>
             <div class="creator-layout">
               <div class="creator-preview-block">
                 <div class="preview-head">
@@ -2581,14 +2686,13 @@ function admin_field(array $f, $val, string $board): void
 
                   <div class="field-block span-full creator-actions">
                     <button type="button" class="save" id="creatorSave">Create slide</button>
-                    <p class="help">Adds to the Slide deck above. Requires a title or body.</p>
+                    <p class="help">Adds to the deck. Requires a title or body — then Save or Deploy.</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </details>
+      </div>
       <?php endif; ?>
       <?php if ($board === 'video'): foreach ($videoStatuses as $st):
         if (empty($st['fetchable'])) continue;
@@ -2607,7 +2711,7 @@ function admin_field(array $f, $val, string $board): void
 </div>
 
 <script>
-const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1&safebottom=' . SIGNAGE_TICKER_H) ?>;
+const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1' . (signage_ticker_enabled() ? '&safebottom=' . SIGNAGE_TICKER_H : '')) ?>;
 
 function rssPreviewUrl(key) {
   key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
@@ -2722,6 +2826,7 @@ function addRow(btn) {
       inp.type = 'checkbox';
       inp.style.cssText = 'width:20px;height:20px;accent-color:var(--beacon);min-width:0';
       td.style.cssText = 'text-align:center;vertical-align:middle';
+      if (field === 'SCREENS' && (c.key === 'show_ticker' || c.key === 'show_clock')) inp.checked = true;
     } else if (c.select) {
       inp = document.createElement('select');
       const blank = document.createElement('option');
@@ -2912,36 +3017,30 @@ function initSlideDeck() {
   });
   const hl = deck.querySelector('.slide-card-highlight');
   if (hl) {
-    const panel = document.getElementById('slide-deck-panel');
-    if (panel) panel.open = true;
     setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
   }
 }
 
-function jumpToSlidesSection(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (el.tagName === 'DETAILS') el.open = true;
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  document.querySelectorAll('.slides-jump').forEach(function (a) {
-    a.classList.toggle('is-active', (a.getAttribute('href') || '') === '#' + id);
+function initAdminTabs(tabRootId, boardName) {
+  const root = document.getElementById(tabRootId);
+  if (!root) return;
+  const tabs = root.querySelectorAll('.admin-tab[data-tab]');
+  const panels = document.querySelectorAll('.admin-tab-panel[data-tab-panel]');
+  function show(id) {
+    tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === id); });
+    panels.forEach(function (p) { p.classList.toggle('active', p.dataset.tabPanel === id); });
+    const url = new URL(location.href);
+    url.searchParams.set('board', boardName);
+    url.searchParams.set('tab', id);
+    if (history.replaceState) history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { show(t.dataset.tab); });
   });
 }
 
 function initSlidesSectionNav() {
-  document.querySelectorAll('.slides-jump').forEach(function (a) {
-    a.addEventListener('click', function (e) {
-      const id = (a.getAttribute('href') || '').replace(/^#/, '');
-      if (!id) return;
-      e.preventDefault();
-      jumpToSlidesSection(id);
-      if (history.replaceState) history.replaceState(null, '', '#' + id);
-    });
-  });
-  const hash = (location.hash || '').replace(/^#/, '');
-  if (hash && document.getElementById(hash)) {
-    setTimeout(function () { jumpToSlidesSection(hash); }, 80);
-  }
+  initAdminTabs('slidesTabs', 'slides');
 }
 
 function submitSlideDelete(file) {
@@ -3040,13 +3139,13 @@ function addSlideCard() {
       '<div class="slide-card-title"><strong>New slide</strong><span class="slide-card-meta-line">' +
       '<span class="schedule-summary" data-schedule-summary>Always</span></span></div>' +
       '<button type="button" class="rowdel" onclick="this.closest(\'[data-slide-card]\').remove(); reindexSlideDeck();" title="Remove">×</button></div>' +
-      '<div class="slide-card-grid">' +
+      '<div class="slide-card-quick"><div><label class="mini">Sec</label><input type="text" name="SLIDES[' + idx + '][dwell]" placeholder="12"></div></div>' +
+      '<details class="slide-card-edit"><summary>Schedule &amp; options</summary><div class="slide-card-grid">' +
       '<div class="span-2"><label class="mini">Image file</label><input type="text" name="SLIDES[' + idx + '][file]" placeholder="filename.png"></div>' +
-      '<div><label class="mini">Seconds</label><input type="text" name="SLIDES[' + idx + '][dwell]" placeholder="12"></div>' +
       '<div class="span-3"><label class="mini">Label</label><input type="text" name="SLIDES[' + idx + '][caption]" placeholder="Admin label only (not shown on wall)"></div>' +
       '<div><label class="mini">Schedule</label><select name="SLIDES[' + idx + '][schedule]" data-schedule-select>' +
       SLIDE_SCHEDULES.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
-      '</select></div></div>';
+      '</select></div></div></details>';
   }
   if (proto) {
     card.querySelectorAll('[name]').forEach(function (el) {
@@ -3064,19 +3163,35 @@ document.addEventListener('DOMContentLoaded', function () {
   initSlidesSectionNav();
   initVideoPlaylist();
   initSplunkPanels();
+  initPresencePanel();
   initRssFeedPreviews();
   initWebSitePreviews();
   initKeyedBoardPreviews();
   initRotationDecks();
+  initRotationGlobalAdd();
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      const deckId = btn.dataset.deck;
+      const sel = document.getElementById('rotationTargetScreen');
+      const deckId = sel ? sel.value : '';
       const deck = deckId ? document.getElementById(deckId) : null;
       if (!deck) return;
       addRotationPage(deck.id, btn.dataset.url || '', btn.dataset.dwell || '60');
+      const panel = deck.closest('.rotation-playlist-panel');
+      if (panel) panel.open = true;
     });
   });
 });
+
+function initRotationGlobalAdd() {
+  const sel = document.getElementById('rotationTargetScreen');
+  const copyBtn = document.getElementById('rotationCopyMainBtn');
+  if (!sel || !copyBtn) return;
+  function syncCopyBtn() {
+    copyBtn.style.display = sel.value === 'rotationDeck-main' ? 'none' : '';
+  }
+  sel.addEventListener('change', syncCopyBtn);
+  syncCopyBtn();
+}
 
 const ROTATION_STARTER = <?= json_encode($rotationStarterPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_MAIN_PAGES = <?= json_encode($rotationMainPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
@@ -3296,16 +3411,20 @@ function addRotationPage(deckId, url, dwell, scroll) {
       '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
       '<div class="rotation-card-title"><strong data-rotation-label>' + rotationLabelFromUrl(url) + '</strong>' +
       '<code data-rotation-url-display>' + (url || 'board URL') + '</code></div>' +
-      '<button type="button" class="rowdel" onclick="removeRotationCard(this, \'' + deck.id + '\')" title="Remove">×</button>' +
+      '<div class="rotation-card-head-meta">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="' + field + '[' + idx + '][off]"> Skip</label>' +
+        '<button type="button" class="rowdel" onclick="removeRotationCard(this, \'' + deck.id + '\')" title="Remove">×</button>' +
+      '</div>' +
     '</div>' +
+    '<details class="rotation-card-edit"><summary>Dwell ' + dwell.replace(/"/g, '') + 's</summary>' +
     '<div class="rotation-card-grid">' +
       '<div style="grid-column:1 / -1"><label class="mini">URL</label>' +
       '<input type="text" name="' + field + '[' + idx + '][url]" value="' + url.replace(/"/g, '&quot;') + '" placeholder="slides.php" data-rotation-url required></div>' +
       '<div><label class="mini">Dwell (s)</label><input type="text" name="' + field + '[' + idx + '][dwell]" value="' + dwell.replace(/"/g, '&quot;') + '" placeholder="60"></div>' +
       '<div><label class="mini">From hr</label><input type="text" name="' + field + '[' + idx + '][from]" placeholder="0-23"></div>' +
       '<div><label class="mini">To hr</label><input type="text" name="' + field + '[' + idx + '][to]" placeholder="0-23"></div>' +
-    '</div>' +
-    '<div class="rotation-card-meta"><label class="check" style="margin:0"><input type="checkbox" name="' + field + '[' + idx + '][off]"> Skip this page</label></div>';
+      '<div><label class="mini">Weight</label><input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="Used when Weighted is on for this display (1–20)"></div>' +
+    '</div></details>';
   deck.appendChild(card);
   bindRotationCard(card, deck);
   bindRotationCardDrag(card, deck);
@@ -3493,7 +3612,101 @@ function splunkNormalizePageKey(raw) {
 }
 
 function splunkPreviewHref(pageKey) {
-  return 'splunk.php?d=' + encodeURIComponent(pageKey) + '&noticker=1&safebottom=72';
+  return 'splunk.php?d=' + encodeURIComponent(pageKey) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function initPresencePanel() {
+  const panel = document.getElementById('presencePanel');
+  const logPanel = document.getElementById('playLogPanel');
+  if (!panel) return;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderPlayLog(events) {
+    if (!logPanel) return;
+    if (!events || !events.length) {
+      logPanel.innerHTML = '';
+      return;
+    }
+    let rows = '';
+    events.forEach(function (ev) {
+      rows += '<tr>'
+        + '<td>' + esc(ev.time) + '</td>'
+        + '<td><code>' + esc(ev.screen) + '</code></td>'
+        + '<td>' + esc(ev.label) + '</td>'
+        + '<td><code>' + esc(ev.url) + '</code></td>'
+        + '</tr>';
+    });
+    logPanel.innerHTML = '<details class="play-log-panel" open>'
+      + '<summary>Play log — ' + events.length + ' recent on-screen events</summary>'
+      + '<table class="play-log"><thead><tr>'
+      + '<th>When</th><th>Display</th><th>Page</th><th>URL</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></details>';
+  }
+
+  function render(data) {
+    if (!data || !Array.isArray(data.screens)) {
+      panel.innerHTML = '<p class="help">No display data yet — open a kiosk on <code>board.php</code>.</p>';
+      return;
+    }
+    let html = '<table class="presence-status"><thead><tr>'
+      + '<th>Display</th><th>Status</th><th>Now showing</th><th>Plays today</th>'
+      + '</tr></thead><tbody>';
+    data.screens.forEach(function (s) {
+      const dotCls = s.online ? 'presence-dot online' : 'presence-dot';
+      let statusText = s.online ? 'Online' : 'Offline';
+      if (s.online && s.blank) statusText = 'Online · blank';
+      let nowHtml = '<span class="presence-now muted">—</span>';
+      if (s.online && s.now && s.now.label) {
+        nowHtml = '<span class="presence-now">' + esc(s.now.label) + '</span>';
+        if (s.now.index >= 0 && s.now.total > 0) {
+          nowHtml += ' <span class="presence-stats">(' + (s.now.index + 1) + '/' + s.now.total + ')</span>';
+        }
+        if (s.now.status === 'loading') {
+          nowHtml += ' <span class="presence-stats">loading…</span>';
+        }
+      } else if (!s.online) {
+        nowHtml = '<span class="presence-now muted">Last seen ' + esc(s.last_seen_ago || 'never') + '</span>';
+      } else if (s.online && s.now && s.now.status === 'empty') {
+        nowHtml = '<span class="presence-now muted">No pages in rotation</span>';
+      }
+      let plays = String(s.plays_today || 0);
+      if (s.top_today && s.top_today.length) {
+        plays += '<div class="presence-top">'
+          + s.top_today.map(function (t) { return esc(t.label) + ' ×' + t.count; }).join(' · ')
+          + '</div>';
+      }
+      html += '<tr>'
+        + '<td><span class="' + dotCls + '"></span><code>' + esc(s.screen) + '</code> ' + esc(s.name) + '</td>'
+        + '<td>' + esc(statusText) + '</td>'
+        + '<td>' + nowHtml + '</td>'
+        + '<td>' + plays + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    if (data.stats_day) {
+      html += '<p class="help" style="margin-top:8px">Stats day: ' + esc(data.stats_day)
+        + ' · refreshes every 20s</p>';
+    }
+    panel.innerHTML = html;
+    renderPlayLog(data.play_log || []);
+  }
+
+  function load() {
+    fetch('admin.php?board=rotation&action=presence', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(render)
+      .catch(function () {});
+  }
+
+  load();
+  setInterval(load, 20000);
 }
 
 function initSplunkPanels() {

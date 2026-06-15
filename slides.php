@@ -20,6 +20,7 @@ require_once __DIR__ . '/slides_lib.php';
 define('DEFAULT_DWELL', cfg('slides.DEFAULT_DWELL', 12));
 define('SHUFFLE', cfg('slides.SHUFFLE', false));
 define('FIT', cfg('slides.FIT', 'contain'));
+define('SHOW_CLOCK', signage_show_clock((bool)cfg('slides.SHOW_CLOCK', true)));
 define('TIMEZONE', slides_timezone());
 
 date_default_timezone_set(TIMEZONE);
@@ -32,6 +33,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 /** Wall clock overlay — fixed above slide layers (and rotation iframes). */
 function slides_clock_css(): string
 {
+    if (!SHOW_CLOCK) {
+        return '';
+    }
+
     return '#clock{position:fixed;top:36px;right:48px;z-index:9000;pointer-events:none;'
          . 'font-family:\'Big Shoulders Display\',system-ui,sans-serif;font-weight:600;font-size:48px;'
          . 'color:var(--snow);font-variant-numeric:tabular-nums;'
@@ -41,11 +46,19 @@ function slides_clock_css(): string
 
 function slides_clock_html(): void
 {
+    if (!SHOW_CLOCK) {
+        return;
+    }
+
     echo '<div id="clock">--:--</div>';
 }
 
 function slides_clock_js(): void
 {
+    if (!SHOW_CLOCK) {
+        return;
+    }
+
     echo <<<'JS'
     (function () {
       function tick() {

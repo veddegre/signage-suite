@@ -31,6 +31,7 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('homelab.CACHE_TTL', 30));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
 $rowHead = max(72, (int)round(96 * $boardH / 1080));
@@ -208,7 +209,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
 <div class="board">
   <div class="head">
     <h1>Homelab <span>&middot; Ops</span></h1>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <section class="panel node">
@@ -295,9 +296,11 @@ $wanMs    = $checks['wan_ms'] ?? null;
   <div class="stamp">Proxmox API &middot; AdGuard Home<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
+  <?php if ($showClock): ?>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
+  <?php endif; ?>
   <?php if (!$embedded): ?>
   setTimeout(() => location.reload(), 60 * 1000);
   <?php endif; ?>

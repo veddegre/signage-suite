@@ -35,6 +35,7 @@ const CACHE_DIR       = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('rss.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
@@ -257,7 +258,7 @@ $payload = array_map(fn($i) => [
     <div class="brand"><?= h($feed['name']) ?> <span>&middot; Stories</span></div>
     <div class="stamp"><?= h($feedKey) ?> &middot; <?= count($payload) ?> stories &middot; <?= $dwell ?>s<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
   </div>
-  <div id="clock">--:--</div>
+  <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
 </div>
 
 <?php if (!$payload): ?>
@@ -386,9 +387,11 @@ $payload = array_map(fn($i) => [
       else window.addEventListener('load', kick, { once: true });
     }
 
+    <?php if ($showClock): ?>
     function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
       document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
     tick(); setInterval(tick, 1000);
+    <?php endif; ?>
 
     // Refetch the feed periodically (Anthias also reloads per cycle)
     setTimeout(() => location.reload(), 15 * 60 * 1000);

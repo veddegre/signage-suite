@@ -52,6 +52,28 @@ function cfg_write(array $conf): bool
 /** Height reserved at the bottom for the weather alert ticker overlay. */
 const SIGNAGE_TICKER_H = 72;
 
+/** Whether the NWS alert ticker is enabled (admin → Alert Ticker). */
+function signage_ticker_enabled(): bool
+{
+    return (bool)cfg('ticker.TICKER_ENABLED', true);
+}
+
+/** True when rotation iframe requests clock hidden (?clock=0 from board.php). */
+function signage_clock_suppressed(): bool
+{
+    return isset($_GET['clock']) && (string)$_GET['clock'] === '0';
+}
+
+/** Whether to render a board clock (board setting AND not suppressed by rotation screen). */
+function signage_show_clock(bool $boardEnabled = true): bool
+{
+    if (!$boardEnabled) {
+        return false;
+    }
+
+    return !signage_clock_suppressed();
+}
+
 /** Bottom inset (px) when a board is framed in board.php / player.php (?safebottom=). */
 function signage_safe_bottom(): int
 {
@@ -102,7 +124,12 @@ function signage_viewport_css(): string
 function signage_board_preview_url(string $file): string
 {
     $sep = str_contains($file, '?') ? '&' : '?';
-    return $file . $sep . 'noticker=1&safebottom=' . SIGNAGE_TICKER_H;
+    $qs = 'noticker=1';
+    if (signage_ticker_enabled()) {
+        $qs .= '&safebottom=' . SIGNAGE_TICKER_H;
+    }
+
+    return $file . $sep . $qs;
 }
 
 /** In-flow attribution line — place inside .board, not as an absolute body overlay. */

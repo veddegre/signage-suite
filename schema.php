@@ -24,6 +24,7 @@ function rotation_page_fields(): array
              ['key' => 'dwell', 'label' => 'Dwell (s)', 'cast' => 'int'],
              ['key' => 'from', 'label' => 'From hr', 'cast' => 'int'],
              ['key' => 'to', 'label' => 'To hr', 'cast' => 'int'],
+             ['key' => 'weight', 'label' => 'Weight', 'cast' => 'int'],
              ['key' => 'off', 'label' => 'Skip', 'type' => 'check']];
     $out = [];
     foreach ($screens as $key => $scr) {
@@ -53,14 +54,19 @@ function admin_schema(): array
             ['key' => 'SCREENS', 'label' => 'Screens', 'type' => 'rows', 'keyed' => true,
              'columns' => [['key' => '_key', 'label' => 'Key', 'help' => 'used in ?screen='],
                            ['key' => 'name', 'label' => 'Display name'],
+                           ['key' => 'show_ticker', 'label' => 'Ticker', 'type' => 'check'],
+                           ['key' => 'show_clock', 'label' => 'Clock', 'type' => 'check'],
+                           ['key' => 'show_debug', 'label' => 'Debug', 'type' => 'check'],
+                           ['key' => 'weighted', 'label' => 'Weighted', 'type' => 'check'],
                            ['key' => 'shuffle', 'label' => 'Shuffle', 'type' => 'check'],
-                           ['key' => 'cec_enabled', 'label' => 'CEC', 'type' => 'check'],
+                           ['key' => 'schedule_enabled', 'label' => 'Blank', 'type' => 'check'],
                            ['key' => 'cec_off', 'label' => 'Off hr'],
-                           ['key' => 'cec_on', 'label' => 'On hr']],
+                           ['key' => 'cec_on', 'label' => 'On hr'],
+                           ['key' => 'cec_enabled', 'label' => 'CEC', 'type' => 'check']],
              'help' => 'One row per physical display. Each kiosk points at board.php?screen=<key> '
                      . '(plain board.php = the "main" screen). Save after adding a screen and its '
                      . 'page list appears below. A screen with no pages of its own falls back to main. '
-                     . 'CEC schedules TV standby/wake on kiosks set up with setup-kiosk.sh.'],
+                     . 'Blank shows a dark screen during Off→On hours (rotation timezone). CEC is optional HDMI standby on Pi kiosks.'],
         ], rotation_page_fields(), [
             $tz,
             ['key' => 'FADE_MS', 'label' => 'Crossfade (ms)', 'type' => 'number'],
@@ -167,6 +173,8 @@ function admin_schema(): array
             ['key' => 'DEFAULT_DWELL', 'label' => 'Default seconds per slide', 'type' => 'number'],
             ['key' => 'SHUFFLE', 'label' => 'Shuffle active slides', 'type' => 'bool', 'default' => false],
             ['key' => 'FIT', 'label' => 'Image fit', 'type' => 'select', 'options' => ['contain', 'cover']],
+            ['key' => 'SHOW_CLOCK', 'label' => 'Show clock overlay', 'type' => 'bool', 'default' => true,
+             'help' => 'Fixed top-right on each slide; uses the timezone below'],
             ['key' => 'SLIDES', 'label' => 'Slide deck', 'type' => 'rows',
              'columns' => [
                  ['key' => 'file', 'label' => 'File', 'wide' => true, 'placeholder' => 'name.jpg'],
@@ -315,6 +323,8 @@ function admin_schema(): array
             $tz,
         ]],
         'ticker' => ['title' => 'Alert Ticker', 'file' => 'ticker.php', 'fields' => [
+            ['key' => 'TICKER_ENABLED', 'label' => 'Enable weather alert ticker', 'type' => 'bool', 'default' => true,
+             'help' => 'Master switch — off hides the ticker everywhere. Per-display on/off is under Rotation → Displays'],
             ['key' => 'TICKER_LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
             ['key' => 'TICKER_LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
             ['key' => 'TICKER_UA', 'label' => 'NWS User-Agent', 'type' => 'text'],

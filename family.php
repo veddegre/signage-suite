@@ -36,6 +36,7 @@ define('CACHE_TTL', cfg('family.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
+$showClock = signage_show_clock();
 $GLOBALS['diag'] = [];
 
 function cached_get(string $url, string $key, ?array $auth = null): ?string
@@ -781,7 +782,7 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 <body>
 <div class="board">
   <section class="today">
-    <div id="clock">--:--<span> --</span></div>
+    <?php if ($showClock): ?><div id="clock">--:--<span> --</span></div><?php endif; ?>
     <div class="dateline" id="dateline">&nbsp;</div>
     <?php if ($calLegend !== []): ?>
     <div class="cal-legend" aria-label="Calendar key">
@@ -849,9 +850,12 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 </div>
 <script>
   function tick(){
-    const n = new Date(); let h = n.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    const n = new Date();
+    <?php if ($showClock): ?>
+    let h = n.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
     document.getElementById('clock').innerHTML =
       h + ':' + String(n.getMinutes()).padStart(2,'0') + '<span> ' + ap + '</span>';
+    <?php endif; ?>
     document.getElementById('dateline').textContent =
       n.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   }

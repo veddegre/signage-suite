@@ -23,6 +23,7 @@ const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('air.CACHE_TTL', 900));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $GLOBALS['diag'] = [];
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
@@ -422,7 +423,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
 <div class="board">
   <div class="head">
     <h1><?= h(TITLE) ?><span class="sub"><?= h(PLACE) ?></span></h1>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <?php if ($hasData): ?>
@@ -522,6 +523,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   ]))) ?></div>
 </div>
 <script>
+  <?php if ($showClock): ?>
   function tick() {
     const n = new Date();
     let h = n.getHours();
@@ -532,6 +534,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   }
   tick();
   setInterval(tick, 1000);
+  <?php endif; ?>
   <?php if (!$embedded): ?>
   setTimeout(() => location.reload(), <?= max(60, (int)RELOAD_SEC) ?> * 1000);
   <?php endif; ?>

@@ -15,7 +15,7 @@
 require_once __DIR__ . '/web_lib.php';
 
 define('TIMEZONE', cfg('web.TIMEZONE', 'America/Detroit'));
-define('SHOW_CLOCK', cfg('web.SHOW_CLOCK', true));
+define('SHOW_CLOCK', signage_show_clock((bool)cfg('web.SHOW_CLOCK', true)));
 
 date_default_timezone_set(TIMEZONE);
 

@@ -27,6 +27,21 @@ if (isset($_GET['noticker'])) return;
 
 require_once __DIR__ . '/config.php';
 
+if (!signage_ticker_enabled()) {
+    if (isset($_GET['api']) && $_GET['api'] === '1') {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo json_encode([
+            'alerts' => [],
+            'mode'   => 'scroll',
+            'demo'   => false,
+        ], JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    return;
+}
+
 if (!defined('TICKER_LAT')) {
     define('TICKER_LAT', cfg('ticker.TICKER_LAT', 42.9720));              // Allendale / home point
     define('TICKER_LON', cfg('ticker.TICKER_LON', -85.9536));

@@ -24,6 +24,7 @@ const CACHE_DIR       = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('signaltrace.CACHE_TTL', 60));
 
 date_default_timezone_set(TIMEZONE);
+$showClock = signage_show_clock();
 $frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
@@ -228,7 +229,7 @@ if (is_array($clicks)) {
 <div class="board">
   <div class="head">
     <h1>SignalTrace <span>&middot; Threat Wall</span></h1>
-    <div id="clock">--:--</div>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <?php if (!$configured): ?>
@@ -298,9 +299,11 @@ if (is_array($clicks)) {
   <div class="stamp">SignalTrace export API<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
+  <?php if ($showClock): ?>
   function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
     document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
   tick(); setInterval(tick, 1000);
+  <?php endif; ?>
   setTimeout(() => location.reload(), 60 * 1000);
 </script>
 <?php include __DIR__ . '/ticker.php'; ?>

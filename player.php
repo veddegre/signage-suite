@@ -21,11 +21,16 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/rotation_lib.php';
 
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
+$blankActive = rotation_screen_blank_active($SCREEN);
+$showTicker = rotation_screen_ticker_enabled($SCREEN) && !$blankActive;
 // noticker=1 suppresses the ticker inside the iframe; player.php renders it here
 // at the viewport bottom so polling works in the top-level PWA document.
 $src = $SCREEN !== 'main'
     ? 'board.php?screen=' . rawurlencode($SCREEN) . '&noticker=1'
     : 'board.php?noticker=1';
+if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
+    $src .= '&debug=1';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -51,9 +56,11 @@ $src = $SCREEN !== 'main'
           padding:7px 16px; border-radius:18px; opacity:0; transition:opacity .4s;
           pointer-events:none; }
   #hint.show { opacity:1; }
+  body.signage-blank #signage-ticker-root,
+  body.signage-blank #signage-ticker { display:none !important; }
 </style>
 </head>
-<body>
+<body<?= $blankActive ? ' class="signage-blank"' : '' ?>>
 <div id="stage"><iframe src="<?= htmlspecialchars($src) ?>" allow="autoplay; fullscreen"></iframe></div>
 <div id="hint">Tap to toggle fullscreen</div>
 
@@ -107,7 +114,24 @@ $src = $SCREEN !== 'main'
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+
+  // Keep player chrome in sync when a scheduled blank window starts/ends
+  (function () {
+    const screen = <?= json_encode($SCREEN) ?>;
+    const q = screen === 'main' ? 'board.php?api=1' : ('board.php?api=1&screen=' + encodeURIComponent(screen));
+    function syncBlank() {
+      fetch(q, { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || typeof data.blank !== 'boolean') return;
+          document.body.classList.toggle('signage-blank', data.blank);
+        })
+        .catch(function () {});
+    }
+    syncBlank();
+    setInterval(syncBlank, 30000);
+  })();
 </script>
-<?php include __DIR__ . '/ticker.php'; ?>
+<?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>
 </body>
 </html>
