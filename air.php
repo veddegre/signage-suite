@@ -322,10 +322,8 @@ foreach ($forecastDays as $i => $dayKey) {
 [$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $pollenToday, $pollenSource);
 
 $embedded = isset($_GET['noticker']);
+$heightCss = signage_viewport_height();
 $boardH = signage_frame_height();
-$heightCss = $embedded
-    ? $boardH . 'px'
-    : 'calc(1080px - var(--signage-ticker-inset, 0px))';
 $rowHead = max(72, (int)round(88 * $boardH / 1080));
 $rowAqi  = max(300, (int)round(360 * $boardH / 1080));
 $rowMid  = max(260, (int)round(320 * $boardH / 1080));

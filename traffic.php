@@ -56,7 +56,7 @@ $markers = [
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
+              <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:24px 32px 20px; display:grid; gap:18px;
            grid-template-rows: 88px 1fr 64px; grid-template-areas: "head" "map" "legend"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }

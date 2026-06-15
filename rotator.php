@@ -70,7 +70,7 @@ if (SHUFFLE) shuffle($photos);
 <style>
   :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:#000;
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
               font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .layer { position:absolute; inset:0; background-position:center; background-size:contain;
            background-repeat:no-repeat; background-color:#000;

@@ -135,7 +135,7 @@ $padY = $compact ? 24 : 28;
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
+              <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $compact ? 20 : 24 ?>px;
            grid-template-columns: 1.2fr 1fr; grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowFoot ?>px auto;
            grid-template-areas: "head head" "verdict moon" "windows windows" "meta meta"; }

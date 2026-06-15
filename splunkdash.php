@@ -69,10 +69,10 @@ $configured = !str_contains($dash['url'], 'REPLACE');
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night); cursor:none;
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night); cursor:none;
               font-family:system-ui,sans-serif; }
-  iframe { width:1920px; height:1080px; border:0; display:block; background:var(--lake-night); }
-  .empty { width:1920px; height:1080px; display:flex; flex-direction:column; gap:18px;
+  iframe { width:1920px; height:100%; border:0; display:block; background:var(--lake-night); }
+  .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
   .empty p { font-size:27px; max-width:1150px; text-align:center; line-height:1.65; }

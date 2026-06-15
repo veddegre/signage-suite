@@ -61,14 +61,41 @@ function signage_safe_bottom(): int
 /** Usable board viewport height — 1080 minus any framed safe-bottom inset. */
 function signage_frame_height(): int
 {
-    return 1080 - signage_safe_bottom();
+    if (isset($_GET['noticker'])) {
+        $sb = signage_safe_bottom();
+        if ($sb > 0) {
+            return 1080 - $sb;
+        }
+
+        return 1080;
+    }
+
+    return 1080;
+}
+
+/** True when loaded in the board.php rotation iframe (not admin preview). */
+function signage_rotation_frame(): bool
+{
+    return isset($_GET['noticker']) && signage_safe_bottom() === 0;
+}
+
+/** CSS height value for html/body on signage boards. */
+function signage_viewport_height(): string
+{
+    if (signage_rotation_frame()) {
+        return '100%';
+    }
+    if (isset($_GET['noticker']) && signage_safe_bottom() > 0) {
+        return (1080 - signage_safe_bottom()) . 'px';
+    }
+
+    return 'calc(1080px - var(--signage-ticker-inset, 0px))';
 }
 
 /** html/body height declaration for framed signage boards (property only — not a nested rule). */
 function signage_viewport_css(): string
 {
-    $h = signage_frame_height();
-    return "height:calc({$h}px - var(--signage-ticker-inset,0px));";
+    return 'height:' . signage_viewport_height() . ';';
 }
 
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */

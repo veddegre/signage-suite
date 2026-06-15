@@ -48,7 +48,8 @@ if (($_GET['api'] ?? '') === 'cec') {
 <style>
   * { margin:0; padding:0; }
   html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; cursor:none; }
-  iframe { position:absolute; top:0; left:0; width:1920px; height:<?= 1080 - SIGNAGE_TICKER_H ?>px; border:0;
+  iframe { position:absolute; top:0; left:0; width:1920px;
+           height:calc(1080px - var(--signage-ticker-inset, 0px)); border:0;
            opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease; }
   iframe.show { opacity:1; }
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
@@ -231,7 +232,7 @@ if (($_GET['api'] ?? '') === 'cec') {
       reveal();
     }, SETTLE);
     const sep = p.url.includes('?') ? '&' : '?';
-    f.src = p.url + sep + 'noticker=1&safebottom=<?= SIGNAGE_TICKER_H ?>&settle=' + SETTLE + '&r=' + Date.now();
+    f.src = p.url + sep + 'noticker=1&settle=' + SETTLE + '&r=' + Date.now();
     setTimeout(reveal, HANG);                              // safety net for hung pages
   }
 

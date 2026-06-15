@@ -35,9 +35,7 @@ $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
 $rowHead = max(72, (int)round(96 * $boardH / 1080));
 $rowMid  = max(248, (int)round(300 * $boardH / 1080));
-$heightCss = $embedded
-    ? $boardH . 'px'
-    : 'calc(1080px - var(--signage-ticker-inset, 0px))';
+$heightCss = signage_viewport_height();
 $vmLimit = 8;
 $GLOBALS['diag'] = [];
 

@@ -82,9 +82,9 @@ $loopAttr = $embedded ? '' : 'loop';
 <style>
   :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:#000;
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
               font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  video { width:1920px; height:1080px; object-fit:<?= FIT ?>; background:#000; }
+  video { width:1920px; height:100%; object-fit:<?= FIT ?>; background:#000; }
   .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:5;
             display:flex; justify-content:space-between; align-items:baseline;
             text-shadow:0 1px 14px rgba(0,0,0,.8); }

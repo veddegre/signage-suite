@@ -111,7 +111,7 @@ if (isset($_GET['slide'])) {
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
               font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
+              <?= signage_viewport_css() ?> }
   .layer { position:absolute; inset:0; z-index:1; background-position:center; background-repeat:no-repeat;
            background-color:#000; background-size:<?= $fit === 'cover' ? 'cover' : 'contain' ?>; }
   <?= slides_clock_css() ?>
@@ -167,7 +167,7 @@ $playlist = array_map(fn($s) => [
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
               font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              height:calc(<?= $frameH ?>px - var(--signage-ticker-inset, 0px)); }
+              <?= signage_viewport_css() ?> }
   .layer { position:absolute; inset:0; z-index:1; background-position:center; background-repeat:no-repeat;
            background-color:#000; opacity:0; transition:opacity 1.4s ease;
            background-size:<?= FIT === 'cover' ? 'cover' : 'contain' ?>; }

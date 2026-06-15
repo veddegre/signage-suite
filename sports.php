@@ -49,9 +49,7 @@ $hasData = $cards !== [];
 
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
-$heightCss = $embedded
-    ? $boardH . 'px'
-    : 'calc(1080px - var(--signage-ticker-inset, 0px))';
+$heightCss = signage_viewport_height();
 $gap = $boardH < 1080 ? 14 : 18;
 $padY = ($boardH < 1080 ? 20 : 24) * 2;
 $stampH = 22;

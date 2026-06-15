@@ -46,9 +46,7 @@ function webcam_embed_url(): ?string
 $embed = webcam_embed_url();
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
-$heightCss = $embedded
-    ? $boardH . 'px'
-    : 'calc(1080px - var(--signage-ticker-inset, 0px))';
+$heightCss = signage_viewport_height();
 $reloadSec = max(0, (int)RELOAD_SEC);
 ?>
 <!DOCTYPE html>
