@@ -4,13 +4,11 @@
  * Edits config/settings.json; the board PHP files are never modified, so the
  * web server only needs write access to config/, cache/, videos/, slides/, photos/, and bin/.
  *
- * First visit: create an admin password using the one-time key in config/setup.key
- * (on the server via SSH — not downloadable over HTTP). Stored as password_hash
- * in config/admin.json. Change password under Tools; delete admin.json to reset
- * (a new setup.key is created).
- *
- * Settings left blank fall back to each board's built-in default. The Tools
- * page can clear the API cache and shows the raw JSON for hand editing.
+ * First visit: create a super admin using the one-time key in config/setup.key
+ * (on the server via SSH — not downloadable over HTTP). Accounts live in
+ * config/users.json (local auth today; SSO-ready via auth_provider per user).
+ * Change your password under Account; manage users under Users (super only).
+ * Tools (raw JSON, cache) is super-admin only.
  */
 
 require_once __DIR__ . '/config.php';
@@ -25,15 +23,17 @@ require_once __DIR__ . '/presence_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
 require_once __DIR__ . '/splunk_lib.php';
 require_once __DIR__ . '/web_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
 slide_background_ensure_assets();
 slide_background_ensure_photos();
 
-const ADMIN_FILE = __DIR__ . '/config/admin.json';
+const ADMIN_FILE = __DIR__ . '/config/admin.json'; // legacy; migrated to users.json
 
 signage_admin_security_headers();
 signage_session_start();
 signage_setup_key_ready();
+users_migrate_from_legacy();
 
 /** Drop deny-all .htaccess into config/ and cache/ so tokens and cached API
  *  responses can't be fetched directly (Apache; nginx needs a location block
@@ -50,13 +50,6 @@ function protect_dirs(): void
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-function admin_hash(): ?string
-{
-    if (!is_file(ADMIN_FILE)) return null;
-    $j = json_decode((string)file_get_contents(ADMIN_FILE), true);
-    return is_array($j) && !empty($j['hash']) ? $j['hash'] : null;
-}
-
 function csrf_token(): string
 {
     if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
@@ -68,15 +61,18 @@ function csrf_ok(): bool
 }
 
 $schema  = admin_schema();
-$hash    = admin_hash();
+$needSetup = users_need_setup();
 $flash   = null;
 $flashOk = true;
 
 // ── Auth actions ─────────────────────────────────────────────────────────────
-if (($_POST['action'] ?? '') === 'setup' && $hash === null) {
+if (($_POST['action'] ?? '') === 'setup' && $needSetup) {
+    $username = users_normalize_username((string)($_POST['username'] ?? 'admin'));
     $pw = (string)($_POST['password'] ?? '');
     $setupKey = (string)($_POST['setup_key'] ?? '');
-    if (!signage_setup_key_valid($setupKey)) {
+    if ($username === '') {
+        $flash = 'Choose a username.'; $flashOk = false;
+    } elseif (!signage_setup_key_valid($setupKey)) {
         $flash = 'Invalid setup key — read config/setup.key on the server (SSH).'; $flashOk = false;
     } elseif (strlen($pw) < 8) {
         $flash = 'Password must be at least 8 characters.'; $flashOk = false;
@@ -85,39 +81,48 @@ if (($_POST['action'] ?? '') === 'setup' && $hash === null) {
     } else {
         if (!is_dir(__DIR__ . '/config')) @mkdir(__DIR__ . '/config', 0775, true);
         protect_dirs();
-        @file_put_contents(ADMIN_FILE, json_encode(['hash' => password_hash($pw, PASSWORD_DEFAULT)]), LOCK_EX);
-        session_regenerate_id(true);
-        $_SESSION['auth'] = true;
-        $_SESSION['last_active'] = time();
-        signage_setup_key_consume();
-        signage_login_succeeded();
-        $hash = admin_hash();
-        $flash = 'Admin password set. Welcome!';
+        if (users_create_super($username, $pw)) {
+            $user = admin_authenticate_local($username, $pw);
+            if ($user !== null) {
+                admin_login_user($user);
+                signage_setup_key_consume();
+                signage_login_succeeded();
+                $needSetup = false;
+                $flash = 'Super admin account created. Welcome!';
+            } else {
+                $flash = 'Account created but login failed — try signing in.'; $flashOk = false;
+            }
+        } else {
+            $flash = 'Could not create admin account.'; $flashOk = false;
+        }
     }
 }
-if (($_POST['action'] ?? '') === 'login' && $hash !== null) {
+if (($_POST['action'] ?? '') === 'login' && !$needSetup) {
     $gate = signage_login_allowed();
     if (!$gate['ok']) {
         $flash = 'Too many failed attempts — try again in ' . (int)ceil(($gate['wait'] ?? 900) / 60) . ' minutes.';
         $flashOk = false;
-    } elseif (password_verify((string)($_POST['password'] ?? ''), $hash)) {
-        session_regenerate_id(true);
-        $_SESSION['auth'] = true;
-        $_SESSION['last_active'] = time();
-        signage_login_succeeded();
     } else {
-        signage_login_failed();
-        usleep(400000);
-        $flash = 'Wrong password.'; $flashOk = false;
+        $user = admin_authenticate_local(
+            (string)($_POST['username'] ?? ''),
+            (string)($_POST['password'] ?? '')
+        );
+        if ($user !== null) {
+            admin_login_user($user);
+            signage_login_succeeded();
+        } else {
+            signage_login_failed();
+            usleep(400000);
+            $flash = 'Invalid username or password.'; $flashOk = false;
+        }
     }
 }
 if (($_GET['logout'] ?? '') === '1') {
-    $_SESSION = [];
-    session_destroy();
+    admin_logout_user();
     header('Location: admin.php');
     exit;
 }
-$authed = !empty($_SESSION['auth']);
+$authed = admin_is_authenticated();
 if ($authed && !signage_admin_idle_check()) {
     $authed = false;
     $flash = 'Session expired from inactivity — log in again.';
@@ -126,7 +131,18 @@ if ($authed && !signage_admin_idle_check()) {
 
 // ── Save handler ─────────────────────────────────────────────────────────────
 $board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));
-if ($board === '' || !isset($schema[$board])) $board = array_key_first($schema);
+$virtualBoards = ['tools', 'users', 'account'];
+if ($board === '') {
+    $board = $authed ? admin_default_board() : (string)array_key_first($schema);
+} elseif (!isset($schema[$board]) && !in_array($board, $virtualBoards, true)) {
+    $board = $authed ? admin_default_board() : (string)array_key_first($schema);
+}
+if ($authed) {
+    admin_enforce_board_access($board, $flash, $flashOk);
+}
+$tools = ($board === 'tools');
+$usersBoard = ($board === 'users');
+$accountBoard = ($board === 'account');
 
 if ($authed && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $contentLen = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
@@ -153,7 +169,7 @@ if ($authed && $board === 'slides' && isset($_GET['replaced'])) {
     }
 }
 
-if ($authed && $board === 'splunk' && ($_POST['action'] ?? '') === 'splunk_test_panel' && csrf_ok()) {
+if ($authed && $board === 'splunk' && admin_can_board('splunk') && ($_POST['action'] ?? '') === 'splunk_test_panel' && csrf_ok()) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(splunk_test_panel([
         'title' => $_POST['title'] ?? '',
@@ -172,14 +188,30 @@ if ($authed && $board === 'splunk' && ($_POST['action'] ?? '') === 'splunk_test_
 if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'presence') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
-    echo json_encode(signage_presence_dashboard(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode(admin_filter_presence_dashboard(signage_presence_dashboard()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
 if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
+    if (!admin_can_board($board)) {
+        $flash = 'You do not have access to that section.';
+        $flashOk = false;
+    } else {
+    $rotationSuperFieldKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
     $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
     $errors = [];
     foreach ($schema[$board]['fields'] as $f) {
+        if ($board === 'rotation' && !admin_is_super()) {
+            if ($f['key'] === 'SCREENS' || in_array($f['key'], $rotationSuperFieldKeys, true)) {
+                continue;
+            }
+            if (strpos($f['key'], 'PAGES_') === 0) {
+                $screenKey = substr($f['key'], 6);
+                if (!admin_can_screen($screenKey)) {
+                    continue;
+                }
+            }
+        }
         $cfgKey = "$board.{$f['key']}";
         $name   = $f['key'];
         switch ($f['type']) {
@@ -386,7 +418,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             $screens = array_keys($screens);
             sort($screens);
             if (!isset($row['screens'])) {
-                $obj['screens'] = [];
+                if (!empty($row['_screens_form'])) {
+                    $obj['screens'] = [];
+                }
             } elseif ($screens !== $allScreenKeys) {
                 $obj['screens'] = $screens;
             }
@@ -422,6 +456,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
     }
     if ($board === 'rotation') {
+        if (admin_is_super()) {
         $screensOut = [];
         foreach ($_POST['SCREENS'] ?? [] as $row) {
             if (!is_array($row)) {
@@ -471,6 +506,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
             $conf['rotation.SCREENS'] = $screensOut;
         }
+        }
 
         $schemaPageKeys = [];
         foreach ($schema[$board]['fields'] as $sf) {
@@ -483,6 +519,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 continue;
             }
             if (!empty($schemaPageKeys[$name]) || !is_array($rows)) {
+                continue;
+            }
+            $screenKey = substr($name, 6);
+            if (!admin_can_screen($screenKey)) {
                 continue;
             }
             $cfgKey = "$board.$name";
@@ -500,12 +540,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     } else {
         protect_dirs();
         if (cfg_write($conf)) {
-            if (isset($_POST['clear_cache'])) {
+            if (isset($_POST['clear_cache']) && admin_can_tools()) {
                 foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) @unlink($cf);
             }
             cfg_reload();
             $extra = '';
-            if ($board === 'video' && isset($_POST['sync_rotation_main'])) {
+            if ($board === 'video' && isset($_POST['sync_rotation_main']) && admin_can_screen('main')) {
                 $sync = video_sync_rotation('main');
                 if (video_rotation_pages_write($sync['screen'], $sync['pages'])) {
                     cfg_reload();
@@ -526,10 +566,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                         }
                     }
                 } elseif (isset($_POST['sync_rotation_slides'])) {
-                    $deployScreens['main'] = true;
+                    foreach (admin_default_deploy_screens() as $scr) {
+                        $deployScreens[$scr] = true;
+                    }
                 }
                 if ($deployScreens !== []) {
-                    $result = slides_deploy_to_screens(array_keys($deployScreens));
+                    $result = slides_deploy_to_screens(admin_filter_deploy_screens(array_keys($deployScreens)));
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
                 }
@@ -544,11 +586,11 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     }
                 }
                 if ($deployScreens !== []) {
-                    $result = rotator_deploy_to_screens(array_keys($deployScreens));
+                    $result = rotator_deploy_to_screens(admin_filter_deploy_screens(array_keys($deployScreens)));
                     cfg_reload();
                     $extra = rotator_deploy_flash_message($result);
                 }
-            } elseif ($board === 'rss' && isset($_POST['sync_rotation_rss'])) {
+            } elseif ($board === 'rss' && isset($_POST['sync_rotation_rss']) && admin_can_screen('main')) {
                 $sync = rotation_sync_rss('main');
                 if (rotation_pages_write($sync['screen'], $sync['pages'])) {
                     cfg_reload();
@@ -569,34 +611,50 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             )) {
                 $extra .= ($extra !== '' ? ' ' : '') . 'Wall displays refresh within 30 seconds.';
             }
-            $flash = $schema[$board]['title'] . ' saved.' . (isset($_POST['clear_cache']) ? ' Cache cleared.' : '') . $extra;
+            $flash = $schema[$board]['title'] . ' saved.'
+                . (isset($_POST['clear_cache']) && admin_can_tools() ? ' Cache cleared.' : '') . $extra;
             $schema = admin_schema();   // pick up structural changes (e.g. new rotation screens)
         } else {
             $flash = 'Could not write config/settings.json — check directory permissions.'; $flashOk = false;
         }
     }
+    }
+}
+
+if ($authed && admin_can_manage_users() && ($_POST['action'] ?? '') === 'save_users' && csrf_ok()) {
+    $result = users_save_from_post($_POST['USERS'] ?? []);
+    if ($result['ok']) {
+        $flash = 'Saved ' . (int)($result['count'] ?? 0) . ' user account' . ((int)($result['count'] ?? 0) === 1 ? '' : 's') . '.';
+    } else {
+        $flash = (string)($result['error'] ?? 'Could not save users.');
+        $flashOk = false;
+    }
 }
 
 if ($authed && ($_POST['action'] ?? '') === 'clearcache' && csrf_ok()) {
+    if (!admin_can_tools()) {
+        $flash = 'Only super admins can clear the cache.'; $flashOk = false;
+    } else {
     $n = 0;
     foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) { @unlink($cf); $n++; }
     $flash = "Cleared $n cached file" . ($n === 1 ? '' : 's') . '.';
+    }
 }
 
 if ($authed && ($_POST['action'] ?? '') === 'changepassword' && csrf_ok()) {
     $cur = (string)($_POST['current_password'] ?? '');
     $pw = (string)($_POST['new_password'] ?? '');
     $pw2 = (string)($_POST['new_password2'] ?? '');
-    $curHash = admin_hash();
-    if ($curHash === null || !password_verify($cur, $curHash)) {
-        $flash = 'Current password is wrong.'; $flashOk = false;
-    } elseif (strlen($pw) < 8) {
-        $flash = 'New password must be at least 8 characters.'; $flashOk = false;
-    } elseif ($pw !== $pw2) {
+    if ($pw !== $pw2) {
         $flash = 'New passwords do not match.'; $flashOk = false;
     } else {
-        @file_put_contents(ADMIN_FILE, json_encode(['hash' => password_hash($pw, PASSWORD_DEFAULT)]), LOCK_EX);
-        $flash = 'Admin password updated.';
+        $result = admin_change_own_password($cur, $pw);
+        if ($result['ok']) {
+            $flash = 'Password updated.';
+        } else {
+            $flash = (string)($result['error'] ?? 'Could not update password.');
+            $flashOk = false;
+        }
     }
 }
 
@@ -691,7 +749,10 @@ if ($authed && $board === 'slides') {
                         $extra['caption'] = $caption;
                     }
                     if (slide_append_to_deck($name, $extra)) {
-                        slides_deploy_to_screens(['main']);
+                        $deploy = admin_default_deploy_screens();
+                        if ($deploy !== []) {
+                            slides_deploy_to_screens($deploy);
+                        }
                         cfg_reload();
                         slide_creator_finish($name);
                     } else {
@@ -703,12 +764,12 @@ if ($authed && $board === 'slides') {
         }
     } elseif (csrf_ok()) {
     if (($_POST['action'] ?? '') === 'deploy_slides') {
-        $screens = array_values(array_filter(array_map(
+        $screens = admin_filter_deploy_screens(array_values(array_filter(array_map(
             'rotation_normalize_screen_key',
             (array)($_POST['deploy_screens'] ?? [])
-        )));
+        ))));
         if ($screens === []) {
-            $flash = 'Pick at least one display to deploy to.'; $flashOk = false;
+            $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
         } else {
             $result = slides_deploy_to_screens($screens);
             cfg_reload();
@@ -718,7 +779,7 @@ if ($authed && $board === 'slides') {
 
     if (($_POST['action'] ?? '') === 'remove_slides_rotation') {
         $screen = rotation_normalize_screen_key((string)($_POST['remove_screen'] ?? $_POST['screen'] ?? ''));
-        if ($screen === '') {
+        if ($screen === '' || !admin_can_screen($screen)) {
             $flash = 'Invalid display.'; $flashOk = false;
         } else {
             $rm = rotation_remove_all_slides($screen);
@@ -745,7 +806,10 @@ if ($authed && $board === 'slides') {
                 $flash = (string)($saved['error'] ?? 'Upload failed — try again.');
                 $flashOk = false;
             } elseif (slide_append_to_deck((string)$saved['name'])) {
-                slides_deploy_to_screens(['main']);
+                $deploy = admin_default_deploy_screens();
+                if ($deploy !== []) {
+                    slides_deploy_to_screens($deploy);
+                }
                 cfg_reload();
                 header('Location: ?board=slides&highlight=' . rawurlencode((string)$saved['name']));
                 exit;
@@ -874,12 +938,12 @@ if ($authed && $board === 'rotator') {
         }
     } elseif (csrf_ok()) {
         if ($photoAction === 'deploy_photos') {
-            $screens = array_values(array_filter(array_map(
+            $screens = admin_filter_deploy_screens(array_values(array_filter(array_map(
                 'rotation_normalize_screen_key',
                 (array)($_POST['deploy_screens'] ?? [])
-            )));
+            ))));
             if ($screens === []) {
-                $flash = 'Pick at least one display to deploy to.'; $flashOk = false;
+                $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
             } else {
                 $result = rotator_deploy_to_screens($screens);
                 cfg_reload();
@@ -889,7 +953,7 @@ if ($authed && $board === 'rotator') {
 
         if ($photoAction === 'remove_photos_rotation') {
             $screen = rotation_normalize_screen_key((string)($_POST['remove_screen'] ?? $_POST['screen'] ?? ''));
-            if ($screen === '') {
+            if ($screen === '' || !admin_can_screen($screen)) {
                 $flash = 'Invalid display.'; $flashOk = false;
             } else {
                 $rm = rotation_remove_all_photos($screen);
@@ -920,7 +984,10 @@ if ($authed && $board === 'rotator') {
                 }
             }
             if ($uploaded) {
-                rotator_deploy_to_screens(['main']);
+                $deploy = admin_default_deploy_screens();
+                if ($deploy !== []) {
+                    rotator_deploy_to_screens($deploy);
+                }
                 cfg_reload();
                 header('Location: ?board=rotator&highlight=' . rawurlencode((string)$uploaded[0]));
                 exit;
@@ -958,7 +1025,6 @@ function current_val(array $rawConf, string $board, string $key)
 {
     return $rawConf["$board.$key"] ?? null;
 }
-$tools = ($_GET['board'] ?? '') === 'tools';
 $videoYtdlpStatus = null;
 $videoDenoStatus = null;
 $videoStatuses = [];
@@ -998,7 +1064,7 @@ if ($rotationMainPages === []) {
     $rotationMainPages = $rotationStarterPages;
 }
 $slidesDeckStats = slides_deck_stats($rawConf['slides.SLIDES'] ?? []);
-$slidesDeployStatus = slides_deploy_status($rawConf['slides.SLIDES'] ?? null);
+$slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($rawConf['slides.SLIDES'] ?? null));
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesOrphanFiles = ($board === 'slides')
     ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
@@ -1011,7 +1077,9 @@ if ($board === 'rotator') {
     $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : $rawConf;
 }
 $rotatorDeckStats = rotator_deck_stats($rawConf['rotator.PHOTOS'] ?? []);
-$rotatorDeployStatus = rotator_deploy_status($rawConf['rotator.PHOTOS'] ?? null);
+$rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rawConf['rotator.PHOTOS'] ?? null));
+$userAdminRows = admin_is_super() ? users_admin_rows() : [];
+$navGroupsFiltered = $authed ? admin_filter_nav_groups($navGroups, $schema) : $navGroups;
 $photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
 $rotatorLibrary = ($board === 'rotator')
     ? rotator_library_entries($rawConf['rotator.PHOTOS'] ?? null)
@@ -1428,14 +1496,18 @@ function admin_field(array $f, $val, string $board): void
 <body>
 <div class="top">
   <h1>Signage <span>&middot; Admin</span></h1>
-  <?php if ($authed): ?><a href="?logout=1">Log out</a><?php endif; ?>
+  <?php if ($authed): ?>
+    <span class="admin-user" style="margin-right:14px;font-size:14px;color:var(--mist)"><?= h(admin_username()) ?><?= admin_is_super() ? '' : ' · operator' ?></span>
+    <a href="?board=account" style="margin-right:12px">Account</a>
+    <a href="?logout=1">Log out</a>
+  <?php endif; ?>
 </div>
 
 <?php if (!$authed): ?>
   <div class="login">
     <?php if ($flash): ?><div class="flash<?= $flashOk ? '' : ' bad' ?>"><?= h($flash) ?></div><?php endif; ?>
-    <?php if ($hash === null): ?>
-      <h2>Create admin password</h2>
+    <?php if ($needSetup): ?>
+      <h2>Create super admin</h2>
       <p class="help" style="margin-bottom:16px">First-time setup requires the one-time key in
         <code>config/setup.key</code> on the server (not downloadable over HTTP). SSH in and run:
         <code>sudo cat /var/www/html/boards/config/setup.key</code></p>
@@ -1443,18 +1515,22 @@ function admin_field(array $f, $val, string $board): void
         <input type="hidden" name="action" value="setup">
         <div class="field"><label class="l">Setup key</label>
           <input type="password" name="setup_key" autocomplete="off" required></div>
+        <div class="field"><label class="l">Username</label>
+          <input type="text" name="username" value="admin" autocomplete="username" required></div>
         <div class="field"><label class="l">Password (8+ characters)</label>
-          <input type="password" name="password" autofocus></div>
+          <input type="password" name="password" autofocus autocomplete="new-password"></div>
         <div class="field"><label class="l">Confirm</label>
-          <input type="password" name="password2"></div>
-        <div class="actions"><button class="save">Set password</button></div>
+          <input type="password" name="password2" autocomplete="new-password"></div>
+        <div class="actions"><button class="save">Create account</button></div>
       </form>
     <?php else: ?>
       <h2>Log in</h2>
       <form method="post">
         <input type="hidden" name="action" value="login">
+        <div class="field"><label class="l">Username</label>
+          <input type="text" name="username" autocomplete="username" autofocus required></div>
         <div class="field"><label class="l">Password</label>
-          <input type="password" name="password" autofocus></div>
+          <input type="password" name="password" autocomplete="current-password" required></div>
         <div class="actions"><button class="save">Log in</button></div>
       </form>
     <?php endif; ?>
@@ -1465,7 +1541,7 @@ function admin_field(array $f, $val, string $board): void
   <nav>
     <?php
     $navSeen = [];
-    foreach ($navGroups as $groupLabel => $keys):
+    foreach ($navGroupsFiltered as $groupLabel => $keys):
       $any = false;
       foreach ($keys as $k) {
           if (isset($schema[$k])) { $any = true; break; }
@@ -1477,38 +1553,30 @@ function admin_field(array $f, $val, string $board): void
         if (!isset($schema[$k])) continue;
         $navSeen[$k] = true;
       ?>
-        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
+        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && !$usersBoard && !$accountBoard && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
       <?php endforeach; ?>
     <?php endforeach;
     foreach ($schema as $k => $b) {
         if (!empty($navSeen[$k])) continue;
-        echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
+        echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && !$usersBoard && !$accountBoard && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
     }
     ?>
     <div class="sep"></div>
+    <?php if (admin_can_manage_users()): ?>
+    <a href="?board=users" class="<?= $usersBoard ? 'active' : '' ?>">Users</a>
+    <?php endif; ?>
+    <a href="?board=account" class="<?= $accountBoard ? 'active' : '' ?>">Account</a>
+    <?php if (admin_can_tools()): ?>
     <a href="?board=tools" class="<?= $tools ? 'active' : '' ?>">Tools</a>
+    <?php endif; ?>
   </nav>
   <main<?= (!$tools && $board === 'slides') ? ' class="main-wide"' : '' ?>>
     <?php if ($flash): ?><div class="flash<?= $flashOk ? '' : ' bad' ?>"><?= h($flash) ?></div><?php endif; ?>
 
     <?php if ($tools): ?>
       <h2>Tools</h2>
-      <div class="sub">Cache, admin password, and raw JSON.</div>
-      <h2 style="font-size:22px;margin-top:0">Change admin password</h2>
-      <form method="post" style="margin-bottom:28px;max-width:420px">
-        <input type="hidden" name="action" value="changepassword">
-        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <div class="field"><label class="l">Current password</label>
-          <input type="password" name="current_password" autocomplete="current-password" required></div>
-        <div class="field"><label class="l">New password (8+ characters)</label>
-          <input type="password" name="new_password" autocomplete="new-password" required></div>
-        <div class="field"><label class="l">Confirm new password</label>
-          <input type="password" name="new_password2" autocomplete="new-password" required></div>
-        <div class="actions"><button class="save">Update password</button></div>
-        <div class="help" style="margin-top:8px">To fully reset admin (e.g. if you forgot the password), delete
-          <code>config/admin.json</code> on the server — a new <code>config/setup.key</code> is created for setup.</div>
-      </form>
-      <h2 style="font-size:22px">Clear API cache</h2>
+      <div class="sub">Super-admin maintenance — cache and raw configuration.</div>
+      <h2 style="font-size:22px;margin-top:0">Clear API cache</h2>
       <form method="post" style="margin-bottom:28px">
         <input type="hidden" name="action" value="clearcache">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -1518,6 +1586,94 @@ function admin_field(array $f, $val, string $board): void
       <h2 style="font-size:22px">config/settings.json</h2>
       <div class="sub">Only keys that differ from board defaults are stored. Edit by hand if you like — boards pick it up on next render.</div>
       <pre class="raw"><?= h(json_encode($rawConf, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}') ?></pre>
+
+    <?php elseif ($accountBoard): ?>
+      <h2>Account</h2>
+      <div class="sub">Signed in as <strong><?= h(admin_username()) ?></strong>
+        — <?= admin_is_super() ? 'super admin (full access)' : 'screen operator' ?>.</div>
+      <?php if (!admin_is_super()): ?>
+      <div class="help" style="margin-bottom:18px">Assigned displays:
+        <?php $allowed = admin_allowed_screen_keys(); ?>
+        <?php if ($allowed === []): ?>
+          <span class="pill warn">none — ask a super admin to assign screens</span>
+        <?php else: ?>
+          <?php foreach ($allowed as $sk): ?>
+            <code><?= h($sk) ?></code>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
+      <h2 style="font-size:22px;margin-top:0">Change password</h2>
+      <form method="post" style="margin-bottom:28px;max-width:420px">
+        <input type="hidden" name="action" value="changepassword">
+        <input type="hidden" name="board" value="account">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <div class="field"><label class="l">Current password</label>
+          <input type="password" name="current_password" autocomplete="current-password" required></div>
+        <div class="field"><label class="l">New password (8+ characters)</label>
+          <input type="password" name="new_password" autocomplete="new-password" required></div>
+        <div class="field"><label class="l">Confirm new password</label>
+          <input type="password" name="new_password2" autocomplete="new-password" required></div>
+        <div class="actions"><button class="save">Update password</button></div>
+      </form>
+
+    <?php elseif ($usersBoard):
+      $allScreens = rotation_screens();
+    ?>
+      <h2>Users</h2>
+      <div class="sub">Local accounts — SSO can be added later via <code>auth_provider</code> on each user.</div>
+      <form method="post" id="usersForm">
+        <input type="hidden" name="action" value="save_users">
+        <input type="hidden" name="board" value="users">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <div class="rows-scroll">
+        <table class="rows" id="usersTable">
+          <thead><tr>
+            <th>Username</th><th>Role</th><th>Displays</th><th>Disabled</th><th>New password</th><th></th>
+          </tr></thead>
+          <tbody>
+            <?php foreach ($userAdminRows as $ui => $urow): ?>
+            <tr>
+              <td>
+                <input type="hidden" name="USERS[<?= (int)$ui ?>][id]" value="<?= h((string)$urow['id']) ?>">
+                <input type="text" name="USERS[<?= (int)$ui ?>][username]" value="<?= h((string)$urow['username']) ?>" required>
+              </td>
+              <td>
+                <select name="USERS[<?= (int)$ui ?>][role]">
+                  <option value="super" <?= ($urow['role'] ?? '') === 'super' ? 'selected' : '' ?>>super</option>
+                  <option value="operator" <?= ($urow['role'] ?? '') === 'operator' ? 'selected' : '' ?>>operator</option>
+                </select>
+              </td>
+              <td class="wide">
+                <?php if (($urow['role'] ?? '') === 'super'): ?>
+                  <span class="help" style="margin:0">All displays</span>
+                <?php else: ?>
+                <div class="slide-screen-checks">
+                  <?php foreach ($allScreens as $screenKey => $screenMeta): ?>
+                  <label>
+                    <input type="checkbox" name="USERS[<?= (int)$ui ?>][screens][]" value="<?= h($screenKey) ?>"
+                      <?= in_array($screenKey, $urow['screens'] ?? [], true) ? 'checked' : '' ?>>
+                    <?= h((string)($screenMeta['name'] ?? $screenKey)) ?>
+                  </label>
+                  <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+              </td>
+              <td style="text-align:center"><input type="checkbox" name="USERS[<?= (int)$ui ?>][disabled]" value="1"
+                <?= !empty($urow['disabled']) ? 'checked' : '' ?> style="width:20px;height:20px;accent-color:var(--beacon)"></td>
+              <td><input type="password" name="USERS[<?= (int)$ui ?>][new_password]" autocomplete="new-password" placeholder="Leave blank to keep"></td>
+              <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        </div>
+        <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column.</div>
+        <div class="actions" style="margin-top:16px">
+          <button class="save" type="submit">Save users</button>
+        </div>
+      </form>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
@@ -1739,8 +1895,12 @@ function admin_field(array $f, $val, string $board): void
         $scheduleOptions = ['always', 'once', 'range', 'yearly', 'yearly_range', 'monthly', 'weekly'];
 
         if ($board === 'rotation'):
-          $rotationScreens = rotation_screens();
+          $rotationScreens = admin_filter_screens(rotation_screens());
           $presenceAll = signage_presence_read_all();
+          if (!admin_is_super()) {
+              $allowedKeys = array_flip(admin_allowed_screen_keys());
+              $presenceAll = array_intersect_key($presenceAll, $allowedKeys);
+          }
           $scrVal = current_val($rawConf, $board, 'SCREENS');
           $scrRows = [];
           if (is_array($scrVal)) {
@@ -1765,6 +1925,7 @@ function admin_field(array $f, $val, string $board): void
             </div>
           </details>
 
+          <?php if (admin_is_super()): ?>
           <details class="panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body" style="padding-top:8px">
@@ -1804,6 +1965,9 @@ function admin_field(array $f, $val, string $board): void
           <button type="button" class="addrow" onclick="addRow(this)">+ Add screen</button>
             </div>
           </details>
+          <?php elseif ($rotationScreens === []): ?>
+          <div class="flash bad" style="margin-bottom:16px">No displays assigned to your account — ask a super admin to assign screens under <strong>Users</strong>.</div>
+          <?php endif; ?>
 
           <div class="section-title">Playlists</div>
           <div class="rotation-global-add" id="rotationGlobalAdd">
@@ -2136,6 +2300,7 @@ function admin_field(array $f, $val, string $board): void
           </details>
           <?php endforeach; ?>
 
+          <?php if (admin_is_super()): ?>
           <details class="panel panel-muted" style="margin-top:22px">
             <summary>Transition settings</summary>
             <div class="panel-body">
@@ -2148,6 +2313,7 @@ function admin_field(array $f, $val, string $board): void
               </div>
             </div>
           </details>
+          <?php endif; ?>
 
         <?php elseif ($board === 'video'):
           $videoVal = current_val($rawConf, $board, 'VIDEOS');
@@ -2329,7 +2495,7 @@ function admin_field(array $f, $val, string $board): void
           </details>
 
         <?php elseif ($board === 'rotator'):
-          $rotationScreens = rotation_screens();
+          $rotationScreens = admin_filter_screens(rotation_screens());
           $photoVal = current_val($rawConf, $board, 'PHOTOS');
           $photoRows = is_array($photoVal) ? $photoVal : [];
           $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
@@ -2416,6 +2582,7 @@ function admin_field(array $f, $val, string $board): void
                   <label><input type="checkbox" name="PHOTOS[<?= h((string)$ri) ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?>> Disabled</label>
                 </div>
                 <?php if (count($rotationScreens) > 0): ?>
+                <input type="hidden" name="PHOTOS[<?= h((string)$ri) ?>][_screens_form]" value="1">
                 <div class="slide-card-screens">
                   <span class="mini">Show on displays</span>
                   <div class="slide-screen-checks">
@@ -2454,6 +2621,13 @@ function admin_field(array $f, $val, string $board): void
           </datalist>
           <?php endif; ?>
           <button type="button" class="addrow" style="margin-top:12px" onclick="addPhotoCard()">+ Add blank deck row</button>
+          <?php
+          $photoScreenOptionsJs = [];
+          foreach ($rotationScreens as $sk => $sm) {
+              $photoScreenOptionsJs[] = ['key' => $sk, 'name' => (string)($sm['name'] ?? $sk)];
+          }
+          ?>
+          <script>window.PHOTO_SCREEN_OPTIONS = <?= json_encode($photoScreenOptionsJs, JSON_UNESCAPED_UNICODE) ?>;</script>
           </div>
 
           <div class="admin-tab-panel<?= $rotatorTab === 'library' ? ' active' : '' ?>" data-tab-panel="library" id="photo-library-panel">
@@ -2529,7 +2703,7 @@ function admin_field(array $f, $val, string $board): void
           </details>
 
         <?php elseif ($board === 'slides'):
-          $rotationScreens = rotation_screens();
+          $rotationScreens = admin_filter_screens(rotation_screens());
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = is_array($slideVal) ? $slideVal : [];
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
@@ -2913,7 +3087,9 @@ function admin_field(array $f, $val, string $board): void
 
         <div class="actions">
           <button class="save">Save</button>
+          <?php if (admin_can_tools()): ?>
           <label class="check"><input type="checkbox" name="clear_cache"> Clear cache after save</label>
+          <?php endif; ?>
         </div>
       </form>
       <?php if ($board === 'rotator'): ?>
@@ -3565,6 +3741,22 @@ function submitPhotoAddToDeck(file) {
   form.submit();
 }
 
+function photoScreenChecksHtml(idx) {
+  const opts = window.PHOTO_SCREEN_OPTIONS || [];
+  if (!opts.length) return '';
+  let html = '<input type="hidden" name="PHOTOS[' + idx + '][_screens_form]" value="1">' +
+    '<div class="slide-card-flags">' +
+    '<label><input type="checkbox" name="PHOTOS[' + idx + '][off]"> Disabled</label></div>' +
+    '<div class="slide-card-screens"><span class="mini">Show on displays</span><div class="slide-screen-checks">';
+  opts.forEach(function (o) {
+    const key = String(o.key).replace(/"/g, '&quot;');
+    const name = String(o.name).replace(/</g, '&lt;');
+    html += '<label><input type="checkbox" name="PHOTOS[' + idx + '][screens][]" value="' + key + '" checked> ' + name + '</label>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
 function addPhotoCard() {
   const deck = document.getElementById('photoDeck');
   if (!deck) return;
@@ -3587,6 +3779,7 @@ function addPhotoCard() {
     if (handle) handle.removeAttribute('data-drag-bound');
     const thumb = card.querySelector('.slide-card-thumb');
     if (thumb) thumb.closest('a')?.remove();
+    card.querySelectorAll('.slide-card-actions').forEach(function (el) { el.remove(); });
   } else {
     card = document.createElement('div');
     card.className = 'slide-card';
@@ -3597,9 +3790,10 @@ function addPhotoCard() {
       '<button type="button" class="rowdel" onclick="this.closest(\'[data-photo-card]\').remove(); reindexPhotoDeck();" title="Remove">×</button></div>' +
       '<div class="slide-card-quick"><div><label class="mini">Sec</label><input type="text" name="PHOTOS[' + idx + '][dwell]" placeholder="18"></div>' +
       '<div><label class="mini">Group</label><input type="text" name="PHOTOS[' + idx + '][group]" placeholder="travel"></div></div>' +
-      '<details class="slide-card-edit"><summary>Options &amp; displays</summary><div class="slide-card-grid">' +
+      '<details class="slide-card-edit" open><summary>Options &amp; displays</summary><div class="slide-card-grid">' +
       '<div class="span-2"><label class="mini">Image file</label><input type="text" name="PHOTOS[' + idx + '][file]" placeholder="filename.jpg"></div>' +
-      '<div class="span-3"><label class="mini">Label</label><input type="text" name="PHOTOS[' + idx + '][caption]" placeholder="Admin label only"></div></div></details>';
+      '<div class="span-3"><label class="mini">Label</label><input type="text" name="PHOTOS[' + idx + '][caption]" placeholder="Admin label only"></div></div>' +
+      photoScreenChecksHtml(idx) + '</details>';
   }
   deck.appendChild(card);
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexPhotoDeck);
@@ -3732,6 +3926,23 @@ function addSlideCard() {
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexSlideDeck);
   bindSlideCard(card);
   reindexSlideDeck();
+}
+
+function addUserRow() {
+  const table = document.getElementById('usersTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const idx = 'n' + (Date.now() % 1e7);
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td><input type="hidden" name="USERS[' + idx + '][id]" value="">' +
+    '<input type="text" name="USERS[' + idx + '][username]" placeholder="username" required></td>' +
+    '<td><select name="USERS[' + idx + '][role]"><option value="operator" selected>operator</option><option value="super">super</option></select></td>' +
+    '<td class="wide"><input type="text" name="USERS[' + idx + '][screens]" placeholder="main, garage"></td>' +
+    '<td style="text-align:center"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1" style="width:20px;height:20px;accent-color:var(--beacon)"></td>' +
+    '<td><input type="password" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user"></td>' +
+    '<td><button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button></td>';
+  tbody.appendChild(tr);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
