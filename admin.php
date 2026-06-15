@@ -1674,6 +1674,13 @@ function admin_field(array $f, $val, string $board): void
           <button class="save" type="submit">Save users</button>
         </div>
       </form>
+      <?php
+      $userScreenOptionsJs = [];
+      foreach ($allScreens as $sk => $sm) {
+          $userScreenOptionsJs[] = ['key' => $sk, 'name' => (string)($sm['name'] ?? $sk)];
+      }
+      ?>
+      <script>window.USER_SCREEN_OPTIONS = <?= json_encode($userScreenOptionsJs, JSON_UNESCAPED_UNICODE) ?>;</script>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
@@ -3928,6 +3935,48 @@ function addSlideCard() {
   reindexSlideDeck();
 }
 
+function userScreenChecksHtml(idx, checkedKeys) {
+  const opts = window.USER_SCREEN_OPTIONS || [];
+  const checked = new Set((checkedKeys || []).map(String));
+  if (!opts.length) {
+    return '<span class="help" style="margin:0">No displays configured — add screens under Rotation first.</span>';
+  }
+  let html = '<div class="slide-screen-checks">';
+  opts.forEach(function (o) {
+    const key = String(o.key).replace(/"/g, '&quot;');
+    const name = String(o.name).replace(/</g, '&lt;');
+    html += '<label><input type="checkbox" name="USERS[' + idx + '][screens][]" value="' + key + '"' +
+      (checked.has(String(o.key)) ? ' checked' : '') + '> ' + name + '</label>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function userScreensCellHtml(idx, role, checkedKeys) {
+  if (role === 'super') {
+    return '<span class="help" style="margin:0">All displays</span>';
+  }
+  return userScreenChecksHtml(idx, checkedKeys);
+}
+
+function bindUserRow(tr) {
+  const sel = tr.querySelector('select[name*="[role]"]');
+  if (!sel || sel.dataset.bound) return;
+  sel.dataset.bound = '1';
+  sel.addEventListener('change', function () {
+    const idxMatch = sel.name.match(/USERS\[([^\]]+)\]/);
+    if (!idxMatch) return;
+    const idx = idxMatch[1];
+    const cell = tr.querySelector('td.wide');
+    if (!cell) return;
+    const checked = [];
+    cell.querySelectorAll('input[name*="[screens]"]:checked').forEach(function (cb) {
+      checked.push(cb.value);
+    });
+    cell.innerHTML = userScreensCellHtml(idx, sel.value, checked);
+  });
+}
+
 function addUserRow() {
   const table = document.getElementById('usersTable');
   if (!table) return;
@@ -3938,11 +3987,12 @@ function addUserRow() {
     '<td><input type="hidden" name="USERS[' + idx + '][id]" value="">' +
     '<input type="text" name="USERS[' + idx + '][username]" placeholder="username" required></td>' +
     '<td><select name="USERS[' + idx + '][role]"><option value="operator" selected>operator</option><option value="super">super</option></select></td>' +
-    '<td class="wide"><input type="text" name="USERS[' + idx + '][screens]" placeholder="main, garage"></td>' +
+    '<td class="wide">' + userScreensCellHtml(idx, 'operator', []) + '</td>' +
     '<td style="text-align:center"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1" style="width:20px;height:20px;accent-color:var(--beacon)"></td>' +
     '<td><input type="password" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user"></td>' +
     '<td><button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button></td>';
   tbody.appendChild(tr);
+  bindUserRow(tr);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -3950,6 +4000,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initSlidesSectionNav();
   initPhotoDeck();
   initPhotosSectionNav();
+  document.querySelectorAll('#usersTable tbody tr').forEach(bindUserRow);
   initVideoPlaylist();
   initSplunkPanels();
   initPresencePanel();
