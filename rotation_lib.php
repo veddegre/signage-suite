@@ -591,6 +591,21 @@ function rotation_page_label(string $url): string
         return 'Slide — ' . ($caption !== '' ? $caption : $slideFile);
     }
 
+    require_once __DIR__ . '/rotator_lib.php';
+    $photoFile = rotator_rotation_parse_file($url);
+    if ($photoFile !== null) {
+        $photo = rotator_deck_by_file($photoFile);
+        $caption = is_array($photo) ? trim((string)($photo['caption'] ?? '')) : '';
+        return 'Photo — ' . ($caption !== '' ? $caption : $photoFile);
+    }
+    $photoGroup = rotator_rotation_parse_group($url);
+    if ($photoGroup !== null) {
+        return 'Photos — group ' . $photoGroup;
+    }
+    if (rotator_is_legacy_url($url)) {
+        return 'Photo rotator (all photos)';
+    }
+
     static $boards = [
         'index.php' => 'Weather',
         'lake.php' => 'Lake Michigan',
@@ -848,6 +863,43 @@ function rotation_is_slide_url(string $url): bool
     return slide_rotation_parse_file($url) !== null;
 }
 
+function rotation_is_legacy_rotator_url(string $url): bool
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    return rotator_is_legacy_url($url);
+}
+
+function rotation_is_photo_url(string $url): bool
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    return rotator_rotation_parse_file($url) !== null;
+}
+
+function rotation_is_rotator_group_url(string $url): bool
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    return rotator_rotation_parse_group($url) !== null;
+}
+
+function rotation_is_any_rotator_url(string $url): bool
+{
+    return rotation_is_legacy_rotator_url($url)
+        || rotation_is_photo_url($url)
+        || rotation_is_rotator_group_url($url);
+}
+
+/** @return list<array<string,mixed>> */
+function rotation_strip_photo_pages(array $pages): array
+{
+    return array_values(array_filter($pages, static function ($page) {
+        if (!is_array($page)) {
+            return false;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        return !rotation_is_any_rotator_url($url);
+    }));
+}
+
 /** @return list<array<string,mixed>> */
 function rotation_strip_slide_pages(array $pages): array
 {
@@ -861,15 +913,18 @@ function rotation_strip_slide_pages(array $pages): array
 }
 
 /**
- * Human page count — a contiguous slide block counts as one board.
- * @return array{total:int,slide_entries:int,slide_blocks:int}
+ * Human page count — contiguous slide or photo blocks count as one board.
+ * @return array{total:int,slide_entries:int,slide_blocks:int,photo_entries:int,photo_blocks:int}
  */
 function rotation_playlist_counts(array $pageRows): array
 {
     $total = 0;
     $slideEntries = 0;
     $slideBlocks = 0;
+    $photoEntries = 0;
+    $photoBlocks = 0;
     $inSlideBlock = false;
+    $inPhotoBlock = false;
 
     foreach ($pageRows as $prow) {
         if (!is_array($prow)) {
@@ -886,13 +941,31 @@ function rotation_playlist_counts(array $pageRows): array
                 $total++;
                 $inSlideBlock = true;
             }
+            $inPhotoBlock = false;
+            continue;
+        }
+        if (rotation_is_photo_url($url)) {
+            $photoEntries++;
+            if (!$inPhotoBlock) {
+                $photoBlocks++;
+                $total++;
+                $inPhotoBlock = true;
+            }
+            $inSlideBlock = false;
             continue;
         }
         $inSlideBlock = false;
+        $inPhotoBlock = false;
         $total++;
     }
 
-    return ['total' => $total, 'slide_entries' => $slideEntries, 'slide_blocks' => $slideBlocks];
+    return [
+        'total' => $total,
+        'slide_entries' => $slideEntries,
+        'slide_blocks' => $slideBlocks,
+        'photo_entries' => $photoEntries,
+        'photo_blocks' => $photoBlocks,
+    ];
 }
 
 /**
@@ -903,6 +976,20 @@ function rotation_playlist_segments(array $pageRows): array
 {
     $segments = [];
     $slideBuf = [];
+    $photoBuf = [];
+
+    $flushSlides = static function () use (&$segments, &$slideBuf): void {
+        if ($slideBuf !== []) {
+            $segments[] = ['type' => 'slides', 'items' => $slideBuf];
+            $slideBuf = [];
+        }
+    };
+    $flushPhotos = static function () use (&$segments, &$photoBuf): void {
+        if ($photoBuf !== []) {
+            $segments[] = ['type' => 'photos', 'items' => $photoBuf];
+            $photoBuf = [];
+        }
+    };
 
     foreach ($pageRows as $idx => $prow) {
         if (!is_array($prow)) {
@@ -910,27 +997,28 @@ function rotation_playlist_segments(array $pageRows): array
         }
         $purl = trim((string)($prow['url'] ?? ''));
         if ($purl === '') {
-            if ($slideBuf !== []) {
-                $segments[] = ['type' => 'slides', 'items' => $slideBuf];
-                $slideBuf = [];
-            }
+            $flushSlides();
+            $flushPhotos();
             $segments[] = ['type' => 'page', 'index' => $idx, 'row' => $prow, 'url' => ''];
             continue;
         }
         $isSlide = rotation_is_legacy_slides_url($purl) || rotation_is_slide_url($purl);
         if ($isSlide) {
+            $flushPhotos();
             $slideBuf[] = ['index' => $idx, 'row' => $prow, 'url' => $purl];
             continue;
         }
-        if ($slideBuf !== []) {
-            $segments[] = ['type' => 'slides', 'items' => $slideBuf];
-            $slideBuf = [];
+        if (rotation_is_photo_url($purl)) {
+            $flushSlides();
+            $photoBuf[] = ['index' => $idx, 'row' => $prow, 'url' => $purl];
+            continue;
         }
+        $flushSlides();
+        $flushPhotos();
         $segments[] = ['type' => 'page', 'index' => $idx, 'row' => $prow, 'url' => $purl];
     }
-    if ($slideBuf !== []) {
-        $segments[] = ['type' => 'slides', 'items' => $slideBuf];
-    }
+    $flushSlides();
+    $flushPhotos();
 
     return $segments;
 }
@@ -943,6 +1031,20 @@ function rotation_effective_playlist_lines(array $pages): array
 {
     $lines = [];
     $slideRun = [];
+    $photoRun = [];
+
+    $flushSlides = static function () use (&$lines, &$slideRun): void {
+        if ($slideRun !== []) {
+            $lines[] = rotation_format_slide_run_line($slideRun);
+            $slideRun = [];
+        }
+    };
+    $flushPhotos = static function () use (&$lines, &$photoRun): void {
+        if ($photoRun !== []) {
+            $lines[] = rotation_format_photo_run_line($photoRun);
+            $photoRun = [];
+        }
+    };
 
     foreach ($pages as $ep) {
         if (!is_array($ep) || empty($ep['url']) || !empty($ep['off'])) {
@@ -950,22 +1052,25 @@ function rotation_effective_playlist_lines(array $pages): array
         }
         $url = trim((string)$ep['url']);
         if (rotation_is_legacy_slides_url($url) || rotation_is_slide_url($url)) {
+            $flushPhotos();
             $slideRun[] = $ep;
             continue;
         }
-        if ($slideRun !== []) {
-            $lines[] = rotation_format_slide_run_line($slideRun);
-            $slideRun = [];
+        if (rotation_is_photo_url($url)) {
+            $flushSlides();
+            $photoRun[] = $ep;
+            continue;
         }
+        $flushSlides();
+        $flushPhotos();
         $dwell = (int)($ep['dwell'] ?? 0);
         $lines[] = [
             'label' => rotation_page_label($url),
             'detail' => $url . ($dwell > 0 ? ' · ' . $dwell . 's' : ''),
         ];
     }
-    if ($slideRun !== []) {
-        $lines[] = rotation_format_slide_run_line($slideRun);
-    }
+    $flushSlides();
+    $flushPhotos();
 
     return $lines;
 }
@@ -992,6 +1097,270 @@ function rotation_format_slide_run_line(array $run): array
         'label' => 'Custom slides (' . $count . ')',
         'detail' => $count . ' slide' . ($count === 1 ? '' : 's') . $dwellLabel,
     ];
+}
+
+/** @param list<array<string,mixed>> $run @return array{label:string,detail:string} */
+function rotation_format_photo_run_line(array $run): array
+{
+    $count = count($run);
+    $dwells = array_values(array_filter(array_map(static fn($p) => (int)($p['dwell'] ?? 0), $run)));
+    $dwellLabel = '';
+    if ($dwells !== []) {
+        $min = min($dwells);
+        $max = max($dwells);
+        $dwellLabel = $min === $max ? (' · ' . $min . 's each') : (' · ' . $min . '–' . $max . 's');
+    }
+
+    return [
+        'label' => 'Photos (' . $count . ')',
+        'detail' => $count . ' photo' . ($count === 1 ? '' : 's') . $dwellLabel,
+    ];
+}
+
+/** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,photo_count:int,screen:string} */
+function rotation_sync_photos(string $screen = 'main', ?array $deck = null): array
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $pages = rotation_screen_pages($screen);
+    $expected = rotator_rotation_pages($deck, $screen);
+    $expectedByUrl = [];
+    foreach ($expected as $row) {
+        $expectedByUrl[$row['url']] = (int)$row['dwell'];
+    }
+
+    $insertAt = null;
+    $filtered = [];
+    $oldPhotoUrls = [];
+    $removedLegacy = false;
+
+    foreach ($pages as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if (rotation_is_any_rotator_url($url)) {
+            if ($insertAt === null) {
+                $insertAt = count($filtered);
+            }
+            if (rotation_is_legacy_rotator_url($url)) {
+                $removedLegacy = true;
+            }
+            $oldPhotoUrls[$url] = (int)($page['dwell'] ?? 0);
+            continue;
+        }
+        $filtered[] = $page;
+    }
+    if ($insertAt === null) {
+        $insertAt = count($filtered);
+    }
+
+    $photoPages = [];
+    $added = 0;
+    $updated = 0;
+    foreach ($expectedByUrl as $url => $dwell) {
+        if (!array_key_exists($url, $oldPhotoUrls)) {
+            $added++;
+        } elseif ($oldPhotoUrls[$url] !== $dwell) {
+            $updated++;
+        }
+        $photoPages[] = ['url' => $url, 'dwell' => $dwell];
+    }
+    foreach (array_keys($oldPhotoUrls) as $oldUrl) {
+        if (!array_key_exists($oldUrl, $expectedByUrl)) {
+            $updated++;
+        }
+    }
+    if ($removedLegacy && $expected !== []) {
+        $updated = max($updated, 1);
+    }
+
+    array_splice($filtered, $insertAt, 0, $photoPages);
+
+    return [
+        'pages' => $filtered,
+        'added' => $added,
+        'updated' => $updated,
+        'removed_legacy' => $removedLegacy,
+        'photo_count' => count($photoPages),
+        'screen' => $screen,
+    ];
+}
+
+/** @return array{pages:list<array<string,mixed>>,removed:bool,removed_count:int,screen:string} */
+function rotation_remove_all_photos(string $screen): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $pages = rotation_screen_pages($screen);
+    $stripped = rotation_strip_photo_pages($pages);
+    return [
+        'pages' => $stripped,
+        'removed' => count($stripped) < count($pages),
+        'removed_count' => count($pages) - count($stripped),
+        'screen' => $screen,
+    ];
+}
+
+/** @return array{expected:int,synced:int,first_index:?int,last_index:?int,dwell_mismatch:int,on_playlist:bool,partial:bool} */
+function rotator_rotation_sync_info(string $screen = 'main', ?array $deck = null): array
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $expected = rotator_rotation_pages($deck, $screen);
+    $own = rotation_screen_own_pages($screen);
+    $byUrl = [];
+    foreach ($own as $i => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if (rotation_is_legacy_rotator_url($url)) {
+            $byUrl['__legacy__'] = ['index' => $i + 1, 'dwell' => (int)($page['dwell'] ?? 0), 'off' => !empty($page['off'])];
+            continue;
+        }
+        if (!rotation_is_any_rotator_url($url)) {
+            continue;
+        }
+        $byUrl[$url] = [
+            'index' => $i + 1,
+            'dwell' => (int)($page['dwell'] ?? 0),
+            'off' => !empty($page['off']),
+        ];
+    }
+
+    $synced = 0;
+    $dwellMismatch = 0;
+    $indices = [];
+    foreach ($expected as $exp) {
+        $url = $exp['url'];
+        if (!isset($byUrl[$url]) || !empty($byUrl[$url]['off'])) {
+            continue;
+        }
+        $synced++;
+        $indices[] = (int)$byUrl[$url]['index'];
+        if ((int)$byUrl[$url]['dwell'] !== (int)$exp['dwell']) {
+            $dwellMismatch++;
+        }
+    }
+
+    $expectedCount = count($expected);
+    return [
+        'expected' => $expectedCount,
+        'synced' => $synced,
+        'first_index' => $indices !== [] ? min($indices) : null,
+        'last_index' => $indices !== [] ? max($indices) : null,
+        'dwell_mismatch' => $dwellMismatch,
+        'on_playlist' => $expectedCount > 0 && $synced === $expectedCount && !isset($byUrl['__legacy__']),
+        'partial' => $synced > 0 && ($synced < $expectedCount || isset($byUrl['__legacy__'])),
+    ];
+}
+
+/**
+ * Per-display deploy status for the photo rotator admin panel.
+ * @return array<string,array<string,mixed>>
+ */
+function rotator_deploy_status(?array $deck = null): array
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    $deck = rotator_deck($deck);
+    $stats = rotator_deck_stats($deck);
+    $expected = (int)$stats['playlist_entries'];
+    $out = [];
+
+    foreach (rotation_screens() as $key => $scr) {
+        $own = rotation_screen_own_pages($key);
+        $mirrorsMain = ($key !== 'main' && $own === []);
+        $sync = rotator_rotation_sync_info($key, $deck);
+
+        $wallPhotos = 0;
+        $wallPos = null;
+        $pos = 0;
+        foreach (rotation_screen_active_pages($key) as $page) {
+            if (!is_array($page) || empty($page['url'])) {
+                continue;
+            }
+            $pos++;
+            $url = trim((string)$page['url']);
+            if (rotation_is_any_rotator_url($url)) {
+                if ($wallPos === null) {
+                    $wallPos = $pos;
+                }
+                if (rotation_is_photo_url($url)) {
+                    $wallPhotos++;
+                } else {
+                    $wallPhotos = max($wallPhotos, 1);
+                }
+            }
+        }
+
+        $out[$key] = [
+            'name' => (string)($scr['name'] ?? $key),
+            'mirrors_main' => $mirrorsMain,
+            'on_playlist' => $sync['on_playlist'],
+            'partial' => $sync['partial'],
+            'on_wall' => $wallPhotos > 0,
+            'sync' => $sync,
+            'wall' => $wallPhotos > 0 ? ['position' => $wallPos, 'photo_count' => $wallPhotos] : null,
+            'expected' => $expected,
+            'dwell_mismatch' => (int)$sync['dwell_mismatch'],
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * Sync photo rotation entries onto selected screens.
+ * @param list<string> $screens
+ * @return array{added:int,updated:int,screens:list<string>,photo_count:int}
+ */
+function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
+{
+    require_once __DIR__ . '/rotator_lib.php';
+    $added = 0;
+    $updated = 0;
+    $photoCount = 0;
+    $done = [];
+    foreach ($screens as $screen) {
+        $screen = rotation_normalize_screen_key((string)$screen);
+        if ($screen === '' || isset($done[$screen])) {
+            continue;
+        }
+        $done[$screen] = true;
+        $sync = rotation_sync_photos($screen, $deck);
+        rotation_pages_write($sync['screen'], $sync['pages']);
+        $added += (int)$sync['added'];
+        $updated += (int)$sync['updated'];
+        $photoCount = max($photoCount, (int)$sync['photo_count']);
+    }
+
+    return [
+        'added' => $added,
+        'updated' => $updated,
+        'screens' => array_keys($done),
+        'photo_count' => $photoCount,
+    ];
+}
+
+function rotator_deploy_flash_message(array $result): string
+{
+    $photoCount = (int)($result['photo_count'] ?? 0);
+    $screenCount = count($result['screens'] ?? []);
+    $parts = [];
+    if ($photoCount > 0 && $screenCount > 0) {
+        $parts[] = 'synced ' . $photoCount . ' photo entr' . ($photoCount === 1 ? 'y' : 'ies')
+            . ' to ' . $screenCount . ' display' . ($screenCount === 1 ? '' : 's');
+    }
+    if (($result['added'] ?? 0) > 0) {
+        $parts[] = (int)$result['added'] . ' new photo entr' . ((int)$result['added'] === 1 ? 'y' : 'ies');
+    }
+    if (($result['updated'] ?? 0) > 0) {
+        $parts[] = (int)$result['updated'] . ' dwell/order update' . ((int)$result['updated'] === 1 ? '' : 's');
+    }
+    if ($parts === []) {
+        return 'Photos already synced on selected displays.';
+    }
+    return 'Photo rotator ' . implode('; ', $parts) . '.';
 }
 
 /** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,screen:string} */

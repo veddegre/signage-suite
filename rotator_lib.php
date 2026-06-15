@@ -120,3 +120,501 @@ function rotator_normalize_uploads(array $files): array
     }
     return $out;
 }
+
+function rotator_default_dwell(): int
+{
+    return max(1, (int)cfg('rotator.DEFAULT_DWELL', (int)cfg('rotator.INTERVAL_SEC', 18)));
+}
+
+/** @return 'individual'|'groups'|'legacy' */
+function rotator_deploy_mode(): string
+{
+    $mode = strtolower(trim((string)cfg('rotator.DEPLOY_MODE', 'individual')));
+    return in_array($mode, ['individual', 'groups', 'legacy'], true) ? $mode : 'individual';
+}
+
+function rotator_photo_dwell(array $photo, ?int $default = null): int
+{
+    $default = $default ?? rotator_default_dwell();
+    $d = (int)($photo['dwell'] ?? 0);
+    return $d > 0 ? $d : $default;
+}
+
+function rotator_normalize_group(string $group): string
+{
+    $group = trim($group);
+    $group = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $group);
+    return trim($group, '-._');
+}
+
+function rotator_rotation_url(string $file): string
+{
+    $safe = rotator_safe_filename($file);
+    if ($safe === null) {
+        return 'rotator.php';
+    }
+    return 'rotator.php?photo=' . rawurlencode($safe);
+}
+
+function rotator_group_url(string $group): string
+{
+    $group = rotator_normalize_group($group);
+    if ($group === '') {
+        return 'rotator.php';
+    }
+    return 'rotator.php?group=' . rawurlencode($group);
+}
+
+function rotator_is_legacy_url(string $url): bool
+{
+    return trim($url) === 'rotator.php';
+}
+
+function rotator_rotation_parse_file(string $url): ?string
+{
+    $url = trim($url);
+    if (strtok($url, '?') !== 'rotator.php') {
+        return null;
+    }
+    $query = parse_url($url, PHP_URL_QUERY);
+    if (!is_string($query) || $query === '') {
+        return null;
+    }
+    parse_str($query, $params);
+    if (!isset($params['photo'])) {
+        return null;
+    }
+    return rotator_safe_filename((string)$params['photo']);
+}
+
+function rotator_rotation_parse_group(string $url): ?string
+{
+    $url = trim($url);
+    if (strtok($url, '?') !== 'rotator.php') {
+        return null;
+    }
+    $query = parse_url($url, PHP_URL_QUERY);
+    if (!is_string($query) || $query === '') {
+        return null;
+    }
+    parse_str($query, $params);
+    if (!isset($params['group'])) {
+        return null;
+    }
+    $group = rotator_normalize_group((string)$params['group']);
+    return $group !== '' ? $group : null;
+}
+
+/** @return list<array<string,mixed>> */
+function rotator_deck(?array $deck = null): array
+{
+    $deck = is_array($deck) ? $deck : cfg('rotator.PHOTOS', []);
+    return is_array($deck) ? $deck : [];
+}
+
+/** @return list<string> */
+function rotator_deck_files(?array $deck = null): array
+{
+    $files = [];
+    foreach (rotator_deck($deck) as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        $file = rotator_safe_filename((string)($photo['file'] ?? ''));
+        if ($file !== null) {
+            $files[] = $file;
+        }
+    }
+    return $files;
+}
+
+/** @return array<string,mixed>|null */
+function rotator_deck_by_file(string $file, ?array $deck = null): ?array
+{
+    $want = rotator_safe_filename($file);
+    if ($want === null) {
+        return null;
+    }
+    foreach (rotator_deck($deck) as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        if (rotator_safe_filename((string)($photo['file'] ?? '')) === $want) {
+            return $photo;
+        }
+    }
+    return null;
+}
+
+/** @return list<string> Empty = no restriction (all deploy targets). */
+function rotator_target_screens(array $photo): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $raw = $photo['screens'] ?? null;
+    if ($raw === null || $raw === '' || $raw === []) {
+        return [];
+    }
+    $keys = [];
+    if (is_array($raw)) {
+        foreach ($raw as $item) {
+            $k = rotation_normalize_screen_key((string)$item);
+            if ($k !== '') {
+                $keys[$k] = true;
+            }
+        }
+    } else {
+        foreach (preg_split('/\s*,\s*/', (string)$raw, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $item) {
+            $k = rotation_normalize_screen_key((string)$item);
+            if ($k !== '') {
+                $keys[$k] = true;
+            }
+        }
+    }
+    return array_keys($keys);
+}
+
+function rotator_on_screen(array $photo, string $screen): bool
+{
+    if (!array_key_exists('screens', $photo)) {
+        return true;
+    }
+    $targets = rotator_target_screens($photo);
+    if ($targets === []) {
+        return false;
+    }
+    require_once __DIR__ . '/rotation_lib.php';
+    return in_array(rotation_normalize_screen_key($screen), $targets, true);
+}
+
+function rotator_photo_enabled(array $photo, ?string $dir = null): bool
+{
+    if (!is_array($photo) || !empty($photo['off'])) {
+        return false;
+    }
+    $dir = $dir ?? rotator_photo_dir();
+    $file = rotator_safe_filename((string)($photo['file'] ?? ''));
+    return $file !== null && is_file($dir . '/' . $file);
+}
+
+function rotator_thumb_url(string $file): ?string
+{
+    $safe = rotator_safe_filename($file);
+    if ($safe === null || !is_file(rotator_photo_dir() . '/' . $safe)) {
+        return null;
+    }
+    $mtime = @filemtime(rotator_photo_dir() . '/' . $safe);
+    return 'rotator.php?img=' . rawurlencode($safe) . ($mtime ? '&v=' . $mtime : '');
+}
+
+function rotator_preview_url(string $file): ?string
+{
+    $safe = rotator_safe_filename($file);
+    if ($safe === null) {
+        return null;
+    }
+    return signage_board_preview_url('rotator.php?photo=' . rawurlencode($safe) . '&preview=1');
+}
+
+function rotator_display_label(string $file, ?array $deck = null): string
+{
+    $photo = rotator_deck_by_file($file, $deck);
+    if (is_array($photo)) {
+        $caption = trim((string)($photo['caption'] ?? ''));
+        if ($caption !== '') {
+            return $caption;
+        }
+    }
+    return $file;
+}
+
+/**
+ * @return list<array{file:string,in_deck:bool,label:string,caption:string,off:bool,group:string,thumb:?string,preview:?string}>
+ */
+function rotator_library_entries(?array $deck = null, ?string $dir = null): array
+{
+    $deck = rotator_deck($deck);
+    $dir = $dir ?? rotator_photo_dir();
+    $deckByFile = [];
+    foreach ($deck as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        $file = rotator_safe_filename((string)($photo['file'] ?? ''));
+        if ($file !== null) {
+            $deckByFile[$file] = $photo;
+        }
+    }
+    $out = [];
+    foreach (rotator_list_photos($dir) as $file) {
+        $entry = $deckByFile[$file] ?? null;
+        $caption = is_array($entry) ? trim((string)($entry['caption'] ?? '')) : '';
+        $out[] = [
+            'file' => $file,
+            'in_deck' => $entry !== null,
+            'caption' => $caption,
+            'label' => $caption !== '' ? $caption : $file,
+            'off' => is_array($entry) && !empty($entry['off']),
+            'group' => is_array($entry) ? trim((string)($entry['group'] ?? '')) : '',
+            'thumb' => rotator_thumb_url($file),
+            'preview' => rotator_preview_url($file),
+        ];
+    }
+    usort($out, static function ($a, $b) {
+        if ($a['in_deck'] !== $b['in_deck']) {
+            return $a['in_deck'] ? 1 : -1;
+        }
+        return strcasecmp($a['label'], $b['label']);
+    });
+    return $out;
+}
+
+/** @return list<string> */
+function rotator_orphan_files(?array $deck = null, ?string $dir = null): array
+{
+    $dir = $dir ?? rotator_photo_dir();
+    $inDeck = array_flip(rotator_deck_files($deck));
+    return array_values(array_filter(rotator_list_photos($dir), static fn($f) => !isset($inDeck[$f])));
+}
+
+/** @return list<array<string,mixed>> */
+function rotator_remove_from_deck(array $deck, string $file): array
+{
+    $want = rotator_safe_filename($file);
+    if ($want === null) {
+        return $deck;
+    }
+    return array_values(array_filter($deck, static function ($photo) use ($want) {
+        if (!is_array($photo)) {
+            return false;
+        }
+        return rotator_safe_filename((string)($photo['file'] ?? '')) !== $want;
+    }));
+}
+
+function rotator_append_to_deck(string $filename, array $extra = []): bool
+{
+    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    $deck = $conf['rotator.PHOTOS'] ?? [];
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $safe = rotator_safe_filename($filename);
+    if ($safe === null) {
+        return false;
+    }
+    foreach ($deck as $photo) {
+        if (is_array($photo) && rotator_safe_filename((string)($photo['file'] ?? '')) === $safe) {
+            return true;
+        }
+    }
+    $row = ['file' => $safe] + $extra;
+    $deck[] = $row;
+    $conf['rotator.PHOTOS'] = $deck;
+    return cfg_write($conf);
+}
+
+/**
+ * Delete a photo file, remove from deck, and resync rotation on all displays.
+ * @return array{ok:bool,file?:string,error?:string}
+ */
+function rotator_delete_file(string $file): array
+{
+    $safe = rotator_safe_filename($file);
+    if ($safe === null) {
+        return ['ok' => false, 'error' => 'Invalid filename.'];
+    }
+
+    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    $deck = $conf['rotator.PHOTOS'] ?? [];
+    if (is_array($deck)) {
+        $deck = rotator_remove_from_deck($deck, $safe);
+        if ($deck === []) {
+            unset($conf['rotator.PHOTOS']);
+        } else {
+            $conf['rotator.PHOTOS'] = $deck;
+        }
+    }
+    if (!cfg_write($conf)) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
+
+    $path = rotator_photo_dir() . '/' . $safe;
+    if (is_file($path)) {
+        @unlink($path);
+    }
+
+    require_once __DIR__ . '/rotation_lib.php';
+    foreach (array_keys(rotation_screens()) as $screen) {
+        $sync = rotation_sync_photos($screen, $conf['rotator.PHOTOS'] ?? []);
+        rotation_pages_write($sync['screen'], $sync['pages']);
+    }
+    cfg_reload();
+
+    return ['ok' => true, 'file' => $safe];
+}
+
+/** Import existing disk files into the deck when PHOTOS was never configured. */
+function rotator_migrate_deck_from_files(): bool
+{
+    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    if (array_key_exists('rotator.PHOTOS', $conf)) {
+        return false;
+    }
+    $files = rotator_list_photos();
+    if ($files === []) {
+        return false;
+    }
+    $deck = [];
+    foreach ($files as $file) {
+        $deck[] = ['file' => $file];
+    }
+    $conf['rotator.PHOTOS'] = $deck;
+    if (!cfg_write($conf)) {
+        return false;
+    }
+    cfg_reload();
+    return true;
+}
+
+/**
+ * Enabled on-disk photos for one display, in deck order.
+ * @return list<array<string,mixed>>
+ */
+function rotator_photos_for_screen(?string $screen, ?array $deck = null, ?string $dir = null): array
+{
+    $deck = rotator_deck($deck);
+    $dir = $dir ?? rotator_photo_dir();
+    require_once __DIR__ . '/rotation_lib.php';
+    $screenKey = $screen !== null ? rotation_normalize_screen_key($screen) : null;
+    $out = [];
+    foreach ($deck as $photo) {
+        if (!rotator_photo_enabled($photo, $dir)) {
+            continue;
+        }
+        if ($screenKey !== null && $screenKey !== '' && !rotator_on_screen($photo, $screenKey)) {
+            continue;
+        }
+        $photo['file'] = rotator_safe_filename((string)($photo['file'] ?? ''));
+        $out[] = $photo;
+    }
+    return $out;
+}
+
+/**
+ * @return list<array<string,mixed>>
+ */
+function rotator_photos_in_group(string $group, ?string $screen = null, ?array $deck = null): array
+{
+    $group = rotator_normalize_group($group);
+    if ($group === '') {
+        return [];
+    }
+    return array_values(array_filter(
+        rotator_photos_for_screen($screen, $deck),
+        static fn($photo) => rotator_normalize_group((string)($photo['group'] ?? '')) === $group
+    ));
+}
+
+/** @param list<array<string,mixed>> $photos */
+function rotator_group_dwell(array $photos, ?int $default = null): int
+{
+    $default = $default ?? rotator_default_dwell();
+    $sum = 0;
+    foreach ($photos as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        $sum += rotator_photo_dwell($photo, $default);
+    }
+    return max($default, $sum);
+}
+
+/**
+ * Expected rotation entries for one display (based on deploy mode).
+ * @return list<array{url:string,dwell:int,file?:string,group?:string}>
+ */
+function rotator_rotation_pages(?array $deck = null, ?string $screen = null): array
+{
+    $mode = rotator_deploy_mode();
+    $default = rotator_default_dwell();
+    $enabled = rotator_photos_for_screen($screen, $deck);
+    if ($enabled === []) {
+        return [];
+    }
+
+    if ($mode === 'legacy') {
+        return [['url' => 'rotator.php', 'dwell' => rotator_group_dwell($enabled, $default)]];
+    }
+
+    if ($mode === 'groups') {
+        $byGroup = [];
+        $ungrouped = [];
+        foreach ($enabled as $photo) {
+            $group = rotator_normalize_group((string)($photo['group'] ?? ''));
+            if ($group === '') {
+                $ungrouped[] = $photo;
+            } else {
+                $byGroup[$group][] = $photo;
+            }
+        }
+        $out = [];
+        foreach ($byGroup as $group => $photos) {
+            $out[] = [
+                'url' => rotator_group_url($group),
+                'dwell' => rotator_group_dwell($photos, $default),
+                'group' => $group,
+            ];
+        }
+        foreach ($ungrouped as $photo) {
+            $file = (string)$photo['file'];
+            $out[] = [
+                'url' => rotator_rotation_url($file),
+                'dwell' => rotator_photo_dwell($photo, $default),
+                'file' => $file,
+            ];
+        }
+        return $out;
+    }
+
+    $out = [];
+    foreach ($enabled as $photo) {
+        $file = (string)$photo['file'];
+        $out[] = [
+            'url' => rotator_rotation_url($file),
+            'dwell' => rotator_photo_dwell($photo, $default),
+            'file' => $file,
+        ];
+    }
+    return $out;
+}
+
+/**
+ * @return array{total:int,enabled:int,on_disk:int,playlist_entries:int}
+ */
+function rotator_deck_stats(?array $deck = null): array
+{
+    $deck = rotator_deck($deck);
+    $dir = rotator_photo_dir();
+    $total = count($deck);
+    $enabled = 0;
+    $onDisk = 0;
+    foreach ($deck as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        if (empty($photo['off'])) {
+            $enabled++;
+        }
+        $file = rotator_safe_filename((string)($photo['file'] ?? ''));
+        if ($file !== null && is_file($dir . '/' . $file)) {
+            $onDisk++;
+        }
+    }
+    return [
+        'total' => $total,
+        'enabled' => $enabled,
+        'on_disk' => $onDisk,
+        'playlist_entries' => count(rotator_rotation_pages($deck, 'main')),
+    ];
+}

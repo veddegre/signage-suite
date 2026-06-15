@@ -352,6 +352,54 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             $conf['slides.SLIDES'] = $outV;
         }
     }
+    if ($board === 'rotator') {
+        $allScreenKeys = array_keys(rotation_screens());
+        sort($allScreenKeys);
+        $outV = [];
+        foreach ($_POST['PHOTOS'] ?? [] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $obj = [];
+            foreach (['file', 'caption', 'group'] as $k) {
+                $v = trim((string)($row[$k] ?? ''));
+                if ($v !== '') {
+                    $obj[$k] = $k === 'group' ? rotator_normalize_group($v) : $v;
+                }
+            }
+            $v = trim((string)($row['dwell'] ?? ''));
+            if ($v !== '') {
+                $obj['dwell'] = (int)$v;
+            }
+            if (!empty($row['off'])) {
+                $obj['off'] = true;
+            }
+            $screens = [];
+            if (isset($row['screens']) && is_array($row['screens'])) {
+                foreach ($row['screens'] as $scr) {
+                    $sk = rotation_normalize_screen_key((string)$scr);
+                    if ($sk !== '') {
+                        $screens[$sk] = true;
+                    }
+                }
+            }
+            $screens = array_keys($screens);
+            sort($screens);
+            if (!isset($row['screens'])) {
+                $obj['screens'] = [];
+            } elseif ($screens !== $allScreenKeys) {
+                $obj['screens'] = $screens;
+            }
+            if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '') {
+                $outV[] = $obj;
+            }
+        }
+        if ($outV === []) {
+            unset($conf['rotator.PHOTOS']);
+        } else {
+            $conf['rotator.PHOTOS'] = $outV;
+        }
+    }
     if ($board === 'splunk') {
         if (!empty($_POST['splunk_use_json'])) {
             $parsed = splunk_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
@@ -485,6 +533,21 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
                 }
+            } elseif ($board === 'rotator') {
+                $deployScreens = [];
+                if (isset($_POST['deploy_screens']) && is_array($_POST['deploy_screens'])) {
+                    foreach ($_POST['deploy_screens'] as $scr) {
+                        $scr = rotation_normalize_screen_key((string)$scr);
+                        if ($scr !== '') {
+                            $deployScreens[$scr] = true;
+                        }
+                    }
+                }
+                if ($deployScreens !== []) {
+                    $result = rotator_deploy_to_screens(array_keys($deployScreens));
+                    cfg_reload();
+                    $extra = rotator_deploy_flash_message($result);
+                }
             } elseif ($board === 'rss' && isset($_POST['sync_rotation_rss'])) {
                 $sync = rotation_sync_rss('main');
                 if (rotation_pages_write($sync['screen'], $sync['pages'])) {
@@ -501,6 +564,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $board === 'rotation'
                 || ($board === 'video' && isset($_POST['sync_rotation_main']))
                 || ($board === 'slides' && (isset($_POST['deploy_screens']) || isset($_POST['sync_rotation_slides'])))
+                || ($board === 'rotator' && isset($_POST['deploy_screens']))
                 || ($board === 'rss' && isset($_POST['sync_rotation_rss']))
             )) {
                 $extra .= ($extra !== '' ? ' ' : '') . 'Wall displays refresh within 30 seconds.';
@@ -787,46 +851,104 @@ if ($authed && $board === 'video' && csrf_ok()) {
     }
 }
 
-// ── Photo rotator: upload / delete ────────────────────────────────────────────
-if ($authed && $board === 'rotator' && csrf_ok()) {
+// ── Photo rotator: upload / delete / deploy ─────────────────────────────────
+if ($authed && $board === 'rotator') {
     $photoDir = rotator_photo_dir();
     if (!is_dir($photoDir)) @mkdir($photoDir, 0775, true);
     protect_dirs();
 
-    if (($_POST['action'] ?? '') === 'upload_photo' && isset($_FILES['photo'])) {
-        $uploaded = [];
-        $errors = [];
-        foreach (rotator_normalize_uploads($_FILES['photo']) as $f) {
-            if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-                continue;
-            }
-            $result = rotator_save_upload($f, $photoDir);
-            if ($result['ok']) {
-                $uploaded[] = $result['name'];
-            } else {
-                $errors[] = ($f['name'] ?? 'file') . ': ' . ($result['error'] ?? 'failed');
-            }
-        }
-        if ($uploaded) {
-            $flash = 'Uploaded ' . implode(', ', $uploaded) . '.';
-            if ($errors) {
-                $flash .= ' Some failed: ' . implode('; ', $errors);
-            }
-        } elseif ($errors) {
-            $flash = implode('; ', $errors);
+    $photoAction = (string)($_POST['action'] ?? '');
+
+    if ($photoAction === 'delete_photo') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
             $flashOk = false;
         } else {
-            $flash = 'No files selected.'; $flashOk = false;
+            $result = rotator_delete_file((string)($_POST['file'] ?? ''));
+            if (!empty($result['ok'])) {
+                header('Location: ?board=rotator&deleted=' . rawurlencode((string)$result['file']));
+                exit;
+            }
+            $flash = (string)($result['error'] ?? 'Could not delete photo.');
+            $flashOk = false;
         }
-    }
+    } elseif (csrf_ok()) {
+        if ($photoAction === 'deploy_photos') {
+            $screens = array_values(array_filter(array_map(
+                'rotation_normalize_screen_key',
+                (array)($_POST['deploy_screens'] ?? [])
+            )));
+            if ($screens === []) {
+                $flash = 'Pick at least one display to deploy to.'; $flashOk = false;
+            } else {
+                $result = rotator_deploy_to_screens($screens);
+                cfg_reload();
+                $flash = rotator_deploy_flash_message($result) . ' Wall displays refresh within 30 seconds.';
+            }
+        }
 
-    if (($_POST['action'] ?? '') === 'delete_photo') {
-        $del = (string)($_POST['file'] ?? '');
-        if (!rotator_delete_photo($del, $photoDir)) {
-            $flash = 'Could not delete photo.'; $flashOk = false;
-        } else {
-            $flash = 'Deleted ' . basename($del) . '.';
+        if ($photoAction === 'remove_photos_rotation') {
+            $screen = rotation_normalize_screen_key((string)($_POST['remove_screen'] ?? $_POST['screen'] ?? ''));
+            if ($screen === '') {
+                $flash = 'Invalid display.'; $flashOk = false;
+            } else {
+                $rm = rotation_remove_all_photos($screen);
+                if ($rm['removed'] && rotation_pages_write($rm['screen'], $rm['pages'])) {
+                    cfg_reload();
+                    $name = rotation_screen_display_name($screen, rotation_screens());
+                    $flash = 'Removed ' . (int)$rm['removed_count'] . ' photo entr'
+                        . ((int)$rm['removed_count'] === 1 ? 'y' : 'ies') . ' from ' . $name . ' playlist.';
+                } else {
+                    $flash = 'Photos were not on that playlist.'; $flashOk = false;
+                }
+            }
         }
+
+        if ($photoAction === 'upload_photo' && isset($_FILES['photo'])) {
+            $uploaded = [];
+            $errors = [];
+            foreach (rotator_normalize_uploads($_FILES['photo']) as $f) {
+                if (($f['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                    continue;
+                }
+                $result = rotator_save_upload($f, $photoDir);
+                if ($result['ok']) {
+                    rotator_append_to_deck((string)$result['name']);
+                    $uploaded[] = $result['name'];
+                } else {
+                    $errors[] = ($f['name'] ?? 'file') . ': ' . ($result['error'] ?? 'failed');
+                }
+            }
+            if ($uploaded) {
+                rotator_deploy_to_screens(['main']);
+                cfg_reload();
+                header('Location: ?board=rotator&highlight=' . rawurlencode((string)$uploaded[0]));
+                exit;
+            } elseif ($errors) {
+                $flash = implode('; ', $errors);
+                $flashOk = false;
+            } else {
+                $flash = 'No files selected.'; $flashOk = false;
+            }
+        }
+
+        if ($photoAction === 'add_photo_to_deck') {
+            $file = rotator_safe_filename((string)($_POST['file'] ?? ''));
+            if ($file === null || !is_file($photoDir . '/' . $file)) {
+                $flash = 'Invalid photo file.'; $flashOk = false;
+            } elseif (in_array($file, rotator_deck_files(), true)) {
+                $flash = $file . ' is already in the photo deck.';
+            } elseif (rotator_append_to_deck($file)) {
+                cfg_reload();
+                header('Location: ?board=rotator&highlight=' . rawurlencode($file));
+                exit;
+            } else {
+                $flash = 'Could not update settings.json.'; $flashOk = false;
+            }
+        }
+    } elseif ($photoAction !== '') {
+        $flash = 'Session expired — refresh the page and try again.';
+        $flashOk = false;
     }
 }
 
@@ -861,6 +983,7 @@ $navGroups = [
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
+$rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
@@ -882,6 +1005,16 @@ $slidesOrphanFiles = ($board === 'slides')
     : [];
 $slidesLibrary = ($board === 'slides')
     ? slides_library_entries($rawConf['slides.SLIDES'] ?? null)
+    : [];
+if ($board === 'rotator') {
+    rotator_migrate_deck_from_files();
+    $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : $rawConf;
+}
+$rotatorDeckStats = rotator_deck_stats($rawConf['rotator.PHOTOS'] ?? []);
+$rotatorDeployStatus = rotator_deploy_status($rawConf['rotator.PHOTOS'] ?? null);
+$photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
+$rotatorLibrary = ($board === 'rotator')
+    ? rotator_library_entries($rawConf['rotator.PHOTOS'] ?? null)
     : [];
 $splunkPages = [];
 $splunkActivePage = 'main';
@@ -1405,39 +1538,18 @@ function admin_field(array $f, $val, string $board): void
         <?php endif; ?></div>
 
       <?php if ($board === 'rotator'): ?>
-      <details class="panel" open>
-        <summary>Upload photos</summary>
-        <div class="panel-body">
-      <div class="upload-box">
-        <h3>Upload photos</h3>
-        <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=rotator">
-          <input type="hidden" name="action" value="upload_photo">
-          <input type="hidden" name="board" value="rotator">
-          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-          <input type="file" name="photo[]" accept="image/jpeg,image/png" multiple>
-          <button class="secondary" type="submit">Upload</button>
-        </form>
-        <div class="help" style="margin-top:10px">JPG or PNG, up to 25 MB each.</div>
-        <?php $photoFiles = rotator_list_photos();
-        if ($photoFiles): ?>
-        <ul class="filelist">
-          <?php foreach ($photoFiles as $pf): ?>
-            <li>
-              <code><?= h($pf) ?></code>
-              <form method="post" action="?board=rotator" onsubmit="return confirm('Delete <?= h($pf) ?>?');">
-                <input type="hidden" name="action" value="delete_photo">
-                <input type="hidden" name="board" value="rotator">
-                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <input type="hidden" name="file" value="<?= h($pf) ?>">
-                <button class="secondary" type="submit">Delete</button>
-              </form>
-            </li>
-          <?php endforeach; ?>
-        </ul>
-        <?php endif; ?>
-      </div>
-        </div>
-      </details>
+      <form id="photoDeleteForm" method="post" action="?board=rotator" hidden>
+        <input type="hidden" name="action" value="delete_photo">
+        <input type="hidden" name="board" value="rotator">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="photoDeleteFile" value="">
+      </form>
+      <form id="photoAddForm" method="post" action="?board=rotator" hidden>
+        <input type="hidden" name="action" value="add_photo_to_deck">
+        <input type="hidden" name="board" value="rotator">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="file" id="photoAddFile" value="">
+      </form>
       <?php endif; ?>
 
       <?php if ($board === 'traffic'):
@@ -1881,6 +1993,82 @@ function admin_field(array $f, $val, string $board): void
               </div>
             </details>
             <?php continue; endif;
+              if (($segment['type'] ?? '') === 'photos'):
+                $photoItems = $segment['items'] ?? [];
+                $photoCount = count($photoItems);
+                $legacyRotator = $photoCount === 1 && rotation_is_legacy_rotator_url((string)($photoItems[0]['url'] ?? ''));
+            ?>
+            <details class="rotation-slides-group">
+              <summary>
+                <span class="drag-handle rotation-slides-group-handle" title="Drag photo block" draggable="true">⋮⋮</span>
+                <strong><?= $legacyRotator ? 'Photo rotator (legacy)' : 'Photos (' . (int)$photoCount . ')' ?></strong>
+                <span class="help" style="margin:0">Managed from Photo Rotator — deploy or save deck to sync dwell &amp; order</span>
+                <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="?board=rotator">Edit deck ↗</a>
+              </summary>
+              <div class="rotation-slides-group-body">
+                <?php foreach ($photoItems as $item):
+                  $prow = $item['row'];
+                  $purl = (string)$item['url'];
+                  if ($legacyRotator):
+                ?>
+                <div class="rotation-card rotation-card-legacy" data-rotation-card>
+                  <div class="rotation-card-head">
+                    <div class="rotation-card-title">
+                      <strong>Legacy single entry</strong>
+                      <code>rotator.php</code>
+                    </div>
+                  </div>
+                  <div class="rotation-card-meta">
+                    <span class="pill warn">Switch deploy mode in Photo Rotator to split into per-photo entries</span>
+                  </div>
+                  <input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>">
+                  <input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>">
+                  <?php if (!empty($prow['from'])): ?><input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)$prow['from']) ?>"><?php endif; ?>
+                  <?php if (!empty($prow['to'])): ?><input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)$prow['to']) ?>"><?php endif; ?>
+                  <?php if (!empty($prow['off'])): ?><input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" value="1"><?php endif; ?>
+                </div>
+                <?php $pri++; continue; endif;
+                  $photoFile = rotator_rotation_parse_file($purl);
+                  $photoMeta = $photoFile !== null ? rotator_deck_by_file($photoFile, $rawConf['rotator.PHOTOS'] ?? null) : null;
+                  $photoLabel = rotation_page_label($purl);
+                ?>
+                <div class="rotation-card rotation-card-slide" data-rotation-card>
+                  <div class="rotation-card-head">
+                    <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                    <div class="rotation-card-title">
+                      <strong data-rotation-label><?= h($photoLabel) ?></strong>
+                      <code data-rotation-url-display><?= h($purl) ?></code>
+                    </div>
+                  </div>
+                  <div class="rotation-card-grid rotation-card-grid-compact">
+                    <div style="grid-column:1 / -1">
+                      <label class="mini">URL</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>" data-rotation-url readonly>
+                    </div>
+                    <div>
+                      <label class="mini">Dwell (s)</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="18" readonly>
+                    </div>
+                  </div>
+                  <div class="rotation-card-meta">
+                    <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this photo</label>
+                    <?php
+                    $photoProof = signage_presence_page_proof_label($screenPresence, $purl);
+                    if ($photoProof !== ''): ?>
+                      <span class="pill play-proof" title="Proof of play"><?= h($photoProof) ?></span>
+                    <?php endif; ?>
+                    <?php if (is_array($photoMeta) && trim((string)($photoMeta['group'] ?? '')) !== ''): ?>
+                      <span class="pill">Group: <?= h((string)$photoMeta['group']) ?></span>
+                    <?php endif; ?>
+                    <div class="rotation-card-actions">
+                      <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                    </div>
+                  </div>
+                </div>
+                <?php $pri++; endforeach; ?>
+              </div>
+            </details>
+            <?php continue; endif;
               $prow = $segment['row'] ?? [];
               $purl = (string)($segment['url'] ?? '');
             ?>
@@ -2133,6 +2321,206 @@ function admin_field(array $f, $val, string $board): void
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
                   if (!in_array($f['key'], $splunkBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'rotator'):
+          $rotationScreens = rotation_screens();
+          $photoVal = current_val($rawConf, $board, 'PHOTOS');
+          $photoRows = is_array($photoVal) ? $photoVal : [];
+          $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
+          if (!in_array($rotatorTab, ['deck', 'library', 'upload', 'deploy'], true)) {
+              $rotatorTab = 'deck';
+          }
+          if ($photoHighlight !== null) {
+              $rotatorTab = 'deck';
+          }
+          $deployMode = rotator_deploy_mode();
+        ?>
+          <div class="admin-tabs" id="photosTabs" role="tablist">
+            <button type="button" class="admin-tab<?= $rotatorTab === 'deck' ? ' active' : '' ?>" data-tab="deck">Deck<span class="tab-count"><?= count($photoRows) ?></span></button>
+            <button type="button" class="admin-tab<?= $rotatorTab === 'library' ? ' active' : '' ?>" data-tab="library">Library<span class="tab-count"><?= count($rotatorLibrary) ?></span></button>
+            <button type="button" class="admin-tab<?= $rotatorTab === 'upload' ? ' active' : '' ?>" data-tab="upload">Upload</button>
+            <button type="button" class="admin-tab<?= $rotatorTab === 'deploy' ? ' active' : '' ?>" data-tab="deploy">Deploy</button>
+          </div>
+
+          <div class="admin-tab-panel<?= $rotatorTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="photo-deck-panel">
+          <div class="help" style="margin-bottom:12px">Drag to reorder. Set <strong>Sec</strong> and optional <strong>Group</strong> (for group deploy mode). Target specific displays per photo, then deploy from the <strong>Deploy</strong> tab.</div>
+          <?php if ($photoHighlight !== null): ?>
+          <div class="slide-added-notice">Added <code><?= h($photoHighlight) ?></code> to the deck — review settings, then Save.</div>
+          <?php endif; ?>
+          <div class="deck-list" id="photoDeck" data-field="PHOTOS">
+            <?php if ($photoRows === []): ?>
+            <div class="slide-deck-empty">No photos in the deck yet — use <strong>Upload</strong> or add from <strong>Library</strong>.</div>
+            <?php endif; ?>
+            <?php foreach ($photoRows as $ri => $row):
+              if (!is_array($row)) continue;
+              $fileLabel = (string)($row['file'] ?? 'New photo');
+              $fileOk = rotator_safe_filename($fileLabel) !== null && is_file(rotator_photo_dir() . '/' . rotator_safe_filename($fileLabel));
+              $highlightCard = $photoHighlight !== null
+                  && rotator_safe_filename($fileLabel) === $photoHighlight;
+              $thumbUrl = $fileOk ? rotator_thumb_url($fileLabel) : null;
+              $previewUrl = $fileOk ? rotator_preview_url($fileLabel) : null;
+              $displayLabel = rotator_display_label($fileLabel, $photoRows);
+              $photoScreens = array_key_exists('screens', $row) ? rotator_target_screens($row) : [];
+              $photoAllScreens = !array_key_exists('screens', $row);
+              $groupLabel = trim((string)($row['group'] ?? ''));
+            ?>
+            <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?><?= $highlightCard ? ' slide-card-highlight' : '' ?>" data-photo-card data-photo-file="<?= h($fileLabel) ?>">
+              <div class="slide-card-head slide-card-head-with-thumb">
+                <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
+                <?php if ($thumbUrl): ?>
+                <a href="<?= h($previewUrl ?? $thumbUrl) ?>" target="_blank" rel="noopener" title="Preview photo">
+                  <img class="slide-card-thumb" src="<?= h($thumbUrl) ?>" alt="">
+                </a>
+                <?php endif; ?>
+                <div class="slide-card-title">
+                  <strong><?= h($displayLabel !== '' ? $displayLabel : 'New photo') ?></strong>
+                  <?php if ($displayLabel !== $fileLabel && $fileLabel !== ''): ?>
+                  <code style="font-size:12px;color:var(--mist)"><?= h($fileLabel) ?></code>
+                  <?php endif; ?>
+                  <span class="slide-card-meta-line">
+                    <?php if (!$fileOk && $fileLabel !== ''): ?><span class="pill warn">File missing</span><?php endif; ?>
+                    <?php if ($groupLabel !== ''): ?><span class="pill">Group: <?= h($groupLabel) ?></span><?php endif; ?>
+                  </span>
+                </div>
+                <button type="button" class="rowdel" onclick="this.closest('[data-photo-card]').remove(); reindexPhotoDeck();" title="Remove from deck (file stays in library)">×</button>
+              </div>
+              <div class="slide-card-quick">
+                <div>
+                  <label class="mini">Sec</label>
+                  <input type="text" name="PHOTOS[<?= h((string)$ri) ?>][dwell]" value="<?= h((string)($row['dwell'] ?? '')) ?>" placeholder="<?= h((string)rotator_default_dwell()) ?>">
+                </div>
+                <div>
+                  <label class="mini">Group</label>
+                  <input type="text" name="PHOTOS[<?= h((string)$ri) ?>][group]" value="<?= h($groupLabel) ?>" placeholder="travel">
+                </div>
+              </div>
+              <details class="slide-card-edit">
+                <summary>Options &amp; displays</summary>
+              <div class="slide-card-grid">
+                <div class="span-2">
+                  <label class="mini">Image file</label>
+                  <input type="text" name="PHOTOS[<?= h((string)$ri) ?>][file]" value="<?= h($fileLabel) ?>" placeholder="filename.jpg" list="photo-file-options">
+                </div>
+                <div class="span-3">
+                  <label class="mini">Label</label>
+                  <input type="text" name="PHOTOS[<?= h((string)$ri) ?>][caption]" value="<?= h((string)($row['caption'] ?? '')) ?>" placeholder="Admin label only">
+                </div>
+              </div>
+                <div class="slide-card-flags">
+                  <label><input type="checkbox" name="PHOTOS[<?= h((string)$ri) ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?>> Disabled</label>
+                </div>
+                <?php if (count($rotationScreens) > 0): ?>
+                <div class="slide-card-screens">
+                  <span class="mini">Show on displays</span>
+                  <div class="slide-screen-checks">
+                    <?php foreach ($rotationScreens as $screenKey => $screenMeta): ?>
+                    <label>
+                      <input type="checkbox" name="PHOTOS[<?= h((string)$ri) ?>][screens][]" value="<?= h($screenKey) ?>"
+                        <?= $photoAllScreens || in_array($screenKey, $photoScreens, true) ? 'checked' : '' ?>>
+                      <?= h((string)($screenMeta['name'] ?? $screenKey)) ?>
+                    </label>
+                    <?php endforeach; ?>
+                  </div>
+                </div>
+                <?php endif; ?>
+              </details>
+              <?php if ($fileOk):
+                $deleteFile = rotator_safe_filename($fileLabel);
+              ?>
+              <div class="slide-card-actions">
+                <?php if ($previewUrl): ?>
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
+                <?php endif; ?>
+                <?php if ($deleteFile !== null): ?>
+                <button type="button" class="secondary photo-delete-btn" style="padding:6px 12px;font-size:13px"
+                        data-delete-file="<?= h($deleteFile) ?>">Delete file</button>
+                <?php endif; ?>
+              </div>
+              <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php if ($rotatorLibrary !== []): ?>
+          <datalist id="photo-file-options">
+            <?php foreach ($rotatorLibrary as $lib): ?>
+            <option value="<?= h($lib['file']) ?>"><?= h($lib['label']) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <?php endif; ?>
+          <button type="button" class="addrow" style="margin-top:12px" onclick="addPhotoCard()">+ Add blank deck row</button>
+          </div>
+
+          <div class="admin-tab-panel<?= $rotatorTab === 'library' ? ' active' : '' ?>" data-tab-panel="library" id="photo-library-panel">
+              <div class="help" style="margin-bottom:8px">All images in <code>photos/</code>. Thumbnails show what is on disk — add orphans to the deck or delete here.</div>
+              <?php if ($rotatorLibrary === []): ?>
+              <div class="slide-deck-empty">No photo files yet — use <strong>Upload</strong>.</div>
+              <?php else: ?>
+              <div class="slide-library-grid">
+                <?php foreach ($rotatorLibrary as $lib): ?>
+                <div class="slide-library-tile<?= !$lib['in_deck'] ? ' not-in-deck' : '' ?>">
+                  <?php if ($lib['thumb']): ?>
+                  <a href="<?= h($lib['preview'] ?? $lib['thumb']) ?>" target="_blank" rel="noopener">
+                    <img src="<?= h($lib['thumb']) ?>" alt="" loading="lazy">
+                  </a>
+                  <?php endif; ?>
+                  <div class="slide-library-tile-body">
+                    <strong><?= h($lib['label']) ?></strong>
+                    <?php if ($lib['label'] !== $lib['file']): ?><code><?= h($lib['file']) ?></code><?php endif; ?>
+                    <div>
+                      <?php if ($lib['in_deck']): ?>
+                        <span class="pill ok">In deck</span>
+                        <?php if ($lib['off']): ?><span class="pill">Disabled</span><?php endif; ?>
+                        <?php if ($lib['group'] !== ''): ?><span class="pill"><?= h($lib['group']) ?></span><?php endif; ?>
+                      <?php else: ?>
+                        <span class="pill warn">Not in deck</span>
+                      <?php endif; ?>
+                    </div>
+                    <div class="slide-library-tile-actions">
+                      <?php if ($lib['preview']): ?>
+                      <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
+                      <?php endif; ?>
+                      <?php if (!$lib['in_deck']): ?>
+                      <button type="button" class="secondary photo-add-btn" data-add-file="<?= h($lib['file']) ?>">Add to deck</button>
+                      <?php endif; ?>
+                      <button type="button" class="secondary photo-delete-btn" data-delete-file="<?= h($lib['file']) ?>">Delete</button>
+                    </div>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+              <?php endif; ?>
+          </div>
+
+          <div class="slides-form-footer slides-save-deploy">
+            <div class="deploy-checks">
+              <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
+              <?php foreach ($rotatorDeployStatus as $screenKey => $dep):
+                $saveChecked = $dep['on_playlist'] || $screenKey === 'main';
+              ?>
+              <label class="check">
+                <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $saveChecked ? 'checked' : '' ?>>
+                <?= h($dep['name']) ?>
+              </label>
+              <?php endforeach; ?>
+            </div>
+          </div>
+
+          <details class="panel panel-muted" style="margin-top:8px">
+            <summary>Photo rotator settings</summary>
+            <div class="panel-body">
+              <div class="help" style="margin-bottom:10px">Deploy mode <strong><?= h($deployMode) ?></strong>:
+                <?php if ($deployMode === 'individual'): ?>one rotation entry per photo (<code>rotator.php?photo=…</code>)
+                <?php elseif ($deployMode === 'groups'): ?>grouped entries (<code>rotator.php?group=…</code>) plus ungrouped singles
+                <?php else: ?>single legacy page (<code>rotator.php</code>)<?php endif; ?></div>
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if ($f['key'] === 'PHOTOS' || !in_array($f['key'], $rotatorBoardKeys, true)) continue;
                   $val = current_val($rawConf, $board, $f['key']); ?>
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
@@ -2528,6 +2916,69 @@ function admin_field(array $f, $val, string $board): void
           <label class="check"><input type="checkbox" name="clear_cache"> Clear cache after save</label>
         </div>
       </form>
+      <?php if ($board === 'rotator'): ?>
+      <div class="admin-tab-panel<?= $rotatorTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="photos-deploy-panel">
+            <p class="help" style="margin-bottom:12px">Push photos to rotation immediately. Or check displays in the Save bar above and click <strong>Save</strong>.</p>
+            <div class="deploy-stats">
+              <span><strong><?= (int)$rotatorDeckStats['on_disk'] ?></strong> in deck</span>
+              <span><strong><?= (int)$rotatorDeckStats['playlist_entries'] ?></strong> playlist entries (<?= h($deployMode) ?> mode)</span>
+              <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h(signage_board_preview_url('rotator.php')) ?>" target="_blank" rel="noopener">Preview slideshow ↗</a>
+            </div>
+            <form method="post" action="?board=rotator" class="slides-deploy-form">
+              <input type="hidden" name="board" value="rotator">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <div class="slides-deploy-grid">
+                <?php foreach ($rotatorDeployStatus as $screenKey => $dep):
+                  $checked = $dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $rotatorDeckStats['on_disk'] > 0);
+                ?>
+                <div class="slides-deploy-row">
+                  <label class="check">
+                    <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $checked ? 'checked' : '' ?>>
+                    <?= h($dep['name']) ?> <code><?= h($screenKey) ?></code>
+                  </label>
+                  <div class="deploy-detail">
+                    <?php if ($dep['mirrors_main']): ?>
+                      <span class="pill">Mirrors main</span>
+                    <?php elseif ($dep['on_playlist']): ?>
+                      <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
+                    <?php elseif ($dep['partial'] ?? false): ?>
+                      <span class="pill warn">Partial</span>
+                    <?php else: ?>
+                      <span class="pill warn">Not deployed</span>
+                    <?php endif; ?>
+                  </div>
+                  <div class="deploy-actions">
+                    <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+                       href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+                    <?php if (($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
+                    <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+                            name="action" value="remove_photos_rotation"
+                            onclick="this.form.remove_screen.value='<?= h($screenKey) ?>'; return confirm('Remove photos from <?= h($dep['name']) ?>?');">Remove</button>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+              <input type="hidden" name="remove_screen" value="">
+              <div class="slides-deploy-tools">
+                <button class="save" type="submit" name="action" value="deploy_photos">Deploy now</button>
+              </div>
+            </form>
+      </div>
+      <div class="admin-tab-panel<?= $rotatorTab === 'upload' ? ' active' : '' ?>" data-tab-panel="upload" id="photo-upload-panel" style="margin-top:0">
+          <div class="upload-box">
+            <h3>Upload photos</h3>
+            <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=rotator">
+              <input type="hidden" name="action" value="upload_photo">
+              <input type="hidden" name="board" value="rotator">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="file" name="photo[]" accept="image/jpeg,image/png" multiple>
+              <button class="secondary" type="submit">Upload</button>
+            </form>
+            <div class="help" style="margin-top:8px">JPG or PNG, up to 25 MB each — added to the deck and main rotation automatically.</div>
+          </div>
+      </div>
+      <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
             <p class="help" style="margin-bottom:12px">Push slides to rotation immediately. Or check displays in the Save bar above and click <strong>Save</strong>.</p>
@@ -3043,6 +3494,119 @@ function initSlidesSectionNav() {
   initAdminTabs('slidesTabs', 'slides');
 }
 
+function reindexPhotoDeck() {
+  const deck = document.getElementById('photoDeck');
+  if (!deck || !deck.dataset.field) return;
+  const field = deck.dataset.field;
+  deck.querySelectorAll('[data-photo-card]').forEach(function (card, i) {
+    card.querySelectorAll('[name^="' + field + '["]').forEach(function (inp) {
+      inp.name = inp.name.replace(new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\[[^\\]]+\\]'), field + '[' + i + ']');
+    });
+  });
+}
+
+function bindPhotoCard(card) {
+  const fileInp = card.querySelector('input[name*="[file]"]');
+  const head = card.querySelector('.slide-card-title strong');
+  if (fileInp && head) {
+    fileInp.addEventListener('input', function () {
+      head.textContent = fileInp.value.trim() || 'New photo';
+    });
+  }
+  const off = card.querySelector('input[name*="[off]"]');
+  if (off && !off.dataset.bound) {
+    off.dataset.bound = '1';
+    off.addEventListener('change', function () {
+      card.classList.toggle('is-off', off.checked);
+    });
+  }
+}
+
+function initPhotoDeck() {
+  const deck = document.getElementById('photoDeck');
+  if (!deck) return;
+  bindPlaylistDeckDrag(deck, '[data-photo-card]', '.drag-handle', reindexPhotoDeck, function (card, d) {
+    bindPlaylistCardHandle(card, d, '.drag-handle', reindexPhotoDeck);
+    bindPhotoCard(card);
+  });
+  deck.querySelectorAll('[data-photo-card]').forEach(bindPhotoCard);
+  const hl = deck.querySelector('.slide-card-highlight');
+  if (hl) {
+    setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
+  }
+}
+
+function initPhotosSectionNav() {
+  initAdminTabs('photosTabs', 'rotator');
+}
+
+function submitPhotoDelete(file) {
+  if (!file) return;
+  if (!confirm('Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.')) return;
+  const form = document.getElementById('photoDeleteForm');
+  const input = document.getElementById('photoDeleteFile');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = file;
+  form.submit();
+}
+
+function submitPhotoAddToDeck(file) {
+  if (!file) return;
+  const form = document.getElementById('photoAddForm');
+  const input = document.getElementById('photoAddFile');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = file;
+  form.submit();
+}
+
+function addPhotoCard() {
+  const deck = document.getElementById('photoDeck');
+  if (!deck) return;
+  const idx = 'n' + (Date.now() % 1e7);
+  const proto = deck.querySelector('[data-photo-card]');
+  let card;
+  if (proto) {
+    card = proto.cloneNode(true);
+    card.classList.remove('is-off', 'slide-card-highlight', 'dragging');
+    card.querySelectorAll('input[type="text"]').forEach(function (i) { i.value = ''; });
+    card.querySelectorAll('input[type="checkbox"]').forEach(function (i) {
+      if (/\[screens\]/.test(i.name)) {
+        i.checked = true;
+      } else {
+        i.checked = false;
+      }
+    });
+    card.querySelectorAll('[data-bound]').forEach(function (el) { el.removeAttribute('data-bound'); });
+    const handle = card.querySelector('.drag-handle');
+    if (handle) handle.removeAttribute('data-drag-bound');
+    const thumb = card.querySelector('.slide-card-thumb');
+    if (thumb) thumb.closest('a')?.remove();
+  } else {
+    card = document.createElement('div');
+    card.className = 'slide-card';
+    card.setAttribute('data-photo-card', '');
+    card.innerHTML =
+      '<div class="slide-card-head"><span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
+      '<div class="slide-card-title"><strong>New photo</strong></div>' +
+      '<button type="button" class="rowdel" onclick="this.closest(\'[data-photo-card]\').remove(); reindexPhotoDeck();" title="Remove">×</button></div>' +
+      '<div class="slide-card-quick"><div><label class="mini">Sec</label><input type="text" name="PHOTOS[' + idx + '][dwell]" placeholder="18"></div>' +
+      '<div><label class="mini">Group</label><input type="text" name="PHOTOS[' + idx + '][group]" placeholder="travel"></div></div>' +
+      '<details class="slide-card-edit"><summary>Options &amp; displays</summary><div class="slide-card-grid">' +
+      '<div class="span-2"><label class="mini">Image file</label><input type="text" name="PHOTOS[' + idx + '][file]" placeholder="filename.jpg"></div>' +
+      '<div class="span-3"><label class="mini">Label</label><input type="text" name="PHOTOS[' + idx + '][caption]" placeholder="Admin label only"></div></div></details>';
+  }
+  deck.appendChild(card);
+  bindPlaylistCardHandle(card, deck, '.drag-handle', reindexPhotoDeck);
+  bindPhotoCard(card);
+  reindexPhotoDeck();
+}
+
 function submitSlideDelete(file) {
   if (!file) return;
   if (!confirm('Delete "' + file + '" permanently?\n\nThis removes the image from disk and from the deck. It cannot be undone.')) return;
@@ -3102,6 +3666,18 @@ document.addEventListener('click', function (e) {
   if (addBtn) {
     e.preventDefault();
     submitSlideAddToDeck(addBtn.getAttribute('data-add-file') || '');
+    return;
+  }
+  const photoDelBtn = e.target.closest('.photo-delete-btn');
+  if (photoDelBtn) {
+    e.preventDefault();
+    submitPhotoDelete(photoDelBtn.getAttribute('data-delete-file') || '');
+    return;
+  }
+  const photoAddBtn = e.target.closest('.photo-add-btn');
+  if (photoAddBtn) {
+    e.preventDefault();
+    submitPhotoAddToDeck(photoAddBtn.getAttribute('data-add-file') || '');
   }
 });
 
@@ -3161,6 +3737,8 @@ function addSlideCard() {
 document.addEventListener('DOMContentLoaded', function () {
   initSlideDeck();
   initSlidesSectionNav();
+  initPhotoDeck();
+  initPhotosSectionNav();
   initVideoPlaylist();
   initSplunkPanels();
   initPresencePanel();
