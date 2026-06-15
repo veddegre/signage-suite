@@ -370,7 +370,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             $screens = array_keys($screens);
             sort($screens);
             if (!isset($row['screens'])) {
-                $obj['screens'] = [];
+                if (!empty($row['_screens_form'])) {
+                    $obj['screens'] = [];
+                }
             } elseif ($screens !== $allScreenKeys) {
                 $obj['screens'] = $screens;
             }
@@ -545,69 +547,78 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
             cfg_reload();
             $extra = '';
-            if ($board === 'video' && isset($_POST['sync_rotation_main']) && admin_can_screen('main')) {
-                $sync = video_sync_rotation('main');
-                if (video_rotation_pages_write($sync['screen'], $sync['pages'])) {
-                    cfg_reload();
-                    $n = count($sync['added']);
-                    $extra = $n > 0
-                        ? " Added $n video(s) to main rotation."
-                        : (count($sync['updated']) > 0 ? ' Updated rotation dwell times.' : ' Playlist already in main rotation.');
-                } else {
-                    $extra = ' Could not update main rotation.'; $flashOk = false;
-                }
-            } elseif ($board === 'slides') {
-                $deployScreens = [];
-                if (isset($_POST['deploy_screens']) && is_array($_POST['deploy_screens'])) {
-                    foreach ($_POST['deploy_screens'] as $scr) {
-                        $scr = rotation_normalize_screen_key((string)$scr);
-                        if ($scr !== '') {
-                            $deployScreens[$scr] = true;
+            if ($board === 'video') {
+                $screens = admin_filter_deploy_screens(admin_deploy_screens_from_post($_POST));
+                if ($screens !== []) {
+                    $parts = [];
+                    foreach ($screens as $screen) {
+                        $sync = video_sync_rotation($screen);
+                        if (video_rotation_pages_write($sync['screen'], $sync['pages'])) {
+                            $n = count($sync['added']);
+                            $label = rotation_screen_display_name($screen, rotation_screens());
+                            if ($n > 0) {
+                                $parts[] = $label . ': added ' . $n . ' video' . ($n === 1 ? '' : 's');
+                            } elseif (count($sync['updated']) > 0) {
+                                $parts[] = $label . ': updated dwell times';
+                            }
+                        } else {
+                            $parts[] = rotation_screen_display_name($screen, rotation_screens()) . ': could not update';
+                            $flashOk = false;
                         }
                     }
-                } elseif (isset($_POST['sync_rotation_slides'])) {
-                    foreach (admin_default_deploy_screens() as $scr) {
-                        $deployScreens[$scr] = true;
+                    if ($parts !== []) {
+                        cfg_reload();
+                        $extra = ' ' . implode('; ', $parts) . '.';
                     }
                 }
+            } elseif ($board === 'slides') {
+                $deployScreens = admin_deploy_screens_from_post($_POST);
+                if ($deployScreens === [] && isset($_POST['sync_rotation_slides'])) {
+                    $deployScreens = admin_default_deploy_screens();
+                }
                 if ($deployScreens !== []) {
-                    $result = slides_deploy_to_screens(admin_filter_deploy_screens(array_keys($deployScreens)));
+                    $result = slides_deploy_to_screens(admin_filter_deploy_screens($deployScreens));
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
                 }
             } elseif ($board === 'rotator') {
-                $deployScreens = [];
-                if (isset($_POST['deploy_screens']) && is_array($_POST['deploy_screens'])) {
-                    foreach ($_POST['deploy_screens'] as $scr) {
-                        $scr = rotation_normalize_screen_key((string)$scr);
-                        if ($scr !== '') {
-                            $deployScreens[$scr] = true;
-                        }
-                    }
-                }
+                $deployScreens = admin_deploy_screens_from_post($_POST);
                 if ($deployScreens !== []) {
-                    $result = rotator_deploy_to_screens(admin_filter_deploy_screens(array_keys($deployScreens)));
+                    $result = rotator_deploy_to_screens(admin_filter_deploy_screens($deployScreens));
                     cfg_reload();
                     $extra = rotator_deploy_flash_message($result);
                 }
-            } elseif ($board === 'rss' && isset($_POST['sync_rotation_rss']) && admin_can_screen('main')) {
-                $sync = rotation_sync_rss('main');
-                if (rotation_pages_write($sync['screen'], $sync['pages'])) {
-                    cfg_reload();
-                    $n = count($sync['added']);
-                    $extra = $n > 0
-                        ? " Added $n RSS feed(s) to main rotation."
-                        : (count($sync['updated']) > 0 ? ' Updated RSS dwell times on main rotation.' : ' RSS feeds already on main rotation.');
-                } else {
-                    $extra = ' Could not update main rotation.'; $flashOk = false;
+            } elseif ($board === 'rss') {
+                $screens = admin_filter_deploy_screens(admin_deploy_screens_from_post($_POST));
+                if ($screens !== []) {
+                    $parts = [];
+                    foreach ($screens as $screen) {
+                        $sync = rotation_sync_rss($screen);
+                        if (rotation_pages_write($sync['screen'], $sync['pages'])) {
+                            $n = count($sync['added']);
+                            $label = rotation_screen_display_name($screen, rotation_screens());
+                            if ($n > 0) {
+                                $parts[] = $label . ': added ' . $n . ' feed' . ($n === 1 ? '' : 's');
+                            } elseif (count($sync['updated']) > 0) {
+                                $parts[] = $label . ': updated dwell times';
+                            }
+                        } else {
+                            $parts[] = rotation_screen_display_name($screen, rotation_screens()) . ': could not update';
+                            $flashOk = false;
+                        }
+                    }
+                    if ($parts !== []) {
+                        cfg_reload();
+                        $extra = ' ' . implode('; ', $parts) . '.';
+                    }
                 }
             }
             if (($flashOk ?? true) && (
                 $board === 'rotation'
-                || ($board === 'video' && isset($_POST['sync_rotation_main']))
-                || ($board === 'slides' && (isset($_POST['deploy_screens']) || isset($_POST['sync_rotation_slides'])))
-                || ($board === 'rotator' && isset($_POST['deploy_screens']))
-                || ($board === 'rss' && isset($_POST['sync_rotation_rss']))
+                || ($board === 'video' && admin_deploy_screens_from_post($_POST) !== [])
+                || ($board === 'slides' && (admin_deploy_screens_from_post($_POST) !== [] || isset($_POST['sync_rotation_slides'])))
+                || ($board === 'rotator' && admin_deploy_screens_from_post($_POST) !== [])
+                || ($board === 'rss' && admin_deploy_screens_from_post($_POST) !== [])
             )) {
                 $extra .= ($extra !== '' ? ' ' : '') . 'Wall displays refresh within 30 seconds.';
             }
@@ -1094,6 +1105,147 @@ if ($board === 'splunk') {
     }
 }
 
+const ADMIN_SCREEN_PICKER_COMPACT = 5; // rotation target dropdown gets a filter above this count
+
+/** @return list<array{key:string,name:string}> */
+function admin_screen_options(array $screens): array
+{
+    $out = [];
+    foreach ($screens as $sk => $sm) {
+        $out[] = [
+            'key' => (string)$sk,
+            'name' => (string)(is_array($sm) ? ($sm['name'] ?? $sk) : $sm),
+        ];
+    }
+    return $out;
+}
+
+/** @param list<string> $checked */
+function admin_screen_picker_summary(array $options, array $checked, string $mode): string
+{
+    $total = count($options);
+    $n = count($checked);
+    if ($mode === 'assign') {
+        if ($n === 0) {
+            return 'No displays';
+        }
+        if ($n === $total) {
+            return 'All displays (' . $total . ')';
+        }
+        return $n . ' of ' . $total . ' displays';
+    }
+    if ($n === 0) {
+        return 'Hidden on all displays';
+    }
+    if ($n === $total) {
+        return 'All displays (' . $total . ')';
+    }
+    return $n . ' of ' . $total . ' displays';
+}
+
+/**
+ * Checkbox group for targeting rotation displays. Collapses to a summary when many screens exist.
+ *
+ * @param list<array{key:string,name:string}> $options
+ * @param list<string> $checked
+ * @param array<string,mixed> $cfg flat, name, name_key, form_marker, form_marker_key, summary_mode, compact, label, class
+ */
+function admin_screen_picker(string $prefix, array $options, array $checked, array $cfg = []): void
+{
+    if ($options === []) {
+        echo '<span class="help" style="margin:0">No displays configured.</span>';
+        return;
+    }
+    $nameKey = (string)($cfg['name_key'] ?? 'screens');
+    $flat = !empty($cfg['flat']);
+    $flatName = (string)($cfg['name'] ?? 'deploy_screens');
+    $summaryMode = (string)($cfg['summary_mode'] ?? 'deck');
+    $compact = !array_key_exists('compact', $cfg) || (bool)$cfg['compact'];
+    $label = (string)($cfg['label'] ?? '');
+    $extraClass = (string)($cfg['class'] ?? '');
+    $checkedSet = array_flip($checked);
+    $checkboxName = $flat ? $flatName . '[]' : $prefix . '[' . $nameKey . '][]';
+    $pickerClass = 'screen-picker' . ($compact ? ' screen-picker-compact' : '') . ($extraClass !== '' ? ' ' . $extraClass : '');
+
+    echo '<div class="' . h($pickerClass) . '" data-screen-picker data-summary-mode="' . h($summaryMode) . '">';
+    if (!empty($cfg['form_marker'])) {
+        $mk = (string)($cfg['form_marker_key'] ?? '_screens_form');
+        echo '<input type="hidden" name="' . h($prefix . '[' . $mk . ']') . '" value="1">';
+    }
+    if ($compact) {
+        $summaryText = admin_screen_picker_summary($options, $checked, $summaryMode);
+        echo '<div class="screen-picker-bar">';
+        echo '<span class="screen-picker-summary" data-screen-summary>' . h($summaryText) . '</span>';
+        echo '<button type="button" class="screen-picker-toggle secondary" aria-expanded="false">Choose…</button>';
+        echo '</div>';
+        echo '<div class="screen-picker-panel" hidden>';
+        echo '<input type="search" class="screen-picker-filter" placeholder="Filter displays…" autocomplete="off">';
+        echo '<div class="screen-picker-quick">';
+        echo '<button type="button" class="secondary" data-pick="all">All</button>';
+        echo '<button type="button" class="secondary" data-pick="none">None</button>';
+        echo '</div>';
+    } elseif ($label !== '') {
+        echo '<span class="mini">' . h($label) . '</span>';
+    }
+    echo '<div class="screen-picker-list slide-screen-checks">';
+    foreach ($options as $opt) {
+        $k = $opt['key'];
+        $isChecked = isset($checkedSet[$k]);
+        echo '<label data-screen-key="' . h($k) . '"><input type="checkbox" name="' . h($checkboxName) . '" value="' . h($k) . '"'
+            . ($isChecked ? ' checked' : '') . '> ' . h($opt['name']) . '</label>';
+    }
+    echo '</div>';
+    if ($compact) {
+        echo '</div>';
+    }
+    echo '</div>';
+}
+
+/** @return list<string> */
+function admin_deploy_screens_from_post(array $post): array
+{
+    if (!isset($post['deploy_screens']) || !is_array($post['deploy_screens'])) {
+        return [];
+    }
+    $screens = [];
+    foreach ($post['deploy_screens'] as $scr) {
+        $sk = rotation_normalize_screen_key((string)$scr);
+        if ($sk !== '') {
+            $screens[$sk] = true;
+        }
+    }
+    $list = array_keys($screens);
+    sort($list);
+    return $list;
+}
+
+/** @param array<string,array<string,mixed>> $deployStatus */
+function admin_deploy_picker_from_status(array $deployStatus, array $checked, array $cfg = []): void
+{
+    $options = [];
+    foreach ($deployStatus as $sk => $dep) {
+        $options[] = ['key' => (string)$sk, 'name' => (string)($dep['name'] ?? $sk)];
+    }
+    admin_screen_picker('', $options, $checked, array_merge([
+        'flat' => true,
+        'name' => 'deploy_screens',
+        'summary_mode' => 'assign',
+        'compact' => true,
+        'class' => 'screen-picker-inline',
+    ], $cfg));
+}
+
+function admin_deploy_picker_from_screens(array $screens, array $checked, array $cfg = []): void
+{
+    admin_screen_picker('', admin_screen_options($screens), $checked, array_merge([
+        'flat' => true,
+        'name' => 'deploy_screens',
+        'summary_mode' => 'assign',
+        'compact' => true,
+        'class' => 'screen-picker-inline',
+    ], $cfg));
+}
+
 function admin_field(array $f, $val, string $board): void
 {
     if ($f['type'] === 'bool'): ?>
@@ -1271,7 +1423,8 @@ function admin_field(array $f, $val, string $board): void
   .slides-deploy-panel .deploy-stats strong { color:var(--snow); }
   .slides-deploy-grid { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
   .slides-deploy-row { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--lake-night); }
-  .slides-deploy-row label.check { margin:0; min-width:140px; }
+  .slides-deploy-row .deploy-row-title { min-width:140px; font-size:14px; color:var(--snow); }
+  .slides-deploy-row .deploy-row-title code { font-size:12px; color:var(--mist); margin-left:6px; }
   .slides-deploy-row .deploy-detail { flex:1; min-width:200px; font-size:13px; color:var(--mist); }
   .slides-deploy-row .deploy-actions { display:flex; gap:8px; flex-wrap:wrap; }
   .slides-deploy-tools { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
@@ -1291,6 +1444,23 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-screens { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
   .slide-screen-checks { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:8px; }
   .slide-screen-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); }
+  .slide-screen-checks label[hidden] { display:none; }
+  .screen-picker { margin-top:8px; }
+  .screen-picker-bar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
+  .screen-picker-summary { font-size:13px; color:var(--snow); flex:1; min-width:140px; }
+  .screen-picker-toggle { padding:5px 12px; font-size:12px; flex-shrink:0; }
+  .screen-picker-panel { margin-top:10px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--lake-night); }
+  .screen-picker-filter { width:100%; max-width:none; margin-bottom:8px; padding:7px 10px; font-size:14px;
+    background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .screen-picker-quick { display:flex; gap:8px; margin-bottom:8px; }
+  .screen-picker-quick button { padding:4px 10px; font-size:12px; }
+  .screen-picker-compact .screen-picker-list { max-height:168px; overflow:auto; margin-top:0; padding-right:4px; }
+  .screen-picker-inline { margin-top:0; }
+  .screen-picker-deploy-tab { margin-bottom:14px; }
+  .deploy-save-screens { margin-bottom:4px; }
+  .deploy-filter { width:100%; max-width:360px; margin-bottom:12px; padding:8px 11px; font-size:14px;
+    background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .slides-deploy-row[hidden] { display:none; }
   .slide-deck-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; margin-bottom:14px; }
   .slide-added-notice { margin-bottom:12px; padding:12px 14px; border-radius:10px; background:rgba(255,179,71,.12); border:1px solid var(--beacon); color:var(--snow); font-size:14px; }
   .slide-orphan-notice { margin-bottom:12px; padding:12px 14px; border-radius:10px; background:var(--lake-night); border:1px solid var(--line); color:var(--mist); font-size:13px; }
@@ -1647,17 +1817,11 @@ function admin_field(array $f, $val, string $board): void
               <td class="wide">
                 <?php if (($urow['role'] ?? '') === 'super'): ?>
                   <span class="help" style="margin:0">All displays</span>
-                <?php else: ?>
-                <div class="slide-screen-checks">
-                  <?php foreach ($allScreens as $screenKey => $screenMeta): ?>
-                  <label>
-                    <input type="checkbox" name="USERS[<?= (int)$ui ?>][screens][]" value="<?= h($screenKey) ?>"
-                      <?= in_array($screenKey, $urow['screens'] ?? [], true) ? 'checked' : '' ?>>
-                    <?= h((string)($screenMeta['name'] ?? $screenKey)) ?>
-                  </label>
-                  <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
+                <?php else:
+                  admin_screen_picker('USERS[' . (int)$ui . ']', admin_screen_options($allScreens), $urow['screens'] ?? [], [
+                      'summary_mode' => 'assign',
+                  ]);
+                endif; ?>
               </td>
               <td style="text-align:center"><input type="checkbox" name="USERS[<?= (int)$ui ?>][disabled]" value="1"
                 <?= !empty($urow['disabled']) ? 'checked' : '' ?> style="width:20px;height:20px;accent-color:var(--beacon)"></td>
@@ -1981,6 +2145,9 @@ function admin_field(array $f, $val, string $board): void
             <div class="rotation-global-add-row">
               <div>
                 <label class="mini" for="rotationTargetScreen">Add to display</label>
+                <?php if (count($rotationScreens) > ADMIN_SCREEN_PICKER_COMPACT): ?>
+                <input type="search" class="deploy-filter" style="max-width:100%;margin-bottom:6px" placeholder="Filter displays…" autocomplete="off" data-rotation-target-filter="rotationTargetScreen">
+                <?php endif; ?>
                 <select id="rotationTargetScreen">
                   <?php foreach ($rotationScreens as $sk => $sm):
                     $did = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', (string)$sk);
@@ -2402,9 +2569,19 @@ function admin_field(array $f, $val, string $board): void
           </div>
           <button type="button" class="addrow" style="margin-top:12px" onclick="addVideoCard()">+ Add video</button>
 
-          <div class="actions" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
-            <label class="check"><input type="checkbox" name="sync_rotation_main" checked> Add playlist to main rotation on save</label>
-            <span class="help">Adds <code>video.php?v=KEY</code> entries to the main screen with dwell from each video length.</span>
+          <?php
+          $videoDeployScreens = admin_filter_screens(rotation_screens());
+          $videoDeployChecked = [];
+          if (isset($videoDeployScreens['main']) && admin_can_screen('main')) {
+              $videoDeployChecked[] = 'main';
+          } elseif ($videoDeployChecked === []) {
+              $videoDeployChecked = admin_default_deploy_screens();
+          }
+          ?>
+          <div class="actions deploy-save-screens" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
+            <span class="help" style="margin:0;width:100%">On Save, add playlist to rotation on:</span>
+            <?php admin_deploy_picker_from_screens($videoDeployScreens, $videoDeployChecked); ?>
+            <span class="help" style="margin:8px 0 0">Adds <code>video.php?v=KEY</code> entries with dwell from each video length. Leave all unchecked to skip rotation sync.</span>
           </div>
 
           <details class="panel panel-muted" style="margin-top:22px">
@@ -2588,19 +2765,17 @@ function admin_field(array $f, $val, string $board): void
                 <div class="slide-card-flags">
                   <label><input type="checkbox" name="PHOTOS[<?= h((string)$ri) ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?>> Disabled</label>
                 </div>
-                <?php if (count($rotationScreens) > 0): ?>
-                <input type="hidden" name="PHOTOS[<?= h((string)$ri) ?>][_screens_form]" value="1">
+                <?php if (count($rotationScreens) > 0):
+                  $photoPickerChecked = $photoAllScreens
+                      ? array_keys($rotationScreens)
+                      : $photoScreens;
+                ?>
                 <div class="slide-card-screens">
                   <span class="mini">Show on displays</span>
-                  <div class="slide-screen-checks">
-                    <?php foreach ($rotationScreens as $screenKey => $screenMeta): ?>
-                    <label>
-                      <input type="checkbox" name="PHOTOS[<?= h((string)$ri) ?>][screens][]" value="<?= h($screenKey) ?>"
-                        <?= $photoAllScreens || in_array($screenKey, $photoScreens, true) ? 'checked' : '' ?>>
-                      <?= h((string)($screenMeta['name'] ?? $screenKey)) ?>
-                    </label>
-                    <?php endforeach; ?>
-                  </div>
+                  <?php admin_screen_picker('PHOTOS[' . (int)$ri . ']', admin_screen_options($rotationScreens), $photoPickerChecked, [
+                      'form_marker' => true,
+                      'summary_mode' => 'deck',
+                  ]); ?>
                 </div>
                 <?php endif; ?>
               </details>
@@ -2679,16 +2854,17 @@ function admin_field(array $f, $val, string $board): void
           </div>
 
           <div class="slides-form-footer slides-save-deploy">
+            <?php
+            $rotatorDeployPickerChecked = [];
+            foreach ($rotatorDeployStatus as $screenKey => $dep) {
+                if ($dep['on_playlist'] || $screenKey === 'main') {
+                    $rotatorDeployPickerChecked[] = $screenKey;
+                }
+            }
+            ?>
             <div class="deploy-checks">
               <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
-              <?php foreach ($rotatorDeployStatus as $screenKey => $dep):
-                $saveChecked = $dep['on_playlist'] || $screenKey === 'main';
-              ?>
-              <label class="check">
-                <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $saveChecked ? 'checked' : '' ?>>
-                <?= h($dep['name']) ?>
-              </label>
-              <?php endforeach; ?>
+              <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployPickerChecked); ?>
             </div>
           </div>
 
@@ -2837,18 +3013,17 @@ function admin_field(array $f, $val, string $board): void
                   <label><input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][priority]" <?= !empty($row['priority']) ? 'checked' : '' ?>> Priority override</label>
                   <label><input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][off]" <?= !empty($row['off']) ? 'checked' : '' ?>> Disabled</label>
                 </div>
-                <?php if (count($rotationScreens) > 0): ?>
+                <?php if (count($rotationScreens) > 0):
+                  $slidePickerChecked = $slideAllScreens
+                      ? array_keys($rotationScreens)
+                      : $slideScreens;
+                ?>
                 <div class="slide-card-screens">
                   <span class="mini">Show on displays</span>
-                  <div class="slide-screen-checks">
-                    <?php foreach ($rotationScreens as $screenKey => $screenMeta): ?>
-                    <label>
-                      <input type="checkbox" name="SLIDES[<?= h((string)$ri) ?>][screens][]" value="<?= h($screenKey) ?>"
-                        <?= $slideAllScreens || in_array($screenKey, $slideScreens, true) ? 'checked' : '' ?>>
-                      <?= h((string)($screenMeta['name'] ?? $screenKey)) ?>
-                    </label>
-                    <?php endforeach; ?>
-                  </div>
+                  <?php admin_screen_picker('SLIDES[' . (int)$ri . ']', admin_screen_options($rotationScreens), $slidePickerChecked, [
+                      'form_marker' => true,
+                      'summary_mode' => 'deck',
+                  ]); ?>
                 </div>
                 <?php endif; ?>
               </details>
@@ -2878,6 +3053,13 @@ function admin_field(array $f, $val, string $board): void
           </datalist>
           <?php endif; ?>
           <button type="button" class="addrow" style="margin-top:12px" onclick="addSlideCard()">+ Add blank deck row</button>
+          <?php
+          $slideScreenOptionsJs = [];
+          foreach ($rotationScreens as $sk => $sm) {
+              $slideScreenOptionsJs[] = ['key' => $sk, 'name' => (string)($sm['name'] ?? $sk)];
+          }
+          ?>
+          <script>window.SLIDE_SCREEN_OPTIONS = <?= json_encode($slideScreenOptionsJs, JSON_UNESCAPED_UNICODE) ?>;</script>
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'library' ? ' active' : '' ?>" data-tab-panel="library" id="slide-library-panel">
@@ -2922,16 +3104,17 @@ function admin_field(array $f, $val, string $board): void
           </div>
 
           <div class="slides-form-footer slides-save-deploy">
+            <?php
+            $slidesDeployPickerChecked = [];
+            foreach ($slidesDeployStatus as $screenKey => $dep) {
+                if ($dep['on_playlist'] || $screenKey === 'main') {
+                    $slidesDeployPickerChecked[] = $screenKey;
+                }
+            }
+            ?>
             <div class="deploy-checks">
               <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
-              <?php foreach ($slidesDeployStatus as $screenKey => $dep):
-                $saveChecked = $dep['on_playlist'] || $screenKey === 'main';
-              ?>
-              <label class="check">
-                <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $saveChecked ? 'checked' : '' ?>>
-                <?= h($dep['name']) ?>
-              </label>
-              <?php endforeach; ?>
+              <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployPickerChecked); ?>
             </div>
           </div>
 
@@ -3085,10 +3268,19 @@ function admin_field(array $f, $val, string $board): void
           </div>
         <?php endforeach; endif; ?>
 
-        <?php if ($board === 'rss'): ?>
-        <div class="actions" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
-          <label class="check"><input type="checkbox" name="sync_rotation_rss" checked> Add all feeds to main rotation on save</label>
-          <span class="help">Adds <code>rss.php?feed=KEY</code> for each feed with dwell from stories × seconds per story.</span>
+        <?php if ($board === 'rss'):
+          $rssDeployScreens = admin_filter_screens(rotation_screens());
+          $rssDeployChecked = [];
+          if (isset($rssDeployScreens['main']) && admin_can_screen('main')) {
+              $rssDeployChecked[] = 'main';
+          } elseif ($rssDeployChecked === []) {
+              $rssDeployChecked = admin_default_deploy_screens();
+          }
+        ?>
+        <div class="actions deploy-save-screens" style="margin-top:18px;margin-bottom:0;padding-top:16px;border-top:1px solid var(--line)">
+          <span class="help" style="margin:0;width:100%">On Save, add all feeds to rotation on:</span>
+          <?php admin_deploy_picker_from_screens($rssDeployScreens, $rssDeployChecked); ?>
+          <span class="help" style="margin:8px 0 0">Adds <code>rss.php?feed=KEY</code> for each feed with dwell from stories × seconds per story. Leave all unchecked to skip rotation sync.</span>
         </div>
         <?php endif; ?>
 
@@ -3110,15 +3302,21 @@ function admin_field(array $f, $val, string $board): void
             <form method="post" action="?board=rotator" class="slides-deploy-form">
               <input type="hidden" name="board" value="rotator">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-              <div class="slides-deploy-grid">
-                <?php foreach ($rotatorDeployStatus as $screenKey => $dep):
-                  $checked = $dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $rotatorDeckStats['on_disk'] > 0);
-                ?>
-                <div class="slides-deploy-row">
-                  <label class="check">
-                    <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $checked ? 'checked' : '' ?>>
-                    <?= h($dep['name']) ?> <code><?= h($screenKey) ?></code>
-                  </label>
+              <?php
+              $rotatorDeployTabChecked = [];
+              foreach ($rotatorDeployStatus as $screenKey => $dep) {
+                  if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $rotatorDeckStats['on_disk'] > 0)) {
+                      $rotatorDeployTabChecked[] = $screenKey;
+                  }
+              }
+              ?>
+              <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
+              <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
+              <input type="search" class="deploy-filter" placeholder="Filter status list…" autocomplete="off" data-deploy-filter="photos-deploy-grid">
+              <div class="slides-deploy-grid" id="photos-deploy-grid">
+                <?php foreach ($rotatorDeployStatus as $screenKey => $dep): ?>
+                <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
+                  <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
                   <div class="deploy-detail">
                     <?php if ($dep['mirrors_main']): ?>
                       <span class="pill">Mirrors main</span>
@@ -3173,15 +3371,21 @@ function admin_field(array $f, $val, string $board): void
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-              <div class="slides-deploy-grid">
-                <?php foreach ($slidesDeployStatus as $screenKey => $dep):
-                  $checked = $dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0);
-                ?>
-                <div class="slides-deploy-row">
-                  <label class="check">
-                    <input type="checkbox" name="deploy_screens[]" value="<?= h($screenKey) ?>" <?= $checked ? 'checked' : '' ?>>
-                    <?= h($dep['name']) ?> <code><?= h($screenKey) ?></code>
-                  </label>
+              <?php
+              $slidesDeployTabChecked = [];
+              foreach ($slidesDeployStatus as $screenKey => $dep) {
+                  if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0)) {
+                      $slidesDeployTabChecked[] = $screenKey;
+                  }
+              }
+              ?>
+              <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
+              <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
+              <input type="search" class="deploy-filter" placeholder="Filter status list…" autocomplete="off" data-deploy-filter="slides-deploy-grid">
+              <div class="slides-deploy-grid" id="slides-deploy-grid">
+                <?php foreach ($slidesDeployStatus as $screenKey => $dep): ?>
+                <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
+                  <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
                   <div class="deploy-detail">
                     <?php if ($dep['mirrors_main']): ?>
                       <span class="pill">Mirrors main</span>
@@ -3748,19 +3952,178 @@ function submitPhotoAddToDeck(file) {
   form.submit();
 }
 
-function photoScreenChecksHtml(idx) {
-  const opts = window.PHOTO_SCREEN_OPTIONS || [];
-  if (!opts.length) return '';
-  let html = '<input type="hidden" name="PHOTOS[' + idx + '][_screens_form]" value="1">' +
-    '<div class="slide-card-flags">' +
-    '<label><input type="checkbox" name="PHOTOS[' + idx + '][off]"> Disabled</label></div>' +
-    '<div class="slide-card-screens"><span class="mini">Show on displays</span><div class="slide-screen-checks">';
+function screenPickerSummaryText(picker) {
+  const mode = picker.dataset.summaryMode || 'deck';
+  const boxes = picker.querySelectorAll('.screen-picker-list input[type=checkbox]');
+  const total = boxes.length;
+  let n = 0;
+  boxes.forEach(function (cb) { if (cb.checked) n++; });
+  if (mode === 'assign') {
+    if (n === 0) return 'No displays';
+    if (n === total) return 'All displays (' + total + ')';
+    return n + ' of ' + total + ' displays';
+  }
+  if (n === 0) return 'Hidden on all displays';
+  if (n === total) return 'All displays (' + total + ')';
+  return n + ' of ' + total + ' displays';
+}
+
+function updateScreenPickerSummary(picker) {
+  const el = picker.querySelector('[data-screen-summary]');
+  if (el) el.textContent = screenPickerSummaryText(picker);
+}
+
+function bindScreenPicker(picker) {
+  if (picker.dataset.screenPickerBound) return;
+  picker.dataset.screenPickerBound = '1';
+  updateScreenPickerSummary(picker);
+  const toggle = picker.querySelector('.screen-picker-toggle');
+  const panel = picker.querySelector('.screen-picker-panel');
+  if (toggle && panel) {
+    toggle.addEventListener('click', function () {
+      const open = panel.hidden;
+      panel.hidden = !open;
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      toggle.textContent = open ? 'Done' : 'Choose…';
+      if (open) {
+        const filter = panel.querySelector('.screen-picker-filter');
+        if (filter) {
+          filter.value = '';
+          filter.dispatchEvent(new Event('input'));
+          filter.focus();
+        }
+      }
+    });
+  }
+  const filter = picker.querySelector('.screen-picker-filter');
+  if (filter) {
+    filter.addEventListener('input', function () {
+      const q = filter.value.trim().toLowerCase();
+      picker.querySelectorAll('.screen-picker-list label[data-screen-key]').forEach(function (lab) {
+        lab.hidden = q !== '' && lab.textContent.toLowerCase().indexOf(q) === -1;
+      });
+    });
+  }
+  picker.querySelectorAll('[data-pick]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const pickAll = btn.getAttribute('data-pick') === 'all';
+      picker.querySelectorAll('.screen-picker-list input[type=checkbox]').forEach(function (cb) {
+        cb.checked = pickAll;
+      });
+      updateScreenPickerSummary(picker);
+    });
+  });
+  picker.querySelectorAll('.screen-picker-list input[type=checkbox]').forEach(function (cb) {
+    cb.addEventListener('change', function () { updateScreenPickerSummary(picker); });
+  });
+}
+
+function initScreenPickers(root) {
+  (root || document).querySelectorAll('[data-screen-picker]').forEach(bindScreenPicker);
+}
+
+function screenPickerHtml(prefix, opts, checkedKeys, cfg) {
+  cfg = cfg || {};
+  if (!opts.length) {
+    return '<span class="help" style="margin:0">No displays configured.</span>';
+  }
+  const compact = cfg.compact !== false;
+  const summaryMode = cfg.summaryMode || 'deck';
+  const nameKey = cfg.nameKey || 'screens';
+  const flat = !!cfg.flat;
+  const flatName = cfg.name || 'deploy_screens';
+  const checkboxName = flat ? flatName + '[]' : prefix + '[' + nameKey + '][]';
+  const checked = new Set((checkedKeys || []).map(String));
+  let html = '<div class="screen-picker' + (compact ? ' screen-picker-compact' : '') +
+    (cfg.class ? ' ' + cfg.class : '') + '" data-screen-picker data-summary-mode="' + summaryMode + '">';
+  if (cfg.formMarker) {
+    html += '<input type="hidden" name="' + prefix + '[' + (cfg.formMarkerKey || '_screens_form') + ']" value="1">';
+  }
+  if (compact) {
+    html += '<div class="screen-picker-bar"><span class="screen-picker-summary" data-screen-summary></span>';
+    html += '<button type="button" class="screen-picker-toggle secondary" aria-expanded="false">Choose…</button></div>';
+    html += '<div class="screen-picker-panel" hidden>';
+    html += '<input type="search" class="screen-picker-filter" placeholder="Filter displays…" autocomplete="off">';
+    html += '<div class="screen-picker-quick"><button type="button" class="secondary" data-pick="all">All</button>';
+    html += '<button type="button" class="secondary" data-pick="none">None</button></div>';
+  } else if (cfg.label) {
+    html += '<span class="mini">' + cfg.label + '</span>';
+  }
+  html += '<div class="screen-picker-list slide-screen-checks">';
   opts.forEach(function (o) {
     const key = String(o.key).replace(/"/g, '&quot;');
     const name = String(o.name).replace(/</g, '&lt;');
-    html += '<label><input type="checkbox" name="PHOTOS[' + idx + '][screens][]" value="' + key + '" checked> ' + name + '</label>';
+    html += '<label data-screen-key="' + key + '"><input type="checkbox" name="' + checkboxName + '" value="' + key + '"';
+    if (checked.has(String(o.key))) html += ' checked';
+    html += '> ' + name + '</label>';
   });
-  html += '</div></div>';
+  html += '</div>';
+  if (compact) html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function initDeployPanelFilters() {
+  document.querySelectorAll('[data-deploy-filter]').forEach(function (input) {
+    if (input.dataset.deployFilterBound) return;
+    input.dataset.deployFilterBound = '1';
+    input.addEventListener('input', function () {
+      const q = input.value.trim().toLowerCase();
+      const grid = document.getElementById(input.getAttribute('data-deploy-filter') || '');
+      if (!grid) return;
+      grid.querySelectorAll('.slides-deploy-row').forEach(function (row) {
+        row.hidden = q !== '' && row.textContent.toLowerCase().indexOf(q) === -1;
+      });
+    });
+  });
+}
+
+function initRotationTargetFilter() {
+  document.querySelectorAll('[data-rotation-target-filter]').forEach(function (input) {
+    if (input.dataset.rotationTargetFilterBound) return;
+    input.dataset.rotationTargetFilterBound = '1';
+    const sel = document.getElementById(input.getAttribute('data-rotation-target-filter') || '');
+    if (!sel) return;
+    input.addEventListener('input', function () {
+      const q = input.value.trim().toLowerCase();
+      Array.from(sel.options).forEach(function (opt) {
+        opt.hidden = q !== '' && opt.textContent.toLowerCase().indexOf(q) === -1;
+      });
+      if (sel.selectedOptions.length && sel.selectedOptions[0].hidden) {
+        const first = Array.from(sel.options).find(function (o) { return !o.hidden; });
+        if (first) sel.value = first.value;
+      }
+    });
+  });
+}
+
+function photoScreenChecksHtml(idx) {
+  const opts = window.PHOTO_SCREEN_OPTIONS || [];
+  if (!opts.length) return '';
+  const allKeys = opts.map(function (o) { return o.key; });
+  let html = '<div class="slide-card-flags"><label><input type="checkbox" name="PHOTOS[' + idx + '][off]"> Disabled</label></div>';
+  html += '<div class="slide-card-screens"><span class="mini">Show on displays</span>';
+  html += screenPickerHtml('PHOTOS[' + idx + ']', opts, allKeys, {
+    summaryMode: 'deck',
+    formMarker: true
+  });
+  html += '</div>';
+  return html;
+}
+
+function slideScreenChecksHtml(idx) {
+  const opts = window.SLIDE_SCREEN_OPTIONS || [];
+  if (!opts.length) return '';
+  const allKeys = opts.map(function (o) { return o.key; });
+  let html = '<div class="slide-card-flags">';
+  html += '<label><input type="checkbox" name="SLIDES[' + idx + '][priority]"> Priority override</label>';
+  html += '<label><input type="checkbox" name="SLIDES[' + idx + '][off]"> Disabled</label></div>';
+  html += '<div class="slide-card-screens"><span class="mini">Show on displays</span>';
+  html += screenPickerHtml('SLIDES[' + idx + ']', opts, allKeys, {
+    summaryMode: 'deck',
+    formMarker: true
+  });
+  html += '</div>';
   return html;
 }
 
@@ -3782,6 +4145,7 @@ function addPhotoCard() {
       }
     });
     card.querySelectorAll('[data-bound]').forEach(function (el) { el.removeAttribute('data-bound'); });
+    card.querySelectorAll('[data-screen-picker-bound]').forEach(function (el) { el.removeAttribute('data-screen-picker-bound'); });
     const handle = card.querySelector('.drag-handle');
     if (handle) handle.removeAttribute('data-drag-bound');
     const thumb = card.querySelector('.slide-card-thumb');
@@ -3805,6 +4169,7 @@ function addPhotoCard() {
   deck.appendChild(card);
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexPhotoDeck);
   bindPhotoCard(card);
+  initScreenPickers(card);
   reindexPhotoDeck();
 }
 
@@ -3905,6 +4270,7 @@ function addSlideCard() {
       el.removeAttribute('data-bound');
       el.removeAttribute('data-summary-bound');
     });
+    card.querySelectorAll('[data-screen-picker-bound]').forEach(function (el) { el.removeAttribute('data-screen-picker-bound'); });
     const handle = card.querySelector('.drag-handle');
     if (handle) handle.removeAttribute('data-drag-bound');
   } else {
@@ -3922,7 +4288,8 @@ function addSlideCard() {
       '<div class="span-3"><label class="mini">Label</label><input type="text" name="SLIDES[' + idx + '][caption]" placeholder="Admin label only (not shown on wall)"></div>' +
       '<div><label class="mini">Schedule</label><select name="SLIDES[' + idx + '][schedule]" data-schedule-select>' +
       SLIDE_SCHEDULES.map(function (s) { return '<option value="' + s + '">' + s + '</option>'; }).join('') +
-      '</select></div></div></details>';
+      '</select></div></div>' +
+      slideScreenChecksHtml(idx) + '</details>';
   }
   if (proto) {
     card.querySelectorAll('[name]').forEach(function (el) {
@@ -3932,31 +4299,17 @@ function addSlideCard() {
   deck.appendChild(card);
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexSlideDeck);
   bindSlideCard(card);
+  initScreenPickers(card);
   reindexSlideDeck();
-}
-
-function userScreenChecksHtml(idx, checkedKeys) {
-  const opts = window.USER_SCREEN_OPTIONS || [];
-  const checked = new Set((checkedKeys || []).map(String));
-  if (!opts.length) {
-    return '<span class="help" style="margin:0">No displays configured — add screens under Rotation first.</span>';
-  }
-  let html = '<div class="slide-screen-checks">';
-  opts.forEach(function (o) {
-    const key = String(o.key).replace(/"/g, '&quot;');
-    const name = String(o.name).replace(/</g, '&lt;');
-    html += '<label><input type="checkbox" name="USERS[' + idx + '][screens][]" value="' + key + '"' +
-      (checked.has(String(o.key)) ? ' checked' : '') + '> ' + name + '</label>';
-  });
-  html += '</div>';
-  return html;
 }
 
 function userScreensCellHtml(idx, role, checkedKeys) {
   if (role === 'super') {
     return '<span class="help" style="margin:0">All displays</span>';
   }
-  return userScreenChecksHtml(idx, checkedKeys);
+  return screenPickerHtml('USERS[' + idx + ']', window.USER_SCREEN_OPTIONS || [], checkedKeys, {
+    summaryMode: 'assign'
+  });
 }
 
 function bindUserRow(tr) {
@@ -3974,6 +4327,7 @@ function bindUserRow(tr) {
       checked.push(cb.value);
     });
     cell.innerHTML = userScreensCellHtml(idx, sel.value, checked);
+    initScreenPickers(tr);
   });
 }
 
@@ -3993,6 +4347,7 @@ function addUserRow() {
     '<td><button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button></td>';
   tbody.appendChild(tr);
   bindUserRow(tr);
+  initScreenPickers(tr);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -4000,6 +4355,9 @@ document.addEventListener('DOMContentLoaded', function () {
   initSlidesSectionNav();
   initPhotoDeck();
   initPhotosSectionNav();
+  initScreenPickers(document);
+  initDeployPanelFilters();
+  initRotationTargetFilter();
   document.querySelectorAll('#usersTable tbody tr').forEach(bindUserRow);
   initVideoPlaylist();
   initSplunkPanels();
