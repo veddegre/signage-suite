@@ -529,7 +529,7 @@ function admin_entry_access_summary(?array $entry): string
 }
 
 /** Super-admin: owner dropdown + shared-with checkboxes. */
-function admin_entry_sharing_html(string $prefix, ?array $entry): void
+function admin_entry_sharing_html(string $prefix, ?array $entry, bool $compact = false): void
 {
     if (!admin_is_super()) {
         return;
@@ -540,26 +540,51 @@ function admin_entry_sharing_html(string $prefix, ?array $entry): void
     }
     $owner = admin_entry_owner($entry);
     $sharedSet = array_flip(admin_entry_shared_users($entry));
-    echo '<div class="entry-sharing">';
+    $class = 'entry-sharing' . ($compact ? ' entry-sharing--compact' : '');
+    echo '<div class="' . h($class) . '">';
     echo '<input type="hidden" name="' . h($prefix . '[_sharing_form]') . '" value="1">';
-    echo '<label class="mini">Owner</label>';
-    echo '<select name="' . h($prefix . '[owner]') . '">';
-    echo '<option value="">(none — super only)</option>';
-    foreach ($users as $u) {
-        echo '<option value="' . h($u['id']) . '"' . ($owner === $u['id'] ? ' selected' : '') . '>'
-            . h($u['username']) . '</option>';
-    }
-    echo '</select>';
-    echo '<span class="mini entry-sharing-shared-label">Also shared with</span>';
-    echo '<div class="slide-screen-checks entry-sharing-users">';
-    foreach ($users as $u) {
-        if ($owner !== null && $u['id'] === $owner) {
-            continue;
+    if ($compact) {
+        echo '<div class="entry-sharing-inline">';
+        echo '<label class="mini">Owner</label>';
+        echo '<select name="' . h($prefix . '[owner]') . '">';
+        echo '<option value="">Super only</option>';
+        foreach ($users as $u) {
+            echo '<option value="' . h($u['id']) . '"' . ($owner === $u['id'] ? ' selected' : '') . '>'
+                . h($u['username']) . '</option>';
         }
-        echo '<label><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
-            . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
+        echo '</select>';
+        echo '<span class="entry-sharing-sep" aria-hidden="true">·</span>';
+        echo '<span class="mini entry-sharing-shared-label">Shared</span>';
+        echo '<div class="entry-sharing-users">';
+        foreach ($users as $u) {
+            if ($owner !== null && $u['id'] === $owner) {
+                continue;
+            }
+            echo '<label><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
+                . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
+        }
+        echo '</div></div>';
+    } else {
+        echo '<label class="mini">Owner</label>';
+        echo '<select name="' . h($prefix . '[owner]') . '">';
+        echo '<option value="">(none — super only)</option>';
+        foreach ($users as $u) {
+            echo '<option value="' . h($u['id']) . '"' . ($owner === $u['id'] ? ' selected' : '') . '>'
+                . h($u['username']) . '</option>';
+        }
+        echo '</select>';
+        echo '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+        echo '<div class="slide-screen-checks entry-sharing-users">';
+        foreach ($users as $u) {
+            if ($owner !== null && $u['id'] === $owner) {
+                continue;
+            }
+            echo '<label><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
+                . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
+        }
+        echo '</div>';
     }
-    echo '</div></div>';
+    echo '</div>';
 }
 
 /** @param list<array<string,mixed>> $list */

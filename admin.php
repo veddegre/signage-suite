@@ -1398,7 +1398,7 @@ function admin_field(array $f, $val, string $board): void
   .rows-scroll { overflow-x:auto; margin-top:4px; max-width:100%; }
   table.rows th { text-align:left; font-size:12.5px; letter-spacing:1px; text-transform:uppercase;
                   color:var(--mist); font-weight:500; padding:4px 8px 8px 0; }
-  table.rows td { padding:0 8px 10px 0; vertical-align:top; }
+  table.rows td { padding:0 8px 10px 0; vertical-align:middle; }
   .cal-palette-cell { display:flex; align-items:center; gap:10px; min-width:148px; }
   .cal-palette-cell select { min-width:108px; }
   .cal-swatch { width:22px; height:22px; border-radius:50%; flex-shrink:0;
@@ -1517,7 +1517,17 @@ function admin_field(array $f, $val, string $board): void
     background:#0f1728; border:1px solid var(--line); border-radius:8px; color:var(--snow); margin-top:4px; }
   .entry-sharing-shared-label { display:block; margin-top:10px; }
   .entry-sharing-users { margin-top:6px; }
-  .entry-sharing-cell { min-width:220px; vertical-align:top; }
+  .entry-sharing--compact { margin:0; padding:0; border:0; }
+  .entry-sharing--compact .entry-sharing-inline { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+  .entry-sharing--compact label.mini,
+  .entry-sharing--compact .entry-sharing-shared-label { margin:0; white-space:nowrap; font-size:11px; letter-spacing:.6px; }
+  .entry-sharing--compact select { width:auto; min-width:108px; max-width:150px; margin:0; padding:8px 10px; font-size:14px; flex:0 1 auto; }
+  .entry-sharing--compact .entry-sharing-sep { color:var(--mist); font-size:12px; line-height:1; }
+  .entry-sharing--compact .entry-sharing-users { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin:0; }
+  .entry-sharing--compact .entry-sharing-users label { display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--snow); white-space:nowrap; }
+  .entry-sharing--compact .entry-sharing-users input { width:15px; height:15px; min-width:15px; accent-color:var(--beacon); margin:0; }
+  .entry-sharing-cell { min-width:200px; max-width:320px; vertical-align:middle; }
+  table.rows td.entry-sharing-cell { padding-right:0; }
   .slide-screen-checks { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:8px; }
   .slide-screen-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); }
   .slide-screen-checks label[hidden] { display:none; }
@@ -3353,7 +3363,7 @@ function admin_field(array $f, $val, string $board): void
                         }
                       ?>
                       <td class="entry-sharing-cell">
-                        <?php admin_entry_sharing_html($f['key'] . '[' . (int)$ri . ']', $shareEntry); ?>
+                        <?php admin_entry_sharing_html($f['key'] . '[' . (int)$ri . ']', $shareEntry, true); ?>
                       </td>
                       <?php endif; ?>
                       <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
@@ -3828,7 +3838,7 @@ function addRow(btn) {
   if (window.SHARING_USER_OPTIONS && window.SHARING_USER_OPTIONS.length) {
     const shareTd = document.createElement('td');
     shareTd.className = 'entry-sharing-cell';
-    shareTd.innerHTML = entrySharingHtml(field + '[' + idx + ']', '', []);
+    shareTd.innerHTML = entrySharingHtml(field + '[' + idx + ']', '', [], true);
     tr.appendChild(shareTd);
   }
   const td = document.createElement('td');
@@ -4212,31 +4222,52 @@ function initRotationTargetFilter() {
   });
 }
 
-function entrySharingHtml(prefix, ownerId, sharedIds) {
+function entrySharingHtml(prefix, ownerId, sharedIds, compact) {
   const users = window.SHARING_USER_OPTIONS || [];
   if (!users.length) return '';
   ownerId = ownerId || '';
   sharedIds = sharedIds || [];
+  compact = !!compact;
   const sharedSet = {};
   sharedIds.forEach(function (id) { sharedSet[id] = true; });
-  let html = '<div class="entry-sharing">';
+  const cls = compact ? 'entry-sharing entry-sharing--compact' : 'entry-sharing';
+  let html = '<div class="' + cls + '">';
   html += '<input type="hidden" name="' + prefix + '[_sharing_form]" value="1">';
-  html += '<label class="mini">Owner</label><select name="' + prefix + '[owner]">';
-  html += '<option value="">(none — super only)</option>';
-  users.forEach(function (u) {
-    html += '<option value="' + u.id.replace(/"/g, '&quot;') + '"' + (ownerId === u.id ? ' selected' : '') + '>'
-      + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
-  });
-  html += '</select>';
-  html += '<span class="mini entry-sharing-shared-label">Also shared with</span>';
-  html += '<div class="slide-screen-checks entry-sharing-users">';
-  users.forEach(function (u) {
-    if (ownerId && u.id === ownerId) return;
-    html += '<label><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
-      + (sharedSet[u.id] ? ' checked' : '') + '> '
-      + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
-  });
-  html += '</div></div>';
+  if (compact) {
+    html += '<div class="entry-sharing-inline"><label class="mini">Owner</label>';
+    html += '<select name="' + prefix + '[owner]"><option value="">Super only</option>';
+    users.forEach(function (u) {
+      html += '<option value="' + u.id.replace(/"/g, '&quot;') + '"' + (ownerId === u.id ? ' selected' : '') + '>'
+        + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    });
+    html += '</select><span class="entry-sharing-sep" aria-hidden="true">·</span>';
+    html += '<span class="mini entry-sharing-shared-label">Shared</span><div class="entry-sharing-users">';
+    users.forEach(function (u) {
+      if (ownerId && u.id === ownerId) return;
+      html += '<label><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
+        + (sharedSet[u.id] ? ' checked' : '') + '> '
+        + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
+    });
+    html += '</div></div>';
+  } else {
+    html += '<label class="mini">Owner</label><select name="' + prefix + '[owner]">';
+    html += '<option value="">(none — super only)</option>';
+    users.forEach(function (u) {
+      html += '<option value="' + u.id.replace(/"/g, '&quot;') + '"' + (ownerId === u.id ? ' selected' : '') + '>'
+        + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    });
+    html += '</select>';
+    html += '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+    html += '<div class="slide-screen-checks entry-sharing-users">';
+    users.forEach(function (u) {
+      if (ownerId && u.id === ownerId) return;
+      html += '<label><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
+        + (sharedSet[u.id] ? ' checked' : '') + '> '
+        + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
   return html;
 }
 
