@@ -576,6 +576,71 @@ function admin_default_deploy_screens(): array
     return [$keys[0]];
 }
 
+function admin_deploy_screens_session_key(string $board): string
+{
+    return 'admin_deploy_' . preg_replace('/[^a-z]/', '', $board);
+}
+
+/** @return list<string> */
+function admin_deploy_screens_from_post(array $post): array
+{
+    if (!isset($post['deploy_screens']) || !is_array($post['deploy_screens'])) {
+        return [];
+    }
+    require_once __DIR__ . '/rotation_lib.php';
+    $screens = [];
+    foreach ($post['deploy_screens'] as $scr) {
+        $sk = rotation_normalize_screen_key((string)$scr);
+        if ($sk !== '') {
+            $screens[$sk] = true;
+        }
+    }
+    $list = array_keys($screens);
+    sort($list);
+    return $list;
+}
+
+/** @param list<string> $screens */
+function admin_deploy_screens_remember(string $board, array $screens): void
+{
+    $_SESSION[admin_deploy_screens_session_key($board)] = admin_filter_deploy_screens($screens);
+}
+
+/** @return list<string>|null */
+function admin_deploy_screens_remembered(string $board): ?array
+{
+    $key = admin_deploy_screens_session_key($board);
+    if (!array_key_exists($key, $_SESSION)) {
+        return null;
+    }
+    return admin_filter_deploy_screens((array)$_SESSION[$key]);
+}
+
+/** Resolve deploy targets from POST, remembered session, or defaults. @return list<string> */
+function admin_deploy_screens_for_action(string $board, array $post): array
+{
+    if (isset($post['deploy_screens']) || !empty($post['deploy_screens_sent'])) {
+        $screens = admin_deploy_screens_from_post($post);
+        admin_deploy_screens_remember($board, $screens);
+        return admin_filter_deploy_screens($screens);
+    }
+    $remembered = admin_deploy_screens_remembered($board);
+    if ($remembered !== null) {
+        return $remembered;
+    }
+    return admin_default_deploy_screens();
+}
+
+/** @param list<string> $defaultChecked @return list<string> */
+function admin_deploy_picker_checked(string $board, array $defaultChecked): array
+{
+    $remembered = admin_deploy_screens_remembered($board);
+    if ($remembered !== null) {
+        return $remembered;
+    }
+    return admin_filter_deploy_screens($defaultChecked);
+}
+
 function admin_user_id(): ?string
 {
     $user = admin_current_user();

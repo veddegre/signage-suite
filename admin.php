@@ -677,6 +677,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 }
             } elseif ($board === 'slides') {
                 $deployScreens = admin_deploy_screens_from_post($_POST);
+                admin_deploy_screens_remember('slides', $deployScreens);
                 if ($deployScreens === [] && isset($_POST['sync_rotation_slides'])) {
                     $deployScreens = admin_default_deploy_screens();
                 }
@@ -898,7 +899,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
                         $extra['caption'] = $caption;
                     }
                     if (slide_append_to_deck($name, $extra)) {
-                        $deploy = admin_default_deploy_screens();
+                        $deploy = admin_deploy_screens_for_action('slides', $_POST);
                         if ($deploy !== []) {
                             cfg_reload();
                             $deck = cfg('slides.SLIDES', []);
@@ -922,6 +923,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         if ($screens === []) {
             $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
         } else {
+            admin_deploy_screens_remember('slides', $screens);
             $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
             $result = slides_deploy_to_screens($screens, admin_media_deploy_deck($deck));
             cfg_reload();
@@ -958,7 +960,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
                 $flash = (string)($saved['error'] ?? 'Upload failed — try again.');
                 $flashOk = false;
             } elseif (slide_append_to_deck((string)$saved['name'])) {
-                $deploy = admin_default_deploy_screens();
+                $deploy = admin_deploy_screens_for_action('slides', $_POST);
                 if ($deploy !== []) {
                     cfg_reload();
                     $deck = cfg('slides.SLIDES', []);
@@ -1603,24 +1605,6 @@ function admin_user_screen_picker(string $prefix, array $options, array $checked
     }
     echo '</select>';
     echo '<div class="help" style="margin-top:6px">One display per operator.</div>';
-}
-
-/** @return list<string> */
-function admin_deploy_screens_from_post(array $post): array
-{
-    if (!isset($post['deploy_screens']) || !is_array($post['deploy_screens'])) {
-        return [];
-    }
-    $screens = [];
-    foreach ($post['deploy_screens'] as $scr) {
-        $sk = rotation_normalize_screen_key((string)$scr);
-        if ($sk !== '') {
-            $screens[$sk] = true;
-        }
-    }
-    $list = array_keys($screens);
-    sort($list);
-    return $list;
 }
 
 /** @param array<string,array<string,mixed>> $deployStatus */
@@ -4076,14 +4060,16 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 
           <div class="slides-form-footer slides-save-deploy">
             <?php
-            $slidesDeployPickerChecked = [];
+            $slidesDeployPickerDefault = [];
             foreach ($slidesDeployStatus as $screenKey => $dep) {
                 if ($dep['on_playlist'] || $screenKey === 'main') {
-                    $slidesDeployPickerChecked[] = $screenKey;
+                    $slidesDeployPickerDefault[] = $screenKey;
                 }
             }
+            $slidesDeployPickerChecked = admin_deploy_picker_checked('slides', $slidesDeployPickerDefault);
+            $slidesDeployRemembered = admin_deploy_screens_remembered('slides') !== null;
             ?>
-            <div class="deploy-checks">
+            <div class="deploy-checks" data-deploy-remembered="<?= $slidesDeployRemembered ? '1' : '0' ?>">
               <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployPickerChecked); ?>
             </div>
@@ -5541,6 +5527,78 @@ function initDeployPanelFilters() {
   });
 }
 
+function deployScreensStorageKey(board) {
+  return 'signage:deploy_screens:' + board;
+}
+
+function collectDeployScreensChecked() {
+  const out = [];
+  document.querySelectorAll('#boardform input[name="deploy_screens[]"]').forEach(function (cb) {
+    if (cb.checked) out.push(cb.value);
+  });
+  return out;
+}
+
+function appendDeployScreensToForm(form, screens) {
+  form.querySelectorAll('input[data-deploy-screen-injected]').forEach(function (el) { el.remove(); });
+  const sent = document.createElement('input');
+  sent.type = 'hidden';
+  sent.name = 'deploy_screens_sent';
+  sent.value = '1';
+  sent.setAttribute('data-deploy-screen-injected', '1');
+  form.appendChild(sent);
+  screens.forEach(function (sk) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'deploy_screens[]';
+    input.value = sk;
+    input.setAttribute('data-deploy-screen-injected', '1');
+    form.appendChild(input);
+  });
+}
+
+function persistDeployScreensSelection(board) {
+  try {
+    localStorage.setItem(deployScreensStorageKey(board), JSON.stringify(collectDeployScreensChecked()));
+  } catch (e) {}
+}
+
+function initDeployScreensPersistence(board) {
+  const deployChecks = document.querySelector('#boardform .slides-save-deploy .deploy-checks');
+  if (!deployChecks) return;
+  let fromStorage = null;
+  try {
+    const raw = localStorage.getItem(deployScreensStorageKey(board));
+    if (raw) fromStorage = JSON.parse(raw);
+  } catch (e) {}
+  const serverRemembered = deployChecks.dataset.deployRemembered === '1';
+  if (!serverRemembered && Array.isArray(fromStorage)) {
+    const set = new Set(fromStorage.map(String));
+    document.querySelectorAll('#boardform input[name="deploy_screens[]"]').forEach(function (cb) {
+      cb.checked = set.has(cb.value);
+    });
+  } else {
+    persistDeployScreensSelection(board);
+  }
+  document.querySelectorAll('#boardform input[name="deploy_screens[]"]').forEach(function (cb) {
+    if (cb.dataset.deployPersistBound) return;
+    cb.dataset.deployPersistBound = '1';
+    cb.addEventListener('change', function () {
+      persistDeployScreensSelection(board);
+      const picker = cb.closest('[data-screen-picker]');
+      if (picker) updateScreenPickerSummary(picker);
+    });
+  });
+  document.querySelectorAll('#boardform .slides-save-deploy [data-screen-picker]').forEach(updateScreenPickerSummary);
+  const uploadForm = document.querySelector('#add-slides-panel form.upload-row');
+  if (uploadForm && !uploadForm.dataset.deployBound) {
+    uploadForm.dataset.deployBound = '1';
+    uploadForm.addEventListener('submit', function () {
+      appendDeployScreensToForm(uploadForm, collectDeployScreensChecked());
+    });
+  }
+}
+
 function initRotationTargetFilter() {
   document.querySelectorAll('[data-rotation-target-filter]').forEach(function (input) {
     if (input.dataset.rotationTargetFilterBound) return;
@@ -6105,11 +6163,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
+      persistDeployScreensSelection('slides');
     });
   }
   initScreenPickers(document);
   initEntrySharingPopovers(document);
   initDeployPanelFilters();
+  initDeployScreensPersistence('slides');
   initRotationTargetFilter();
   document.querySelectorAll('#usersList .user-card').forEach(bindUserRow);
   initVideoPlaylist();
@@ -7269,7 +7329,7 @@ function testSplunkPanel(btn) {
     });
   }
 
-  function submitCreatorForm(fields) {
+  function submitCreatorForm(fields, extraScreens) {
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '?board=slides';
@@ -7281,6 +7341,9 @@ function testSplunkPanel(btn) {
       input.value = fields[key];
       form.appendChild(input);
     });
+    if (typeof appendDeployScreensToForm === 'function') {
+      appendDeployScreensToForm(form, extraScreens || collectDeployScreensChecked());
+    }
     document.body.appendChild(form);
     form.submit();
   }
