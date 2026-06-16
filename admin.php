@@ -965,7 +965,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
                     slides_deploy_to_screens($deploy, admin_media_deploy_deck(is_array($deck) ? $deck : []));
                 }
                 cfg_reload();
-                header('Location: ?board=slides&highlight=' . rawurlencode((string)$saved['name']));
+                header('Location: ?board=slides&tab=create&highlight=' . rawurlencode((string)$saved['name']));
                 exit;
             } else {
                 $flash = 'File saved but could not update settings.json.'; $flashOk = false;
@@ -3580,11 +3580,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $photoRows = admin_filter_owned_list(is_array($photoVal) ? $photoVal : []);
           $photosDeckFull = is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : [];
           $photoFileFromEntry = static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''));
-          $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
+          $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
           if (!in_array($rotatorTab, ['deck', 'library', 'upload', 'deploy'], true)) {
               $rotatorTab = 'deck';
           }
-          if ($photoHighlight !== null) {
+          if ($photoHighlight !== null && $rotatorTab !== 'upload') {
               $rotatorTab = 'deck';
           }
           $deployMode = rotator_deploy_mode();
@@ -3795,11 +3795,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $slidesDeckFull = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
           $slideFileFromEntry = static fn($e) => slide_safe_filename((string)($e['file'] ?? ''));
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
-          $slidesTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
+          $slidesTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
           if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
               $slidesTab = 'deck';
           }
-          if ($slideHighlight !== null) {
+          if ($slideHighlight !== null && $slidesTab !== 'create') {
               $slidesTab = 'deck';
           }
         ?>
@@ -4368,6 +4368,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             </form>
       </div>
       <div class="admin-tab-panel<?= $slidesTab === 'create' ? ' active' : '' ?>" data-tab-panel="create" id="add-slides-panel" style="margin-top:0">
+          <?php if ($slideHighlight !== null && $slidesTab === 'create'): ?>
+          <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — upload or create another, or switch to <strong>Deck</strong> to edit schedule.</div>
+          <?php endif; ?>
           <div class="upload-box">
             <h3>Upload an image</h3>
             <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=slides">
@@ -4968,6 +4971,15 @@ function initAdminTabs(tabRootId, boardName) {
   tabs.forEach(function (t) {
     t.addEventListener('click', function () { show(t.dataset.tab); });
   });
+  const activeTab = root.querySelector('.admin-tab.active');
+  if (activeTab && activeTab.dataset.tab) {
+    const url = new URL(location.href);
+    if (url.searchParams.get('tab') !== activeTab.dataset.tab) {
+      url.searchParams.set('board', boardName);
+      url.searchParams.set('tab', activeTab.dataset.tab);
+      if (history.replaceState) history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+  }
 }
 
 function initSlidesSectionNav() {
@@ -6063,6 +6075,34 @@ document.addEventListener('DOMContentLoaded', function () {
     boardForm.addEventListener('submit', function () {
       const action = boardForm.querySelector('input[name="action"]');
       if (!action || action.value !== 'save') return;
+      const slidesTabs = document.getElementById('slidesTabs');
+      if (slidesTabs) {
+        const active = slidesTabs.querySelector('.admin-tab.active');
+        if (active && active.dataset.tab) {
+          let tabInp = boardForm.querySelector('input[name="tab"]');
+          if (!tabInp) {
+            tabInp = document.createElement('input');
+            tabInp.type = 'hidden';
+            tabInp.name = 'tab';
+            boardForm.appendChild(tabInp);
+          }
+          tabInp.value = active.dataset.tab;
+        }
+      }
+      const photosTabs = document.getElementById('photosTabs');
+      if (photosTabs) {
+        const active = photosTabs.querySelector('.admin-tab.active');
+        if (active && active.dataset.tab) {
+          let tabInp = boardForm.querySelector('input[name="tab"]');
+          if (!tabInp) {
+            tabInp = document.createElement('input');
+            tabInp.type = 'hidden';
+            tabInp.name = 'tab';
+            boardForm.appendChild(tabInp);
+          }
+          tabInp.value = active.dataset.tab;
+        }
+      }
       if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
     });

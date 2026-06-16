@@ -502,7 +502,7 @@ function slide_creator_read_png(?string $b64, ?array $upload): ?string
 
 function slide_creator_finish(string $filename): void
 {
-    header('Location: ?board=slides&highlight=' . rawurlencode($filename));
+    header('Location: ?board=slides&tab=create&highlight=' . rawurlencode($filename));
     exit;
 }
 
