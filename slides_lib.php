@@ -342,12 +342,13 @@ function slide_delete_file(string $file): array
 /** Append a new slide entry to config deck (used by upload + creator). */
 function slide_append_to_deck(string $filename, array $extra = []): bool
 {
+    require_once __DIR__ . '/users_lib.php';
     $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
     $deck = $conf['slides.SLIDES'] ?? [];
     if (!is_array($deck)) {
         $deck = [];
     }
-    $deck[] = array_merge(['file' => $filename, 'schedule' => 'always'], $extra);
+    $deck[] = admin_stamp_owner(array_merge(['file' => $filename, 'schedule' => 'always'], $extra), null);
     $conf['slides.SLIDES'] = $deck;
     if (!cfg_write($conf)) {
         return false;

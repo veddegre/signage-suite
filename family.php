@@ -707,6 +707,10 @@ if ($showTrash) {
 // Countdowns
 $counts = [];
 foreach (COUNTDOWNS as $label => $date) {
+    if (is_array($date)) {
+        $date = trim((string)($date['value'] ?? ''));
+    }
+    $date = trim((string)$date);
     $d = (int)ceil((strtotime($date) - time()) / 86400);
     if ($d >= 0) $counts[] = [$label, $d];
 }

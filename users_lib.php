@@ -11,8 +11,15 @@ require_once __DIR__ . '/config.php';
 const USERS_FILE = __DIR__ . '/config/users.json';
 const LEGACY_ADMIN_FILE = __DIR__ . '/config/admin.json';
 
-/** Boards screen operators may access (rotation + media deploy). */
-const ADMIN_OPERATOR_BOARDS = ['rotation', 'slides', 'rotator', 'video', 'rss', 'account'];
+/** Boards operators may open (content + rotation; not tools/users/security). */
+const ADMIN_OPERATOR_BOARDS = [
+    'rotation', 'slides', 'rotator', 'video', 'rss',
+    'splunk', 'grafana', 'splunkdash', 'web', 'family', 'homelab',
+    'account',
+];
+
+/** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
+const ADMIN_OPERATOR_SETTINGS_BOARDS = ['slides', 'rotator', 'video', 'rss'];
 
 function users_load_raw(): array
 {
@@ -312,6 +319,291 @@ function admin_default_deploy_screens(): array
         return ['main'];
     }
     return [$keys[0]];
+}
+
+function admin_user_id(): ?string
+{
+    $user = admin_current_user();
+    if (!is_array($user) || empty($user['id'])) {
+        return null;
+    }
+    return (string)$user['id'];
+}
+
+/** @param array<string,mixed>|null $entry */
+function admin_entry_owner(?array $entry): ?string
+{
+    if (!is_array($entry)) {
+        return null;
+    }
+    $owner = trim((string)($entry['owner'] ?? ''));
+    return $owner !== '' ? $owner : null;
+}
+
+/** Legacy entries without owner are super-admin only. */
+function admin_entry_visible(?array $entry): bool
+{
+    if (!is_array($entry)) {
+        return false;
+    }
+    if (admin_is_super()) {
+        return true;
+    }
+    $owner = admin_entry_owner($entry);
+    return $owner !== null && $owner === admin_user_id();
+}
+
+function admin_can_edit_entry(?array $entry): bool
+{
+    return admin_entry_visible($entry);
+}
+
+/** @param array<string,mixed> $entry */
+function admin_stamp_owner(array $entry, ?array $prev = null): array
+{
+    if ($prev !== null) {
+        $prevOwner = admin_entry_owner($prev);
+        if ($prevOwner !== null && !array_key_exists('owner', $entry)) {
+            $entry['owner'] = $prevOwner;
+        }
+    }
+    if (admin_is_super()) {
+        return $entry;
+    }
+    $uid = admin_user_id();
+    if ($uid !== null) {
+        $entry['owner'] = $uid;
+    }
+    return $entry;
+}
+
+/** @param list<array<string,mixed>> $list */
+function admin_filter_owned_list(array $list): array
+{
+    if (admin_is_super()) {
+        return $list;
+    }
+    return array_values(array_filter($list, static fn($row) => is_array($row) && admin_entry_visible($row)));
+}
+
+/** @param array<string,array<string,mixed>|mixed> $map */
+function admin_filter_owned_map(array $map): array
+{
+    if (admin_is_super()) {
+        return $map;
+    }
+    $out = [];
+    foreach ($map as $k => $entry) {
+        if (is_array($entry) && admin_entry_visible($entry)) {
+            $out[$k] = $entry;
+        }
+    }
+    return $out;
+}
+
+/** @param list<array<string,mixed>> $existing @param list<array<string,mixed>> $posted */
+function admin_merge_owned_list(array $existing, array $posted): array
+{
+    if (admin_is_super()) {
+        $out = [];
+        foreach ($posted as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $out[] = admin_stamp_owner($row, admin_find_owned_list_entry($existing, $row));
+        }
+        return $out;
+    }
+    $kept = array_values(array_filter($existing, static fn($e) => is_array($e) && !admin_entry_visible($e)));
+    $ownedOut = [];
+    foreach ($posted as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $prev = admin_find_owned_list_entry($existing, $row);
+        if ($prev !== null && !admin_entry_visible($prev)) {
+            continue;
+        }
+        $ownedOut[] = admin_stamp_owner($row, $prev);
+    }
+    return array_merge($kept, $ownedOut);
+}
+
+/** @param array<string,array<string,mixed>> $existing @param array<string,array<string,mixed>> $posted */
+function admin_merge_owned_map(array $existing, array $posted): array
+{
+    if (admin_is_super()) {
+        $out = [];
+        foreach ($posted as $k => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $out[(string)$k] = admin_stamp_owner($row, is_array($existing[$k] ?? null) ? $existing[$k] : null);
+        }
+        return $out;
+    }
+    $out = [];
+    foreach ($existing as $k => $row) {
+        if (is_array($row) && !admin_entry_visible($row)) {
+            $out[(string)$k] = $row;
+        }
+    }
+    foreach ($posted as $k => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $key = (string)$k;
+        $prev = is_array($existing[$key] ?? null) ? $existing[$key] : null;
+        if ($prev !== null && !admin_entry_visible($prev)) {
+            continue;
+        }
+        $out[$key] = admin_stamp_owner($row, $prev);
+    }
+    return $out;
+}
+
+/**
+ * Keyed scalar rows (homelab services, family countdowns) stored as string or {value, owner}.
+ * @param array<string,mixed> $existing
+ * @param array<string,mixed> $posted
+ */
+function admin_merge_owned_scalar_map(array $existing, array $posted): array
+{
+    if (admin_is_super()) {
+        return $posted;
+    }
+    $out = [];
+    foreach ($existing as $k => $v) {
+        if (is_array($v)) {
+            if (!admin_entry_visible($v)) {
+                $out[(string)$k] = $v;
+            }
+        } else {
+            $out[(string)$k] = $v;
+        }
+    }
+    foreach ($posted as $k => $v) {
+        $key = trim((string)$k);
+        $val = trim((string)$v);
+        if ($key === '' || $val === '') {
+            continue;
+        }
+        $prev = $existing[$key] ?? null;
+        if (is_array($prev) && !admin_entry_visible($prev)) {
+            continue;
+        }
+        $out[$key] = admin_stamp_owner(['value' => $val], is_array($prev) ? $prev : null);
+    }
+    return $out;
+}
+
+/** @param list<array<string,mixed>> $existing @param array<string,mixed> $row */
+function admin_find_owned_list_entry(array $existing, array $row): ?array
+{
+    $file = trim((string)($row['file'] ?? ''));
+    if ($file !== '') {
+        foreach ($existing as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            if (trim((string)($entry['file'] ?? '')) === $file) {
+                return $entry;
+            }
+        }
+    }
+    $feedKey = trim((string)($row['key'] ?? ''));
+    if ($feedKey !== '') {
+        foreach ($existing as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            if (trim((string)($entry['key'] ?? '')) === $feedKey) {
+                return $entry;
+            }
+        }
+    }
+    return null;
+}
+
+/** Resolve homelab service URL or family countdown date from stored value. */
+function admin_owned_scalar_value(mixed $stored): string
+{
+    if (is_array($stored)) {
+        return trim((string)($stored['value'] ?? $stored['url'] ?? ''));
+    }
+    return trim((string)$stored);
+}
+
+function admin_filter_owned_scalar_map(array $map): array
+{
+    if (admin_is_super()) {
+        return $map;
+    }
+    $out = [];
+    foreach ($map as $k => $v) {
+        if (is_array($v) && admin_entry_visible($v)) {
+            $out[(string)$k] = $v;
+        }
+    }
+    return $out;
+}
+
+/**
+ * @param list<array<string,mixed>> $entries
+ * @param list<array<string,mixed>> $deck
+ */
+function admin_filter_library_entries(array $entries, array $deck, callable $fileFromEntry): array
+{
+    if (admin_is_super()) {
+        return $entries;
+    }
+    $ownedFiles = [];
+    foreach ($deck as $entry) {
+        if (!is_array($entry) || !admin_entry_visible($entry)) {
+            continue;
+        }
+        $file = $fileFromEntry($entry);
+        if ($file !== null && $file !== '') {
+            $ownedFiles[$file] = true;
+        }
+    }
+    return array_values(array_filter($entries, static function ($item) use ($ownedFiles) {
+        $file = (string)($item['file'] ?? '');
+        return $file !== '' && !empty($ownedFiles[$file]);
+    }));
+}
+
+function admin_can_board_settings(string $board): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    return in_array($board, ADMIN_OPERATOR_SETTINGS_BOARDS, true);
+}
+
+/** @param array<string,mixed>|null $deck */
+function admin_can_delete_deck_file(?array $deck, string $file, callable $safeName, callable $fileFromEntry): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    $want = $safeName($file);
+    if ($want === null || $want === '') {
+        return false;
+    }
+    if (!is_array($deck)) {
+        return false;
+    }
+    foreach ($deck as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        if ($fileFromEntry($entry) !== $want) {
+            continue;
+        }
+        return admin_can_edit_entry($entry);
+    }
+    return false;
 }
 
 function admin_can_board(string $board): bool

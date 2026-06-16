@@ -127,6 +127,10 @@ $checkKey = 'service_checks_' . md5(json_encode(SERVICES) . '|' . LATENCY_TARGET
 $checks = cached_json($checkKey, function () {
     $out = ['services' => [], 'wan_ms' => null];
     foreach (SERVICES as $name => $url) {
+        if (is_array($url)) {
+            $url = trim((string)($url['value'] ?? $url['url'] ?? ''));
+        }
+        $url = trim((string)$url);
         $r = http_get($url, [], null, false, 4);
         $up = $r['err'] === '' && $r['code'] > 0 && $r['code'] < 500;
         $out['services'][] = ['name' => $name, 'up' => $up, 'ms' => $r['ms'], 'code' => $r['code']];

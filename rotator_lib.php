@@ -393,6 +393,7 @@ function rotator_remove_from_deck(array $deck, string $file): array
 
 function rotator_append_to_deck(string $filename, array $extra = []): bool
 {
+    require_once __DIR__ . '/users_lib.php';
     $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
     $deck = $conf['rotator.PHOTOS'] ?? [];
     if (!is_array($deck)) {
@@ -407,7 +408,7 @@ function rotator_append_to_deck(string $filename, array $extra = []): bool
             return true;
         }
     }
-    $row = ['file' => $safe] + $extra;
+    $row = admin_stamp_owner(['file' => $safe] + $extra, null);
     $deck[] = $row;
     $conf['rotator.PHOTOS'] = $deck;
     return cfg_write($conf);

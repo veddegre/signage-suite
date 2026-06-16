@@ -201,6 +201,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
     $errors = [];
     foreach ($schema[$board]['fields'] as $f) {
+        if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
+            continue;
+        }
         if ($board === 'rotation' && !admin_is_super()) {
             if ($f['key'] === 'SCREENS' || in_array($f['key'], $rotationSuperFieldKeys, true)) {
                 continue;
@@ -323,6 +326,19 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                         if ($any) $outV[] = $obj;
                     }
                 }
+                if (!admin_is_super()) {
+                    if ($keyed && $scalar) {
+                        $outV = admin_merge_owned_scalar_map($existingRows, $outV);
+                    } elseif ($keyed) {
+                        $outV = admin_merge_owned_map($existingRows, $outV);
+                    } else {
+                        $outV = admin_merge_owned_list($existingRows, $outV);
+                    }
+                } elseif ($keyed && !$scalar && $outV !== []) {
+                    $outV = admin_merge_owned_map($existingRows, $outV);
+                } elseif (!$keyed && $outV !== []) {
+                    $outV = admin_merge_owned_list($existingRows, $outV);
+                }
                 if ($outV === []) unset($conf[$cfgKey]); else $conf[$cfgKey] = $outV;
                 break;
             default:    // text, select, textarea
@@ -380,10 +396,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $outV[] = $obj;
             }
         }
-        if ($outV === []) {
+        $existingSlides = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
+        $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
+        if ($mergedSlides === []) {
             unset($conf['slides.SLIDES']);
         } else {
-            $conf['slides.SLIDES'] = $outV;
+            $conf['slides.SLIDES'] = $mergedSlides;
         }
     }
     if ($board === 'rotator') {
@@ -430,14 +448,18 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $outV[] = $obj;
             }
         }
-        if ($outV === []) {
+        $existingPhotos = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
+        $mergedPhotos = admin_merge_owned_list($existingPhotos, $outV);
+        if ($mergedPhotos === []) {
             unset($conf['rotator.PHOTOS']);
         } else {
-            $conf['rotator.PHOTOS'] = $outV;
+            $conf['rotator.PHOTOS'] = $mergedPhotos;
         }
     }
     if ($board === 'splunk') {
-        if (!empty($_POST['splunk_use_json'])) {
+        if (!admin_is_super() && !empty($_POST['splunk_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['splunk_use_json'])) {
             $parsed = splunk_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
             if ($parsed === null) {
                 $errors[] = 'Pages JSON: invalid — not saved.';
@@ -448,11 +470,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 unset($conf['splunk.PANELS']);
             }
         } else {
+            $existingPages = is_array($conf['splunk.PAGES'] ?? null) ? $conf['splunk.PAGES'] : [];
             $outV = splunk_pages_from_post($_POST['PAGES'] ?? []);
-            if ($outV === []) {
+            $mergedPages = admin_merge_owned_map($existingPages, $outV);
+            if ($mergedPages === []) {
                 unset($conf['splunk.PAGES'], $conf['splunk.PANELS']);
             } else {
-                $conf['splunk.PAGES'] = $outV;
+                $conf['splunk.PAGES'] = $mergedPages;
                 unset($conf['splunk.PANELS']);
             }
         }
@@ -699,13 +723,19 @@ if ($authed && $board === 'slides') {
             $flash = 'Session expired — refresh the page and try again.';
             $flashOk = false;
         } else {
-            $result = slide_delete_file((string)($_POST['file'] ?? ''));
-            if (!empty($result['ok'])) {
-                header('Location: ?board=slides&deleted=' . rawurlencode((string)$result['file']));
-                exit;
+            $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+            if (!admin_can_delete_deck_file($deck, (string)($_POST['file'] ?? ''), 'slide_safe_filename', static fn($e) => slide_safe_filename((string)($e['file'] ?? '')))) {
+                $flash = 'You do not have permission to delete that slide.';
+                $flashOk = false;
+            } else {
+                $result = slide_delete_file((string)($_POST['file'] ?? ''));
+                if (!empty($result['ok'])) {
+                    header('Location: ?board=slides&deleted=' . rawurlencode((string)$result['file']));
+                    exit;
+                }
+                $flash = (string)($result['error'] ?? 'Could not delete slide.');
+                $flashOk = false;
             }
-            $flash = (string)($result['error'] ?? 'Could not delete slide.');
-            $flashOk = false;
         }
     } elseif ($slideAction === 'replace_slide') {
         if (!csrf_ok()) {
@@ -939,13 +969,19 @@ if ($authed && $board === 'rotator') {
             $flash = 'Session expired — refresh the page and try again.';
             $flashOk = false;
         } else {
-            $result = rotator_delete_file((string)($_POST['file'] ?? ''));
-            if (!empty($result['ok'])) {
-                header('Location: ?board=rotator&deleted=' . rawurlencode((string)$result['file']));
-                exit;
+            $deck = is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : [];
+            if (!admin_can_delete_deck_file($deck, (string)($_POST['file'] ?? ''), 'rotator_safe_filename', static fn($e) => rotator_safe_filename((string)($e['file'] ?? '')))) {
+                $flash = 'You do not have permission to delete that photo.';
+                $flashOk = false;
+            } else {
+                $result = rotator_delete_file((string)($_POST['file'] ?? ''));
+                if (!empty($result['ok'])) {
+                    header('Location: ?board=rotator&deleted=' . rawurlencode((string)$result['file']));
+                    exit;
+                }
+                $flash = (string)($result['error'] ?? 'Could not delete photo.');
+                $flashOk = false;
             }
-            $flash = (string)($result['error'] ?? 'Could not delete photo.');
-            $flashOk = false;
         }
     } elseif (csrf_ok()) {
         if ($photoAction === 'deploy_photos') {
@@ -1045,6 +1081,12 @@ if ($authed && $board === 'video') {
     $videoDenoStatus = video_deno_status();
     $videoYtdlpSupport = video_ytdlp_support_status();
     foreach (video_registry() as $k => $v) {
+        if (!is_array($v)) {
+            continue;
+        }
+        if (!admin_is_super() && !admin_entry_visible($v)) {
+            continue;
+        }
         $st = video_entry_status($k, $v);
         $st['in_rotation'] = video_in_rotation($k, 'main');
         $videoStatuses[] = $st;
@@ -1074,31 +1116,41 @@ $rotationMainPages = rotation_screen_pages('main');
 if ($rotationMainPages === []) {
     $rotationMainPages = $rotationStarterPages;
 }
-$slidesDeckStats = slides_deck_stats($rawConf['slides.SLIDES'] ?? []);
-$slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($rawConf['slides.SLIDES'] ?? null));
+$slidesDeckForUser = admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []);
+$slidesDeckStats = slides_deck_stats($slidesDeckForUser);
+$slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($slidesDeckForUser !== [] ? $slidesDeckForUser : null));
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesOrphanFiles = ($board === 'slides')
     ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
     : [];
 $slidesLibrary = ($board === 'slides')
-    ? slides_library_entries($rawConf['slides.SLIDES'] ?? null)
+    ? admin_filter_library_entries(
+        slides_library_entries($rawConf['slides.SLIDES'] ?? null),
+        admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []),
+        static fn($e) => slide_safe_filename((string)($e['file'] ?? ''))
+    )
     : [];
 if ($board === 'rotator') {
     rotator_migrate_deck_from_files();
     $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : $rawConf;
 }
-$rotatorDeckStats = rotator_deck_stats($rawConf['rotator.PHOTOS'] ?? []);
-$rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rawConf['rotator.PHOTOS'] ?? null));
+$rotatorDeckForUser = admin_filter_owned_list(is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : []);
+$rotatorDeckStats = rotator_deck_stats($rotatorDeckForUser);
+$rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser !== [] ? $rotatorDeckForUser : null));
 $userAdminRows = admin_is_super() ? users_admin_rows() : [];
 $navGroupsFiltered = $authed ? admin_filter_nav_groups($navGroups, $schema) : $navGroups;
 $photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
 $rotatorLibrary = ($board === 'rotator')
-    ? rotator_library_entries($rawConf['rotator.PHOTOS'] ?? null)
+    ? admin_filter_library_entries(
+        rotator_library_entries($rawConf['rotator.PHOTOS'] ?? null),
+        admin_filter_owned_list(is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : []),
+        static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''))
+    )
     : [];
 $splunkPages = [];
 $splunkActivePage = 'main';
 if ($board === 'splunk') {
-    $splunkPages = splunk_admin_pages($rawConf);
+    $splunkPages = admin_filter_owned_map(splunk_admin_pages($rawConf));
     $splunkActivePage = splunk_normalize_page_key((string)($_GET['page'] ?? ''));
     if (!isset($splunkPages[$splunkActivePage])) {
         $splunkActivePage = (string)(array_key_first($splunkPages) ?: 'main');
@@ -1762,7 +1814,7 @@ function admin_field(array $f, $val, string $board): void
       <div class="sub">Signed in as <strong><?= h(admin_username()) ?></strong>
         — <?= admin_is_super() ? 'super admin (full access)' : 'screen operator' ?>.</div>
       <?php if (!admin_is_super()): ?>
-      <div class="help" style="margin-bottom:18px">Assigned displays:
+      <div class="help" style="margin-bottom:18px">You only see and edit content you own. Legacy items without an owner are super-admin only. Assigned displays:
         <?php $allowed = admin_allowed_screen_keys(); ?>
         <?php if ($allowed === []): ?>
           <span class="pill warn">none — ask a super admin to assign screens</span>
@@ -1833,7 +1885,7 @@ function admin_field(array $f, $val, string $board): void
         </table>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column. Content operators only see items they create; legacy unowned content is super-admin only.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -2491,6 +2543,7 @@ function admin_field(array $f, $val, string $board): void
 
         <?php elseif ($board === 'video'):
           $videoVal = current_val($rawConf, $board, 'VIDEOS');
+          $videoVal = is_array($videoVal) ? admin_filter_owned_map($videoVal) : [];
           $videoRows = is_array($videoVal) ? $videoVal : [];
           $mutedVal = current_val($rawConf, $board, 'MUTED');
         ?>
@@ -2653,7 +2706,7 @@ function admin_field(array $f, $val, string $board): void
           </div>
           <?php endforeach; ?>
 
-          <details class="panel panel-muted" style="margin-top:22px">
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
             <summary>Advanced — paste JSON</summary>
             <div class="panel-body">
               <label class="check"><input type="checkbox" name="splunk_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
@@ -2665,7 +2718,7 @@ function admin_field(array $f, $val, string $board): void
             </div>
           </details>
 
-          <details class="panel panel-muted" style="margin-top:22px">
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('splunk') ? '' : ' hidden' ?>>
             <summary>Board settings</summary>
             <div class="panel-body">
               <div class="field-grid">
@@ -2681,7 +2734,7 @@ function admin_field(array $f, $val, string $board): void
         <?php elseif ($board === 'rotator'):
           $rotationScreens = admin_filter_screens(rotation_screens());
           $photoVal = current_val($rawConf, $board, 'PHOTOS');
-          $photoRows = is_array($photoVal) ? $photoVal : [];
+          $photoRows = admin_filter_owned_list(is_array($photoVal) ? $photoVal : []);
           $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
           if (!in_array($rotatorTab, ['deck', 'library', 'upload', 'deploy'], true)) {
               $rotatorTab = 'deck';
@@ -2888,7 +2941,7 @@ function admin_field(array $f, $val, string $board): void
         <?php elseif ($board === 'slides'):
           $rotationScreens = admin_filter_screens(rotation_screens());
           $slideVal = current_val($rawConf, $board, 'SLIDES');
-          $slideRows = is_array($slideVal) ? $slideVal : [];
+          $slideRows = admin_filter_owned_list(is_array($slideVal) ? $slideVal : []);
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
           $slidesTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
           if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
@@ -3132,6 +3185,9 @@ function admin_field(array $f, $val, string $board): void
           </details>
 
         <?php else: foreach ($b['fields'] as $f):
+          if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
+              continue;
+          }
           $val = current_val($rawConf, $board, $f['key']); ?>
           <div class="field">
             <?php if ($f['type'] === 'rows'):
@@ -3139,9 +3195,14 @@ function admin_field(array $f, $val, string $board): void
               $rows = [];
               if (is_array($val)) {
                   if (!empty($f['keyed'])) {
+                      if (!admin_is_super()) {
+                          $val = !empty($f['scalar'])
+                              ? admin_filter_owned_scalar_map($val)
+                              : admin_filter_owned_map($val);
+                      }
                       foreach ($val as $rk => $rv) {
                           if (!empty($f['scalar'])) {
-                              $rows[] = ['_key' => $rk, '_value' => $rv];
+                              $rows[] = ['_key' => $rk, '_value' => admin_owned_scalar_value($rv)];
                           } else {
                               $first = null;
                               foreach ($cols as $c) if ($c['key'] !== '_key') { $first = $c['key']; break; }
@@ -3149,7 +3210,7 @@ function admin_field(array $f, $val, string $board): void
                           }
                       }
                   } else {
-                      $rows = $val;
+                      $rows = admin_filter_owned_list($val);
                   }
               }
               $hasKeyCol = false;
