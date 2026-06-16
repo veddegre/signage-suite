@@ -781,7 +781,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     $deployScreens = admin_default_deploy_screens();
                 }
                 if ($deployScreens !== []) {
-                    $deck = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
+                    $deck = cfg('slides.SLIDES', []);
+                    $deck = is_array($deck) ? $deck : [];
                     $result = slides_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
@@ -789,7 +790,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             } elseif ($board === 'rotator') {
                 $deployScreens = admin_deploy_screens_from_post($_POST);
                 if ($deployScreens !== []) {
-                    $deck = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
+                    $deck = cfg('rotator.PHOTOS', []);
+                    $deck = is_array($deck) ? $deck : [];
                     $result = rotator_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
                     cfg_reload();
                     $extra = rotator_deploy_flash_message($result);
