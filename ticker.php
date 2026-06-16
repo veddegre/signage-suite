@@ -210,6 +210,15 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
   }
 
   function apply(data) {
+    if (document.body.classList.contains('signage-blank')) {
+      var blankRoot = document.getElementById('signage-ticker-root');
+      stopAnim();
+      if (blankRoot) blankRoot.innerHTML = '';
+      document.documentElement.style.setProperty('--signage-ticker-inset', '0px');
+      lastKey = '';
+      return;
+    }
+
     var key = JSON.stringify(data.alerts || []) + '|' + (data.mode || 'scroll');
     if (key === lastKey) return;
     lastKey = key;
@@ -260,5 +269,14 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') refresh();
   });
+  document.addEventListener('signage-blank', function (ev) {
+    if (ev.detail && ev.detail.on) apply({ alerts: [] });
+    else refresh();
+  });
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(function () {
+      if (document.body.classList.contains('signage-blank')) apply({ alerts: [] });
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
 })();
 </script>

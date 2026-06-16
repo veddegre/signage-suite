@@ -22,7 +22,7 @@ require_once __DIR__ . '/rotation_lib.php';
 
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 $blankActive = rotation_screen_blank_active($SCREEN);
-$showTicker = rotation_screen_ticker_enabled($SCREEN) && !$blankActive;
+$showTicker = rotation_screen_ticker_enabled($SCREEN);
 // noticker=1 suppresses the ticker inside the iframe; player.php renders it here
 // at the viewport bottom so polling works in the top-level PWA document.
 $src = $SCREEN !== 'main'
@@ -124,7 +124,11 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
           if (!data || typeof data.blank !== 'boolean') return;
+          var wasBlank = document.body.classList.contains('signage-blank');
           document.body.classList.toggle('signage-blank', data.blank);
+          if (wasBlank !== data.blank) {
+            document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: data.blank } }));
+          }
         })
         .catch(function () {});
     }

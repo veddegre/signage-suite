@@ -27,7 +27,7 @@ $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 
 $runtime = rotation_screen_runtime($SCREEN);
 $blankActive = (bool)$runtime['blank'];
-$showTicker = rotation_screen_ticker_enabled($SCREEN) && !$blankActive;
+$showTicker = rotation_screen_ticker_enabled($SCREEN);
 $showDebug = !empty($runtime['show_debug']) || (isset($_GET['debug']) && (string)$_GET['debug'] === '1');
 
 if (($_GET['api'] ?? '') === '1') {
@@ -95,7 +95,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   #rotate-debug.rd-wait .rd-status { color:#8aa0c0; }
 </style>
 </head>
-<body>
+<body<?= $blankActive ? ' class="signage-blank"' : '' ?>>
 <div id="empty">
   <h1>No pages in rotation</h1>
   <p>Add boards in admin.php → Rotation, or check hour windows and Skip flags.</p>
@@ -327,6 +327,7 @@ if (($_GET['api'] ?? '') === 'presence') {
       document.getElementById('empty').style.display = 'none';
       if (blankEl) blankEl.style.display = 'block';
       document.body.classList.add('signage-blank');
+      document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: true } }));
       sendPresence('blank');
     } else {
       location.reload();
