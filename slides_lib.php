@@ -304,20 +304,24 @@ function slide_remove_from_deck(array $deck, string $file): array
  */
 function slide_delete_file(string $file): array
 {
+    require_once __DIR__ . '/users_lib.php';
+
     $safe = slide_safe_filename($file);
     if ($safe === null) {
         return ['ok' => false, 'error' => 'Invalid filename.'];
     }
+    $fileFromEntry = static fn($e) => slide_safe_filename((string)($e['file'] ?? ''));
 
-    if (!cfg_update(function (array $conf) use ($safe): array {
+    if (!cfg_update(function (array $conf) use ($safe, $fileFromEntry): array {
         $deck = $conf['slides.SLIDES'] ?? [];
-        if (is_array($deck)) {
-            $deck = slide_remove_from_deck($deck, $safe);
-            if ($deck === []) {
-                unset($conf['slides.SLIDES']);
-            } else {
-                $conf['slides.SLIDES'] = $deck;
-            }
+        if (!is_array($deck)) {
+            $deck = [];
+        }
+        $deck = admin_remove_media_from_deck($deck, $safe, 'slide_safe_filename', $fileFromEntry);
+        if ($deck === []) {
+            unset($conf['slides.SLIDES']);
+        } else {
+            $conf['slides.SLIDES'] = $deck;
         }
 
         return $conf;
@@ -327,15 +331,19 @@ function slide_delete_file(string $file): array
     cfg_reload();
 
     $deck = cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
 
     $path = slides_dir() . '/' . $safe;
-    if (is_file($path)) {
+    if (!admin_media_deck_references_file($deck, $safe, 'slide_safe_filename', $fileFromEntry) && is_file($path)) {
         @unlink($path);
     }
 
     require_once __DIR__ . '/rotation_lib.php';
-    foreach (array_keys(rotation_screens()) as $screen) {
-        $sync = rotation_sync_slides($screen, is_array($deck) ? $deck : []);
+    $syncDeck = admin_media_deploy_deck($deck);
+    foreach (admin_media_rotation_sync_screens() as $screen) {
+        $sync = rotation_sync_slides($screen, $syncDeck);
         rotation_pages_write($sync['screen'], $sync['pages']);
     }
     cfg_reload();
@@ -353,7 +361,14 @@ function slide_append_to_deck(string $filename, array $extra = []): bool
         if (!is_array($deck)) {
             $deck = [];
         }
-        $deck[] = admin_stamp_owner(array_merge(['file' => $filename, 'schedule' => 'always'], $extra), null);
+        $row = admin_stamp_owner(array_merge(['file' => $filename, 'schedule' => 'always'], $extra), null);
+        if (admin_operator_screen_locked()) {
+            $sk = admin_operator_screen_key();
+            if ($sk !== null && $sk !== '') {
+                $row['screens'] = [$sk];
+            }
+        }
+        $deck[] = $row;
         $conf['slides.SLIDES'] = $deck;
 
         return $conf;

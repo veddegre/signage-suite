@@ -13,7 +13,8 @@ const LEGACY_ADMIN_FILE = __DIR__ . '/config/admin.json';
 
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
-    'rotation', 'slides', 'rotator', 'account',
+    'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
+    'grafana', 'splunk', 'splunkdash', 'family', 'account',
 ];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
@@ -1040,7 +1041,7 @@ function admin_filter_owned_scalar_map(array $map): array
 
 /**
  * @param list<array<string,mixed>> $entries
- * @param list<array<string,mixed>> $deck
+ * @param list<array<string,mixed>> $deck Full deck (not ownership-filtered)
  */
 function admin_filter_library_entries(array $entries, array $deck, callable $fileFromEntry): array
 {
@@ -1048,19 +1049,37 @@ function admin_filter_library_entries(array $entries, array $deck, callable $fil
         return $entries;
     }
     $ownedFiles = [];
+    $hiddenFiles = [];
     foreach ($deck as $entry) {
-        if (!is_array($entry) || !admin_entry_visible($entry)) {
+        if (!is_array($entry)) {
             continue;
         }
         $file = $fileFromEntry($entry);
-        if ($file !== null && $file !== '') {
+        if ($file === null || $file === '') {
+            continue;
+        }
+        if (admin_entry_visible($entry)) {
             $ownedFiles[$file] = true;
+        } else {
+            $hiddenFiles[$file] = true;
         }
     }
-    return array_values(array_filter($entries, static function ($item) use ($ownedFiles) {
+    return array_values(array_filter($entries, static function ($item) use ($ownedFiles, $hiddenFiles) {
         $file = (string)($item['file'] ?? '');
-        return $file !== '' && !empty($ownedFiles[$file]);
+        if ($file === '' || !empty($hiddenFiles[$file])) {
+            return false;
+        }
+        if (!empty($ownedFiles[$file])) {
+            return true;
+        }
+        return empty($item['in_deck']);
     }));
+}
+
+/** @param list<array<string,mixed>> $deck */
+function admin_media_deploy_deck(array $deck): array
+{
+    return admin_is_super() ? $deck : admin_filter_owned_list($deck);
 }
 
 function admin_can_board_settings(string $board): bool
@@ -1082,8 +1101,10 @@ function admin_can_delete_deck_file(?array $deck, string $file, callable $safeNa
         return false;
     }
     if (!is_array($deck)) {
-        return false;
+        $deck = [];
     }
+    $visibleEntry = null;
+    $hiddenMatch = false;
     foreach ($deck as $entry) {
         if (!is_array($entry)) {
             continue;
@@ -1091,9 +1112,185 @@ function admin_can_delete_deck_file(?array $deck, string $file, callable $safeNa
         if ($fileFromEntry($entry) !== $want) {
             continue;
         }
-        return admin_can_edit_entry($entry);
+        if (admin_entry_visible($entry)) {
+            $visibleEntry = $entry;
+        } else {
+            $hiddenMatch = true;
+        }
     }
+    if ($visibleEntry !== null) {
+        return admin_can_edit_entry($visibleEntry);
+    }
+    if ($hiddenMatch) {
+        return false;
+    }
+    return true;
+}
+
+function admin_normalize_registry_key(string $key): ?string
+{
+    $key = preg_replace('/[^a-z0-9_\-]/i', '', $key);
+
+    return $key !== '' ? $key : null;
+}
+
+/**
+ * @param array<string,array<string,mixed>|mixed> $registry
+ * @return array<string,mixed>|null
+ */
+function admin_registry_find_entry(array $registry, string $key, ?callable $normalize = null): ?array
+{
+    $normalize ??= static fn($k) => admin_normalize_registry_key((string)$k);
+    if (isset($registry[$key]) && is_array($registry[$key])) {
+        return $registry[$key];
+    }
+    $want = $normalize($key);
+    if ($want === null || $want === '') {
+        return null;
+    }
+    if (isset($registry[$want]) && is_array($registry[$want])) {
+        return $registry[$want];
+    }
+    foreach ($registry as $k => $v) {
+        if (is_array($v) && $normalize((string)$k) === $want) {
+            return $v;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * @param array<string,array<string,mixed>|mixed> $registry
+ */
+function admin_registry_resolve_key(array $registry, string $key, ?callable $normalize = null): ?string
+{
+    $normalize ??= static fn($k) => admin_normalize_registry_key((string)$k);
+    if (isset($registry[$key])) {
+        return $key;
+    }
+    $want = $normalize($key);
+    if ($want === null || $want === '') {
+        return null;
+    }
+    if (isset($registry[$want])) {
+        return $want;
+    }
+    foreach ($registry as $k => $_) {
+        if ($normalize((string)$k) === $want) {
+            return (string)$k;
+        }
+    }
+
+    return null;
+}
+
+/** @param array<string,array<string,mixed>|mixed>|null $registry */
+function admin_can_delete_registry_entry(?array $registry, string $key, ?callable $normalize = null): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    if (!is_array($registry)) {
+        return false;
+    }
+    $entry = admin_registry_find_entry($registry, $key, $normalize);
+    if ($entry === null) {
+        return false;
+    }
+
+    return admin_can_edit_entry($entry);
+}
+
+/**
+ * Remove one keyed registry row. Operators only drop entries they own or that are shared with them.
+ * @param array<string,array<string,mixed>|mixed> $registry
+ * @return array<string,array<string,mixed>|mixed>
+ */
+function admin_remove_registry_entry(array $registry, string $key, ?callable $normalize = null): array
+{
+    $normalize ??= static fn($k) => admin_normalize_registry_key((string)$k);
+    $resolved = admin_registry_resolve_key($registry, $key, $normalize);
+    if ($resolved === null) {
+        return $registry;
+    }
+    if (admin_is_super()) {
+        unset($registry[$resolved]);
+
+        return $registry;
+    }
+    $entry = $registry[$resolved];
+    if (is_array($entry) && admin_entry_visible($entry)) {
+        unset($registry[$resolved]);
+    }
+
+    return $registry;
+}
+
+/** @param array<string,array<string,mixed>|mixed>|null $registry */
+function admin_can_delete_video_entry(?array $registry, string $key): bool
+{
+    return admin_can_delete_registry_entry($registry, $key);
+}
+
+/**
+ * Remove one video registry row. Operators only drop entries they own or that are shared with them.
+ * @param array<string,array<string,mixed>|mixed> $registry
+ * @return array<string,array<string,mixed>|mixed>
+ */
+function admin_remove_video_from_registry(array $registry, string $key): array
+{
+    return admin_remove_registry_entry($registry, $key);
+}
+
+/**
+ * Remove deck rows for a file. Operators only drop entries they own or that are shared with them.
+ * @param list<array<string,mixed>> $deck
+ * @return list<array<string,mixed>>
+ */
+function admin_remove_media_from_deck(array $deck, string $file, callable $safeName, callable $fileFromEntry): array
+{
+    $want = $safeName($file);
+    if ($want === null || $want === '') {
+        return $deck;
+    }
+    return array_values(array_filter($deck, static function ($entry) use ($want, $fileFromEntry) {
+        if (!is_array($entry) || $fileFromEntry($entry) !== $want) {
+            return true;
+        }
+        if (admin_is_super()) {
+            return false;
+        }
+
+        return !admin_entry_visible($entry);
+    }));
+}
+
+/** @param list<array<string,mixed>> $deck */
+function admin_media_deck_references_file(array $deck, string $file, callable $safeName, callable $fileFromEntry): bool
+{
+    $want = $safeName($file);
+    if ($want === null || $want === '') {
+        return false;
+    }
+    foreach ($deck as $entry) {
+        if (is_array($entry) && $fileFromEntry($entry) === $want) {
+            return true;
+        }
+    }
+
     return false;
+}
+
+/** @return list<string> */
+function admin_media_rotation_sync_screens(): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    if (admin_is_super()) {
+        return array_keys(rotation_screens());
+    }
+
+    return admin_filter_deploy_screens(admin_allowed_screen_keys());
 }
 
 function admin_can_board(string $board): bool

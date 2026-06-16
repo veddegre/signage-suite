@@ -722,7 +722,7 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Family Board</title>
+<title>Calendar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">

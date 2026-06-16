@@ -663,7 +663,7 @@ function rotation_page_label(string $url): string
         'photo.php' => 'Photo conditions',
         'air.php' => 'Air & pollen',
         'sports.php' => 'Detroit sports',
-        'family.php' => 'Family calendar',
+        'family.php' => 'Calendar',
         'traffic.php' => 'Traffic map',
         'homelab.php' => 'Homelab status',
         'signaltrace.php' => 'SignalTrace',
@@ -692,6 +692,66 @@ function rss_feed_url(string $feedKey): string
 function rss_preview_url(string $feedKey): string
 {
     return signage_board_preview_url(rss_feed_url($feedKey));
+}
+
+/** @return array<string,array<string,mixed>> */
+function rss_feed_registry(): array
+{
+    $feeds = cfg('rss.FEEDS', []);
+    return is_array($feeds) ? $feeds : [];
+}
+
+/**
+ * Delete an RSS feed entry and drop it from rotation on allowed screens.
+ * @return array{ok:bool,key?:string,error?:string}
+ */
+function rss_delete_feed(string $key): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    $safe = admin_normalize_registry_key($key);
+    if ($safe === null) {
+        return ['ok' => false, 'error' => 'Invalid feed key.'];
+    }
+
+    $registry = rss_feed_registry();
+    if (admin_registry_find_entry($registry, $safe) === null) {
+        return ['ok' => false, 'error' => 'Feed not found.'];
+    }
+
+    if (!cfg_update(function (array $conf) use ($safe): array {
+        $registry = $conf['rss.FEEDS'] ?? [];
+        if (!is_array($registry)) {
+            $registry = [];
+        }
+        $registry = admin_remove_registry_entry($registry, $safe);
+        if ($registry === []) {
+            unset($conf['rss.FEEDS']);
+        } else {
+            $conf['rss.FEEDS'] = $registry;
+        }
+
+        return $conf;
+    })) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
+
+    $cacheFile = __DIR__ . '/cache/rss_' . $safe . '.dat';
+    if (is_file($cacheFile)) {
+        @unlink($cacheFile);
+    }
+
+    $rotationUrl = rss_feed_url($safe);
+    foreach (admin_media_rotation_sync_screens() as $screen) {
+        $sync = rotation_remove_url($screen, $rotationUrl);
+        if ($sync['removed']) {
+            rotation_pages_write($sync['screen'], $sync['pages']);
+        }
+    }
+    cfg_reload();
+
+    return ['ok' => true, 'key' => $safe];
 }
 
 function grafana_normalize_key(string $key): string
@@ -750,7 +810,7 @@ function rotation_quick_add_items(): array
         ['label' => 'Photo conditions', 'url' => 'photo.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Air & pollen', 'url' => 'air.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Detroit sports', 'url' => 'sports.php', 'dwell' => 75, 'group' => 'Boards'],
-        ['label' => 'Family calendar', 'url' => 'family.php', 'dwell' => 90, 'group' => 'Boards'],
+        ['label' => 'Calendar', 'url' => 'family.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Traffic map', 'url' => 'traffic.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Homelab', 'url' => 'homelab.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'SignalTrace', 'url' => 'signaltrace.php', 'dwell' => 60, 'group' => 'Boards'],
@@ -1771,6 +1831,9 @@ function rotation_sync_rss(string $screen = 'main'): array
     }
     foreach ($feeds as $key => $feed) {
         if (!is_array($feed)) {
+            continue;
+        }
+        if (function_exists('admin_entry_visible') && !admin_entry_visible($feed)) {
             continue;
         }
         $url = rss_feed_url((string)$key);

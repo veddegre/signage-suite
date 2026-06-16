@@ -1106,6 +1106,12 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
     }
 
     $registry = video_registry();
+    if (function_exists('admin_entry_visible')) {
+        $registry = array_filter(
+            $registry,
+            static fn($v) => is_array($v) && admin_entry_visible($v)
+        );
+    }
     if ($onlyKeys !== null) {
         $filtered = [];
         foreach ($onlyKeys as $key) {
@@ -1304,6 +1310,12 @@ function video_sync_rotation(string $screen = 'main'): array
     $added = [];
     $updated = [];
     foreach (video_registry() as $key => $v) {
+        if (!is_array($v)) {
+            continue;
+        }
+        if (function_exists('admin_entry_visible') && !admin_entry_visible($v)) {
+            continue;
+        }
         $st = video_entry_status($key, $v);
         $url = video_rotation_url($key);
         $dwell = max(15, (int)($st['rotation_dwell'] ?? 60));
@@ -1340,4 +1352,113 @@ function video_rotation_pages_write(string $screen, array $pages): bool
 
         return $conf;
     });
+}
+
+function video_normalize_key(string $key): ?string
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_normalize_registry_key($key);
+}
+
+/** @return list<string> Basenames of on-disk files tied to one registry entry. */
+function video_entry_disk_files(string $key, array $v, ?string $dir = null): array
+{
+    $path = video_path($key, $v, $dir);
+    if ($path === null) {
+        return [];
+    }
+
+    return [basename($path)];
+}
+
+/** @param array<string,array<string,mixed>|mixed> $registry */
+function video_registry_references_file(array $registry, string $basename): bool
+{
+    $basename = basename($basename);
+    if ($basename === '') {
+        return false;
+    }
+    foreach ($registry as $k => $v) {
+        if (!is_array($v)) {
+            continue;
+        }
+        if (isset($v['file']) && basename((string)$v['file']) === $basename) {
+            return true;
+        }
+        $entryKey = video_normalize_key((string)$k);
+        if ($entryKey === null) {
+            continue;
+        }
+        foreach (['mp4', 'webm', 'mkv'] as $ext) {
+            if ($basename === $entryKey . '.' . $ext) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Delete a video registry entry, remove its file when unreferenced, and drop rotation URLs.
+ * @return array{ok:bool,key?:string,error?:string}
+ */
+function video_delete_entry(string $key): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    require_once __DIR__ . '/rotation_lib.php';
+
+    $safe = video_normalize_key($key);
+    if ($safe === null) {
+        return ['ok' => false, 'error' => 'Invalid video key.'];
+    }
+
+    $registry = video_registry();
+    $entry = is_array($registry[$safe] ?? null) ? $registry[$safe] : null;
+    if ($entry === null) {
+        return ['ok' => false, 'error' => 'Video not found.'];
+    }
+
+    $dir = video_dir();
+    $diskFiles = video_entry_disk_files($safe, $entry, $dir);
+
+    if (!cfg_update(function (array $conf) use ($safe): array {
+        $registry = $conf['video.VIDEOS'] ?? [];
+        if (!is_array($registry)) {
+            $registry = [];
+        }
+        $registry = admin_remove_video_from_registry($registry, $safe);
+        if ($registry === []) {
+            unset($conf['video.VIDEOS']);
+        } else {
+            $conf['video.VIDEOS'] = $registry;
+        }
+
+        return $conf;
+    })) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
+
+    $registry = video_registry();
+    foreach ($diskFiles as $basename) {
+        if (!video_registry_references_file($registry, $basename)) {
+            $path = $dir . '/' . $basename;
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    $rotationUrl = video_rotation_url($safe);
+    foreach (admin_media_rotation_sync_screens() as $screen) {
+        $sync = rotation_remove_url($screen, $rotationUrl);
+        if ($sync['removed']) {
+            rotation_pages_write($sync['screen'], $sync['pages']);
+        }
+    }
+    cfg_reload();
+
+    return ['ok' => true, 'key' => $safe];
 }

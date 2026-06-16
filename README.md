@@ -45,7 +45,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Operator** | **Slides**, **Photo Rotator**, and **Rotation** for their assigned display only; **Account** and **Status** |
+| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Calendar**, and **Rotation** for their assigned display only; **Account** and **Status** |
 
 **Navigation:** sidebar groups boards (Setup, Weather & home, Monitoring, Media, Dashboards). **Users** and **Tools** are super-admin only. **Status**, **Account**, and logout are in the sidebar footer.
 
@@ -59,7 +59,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 
 ### Content ownership & sharing
 
-Playlist rows on **Slides** and **Photo Rotator** (and other operator boards) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). **RSS** and **Video** boards are super-admin only — feeds and videos default to super-only until shared. Operators only see and edit entries they own or that are shared with them.
+Playlist rows on operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Calendar**, etc.) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). Weather, monitoring, and setup boards stay super-admin only. Operators only see and edit entries they own or that are shared with them; new entries they create are owned by them automatically. Board-level API secrets (Splunk token, TomTom key, etc.) remain super-admin only.
 
 ### Concurrent saves & JSON storage
 
@@ -233,9 +233,9 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 - Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.
 - **Flow style** `relative0-dark` matches the dark basemap best. Map reloads on a configurable interval (default 5 min).
 
-## family.php — Family Board
+## family.php — Calendar
 - **Setup:**
-  - `ICS_FEEDS`: one row per calendar — **Key** (legend label, e.g. Dad), **Color** (theme palette), then source/URL. Keys and colors appear on the family board legend and beside each event.
+  - `ICS_FEEDS`: one row per calendar — **Key** (legend label, e.g. Dad), **Color** (theme palette), then source/URL. Keys and colors appear on the calendar board legend and beside each event.
   - `TRASH_WEEKDAY` and `RECYCLE_ANCHOR` (any past date recycling was collected; drives the every-other-week cadence). Leave trash day as **(default)** to hide the chip entirely — useful for apartments.
   - `COUNTDOWNS`: label → `YYYY-MM-DD`.
 - RRULE support: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), YEARLY, with INTERVAL/UNTIL/EXDATE. Exotic rules show only on their original date.

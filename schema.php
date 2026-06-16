@@ -241,7 +241,7 @@ function admin_schema(): array
              'help' => 'Use cards below — schedule fields appear based on type.'],
             $tz,
         ]],
-        'family' => ['title' => 'Family Board', 'file' => 'family.php', 'fields' => [
+        'family' => ['title' => 'Calendar', 'file' => 'family.php', 'fields' => [
             ['key' => 'ICS_FEEDS', 'label' => 'Calendar feeds', 'type' => 'rows',
              'columns' => [
                  ['key' => 'key', 'label' => 'Key', 'placeholder' => 'Dad'],

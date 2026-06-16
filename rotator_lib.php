@@ -410,6 +410,12 @@ function rotator_append_to_deck(string $filename, array $extra = []): bool
             }
         }
         $row = admin_stamp_owner(['file' => $safe] + $extra, null);
+        if (admin_operator_screen_locked()) {
+            $sk = admin_operator_screen_key();
+            if ($sk !== null && $sk !== '') {
+                $row['screens'] = [$sk];
+            }
+        }
         $deck[] = $row;
         $conf['rotator.PHOTOS'] = $deck;
 
@@ -423,20 +429,24 @@ function rotator_append_to_deck(string $filename, array $extra = []): bool
  */
 function rotator_delete_file(string $file): array
 {
+    require_once __DIR__ . '/users_lib.php';
+
     $safe = rotator_safe_filename($file);
     if ($safe === null) {
         return ['ok' => false, 'error' => 'Invalid filename.'];
     }
+    $fileFromEntry = static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''));
 
-    if (!cfg_update(function (array $conf) use ($safe): array {
+    if (!cfg_update(function (array $conf) use ($safe, $fileFromEntry): array {
         $deck = $conf['rotator.PHOTOS'] ?? [];
-        if (is_array($deck)) {
-            $deck = rotator_remove_from_deck($deck, $safe);
-            if ($deck === []) {
-                unset($conf['rotator.PHOTOS']);
-            } else {
-                $conf['rotator.PHOTOS'] = $deck;
-            }
+        if (!is_array($deck)) {
+            $deck = [];
+        }
+        $deck = admin_remove_media_from_deck($deck, $safe, 'rotator_safe_filename', $fileFromEntry);
+        if ($deck === []) {
+            unset($conf['rotator.PHOTOS']);
+        } else {
+            $conf['rotator.PHOTOS'] = $deck;
         }
 
         return $conf;
@@ -446,15 +456,19 @@ function rotator_delete_file(string $file): array
     cfg_reload();
 
     $deck = cfg('rotator.PHOTOS', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
 
     $path = rotator_photo_dir() . '/' . $safe;
-    if (is_file($path)) {
+    if (!admin_media_deck_references_file($deck, $safe, 'rotator_safe_filename', $fileFromEntry) && is_file($path)) {
         @unlink($path);
     }
 
     require_once __DIR__ . '/rotation_lib.php';
-    foreach (array_keys(rotation_screens()) as $screen) {
-        $sync = rotation_sync_photos($screen, is_array($deck) ? $deck : []);
+    $syncDeck = admin_media_deploy_deck($deck);
+    foreach (admin_media_rotation_sync_screens() as $screen) {
+        $sync = rotation_sync_photos($screen, $syncDeck);
         rotation_pages_write($sync['screen'], $sync['pages']);
     }
     cfg_reload();

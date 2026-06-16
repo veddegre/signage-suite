@@ -12,6 +12,69 @@ function web_normalize_key(string $key): string
     return $key !== '' ? $key : 'main';
 }
 
+function web_registry_key(string $key): ?string
+{
+    $key = strtolower(preg_replace('/[^a-z0-9_\-]/i', '', $key));
+
+    return $key !== '' ? $key : null;
+}
+
+/** @return array<string,array<string,mixed>> */
+function web_site_registry(): array
+{
+    $sites = cfg('web.SITES', []);
+    return is_array($sites) ? $sites : [];
+}
+
+/**
+ * Delete a website entry and drop it from rotation on allowed screens.
+ * @return array{ok:bool,key?:string,error?:string}
+ */
+function web_delete_site(string $key): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    require_once __DIR__ . '/rotation_lib.php';
+
+    $safe = web_registry_key($key);
+    if ($safe === null) {
+        return ['ok' => false, 'error' => 'Invalid site key.'];
+    }
+
+    $registry = web_site_registry();
+    if (admin_registry_find_entry($registry, $safe, 'web_registry_key') === null) {
+        return ['ok' => false, 'error' => 'Site not found.'];
+    }
+
+    if (!cfg_update(function (array $conf) use ($safe): array {
+        $registry = $conf['web.SITES'] ?? [];
+        if (!is_array($registry)) {
+            $registry = [];
+        }
+        $registry = admin_remove_registry_entry($registry, $safe, 'web_registry_key');
+        if ($registry === []) {
+            unset($conf['web.SITES']);
+        } else {
+            $conf['web.SITES'] = $registry;
+        }
+
+        return $conf;
+    })) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
+
+    $rotationUrl = web_page_url($safe);
+    foreach (admin_media_rotation_sync_screens() as $screen) {
+        $sync = rotation_remove_url($screen, $rotationUrl);
+        if ($sync['removed']) {
+            rotation_pages_write($sync['screen'], $sync['pages']);
+        }
+    }
+    cfg_reload();
+
+    return ['ok' => true, 'key' => $safe];
+}
+
 function web_allowed_url(string $url): bool
 {
     $url = trim($url);

@@ -200,7 +200,40 @@ if ($authed && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 if ($authed && $board === 'slides' && isset($_GET['deleted'])) {
     $deleted = slide_safe_filename((string)$_GET['deleted']);
     if ($deleted !== null) {
-        $flash = 'Deleted ' . $deleted . '. Rotation updated on all displays.';
+        $flash = 'Deleted ' . $deleted . '. '
+            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+    }
+}
+
+if ($authed && $board === 'rotator' && isset($_GET['deleted'])) {
+    $deleted = rotator_safe_filename((string)$_GET['deleted']);
+    if ($deleted !== null) {
+        $flash = 'Deleted ' . $deleted . '. '
+            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+    }
+}
+
+if ($authed && $board === 'video' && isset($_GET['deleted'])) {
+    $deleted = video_normalize_key((string)$_GET['deleted']);
+    if ($deleted !== null) {
+        $flash = 'Deleted video "' . $deleted . '". '
+            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+    }
+}
+
+if ($authed && $board === 'rss' && isset($_GET['deleted'])) {
+    $deleted = admin_normalize_registry_key((string)$_GET['deleted']);
+    if ($deleted !== null) {
+        $flash = 'Deleted feed "' . $deleted . '". '
+            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+    }
+}
+
+if ($authed && $board === 'web' && isset($_GET['deleted'])) {
+    $deleted = web_registry_key((string)$_GET['deleted']);
+    if ($deleted !== null) {
+        $flash = 'Deleted site "' . $deleted . '". '
+            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
     }
 }
 
@@ -739,14 +772,16 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     $deployScreens = admin_default_deploy_screens();
                 }
                 if ($deployScreens !== []) {
-                    $result = slides_deploy_to_screens(admin_filter_deploy_screens($deployScreens));
+                    $deck = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
+                    $result = slides_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
                 }
             } elseif ($board === 'rotator') {
                 $deployScreens = admin_deploy_screens_from_post($_POST);
                 if ($deployScreens !== []) {
-                    $result = rotator_deploy_to_screens(admin_filter_deploy_screens($deployScreens));
+                    $deck = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
+                    $result = rotator_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
                     cfg_reload();
                     $extra = rotator_deploy_flash_message($result);
                 }
@@ -867,7 +902,7 @@ if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') ===
 }
 
 // ── Custom slides: upload / delete ──────────────────────────────────────────
-if ($authed && $board === 'slides') {
+if ($authed && $board === 'slides' && admin_can_board('slides')) {
     $slideDir = slides_dir();
     if (!is_dir($slideDir)) @mkdir($slideDir, 0775, true);
     protect_dirs();
@@ -903,6 +938,11 @@ if ($authed && $board === 'slides') {
                 . '; raise post_max_size and upload_max_filesize on the server.';
             $flashOk = false;
         } else {
+            $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+            if (!admin_can_delete_deck_file($deck, (string)($_POST['file'] ?? ''), 'slide_safe_filename', static fn($e) => slide_safe_filename((string)($e['file'] ?? '')))) {
+                $flash = 'You do not have permission to replace that slide.';
+                $flashOk = false;
+            } else {
             $result = slide_replace_upload((string)($_POST['file'] ?? ''), $_FILES['slide']);
             if (!empty($result['ok'])) {
                 header('Location: ?board=slides&replaced=' . rawurlencode((string)$result['file']));
@@ -910,6 +950,7 @@ if ($authed && $board === 'slides') {
             }
             $flash = (string)($result['error'] ?? 'Could not replace slide.');
             $flashOk = false;
+            }
         }
     } elseif ($slideAction === 'create_slide') {
         if (!csrf_ok()) {
@@ -948,7 +989,9 @@ if ($authed && $board === 'slides') {
                     if (slide_append_to_deck($name, $extra)) {
                         $deploy = admin_default_deploy_screens();
                         if ($deploy !== []) {
-                            slides_deploy_to_screens($deploy);
+                            cfg_reload();
+                            $deck = cfg('slides.SLIDES', []);
+                            slides_deploy_to_screens($deploy, admin_media_deploy_deck(is_array($deck) ? $deck : []));
                         }
                         cfg_reload();
                         slide_creator_finish($name);
@@ -968,7 +1011,8 @@ if ($authed && $board === 'slides') {
         if ($screens === []) {
             $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
         } else {
-            $result = slides_deploy_to_screens($screens);
+            $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+            $result = slides_deploy_to_screens($screens, admin_media_deploy_deck($deck));
             cfg_reload();
             $flash = slides_deploy_flash_message($result) . ' Wall displays refresh within 30 seconds.';
         }
@@ -1005,7 +1049,9 @@ if ($authed && $board === 'slides') {
             } elseif (slide_append_to_deck((string)$saved['name'])) {
                 $deploy = admin_default_deploy_screens();
                 if ($deploy !== []) {
-                    slides_deploy_to_screens($deploy);
+                    cfg_reload();
+                    $deck = cfg('slides.SLIDES', []);
+                    slides_deploy_to_screens($deploy, admin_media_deploy_deck(is_array($deck) ? $deck : []));
                 }
                 cfg_reload();
                 header('Location: ?board=slides&highlight=' . rawurlencode((string)$saved['name']));
@@ -1037,9 +1083,81 @@ if ($authed && $board === 'slides') {
     }
 }
 
-// ── Video board: YouTube fetch / yt-dlp upkeep ──────────────────────────────
+// ── Video board: delete / YouTube fetch / yt-dlp upkeep ─────────────────────
 $videoFetchLog = null;
 $videoMaintOpen = ($board === 'video');
+if ($authed && $board === 'video' && admin_can_board('video')) {
+    if (($_POST['action'] ?? '') === 'delete_video') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } else {
+            $registry = is_array($rawConf['video.VIDEOS'] ?? null) ? $rawConf['video.VIDEOS'] : [];
+            $deleteKey = video_normalize_key((string)($_POST['video_key'] ?? ''));
+            if ($deleteKey === null || !admin_can_delete_video_entry($registry, $deleteKey)) {
+                $flash = 'You do not have permission to delete that video.';
+                $flashOk = false;
+            } else {
+                $result = video_delete_entry($deleteKey);
+                if (!empty($result['ok'])) {
+                    header('Location: ?board=video&deleted=' . rawurlencode((string)$result['key']));
+                    exit;
+                }
+                $flash = (string)($result['error'] ?? 'Could not delete video.');
+                $flashOk = false;
+            }
+        }
+    }
+}
+
+if ($authed && $board === 'rss' && admin_can_board('rss')) {
+    if (($_POST['action'] ?? '') === 'delete_rss_feed') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } else {
+            $registry = is_array($rawConf['rss.FEEDS'] ?? null) ? $rawConf['rss.FEEDS'] : [];
+            $deleteKey = admin_normalize_registry_key((string)($_POST['feed_key'] ?? ''));
+            if ($deleteKey === null || !admin_can_delete_registry_entry($registry, $deleteKey)) {
+                $flash = 'You do not have permission to delete that feed.';
+                $flashOk = false;
+            } else {
+                $result = rss_delete_feed($deleteKey);
+                if (!empty($result['ok'])) {
+                    header('Location: ?board=rss&deleted=' . rawurlencode((string)$result['key']));
+                    exit;
+                }
+                $flash = (string)($result['error'] ?? 'Could not delete feed.');
+                $flashOk = false;
+            }
+        }
+    }
+}
+
+if ($authed && $board === 'web' && admin_can_board('web')) {
+    if (($_POST['action'] ?? '') === 'delete_web_site') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } else {
+            $registry = is_array($rawConf['web.SITES'] ?? null) ? $rawConf['web.SITES'] : [];
+            $deleteKey = web_registry_key((string)($_POST['site_key'] ?? ''));
+            if ($deleteKey === null || !admin_can_delete_registry_entry($registry, $deleteKey, 'web_registry_key')) {
+                $flash = 'You do not have permission to delete that site.';
+                $flashOk = false;
+            } else {
+                $result = web_delete_site($deleteKey);
+                if (!empty($result['ok'])) {
+                    header('Location: ?board=web&deleted=' . rawurlencode((string)$result['key']));
+                    exit;
+                }
+                $flash = (string)($result['error'] ?? 'Could not delete site.');
+                $flashOk = false;
+            }
+        }
+    }
+}
+
 if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
     $videoDir = video_dir();
     if (!is_dir($videoDir)) {
@@ -1119,7 +1237,7 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
 }
 
 // ── Photo rotator: upload / delete / deploy ─────────────────────────────────
-if ($authed && $board === 'rotator') {
+if ($authed && $board === 'rotator' && admin_can_board('rotator')) {
     $photoDir = rotator_photo_dir();
     if (!is_dir($photoDir)) @mkdir($photoDir, 0775, true);
     protect_dirs();
@@ -1154,7 +1272,8 @@ if ($authed && $board === 'rotator') {
             if ($screens === []) {
                 $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
             } else {
-                $result = rotator_deploy_to_screens($screens);
+                $deck = is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : [];
+                $result = rotator_deploy_to_screens($screens, admin_media_deploy_deck($deck));
                 cfg_reload();
                 $flash = rotator_deploy_flash_message($result) . ' Wall displays refresh within 30 seconds.';
             }
@@ -1195,7 +1314,9 @@ if ($authed && $board === 'rotator') {
             if ($uploaded) {
                 $deploy = admin_default_deploy_screens();
                 if ($deploy !== []) {
-                    rotator_deploy_to_screens($deploy);
+                    cfg_reload();
+                    $deck = cfg('rotator.PHOTOS', []);
+                    rotator_deploy_to_screens($deploy, admin_media_deploy_deck(is_array($deck) ? $deck : []));
                 }
                 cfg_reload();
                 header('Location: ?board=rotator&highlight=' . rawurlencode((string)$uploaded[0]));
@@ -1250,7 +1371,7 @@ if ($authed && $board === 'video') {
             continue;
         }
         $st = video_entry_status($k, $v);
-        $st['in_rotation'] = video_in_rotation($k, 'main');
+        $st['in_rotation'] = video_in_rotation($k, admin_operator_screen_key() ?? 'main');
         $videoStatuses[] = $st;
         $videoStatusByKey[$k] = $st;
     }
@@ -1280,7 +1401,7 @@ if ($rotationMainPages === []) {
 }
 $slidesDeckForUser = admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []);
 $slidesDeckStats = slides_deck_stats($slidesDeckForUser);
-$slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($slidesDeckForUser !== [] ? $slidesDeckForUser : null));
+$slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($slidesDeckForUser));
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesOrphanFiles = ($board === 'slides')
     ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
@@ -1288,7 +1409,7 @@ $slidesOrphanFiles = ($board === 'slides')
 $slidesLibrary = ($board === 'slides')
     ? admin_filter_library_entries(
         slides_library_entries($rawConf['slides.SLIDES'] ?? null),
-        admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []),
+        is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [],
         static fn($e) => slide_safe_filename((string)($e['file'] ?? ''))
     )
     : [];
@@ -1298,14 +1419,14 @@ if ($board === 'rotator') {
 }
 $rotatorDeckForUser = admin_filter_owned_list(is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : []);
 $rotatorDeckStats = rotator_deck_stats($rotatorDeckForUser);
-$rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser !== [] ? $rotatorDeckForUser : null));
+$rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser));
 $userAdminRows = admin_is_super() ? users_admin_rows() : [];
 $navGroupsFiltered = $authed ? admin_filter_nav_groups($navGroups, $schema) : $navGroups;
 $photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
 $rotatorLibrary = ($board === 'rotator')
     ? admin_filter_library_entries(
         rotator_library_entries($rawConf['rotator.PHOTOS'] ?? null),
-        admin_filter_owned_list(is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : []),
+        is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : [],
         static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''))
     )
     : [];
@@ -2194,7 +2315,9 @@ function admin_field(array $f, $val, string $board): void
       <?php endforeach; ?>
     <?php endforeach;
     foreach ($schema as $k => $b) {
-        if (!empty($navSeen[$k])) continue;
+        if (!empty($navSeen[$k]) || !admin_can_board($k)) {
+            continue;
+        }
         echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && !$usersBoard && !$accountBoard && !$statusBoard && !$auditBoard && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
     }
     ?>
@@ -2202,8 +2325,12 @@ function admin_field(array $f, $val, string $board): void
     <?php if (admin_can_manage_users()): ?>
     <a href="?board=users" class="<?= $usersBoard ? 'active' : '' ?>">Users</a>
     <?php endif; ?>
+    <?php if (admin_can_board('status')): ?>
     <a href="?board=status" class="<?= $statusBoard ? 'active' : '' ?>">Status</a>
+    <?php endif; ?>
+    <?php if (admin_can_board('account')): ?>
     <a href="?board=account" class="<?= $accountBoard ? 'active' : '' ?>">Account</a>
+    <?php endif; ?>
     <?php if (admin_can_audit()): ?>
     <a href="?board=audit" class="<?= $auditBoard ? 'active' : '' ?>">Audit</a>
     <?php endif; ?>
@@ -2502,6 +2629,33 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           New keys often require the <strong>Orbis</strong> tile API — leave <strong>Tile API</strong> on Auto (default).
           Leave <strong>domain whitelisting off</strong> for server-side PHP. After changing the key, Save, then Test tile fetch.</div>
       </div>
+      <?php endif; ?>
+
+      <?php if ($board === 'rss'): ?>
+      <form id="rssDeleteForm" method="post" action="?board=rss" hidden>
+        <input type="hidden" name="action" value="delete_rss_feed">
+        <input type="hidden" name="board" value="rss">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="feed_key" id="rssDeleteKey" value="">
+      </form>
+      <?php endif; ?>
+
+      <?php if ($board === 'web'): ?>
+      <form id="webDeleteForm" method="post" action="?board=web" hidden>
+        <input type="hidden" name="action" value="delete_web_site">
+        <input type="hidden" name="board" value="web">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="site_key" id="webDeleteKey" value="">
+      </form>
+      <?php endif; ?>
+
+      <?php if ($board === 'video'): ?>
+      <form id="videoDeleteForm" method="post" action="?board=video" hidden>
+        <input type="hidden" name="action" value="delete_video">
+        <input type="hidden" name="board" value="video">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="video_key" id="videoDeleteKey" value="">
+      </form>
       <?php endif; ?>
 
       <?php if ($board === 'video' && $videoYtdlpStatus !== null): ?>
@@ -3144,6 +3298,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $videoVal = current_val($rawConf, $board, 'VIDEOS');
           $videoVal = is_array($videoVal) ? admin_filter_owned_map($videoVal) : [];
           $videoRows = is_array($videoVal) ? $videoVal : [];
+          $videosRegistryFull = is_array($rawConf['video.VIDEOS'] ?? null) ? $rawConf['video.VIDEOS'] : [];
           $mutedVal = current_val($rawConf, $board, 'MUTED');
         ?>
           <div class="field" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--harbor)">
@@ -3164,6 +3319,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               $st = $videoStatusByKey[$vk] ?? null;
               $label = trim((string)($row['title'] ?? ''));
               if ($label === '') $label = (string)$vk;
+              $canDeleteVideo = admin_can_delete_video_entry($videosRegistryFull, (string)$vk);
             ?>
             <div class="video-card" data-video-card>
               <div class="video-card-head">
@@ -3214,6 +3370,10 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(video_rotation_url($vk)) ?>" target="_blank" rel="noopener">Preview</a>
                   <?php if ($st && $st['fetchable']): ?>
                     <button type="submit" class="secondary" form="video-fetch-<?= h(preg_replace('/[^a-z0-9_\-]/i', '', $vk)) ?>">Fetch</button>
+                  <?php endif; ?>
+                  <?php if ($canDeleteVideo): ?>
+                    <button type="button" class="secondary video-delete-btn" style="padding:6px 12px;font-size:13px"
+                            data-delete-key="<?= h((string)$vk) ?>">Delete</button>
                   <?php endif; ?>
                 </div>
               </div>
@@ -3336,6 +3496,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $rotationScreens = admin_filter_screens(rotation_screens());
           $photoVal = current_val($rawConf, $board, 'PHOTOS');
           $photoRows = admin_filter_owned_list(is_array($photoVal) ? $photoVal : []);
+          $photosDeckFull = is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : [];
+          $photoFileFromEntry = static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''));
           $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
           if (!in_array($rotatorTab, ['deck', 'library', 'upload', 'deploy'], true)) {
               $rotatorTab = 'deck';
@@ -3436,12 +3598,14 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               </details>
               <?php if ($fileOk):
                 $deleteFile = rotator_safe_filename($fileLabel);
+                $canDeletePhoto = $deleteFile !== null
+                    && admin_can_delete_deck_file($photosDeckFull, $deleteFile, 'rotator_safe_filename', $photoFileFromEntry);
               ?>
               <div class="slide-card-actions">
                 <?php if ($previewUrl): ?>
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
                 <?php endif; ?>
-                <?php if ($deleteFile !== null): ?>
+                <?php if ($canDeletePhoto): ?>
                 <button type="button" class="secondary photo-delete-btn" style="padding:6px 12px;font-size:13px"
                         data-delete-file="<?= h($deleteFile) ?>">Delete file</button>
                 <?php endif; ?>
@@ -3499,7 +3663,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                       <?php if (!$lib['in_deck']): ?>
                       <button type="button" class="secondary photo-add-btn" data-add-file="<?= h($lib['file']) ?>">Add to deck</button>
                       <?php endif; ?>
+                      <?php if (admin_can_delete_deck_file($photosDeckFull, (string)$lib['file'], 'rotator_safe_filename', $photoFileFromEntry)): ?>
                       <button type="button" class="secondary photo-delete-btn" data-delete-file="<?= h($lib['file']) ?>">Delete</button>
+                      <?php endif; ?>
                     </div>
                   </div>
                 </div>
@@ -3544,6 +3710,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $rotationScreens = admin_filter_screens(rotation_screens());
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = admin_filter_owned_list(is_array($slideVal) ? $slideVal : []);
+          $slidesDeckFull = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+          $slideFileFromEntry = static fn($e) => slide_safe_filename((string)($e['file'] ?? ''));
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
           $slidesTab = preg_replace('/[^a-z]/', '', (string)($_GET['tab'] ?? 'deck'));
           if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
@@ -3685,12 +3853,14 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               </details>
               <?php if ($fileOk):
                 $deleteFile = slide_safe_filename($fileLabel);
+                $canDeleteSlide = $deleteFile !== null
+                    && admin_can_delete_deck_file($slidesDeckFull, $deleteFile, 'slide_safe_filename', $slideFileFromEntry);
               ?>
               <div class="slide-card-actions">
                 <?php if ($previewUrl): ?>
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($previewUrl) ?>" target="_blank" rel="noopener">Preview ↗</a>
                 <?php endif; ?>
-                <?php if ($deleteFile !== null): ?>
+                <?php if ($canDeleteSlide): ?>
                 <button type="button" class="secondary slide-replace-btn" style="padding:6px 12px;font-size:13px"
                         data-replace-file="<?= h($deleteFile) ?>">Replace image</button>
                 <button type="button" class="secondary slide-delete-btn" style="padding:6px 12px;font-size:13px"
@@ -3746,11 +3916,15 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                       <?php if ($lib['preview']): ?>
                       <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($lib['preview']) ?>" target="_blank" rel="noopener">Preview</a>
                       <?php endif; ?>
+                      <?php if (admin_can_delete_deck_file($slidesDeckFull, (string)$lib['file'], 'slide_safe_filename', $slideFileFromEntry)): ?>
                       <button type="button" class="secondary slide-replace-btn" data-replace-file="<?= h($lib['file']) ?>">Replace</button>
+                      <?php endif; ?>
                       <?php if (!$lib['in_deck']): ?>
                       <button type="button" class="secondary slide-add-btn" data-add-file="<?= h($lib['file']) ?>">Add to deck</button>
                       <?php endif; ?>
+                      <?php if (admin_can_delete_deck_file($slidesDeckFull, (string)$lib['file'], 'slide_safe_filename', $slideFileFromEntry)): ?>
                       <button type="button" class="secondary slide-delete-btn" data-delete-file="<?= h($lib['file']) ?>">Delete</button>
+                      <?php endif; ?>
                     </div>
                   </div>
                 </div>
@@ -3823,6 +3997,14 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                       break;
                   }
               }
+              $registryFullForDelete = null;
+              $registryDeleteNormalize = null;
+              if ($board === 'rss' && $f['key'] === 'FEEDS') {
+                  $registryFullForDelete = is_array($rawConf['rss.FEEDS'] ?? null) ? $rawConf['rss.FEEDS'] : [];
+              } elseif ($board === 'web' && $f['key'] === 'SITES') {
+                  $registryFullForDelete = is_array($rawConf['web.SITES'] ?? null) ? $rawConf['web.SITES'] : [];
+                  $registryDeleteNormalize = 'web_registry_key';
+              }
             ?>
               <label class="l"><?= h($f['label']) ?></label>
               <div class="rows-scroll">
@@ -3893,18 +4075,30 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                       <?php if ($board === 'rss' && $f['key'] === 'FEEDS'):
                         $feedKey = trim((string)($row['_key'] ?? ''));
                         $rssPrev = $feedKey !== '' ? rss_preview_url($feedKey) : '';
+                        $canDeleteFeed = $registryFullForDelete !== null
+                            && admin_can_delete_registry_entry($registryFullForDelete, $feedKey, $registryDeleteNormalize);
                       ?>
                       <td>
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $rssPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($rssPrev !== '' ? $rssPrev : '#') ?>" target="_blank" rel="noopener" data-rss-preview>Preview ↗</a>
+                        <?php if ($canDeleteFeed): ?>
+                        <button type="button" class="secondary rss-delete-btn" style="padding:4px 10px;font-size:12px;margin-left:6px"
+                                data-delete-key="<?= h($feedKey) ?>">Delete</button>
+                        <?php endif; ?>
                       </td>
                       <?php elseif ($board === 'web' && $f['key'] === 'SITES'):
                         $siteKey = trim((string)($row['_key'] ?? ''));
                         $webPrev = $siteKey !== '' ? web_preview_url($siteKey) : '';
+                        $canDeleteSite = $registryFullForDelete !== null
+                            && admin_can_delete_registry_entry($registryFullForDelete, $siteKey, $registryDeleteNormalize);
                       ?>
                       <td>
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $webPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($webPrev !== '' ? $webPrev : '#') ?>" target="_blank" rel="noopener" data-web-preview>Preview ↗</a>
+                        <?php if ($canDeleteSite): ?>
+                        <button type="button" class="secondary web-delete-btn" style="padding:4px 10px;font-size:12px;margin-left:6px"
+                                data-delete-key="<?= h($siteKey) ?>">Delete</button>
+                        <?php endif; ?>
                       </td>
                       <?php elseif (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS'):
                         $dashKey = trim((string)($row['_key'] ?? ''));
@@ -4600,6 +4794,48 @@ function submitPhotoDelete(file) {
   form.submit();
 }
 
+function submitVideoDelete(key) {
+  key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
+  if (!key) return;
+  if (!confirm('Delete video "' + key + '" permanently?\n\nThis removes the playlist entry, deletes the file from videos/, and drops it from rotation. It cannot be undone.')) return;
+  const form = document.getElementById('videoDeleteForm');
+  const input = document.getElementById('videoDeleteKey');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = key;
+  form.submit();
+}
+
+function submitRssDelete(key) {
+  key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
+  if (!key) return;
+  if (!confirm('Delete feed "' + key + '" permanently?\n\nThis removes the feed and drops it from rotation. It cannot be undone.')) return;
+  const form = document.getElementById('rssDeleteForm');
+  const input = document.getElementById('rssDeleteKey');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = key;
+  form.submit();
+}
+
+function submitWebDelete(key) {
+  key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
+  if (!key) return;
+  if (!confirm('Delete site "' + key + '" permanently?\n\nThis removes the website entry and drops it from rotation. It cannot be undone.')) return;
+  const form = document.getElementById('webDeleteForm');
+  const input = document.getElementById('webDeleteKey');
+  if (!form || !input) {
+    alert('Could not submit — refresh the page and try again.');
+    return;
+  }
+  input.value = key;
+  form.submit();
+}
+
 function submitPhotoAddToDeck(file) {
   if (!file) return;
   const form = document.getElementById('photoAddForm');
@@ -5088,6 +5324,24 @@ document.addEventListener('click', function (e) {
     submitPhotoDelete(photoDelBtn.getAttribute('data-delete-file') || '');
     return;
   }
+  const videoDelBtn = e.target.closest('.video-delete-btn');
+  if (videoDelBtn) {
+    e.preventDefault();
+    submitVideoDelete(videoDelBtn.getAttribute('data-delete-key') || '');
+    return;
+  }
+  const rssDelBtn = e.target.closest('.rss-delete-btn');
+  if (rssDelBtn) {
+    e.preventDefault();
+    submitRssDelete(rssDelBtn.getAttribute('data-delete-key') || '');
+    return;
+  }
+  const webDelBtn = e.target.closest('.web-delete-btn');
+  if (webDelBtn) {
+    e.preventDefault();
+    submitWebDelete(webDelBtn.getAttribute('data-delete-key') || '');
+    return;
+  }
   const photoAddBtn = e.target.closest('.photo-add-btn');
   if (photoAddBtn) {
     e.preventDefault();
@@ -5387,7 +5641,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'photo.php': 'Photo conditions',
-    'family.php': 'Family calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
+    'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
     'web.php': 'Website'
