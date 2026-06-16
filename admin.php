@@ -1915,6 +1915,7 @@ function admin_field(array $f, $val, string $board): void
   .deck-toolbar-select { padding:8px 12px; font-size:14px; background:var(--harbor); border:1px solid var(--line);
                          border-radius:8px; color:var(--snow); min-width:160px; }
   .deck-toolbar-check { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); margin:0; white-space:nowrap; }
+  .deck-toolbar-check:has(input:disabled) { color:var(--mist); opacity:.75; }
   .deck-toolbar-count { font-size:13px; color:var(--mist); margin-left:auto; white-space:nowrap; }
   .deck-bulk-bar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:-6px 0 12px; padding:10px 14px;
                    background:rgba(255,179,71,.08); border:1px solid rgba(255,179,71,.35); border-radius:10px; font-size:13px; }
@@ -3818,6 +3819,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <option value="__none__">Hidden on all displays</option>
               <option value="__disabled__">Disabled slides only</option>
             </select>
+            <label class="deck-toolbar-check" id="slideDeckScreenExcludeWrap" title="Show slides that do not play on the selected display"><input type="checkbox" id="slideDeckScreenExclude" disabled> Not on this display</label>
             <label class="deck-toolbar-check"><input type="checkbox" id="slideDeckCompact"<?= $slideDeckLarge ? ' checked' : '' ?>> Compact</label>
             <button type="button" class="secondary" id="slideDeckExpandAll" style="padding:6px 12px;font-size:13px">Expand all</button>
             <button type="button" class="secondary" id="slideDeckCollapseAll" style="padding:6px 12px;font-size:13px">Collapse all</button>
@@ -5166,11 +5168,28 @@ function slideDeckScreenFilterLabel(value) {
   return opt ? opt.textContent : value;
 }
 
+function slideCardOnScreen(card, screenKey) {
+  const scr = card.dataset.slideScreens || 'all';
+  if (scr === 'all') return true;
+  if (scr === '') return false;
+  return (',' + scr + ',').indexOf(',' + screenKey + ',') >= 0;
+}
+
+function updateSlideDeckScreenExcludeState() {
+  const screen = document.getElementById('slideDeckScreenFilter')?.value || '';
+  const excl = document.getElementById('slideDeckScreenExclude');
+  if (!excl) return;
+  const canExclude = screen !== '' && screen.indexOf('__') !== 0;
+  excl.disabled = !canExclude;
+  if (!canExclude) excl.checked = false;
+}
+
 function applySlideDeckFilters() {
   const deck = document.getElementById('slideDeck');
   if (!deck) return;
   const q = (document.getElementById('slideDeckSearch')?.value || '').trim().toLowerCase();
   const screen = document.getElementById('slideDeckScreenFilter')?.value || '';
+  const exclude = !!document.getElementById('slideDeckScreenExclude')?.checked;
   const cards = deck.querySelectorAll('[data-slide-card]');
   let shown = 0;
   cards.forEach(function (card) {
@@ -5180,21 +5199,27 @@ function applySlideDeckFilters() {
       if (screen === '__disabled__') ok = card.classList.contains('is-off');
       else if (screen === '__none__') ok = card.dataset.slideScreens === '';
       else {
-        const scr = card.dataset.slideScreens || 'all';
-        ok = scr === 'all' || (',' + scr + ',').indexOf(',' + screen + ',') >= 0;
+        const onScreen = slideCardOnScreen(card, screen);
+        ok = exclude ? !onScreen : onScreen;
       }
     }
     card.hidden = !ok;
     if (ok) shown++;
   });
   const countEl = document.getElementById('slideDeckCount');
-  if (countEl) countEl.textContent = shown + ' of ' + cards.length + ' shown';
+  if (countEl) {
+    let countText = shown + ' of ' + cards.length + ' shown';
+    if (screen && screen.indexOf('__') !== 0 && exclude) {
+      countText += ' · not on ' + slideDeckScreenFilterLabel(screen);
+    }
+    countEl.textContent = countText;
+  }
   const emptyEl = document.getElementById('slideDeckFilterEmpty');
   if (emptyEl) emptyEl.hidden = shown > 0 || cards.length === 0;
   const bulk = document.getElementById('slideDeckBulkBar');
   const bulkLabel = document.getElementById('slideDeckBulkLabel');
   if (bulk) {
-    const showBulk = screen && screen.indexOf('__') !== 0;
+    const showBulk = screen && screen.indexOf('__') !== 0 && !exclude;
     bulk.hidden = !showBulk;
     if (bulkLabel && showBulk) {
       bulkLabel.textContent = 'Bulk assign ' + shown + ' visible slide' + (shown === 1 ? '' : 's') + ' for ' + slideDeckScreenFilterLabel(screen) + ':';
@@ -5240,8 +5265,17 @@ function initSlideDeckToolbar() {
   }
   if (screenFilter && !screenFilter.dataset.bound) {
     screenFilter.dataset.bound = '1';
-    screenFilter.addEventListener('change', applySlideDeckFilters);
+    screenFilter.addEventListener('change', function () {
+      updateSlideDeckScreenExcludeState();
+      applySlideDeckFilters();
+    });
   }
+  const screenExclude = document.getElementById('slideDeckScreenExclude');
+  if (screenExclude && !screenExclude.dataset.bound) {
+    screenExclude.dataset.bound = '1';
+    screenExclude.addEventListener('change', applySlideDeckFilters);
+  }
+  updateSlideDeckScreenExcludeState();
   if (compact && !compact.dataset.bound) {
     compact.dataset.bound = '1';
     try {
