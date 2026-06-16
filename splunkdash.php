@@ -34,18 +34,10 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/rotation_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
-define('DASHBOARDS', cfg('splunkdash.DASHBOARDS', [
-    'soc' => [
-        'title'  => 'SOC Overview',
-        'url'    => 'https://splunk.example.com:8000/published/REPLACE-WITH-PUBLISHED-URL',
-
-    ],
-    'network' => [
-        'title'  => 'Network Activity',
-        'url'    => 'https://splunk.example.com:8000/published/REPLACE-ME-TOO',
-    ],
-]));
+define('DASHBOARDS', splunkdash_dashboards_for_display());
 
 define('DEFAULT_RELOAD', cfg('splunkdash.DEFAULT_RELOAD', 300));
 define('TIMEZONE', cfg('splunkdash.TIMEZONE', 'America/Detroit'));
@@ -54,8 +46,34 @@ date_default_timezone_set(TIMEZONE);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-$key = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['d'] ?? ''));
-if ($key === '' || !isset(DASHBOARDS[$key])) $key = array_key_first(DASHBOARDS);
+$key = admin_resolve_display_registry_key(DASHBOARDS, (string)($_GET['d'] ?? ''));
+if ($key === null || !isset(DASHBOARDS[$key])) {
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Splunk — Not available</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422;
+              color:#8aa0c0; font-family:system-ui,sans-serif; cursor:none;
+              display:flex; align-items:center; justify-content:center; text-align:center; }
+  h1 { font-size:58px; color:#edf2fb; margin-bottom:16px; }
+  p { font-size:28px; max-width:900px; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>No dashboard to preview</h1>
+    <p>Pick a dashboard from the list in admin, or add one you own.</p>
+  </div>
+<?php include __DIR__ . '/ticker.php'; ?>
+</body>
+</html>
+    <?php
+    exit;
+}
 $dash       = DASHBOARDS[$key];
 $reload     = max(0, (int)($dash['reload'] ?? DEFAULT_RELOAD));
 $configured = !str_contains($dash['url'], 'REPLACE');

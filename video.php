@@ -31,8 +31,9 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/video_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
-define('VIDEOS', video_registry());
+define('VIDEOS', video_registry_for_display());
 define('VIDEO_DIR', video_dir());
 define('MUTED', cfg('video.MUTED', true));
 define('FIT', cfg('video.FIT', 'cover'));
@@ -59,8 +60,42 @@ if (PHP_SAPI === 'cli' && isset($argv[1])) {
 // ── Player ───────────────────────────────────────────────────────────────────
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-$key = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['v'] ?? ''));
-if ($key === '' || !isset(VIDEOS[$key])) $key = array_key_first(VIDEOS);
+$key = admin_resolve_display_registry_key(VIDEOS, (string)($_GET['v'] ?? ''));
+if ($key === null || !isset(VIDEOS[$key])) {
+    $embedded = isset($_GET['noticker']);
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Video — Not available</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --lake-night:#0c1422; --mist:#8aa0c0; --snow:#edf2fb; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
+              font-family:'IBM Plex Sans',sans-serif; cursor:none; }
+  .empty { position:absolute; inset:0; display:flex; flex-direction:column; gap:16px;
+           align-items:center; justify-content:center; color:var(--mist); }
+  .empty h2 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--snow); }
+  .empty p { font-size:27px; max-width:1100px; text-align:center; line-height:1.6; }
+</style>
+</head>
+<body>
+  <div class="empty">
+    <h2>No video to preview</h2>
+    <p>Pick a video from the list in admin, or upload one you own.</p>
+  </div>
+<?php if (!$embedded) {
+    include __DIR__ . '/ticker.php';
+} ?>
+</body>
+</html>
+    <?php
+    exit;
+}
 $video = VIDEOS[$key];
 $path  = video_path($key, $video);
 $src   = $path ? 'videos/' . rawurlencode(basename($path)) : null;

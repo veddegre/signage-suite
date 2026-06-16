@@ -18,14 +18,10 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
+require_once __DIR__ . '/rotation_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
-define('FEEDS', cfg('rss.FEEDS', [
-    'ars'        => ['name' => 'Ars Technica',      'url' => 'https://feeds.arstechnica.com/arstechnica/index'],
-    'krebs'      => ['name' => 'Krebs on Security',  'url' => 'https://krebsonsecurity.com/feed/'],
-    'bleeping'   => ['name' => 'BleepingComputer',   'url' => 'https://www.bleepingcomputer.com/feed/', 'stories' => 6],
-    'petapixel'  => ['name' => 'PetaPixel',          'url' => 'https://petapixel.com/feed/', 'dwell' => 15],
-
-]));
+define('FEEDS', rss_feeds_for_display());
 
 define('DEFAULT_STORIES', cfg('rss.DEFAULT_STORIES', 8));
 define('DEFAULT_DWELL', cfg('rss.DEFAULT_DWELL', 12));
@@ -40,8 +36,34 @@ $frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
 // ── Feed selection ───────────────────────────────────────────────────────────
-$feedKey = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['feed'] ?? ''));
-if ($feedKey === '' || !isset(FEEDS[$feedKey])) $feedKey = array_key_first(FEEDS);
+$feedKey = admin_resolve_display_registry_key(FEEDS, (string)($_GET['feed'] ?? ''));
+if ($feedKey === null || !isset(FEEDS[$feedKey])) {
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RSS — Not available</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422;
+              color:#8aa0c0; font-family:system-ui,sans-serif; cursor:none;
+              display:flex; align-items:center; justify-content:center; text-align:center; }
+  h1 { font-size:58px; color:#edf2fb; margin-bottom:16px; }
+  p { font-size:28px; max-width:900px; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>No feed to preview</h1>
+    <p>Pick a feed from the list in admin, or add one you own.</p>
+  </div>
+<?php include __DIR__ . '/ticker.php'; ?>
+</body>
+</html>
+    <?php
+    exit;
+}
 $feed    = FEEDS[$feedKey];
 $stories = max(1, (int)($feed['stories'] ?? DEFAULT_STORIES));
 $dwell   = max(3, (int)($feed['dwell'] ?? DEFAULT_DWELL));

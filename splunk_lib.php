@@ -113,10 +113,20 @@ function splunk_pages_config(?array $rawConf = null): array
     }
 
     if (isset($rawConf['splunk.PAGES']) && is_array($rawConf['splunk.PAGES']) && $rawConf['splunk.PAGES'] !== []) {
-        $pages = splunk_normalize_pages_registry($rawConf['splunk.PAGES']);
+        require_once __DIR__ . '/users_lib.php';
+        $pagesRaw = admin_filter_registry_for_display($rawConf['splunk.PAGES']);
+        if ($pagesRaw === []) {
+            return [];
+        }
+        $pages = splunk_normalize_pages_registry($pagesRaw);
         if ($pages !== []) {
             return $pages;
         }
+    }
+
+    require_once __DIR__ . '/users_lib.php';
+    if (admin_preview_filter_active()) {
+        return [];
     }
 
     $panels = $rawConf['splunk.PANELS'] ?? null;
@@ -157,12 +167,23 @@ function splunk_admin_pages(?array $rawConf = null): array
 function splunk_resolve_page(?string $pageKey = null): array
 {
     $pages = splunk_pages_config();
-    $key = splunk_normalize_page_key($pageKey ?? '');
-    if ($key === '' || !isset($pages[$key])) {
-        $key = (string)(array_key_first($pages) ?: 'main');
+    if ($pages === []) {
+        return ['key' => 'main', 'title' => 'Not available', 'sub' => '', 'panels' => []];
     }
 
-    return ['key' => $key] + $pages[$key];
+    require_once __DIR__ . '/users_lib.php';
+    $normalize = static fn($k) => splunk_normalize_page_key((string)$k);
+    $resolved = admin_resolve_display_registry_key($pages, (string)($pageKey ?? ''), $normalize);
+    if ($resolved === null || !isset($pages[$resolved])) {
+        return [
+            'key' => splunk_normalize_page_key((string)($pageKey ?? '')),
+            'title' => 'Not available',
+            'sub' => '',
+            'panels' => [],
+        ];
+    }
+
+    return ['key' => $resolved] + $pages[$resolved];
 }
 
 /** All panels for one page in admin (includes disabled). */

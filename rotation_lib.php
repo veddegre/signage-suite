@@ -701,6 +701,44 @@ function rss_feed_registry(): array
     return is_array($feeds) ? $feeds : [];
 }
 
+/** @return array<string,array<string,mixed>> */
+function rss_feeds_for_display(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_filter_registry_for_display(rss_feed_registry());
+}
+
+/** @return array<string,array<string,mixed>> */
+function grafana_dashboard_registry(): array
+{
+    $dash = cfg('grafana.DASHBOARDS', []);
+    return is_array($dash) ? $dash : [];
+}
+
+/** @return array<string,array<string,mixed>> */
+function grafana_dashboards_for_display(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_filter_registry_for_display(grafana_dashboard_registry());
+}
+
+/** @return array<string,array<string,mixed>> */
+function splunkdash_dashboard_registry(): array
+{
+    $dash = cfg('splunkdash.DASHBOARDS', []);
+    return is_array($dash) ? $dash : [];
+}
+
+/** @return array<string,array<string,mixed>> */
+function splunkdash_dashboards_for_display(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_filter_registry_for_display(splunkdash_dashboard_registry());
+}
+
 /**
  * Delete an RSS feed entry and drop it from rotation on allowed screens.
  * @return array{ok:bool,key?:string,error?:string}

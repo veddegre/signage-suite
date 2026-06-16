@@ -12,6 +12,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/rotator_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
 define('PHOTO_DIR', rotator_photo_dir());
 define('BRAND', cfg('rotator.BRAND', 'VEDDERS VISUALS'));
@@ -26,6 +27,24 @@ date_default_timezone_set(TIMEZONE);
 
 $diskPhotos = rotator_list_photos(PHOTO_DIR);
 $deckPhotos = rotator_photos_for_screen(null);
+if (admin_preview_filter_active()) {
+    $deckPhotos = admin_filter_list_for_display($deckPhotos);
+    $ownedFiles = [];
+    foreach ($deckPhotos as $photo) {
+        if (!is_array($photo)) {
+            continue;
+        }
+        $file = rotator_safe_filename((string)($photo['file'] ?? ''));
+        if ($file !== null) {
+            $ownedFiles[$file] = true;
+        }
+    }
+    if ($ownedFiles !== []) {
+        $diskPhotos = array_values(array_filter($diskPhotos, static fn($f) => !empty($ownedFiles[$f])));
+    } else {
+        $diskPhotos = [];
+    }
+}
 
 function rotator_exif_meta(string $path, string $name): array
 {
@@ -59,6 +78,13 @@ if (isset($_GET['img']) || isset($_GET['meta'])) {
     if ($name === null || !in_array($name, $diskPhotos, true)) {
         http_response_code(404);
         exit;
+    }
+    if (admin_preview_filter_active()) {
+        $photo = rotator_deck_by_file($name);
+        if ($photo === null || !admin_entry_visible($photo)) {
+            http_response_code(404);
+            exit;
+        }
     }
     $path = PHOTO_DIR . '/' . $name;
 
@@ -197,6 +223,9 @@ if (isset($_GET['photo'])) {
     $photo = $name !== null ? rotator_deck_by_file($name) : null;
     $onDisk = $name !== null && is_file(PHOTO_DIR . '/' . $name);
     $active = $onDisk && ($preview || (is_array($photo) && empty($photo['off'])));
+    if ($preview && admin_preview_filter_active() && (!is_array($photo) || !admin_entry_visible($photo))) {
+        $active = false;
+    }
     $pageTitle = is_array($photo) && trim((string)($photo['caption'] ?? '')) !== ''
         ? trim((string)$photo['caption'])
         : ($name ?? 'Photo');

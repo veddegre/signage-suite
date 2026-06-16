@@ -96,6 +96,11 @@ function web_sites_config(?array $rawConf = null): array
     if (!is_array($sites) || $sites === []) {
         return [];
     }
+    require_once __DIR__ . '/users_lib.php';
+    $sites = admin_filter_registry_for_display($sites, 'web_registry_key');
+    if ($sites === []) {
+        return [];
+    }
 
     $out = [];
     foreach ($sites as $key => $row) {
@@ -141,7 +146,17 @@ function web_resolve_site(?string $siteKey = null): array
 
     $key = web_normalize_key($siteKey ?? '');
     if ($key === '' || !isset($sites[$key])) {
-        $key = (string)(array_key_first($sites) ?? 'main');
+        require_once __DIR__ . '/users_lib.php';
+        $resolved = admin_resolve_display_registry_key($sites, $siteKey ?? '', 'web_registry_key');
+        $key = $resolved ?? '';
+    }
+    if ($key === '' || !isset($sites[$key])) {
+        return [
+            'key' => 'main',
+            'title' => 'Website',
+            'url' => '',
+            'reload' => web_default_reload(),
+        ];
     }
     $site = $sites[$key];
     $title = trim((string)($site['title'] ?? ''));
@@ -171,7 +186,8 @@ function web_preview_url(?string $key = null): string
 {
     $sites = web_sites_config();
     if ($key === null || $key === '') {
-        $key = (string)(array_key_first($sites) ?? 'main');
+        require_once __DIR__ . '/users_lib.php';
+        $key = admin_resolve_display_registry_key($sites, '', 'web_registry_key') ?? 'main';
     }
 
     return signage_board_preview_url(web_page_url($key));

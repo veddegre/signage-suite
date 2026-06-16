@@ -20,11 +20,13 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
 require_once __DIR__ . '/family_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
-define('ICS_FEEDS', cfg('family.ICS_FEEDS', [
-
-
-]));
+$icsFeeds = cfg('family.ICS_FEEDS', []);
+if (!is_array($icsFeeds)) {
+    $icsFeeds = [];
+}
+define('ICS_FEEDS', admin_filter_list_for_display($icsFeeds));
 define('TRASH_WEEKDAY', cfg('family.TRASH_WEEKDAY', ''));
 define('RECYCLE_ANCHOR', cfg('family.RECYCLE_ANCHOR', ''));
 define('COUNTDOWNS', cfg('family.COUNTDOWNS', [

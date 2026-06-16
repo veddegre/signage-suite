@@ -16,6 +16,7 @@
  */
 
 require_once __DIR__ . '/slides_lib.php';
+require_once __DIR__ . '/users_lib.php';
 
 define('DEFAULT_DWELL', cfg('slides.DEFAULT_DWELL', 12));
 define('SHUFFLE', cfg('slides.SHUFFLE', false));
@@ -84,6 +85,13 @@ if (isset($_GET['img'])) {
         http_response_code(404);
         exit;
     }
+    if (admin_preview_filter_active()) {
+        $slide = slide_deck_by_file($name);
+        if ($slide === null || !admin_entry_visible($slide)) {
+            http_response_code(404);
+            exit;
+        }
+    }
     $path = $dir . '/' . $name;
     $mime = preg_match('/\.png$/i', $name) ? 'image/png'
           : (preg_match('/\.webp$/i', $name) ? 'image/webp' : 'image/jpeg');
@@ -106,6 +114,9 @@ if (isset($_GET['slide'])) {
         && empty($slide['off'])
         && slide_schedule_active($slide, $now);
     $active = $onDisk && ($preview || $scheduled);
+    if ($preview && admin_preview_filter_active() && (!is_array($slide) || !admin_entry_visible($slide))) {
+        $active = false;
+    }
     $pageTitle = is_array($slide) && trim((string)($slide['caption'] ?? '')) !== ''
         ? trim((string)$slide['caption'])
         : ($name ?? 'Slide');
@@ -157,7 +168,11 @@ if (isset($_GET['slide'])) {
     exit;
 }
 
-$entries = slides_active_entries(null, $dir);
+$deck = cfg('slides.SLIDES', []);
+if (!is_array($deck)) {
+    $deck = [];
+}
+$entries = slides_active_entries(admin_filter_list_for_display($deck), $dir);
 if (SHUFFLE) {
     shuffle($entries);
 }

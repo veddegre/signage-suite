@@ -1134,6 +1134,71 @@ function admin_normalize_registry_key(string $key): ?string
     return $key !== '' ? $key : null;
 }
 
+function admin_preview_session_ready(): bool
+{
+    static $ready = null;
+    if ($ready !== null) {
+        return $ready;
+    }
+    if (!function_exists('signage_session_start')) {
+        require_once __DIR__ . '/security_lib.php';
+    }
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        signage_session_start();
+    }
+    $ready = admin_is_authenticated();
+
+    return $ready;
+}
+
+/** True when an operator is previewing a board from admin (?noticker=1). */
+function admin_preview_filter_active(): bool
+{
+    return isset($_GET['noticker']) && admin_preview_session_ready() && !admin_is_super();
+}
+
+/** @param array<string,array<string,mixed>|mixed> $map */
+function admin_filter_registry_for_display(array $map, ?callable $normalize = null): array
+{
+    if (!admin_preview_filter_active()) {
+        return $map;
+    }
+
+    return admin_filter_owned_map($map);
+}
+
+/** @param list<array<string,mixed>> $list */
+function admin_filter_list_for_display(array $list): array
+{
+    if (!admin_preview_filter_active()) {
+        return $list;
+    }
+
+    return admin_filter_owned_list($list);
+}
+
+/**
+ * Resolve a registry key for signage board display.
+ * Operators in admin preview cannot fall back to another user's entry.
+ * @param array<string,array<string,mixed>|mixed> $map
+ */
+function admin_resolve_display_registry_key(array $map, string $requested, ?callable $normalize = null): ?string
+{
+    $resolved = admin_registry_resolve_key($map, $requested, $normalize);
+    if ($resolved !== null) {
+        return $resolved;
+    }
+    if ($map === []) {
+        return null;
+    }
+    if (admin_preview_filter_active()) {
+        return null;
+    }
+    $first = array_key_first($map);
+
+    return $first !== null ? (string)$first : null;
+}
+
 /**
  * @param array<string,array<string,mixed>|mixed> $registry
  * @return array<string,mixed>|null

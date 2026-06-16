@@ -26,6 +26,13 @@ function video_registry(): array
     ]);
 }
 
+function video_registry_for_display(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_filter_registry_for_display(video_registry());
+}
+
 function video_max_height(): int
 {
     $h = (int)cfg('video.MAX_HEIGHT', 1080);

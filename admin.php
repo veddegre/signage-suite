@@ -2681,6 +2681,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'web'): ?>
           Each site is <code>web.php?d=<em>key</em></code> in rotation — preview per row below.
+        <?php elseif (in_array($board, ['rss', 'video', 'family', 'slides', 'rotator'], true)): ?>
+          Preview per row or card below — pick a specific entry to preview.
         <?php elseif (!empty($b['file'])): ?>
           <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
         <?php endif; ?></div>
