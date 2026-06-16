@@ -1920,6 +1920,8 @@ function admin_field(array $f, $val, string $board): void
   .deck-bulk-bar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:-6px 0 12px; padding:10px 14px;
                    background:rgba(255,179,71,.08); border:1px solid rgba(255,179,71,.35); border-radius:10px; font-size:13px; }
   .deck-bulk-bar[hidden] { display:none !important; }
+  .deck-bulk-bar .deck-bulk-remove { border-color:rgba(255,107,107,.45); color:#ffb3b3; }
+  .deck-bulk-bar .deck-bulk-remove:hover { background:rgba(255,107,107,.12); }
   .deck-filter-empty { padding:24px; text-align:center; color:var(--mist); border:1px dashed var(--line); border-radius:10px; }
   .deck-list-compact { gap:8px; }
   .deck-list-compact .slide-card { padding:10px 12px; }
@@ -3830,6 +3832,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             <button type="button" class="secondary" id="slideDeckBulkOnly" style="padding:6px 12px;font-size:13px">Only this display</button>
             <button type="button" class="secondary" id="slideDeckBulkAdd" style="padding:6px 12px;font-size:13px">Add this display</button>
             <button type="button" class="secondary" id="slideDeckBulkAll" style="padding:6px 12px;font-size:13px">All displays</button>
+            <button type="button" class="secondary deck-bulk-remove" id="slideDeckBulkRemove" style="padding:6px 12px;font-size:13px">Remove this display</button>
           </div>
           <div class="deck-filter-empty" id="slideDeckFilterEmpty" hidden>No slides match the current search or display filter.</div>
           <div class="deck-list<?= $slideDeckLarge ? ' deck-list-compact' : '' ?>" id="slideDeck" data-field="SLIDES">
@@ -5222,7 +5225,7 @@ function applySlideDeckFilters() {
     const showBulk = screen && screen.indexOf('__') !== 0 && !exclude;
     bulk.hidden = !showBulk;
     if (bulkLabel && showBulk) {
-      bulkLabel.textContent = 'Bulk assign ' + shown + ' visible slide' + (shown === 1 ? '' : 's') + ' for ' + slideDeckScreenFilterLabel(screen) + ':';
+      bulkLabel.textContent = 'Bulk actions for ' + shown + ' visible slide' + (shown === 1 ? '' : 's') + ' on ' + slideDeckScreenFilterLabel(screen) + ':';
     }
   }
 }
@@ -5234,6 +5237,7 @@ function setSlideCardScreenTarget(card, mode, screenKey) {
     if (mode === 'all') cb.checked = true;
     else if (mode === 'only') cb.checked = (cb.value === screenKey);
     else if (mode === 'add') cb.checked = cb.checked || (cb.value === screenKey);
+    else if (mode === 'remove' && cb.value === screenKey) cb.checked = false;
   });
   updateScreenPickerSummary(picker);
   syncSlideCardScreenMeta(card);
@@ -5248,6 +5252,27 @@ function slideDeckBulkAssign(mode) {
     if (card.hidden) return;
     setSlideCardScreenTarget(card, mode, screen);
   });
+}
+
+function slideDeckBulkRemove() {
+  const screen = document.getElementById('slideDeckScreenFilter')?.value || '';
+  if (!screen || screen.indexOf('__') === 0) return;
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  const visible = Array.from(deck.querySelectorAll('[data-slide-card]')).filter(function (card) { return !card.hidden; });
+  const affected = visible.filter(function (card) { return slideCardOnScreen(card, screen); });
+  if (!affected.length) {
+    alert('No visible slides are assigned to ' + slideDeckScreenFilterLabel(screen) + '.');
+    return;
+  }
+  const label = slideDeckScreenFilterLabel(screen);
+  const msg = 'Remove ' + label + ' from ' + affected.length + ' slide' + (affected.length === 1 ? '' : 's') + '?'
+    + '\n\nSlides set to all displays will be restricted to the remaining displays. Remember to Save when done.';
+  if (!confirm(msg)) return;
+  affected.forEach(function (card) {
+    setSlideCardScreenTarget(card, 'remove', screen);
+  });
+  applySlideDeckFilters();
 }
 
 function initSlideDeckToolbar() {
@@ -5297,6 +5322,7 @@ function initSlideDeckToolbar() {
   document.getElementById('slideDeckBulkOnly')?.addEventListener('click', function () { slideDeckBulkAssign('only'); });
   document.getElementById('slideDeckBulkAdd')?.addEventListener('click', function () { slideDeckBulkAssign('add'); });
   document.getElementById('slideDeckBulkAll')?.addEventListener('click', function () { slideDeckBulkAssign('all'); });
+  document.getElementById('slideDeckBulkRemove')?.addEventListener('click', slideDeckBulkRemove);
   applySlideDeckFilters();
 }
 
