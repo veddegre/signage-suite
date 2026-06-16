@@ -291,8 +291,11 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
             continue;
         }
+        if ($board === 'rotation' && $f['key'] === 'SCREENS') {
+            continue;
+        }
         if ($board === 'rotation' && !admin_is_super()) {
-            if ($f['key'] === 'SCREENS' || in_array($f['key'], $rotationSuperFieldKeys, true)) {
+            if (in_array($f['key'], $rotationSuperFieldKeys, true)) {
                 continue;
             }
             if (strpos($f['key'], 'PAGES_') === 0) {
@@ -616,42 +619,11 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 continue;
             }
             $name = trim((string)($row['name'] ?? ''));
-            $entry = ['name' => $name !== '' ? $name : ($key === 'main' ? 'Main Display' : $key)];
-            if (isset($row['shuffle'])) {
-                $entry['shuffle'] = true;
-            }
-            $entry['show_ticker'] = isset($row['show_ticker']);
-            $entry['show_clock'] = isset($row['show_clock']);
-            $entry['show_debug'] = isset($row['show_debug']);
-            foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
-                $tv = trim((string)($row[$transKey] ?? ''));
-                if ($tv === '') {
-                    continue;
-                }
-                $entry[$transKey] = max(0, (int)$tv);
-            }
-            if (isset($row['weighted'])) {
-                $entry['weighted'] = true;
-            }
-            $off = trim((string)($row['cec_off'] ?? ''));
-            $on = trim((string)($row['cec_on'] ?? ''));
-            $offH = $off !== '' ? max(0, min(23, (int)$off)) : 23;
-            $onH = $on !== '' ? max(0, min(23, (int)$on)) : 6;
-            if (isset($row['schedule_enabled'])) {
-                $entry['schedule'] = [
-                    'enabled' => true,
-                    'off' => $offH,
-                    'on' => $onH,
-                ];
-            }
-            if (isset($row['cec_enabled'])) {
-                $entry['cec'] = [
-                    'enabled' => true,
-                    'off' => $offH,
-                    'on' => $onH,
-                    'device' => 0,
-                ];
-            }
+            $entry = rotation_apply_screen_post_row(
+                ['name' => $name !== '' ? $name : ($key === 'main' ? 'Main Display' : $key)],
+                $row,
+                true
+            );
             $screensOut[$key] = $entry;
         }
         foreach ($protectedScreens as $pkey => $_) {
@@ -688,17 +660,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     if (!is_array($entry)) {
                         $entry = ['name' => (string)$entry];
                     }
-                    $entry['show_ticker'] = isset($opts['show_ticker']);
-                    $entry['show_debug'] = isset($opts['show_debug']);
-                    foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
-                        $tv = trim((string)($opts[$transKey] ?? ''));
-                        if ($tv === '') {
-                            unset($entry[$transKey]);
-                        } else {
-                            $entry[$transKey] = max(0, (int)$tv);
-                        }
-                    }
-                    $screens[$sk] = $entry;
+                    $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false);
                 }
                 $conf['rotation.SCREENS'] = $screens;
             }
@@ -3103,9 +3065,10 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             $fadeOpt = isset($scrRaw['fade_ms']) ? (string)(int)$scrRaw['fade_ms'] : '';
             $settleOpt = isset($scrRaw['settle_ms']) ? (string)(int)$scrRaw['settle_ms'] : '';
             $hangOpt = isset($scrRaw['hang_ms']) ? (string)(int)$scrRaw['hang_ms'] : '';
+            $schedOpt = $screenSettings['schedule'];
           ?>
           <div class="rotation-display-options">
-            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms).</div>
+            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone.</div>
             <div class="field-grid">
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
@@ -3114,6 +3077,22 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_debug]" value="1"
                   <?= $screenSettings['show_debug'] ? 'checked' : '' ?>> Debug overlay</label>
+              </div>
+              <div class="field">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][schedule_enabled]" value="1"
+                  <?= !empty($schedOpt['enabled']) ? 'checked' : '' ?>> Blank screen overnight</label>
+              </div>
+              <div class="field">
+                <label class="l" for="screenOff-<?= h($screenKey) ?>">Blank from (hour 0–23)</label>
+                <input type="number" min="0" max="23" step="1" id="screenOff-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][cec_off]" value="<?= h((string)(int)$schedOpt['off']) ?>"
+                       placeholder="23">
+              </div>
+              <div class="field">
+                <label class="l" for="screenOn-<?= h($screenKey) ?>">Blank until (hour 0–23)</label>
+                <input type="number" min="0" max="23" step="1" id="screenOn-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][cec_on]" value="<?= h((string)(int)$schedOpt['on']) ?>"
+                       placeholder="6">
               </div>
               <div class="field">
                 <label class="l" for="screenFade-<?= h($screenKey) ?>">Crossfade (ms)</label>

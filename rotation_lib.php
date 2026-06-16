@@ -206,20 +206,107 @@ function rotation_schedule_from_screen(array $scr): array
     $hours = rotation_screen_off_hours($scr);
     $sched['off'] = $hours['off'];
     $sched['on'] = $hours['on'];
-    $block = is_array($scr['schedule'] ?? null) ? $scr['schedule'] : [];
-    if (!empty($block['enabled']) || !empty($scr['schedule_enabled'])) {
-        $sched['enabled'] = true;
-    } elseif (!array_key_exists('schedule', $scr) && !array_key_exists('schedule_enabled', $scr)) {
-        // Legacy configs only had CEC — blank the screen on the same hours (works without HDMI-CEC).
-        $cec = rotation_cec_from_screen($scr);
-        if ($cec['enabled']) {
-            $sched['enabled'] = true;
-            $sched['off'] = $cec['off'];
-            $sched['on'] = $cec['on'];
+
+    if (array_key_exists('schedule', $scr) && is_array($scr['schedule'])) {
+        $block = $scr['schedule'];
+        $sched['enabled'] = !empty($block['enabled']);
+        if (isset($block['off'])) {
+            $sched['off'] = max(0, min(23, (int)$block['off']));
         }
+        if (isset($block['on'])) {
+            $sched['on'] = max(0, min(23, (int)$block['on']));
+        }
+
+        return $sched;
+    }
+
+    if (!empty($scr['schedule_enabled'])) {
+        $sched['enabled'] = true;
+
+        return $sched;
+    }
+
+    // Legacy configs only had CEC — blank the screen on the same hours (works without HDMI-CEC).
+    $cec = rotation_cec_from_screen($scr);
+    if ($cec['enabled']) {
+        $sched['enabled'] = true;
+        $sched['off'] = $cec['off'];
+        $sched['on'] = $cec['on'];
     }
 
     return $sched;
+}
+
+/** @param array<string,mixed> $row @return array{off:int,on:int} */
+function rotation_blank_hours_from_post_row(array $row): array
+{
+    $off = trim((string)($row['cec_off'] ?? ''));
+    $on = trim((string)($row['cec_on'] ?? ''));
+
+    return [
+        'off' => $off !== '' ? max(0, min(23, (int)$off)) : 23,
+        'on' => $on !== '' ? max(0, min(23, (int)$on)) : 6,
+    ];
+}
+
+/**
+ * Merge admin POST fields for one display onto a screen registry entry.
+ * @param array<string,mixed> $entry
+ * @param array<string,mixed> $row SCREENS[] or SCREEN_OPTS[] row
+ */
+function rotation_apply_screen_post_row(array $entry, array $row, bool $includeIdentity = false): array
+{
+    if ($includeIdentity) {
+        $name = trim((string)($row['name'] ?? ''));
+        if ($name !== '') {
+            $entry['name'] = $name;
+        }
+        if (isset($row['shuffle'])) {
+            $entry['shuffle'] = true;
+        } else {
+            unset($entry['shuffle']);
+        }
+        if (isset($row['weighted'])) {
+            $entry['weighted'] = true;
+        } else {
+            unset($entry['weighted']);
+        }
+        $entry['show_clock'] = isset($row['show_clock']);
+    }
+
+    $entry['show_ticker'] = isset($row['show_ticker']);
+    $entry['show_debug'] = isset($row['show_debug']);
+
+    foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
+        $tv = trim((string)($row[$transKey] ?? ''));
+        if ($tv === '') {
+            unset($entry[$transKey]);
+        } else {
+            $entry[$transKey] = max(0, (int)$tv);
+        }
+    }
+
+    $hours = rotation_blank_hours_from_post_row($row);
+    $entry['schedule'] = [
+        'enabled' => isset($row['schedule_enabled']),
+        'off' => $hours['off'],
+        'on' => $hours['on'],
+    ];
+
+    if (isset($row['cec_enabled'])) {
+        $entry['cec'] = [
+            'enabled' => true,
+            'off' => $hours['off'],
+            'on' => $hours['on'],
+            'device' => max(0, min(15, (int)($entry['cec']['device'] ?? 0))),
+        ];
+    } else {
+        unset($entry['cec']);
+    }
+
+    unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on']);
+
+    return $entry;
 }
 
 /** @return array{enabled:bool,off:int,on:int,device:int} */
@@ -570,32 +657,40 @@ function rotation_parse_pages_rows(array $rows): array
             continue;
         }
         $row = array_map(fn($v) => trim((string)$v), $row);
-        $obj = [];
-        $any = false;
-        foreach (['url', 'dwell', 'from', 'to'] as $col) {
+        $url = trim((string)($row['url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+        $obj = ['url' => $url];
+        $dwell = (int)($row['dwell'] ?? 0);
+        $obj['dwell'] = $dwell > 0 ? $dwell : 60;
+        foreach (['from', 'to'] as $col) {
             $v = $row[$col] ?? '';
-            if ($v === '') {
-                continue;
+            if ($v !== '') {
+                $obj[$col] = (int)$v;
             }
-            $any = true;
-            $obj[$col] = in_array($col, ['dwell', 'from', 'to'], true) ? (int)$v : $v;
         }
         $wRaw = trim((string)($row['weight'] ?? ''));
         if ($wRaw !== '') {
             $w = max(1, min(20, (int)$wRaw));
             if ($w > 1) {
                 $obj['weight'] = $w;
-                $any = true;
             }
         }
         if (($row['off'] ?? '') !== '') {
             $obj['off'] = true;
         }
-        if ($any) {
-            $outV[] = $obj;
-        }
+        $outV[] = $obj;
     }
     return $outV;
+}
+
+/** Dwell seconds for one playlist row — missing/zero defaults to 60. */
+function rotation_page_dwell(array $page): int
+{
+    $dwell = (int)($page['dwell'] ?? 0);
+
+    return $dwell > 0 ? $dwell : 60;
 }
 
 function rotation_page_label(string $url): string
