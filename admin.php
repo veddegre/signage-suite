@@ -1395,7 +1395,17 @@ function admin_field(array $f, $val, string $board): void
   .check { display:flex; gap:10px; align-items:center; font-size:16px; }
   .check input { width:20px; height:20px; accent-color:var(--beacon); }
   table.rows { border-collapse:collapse; width:100%; margin-top:4px; }
-  .rows-scroll { overflow-x:auto; margin-top:4px; max-width:100%; }
+  .rows-scroll { overflow-x:auto; margin-top:4px; max-width:100%; -webkit-overflow-scrolling:touch; }
+  .rows-scroll table.rows { width:max-content; min-width:100%; }
+  table.rows[data-field="SCREENS"] th,
+  table.rows[data-field="SCREENS"] td { white-space:nowrap; }
+  table.rows[data-field="SCREENS"] td:first-child input { min-width:64px; width:72px; }
+  table.rows[data-field="SCREENS"] td:nth-child(2) input { min-width:140px; width:min(180px, 28vw); }
+  table.rows[data-field="SCREENS"] td:nth-child(n+3):nth-child(-n+8),
+  table.rows[data-field="SCREENS"] th:nth-child(n+3):nth-child(-n+8) { text-align:center; width:1%; padding-left:4px; padding-right:4px; }
+  table.rows[data-field="SCREENS"] td:nth-child(n+9):nth-child(-n+11) { text-align:center; width:1%; }
+  table.rows[data-field="SCREENS"] td:nth-child(n+9):nth-child(-n+10) input { width:52px; min-width:52px; }
+  table.rows[data-field="SCREENS"] td:last-child { padding-right:0; }
   table.rows th { text-align:left; font-size:12.5px; letter-spacing:1px; text-transform:uppercase;
                   color:var(--mist); font-weight:500; padding:4px 8px 8px 0; }
   table.rows td { padding:0 8px 10px 0; vertical-align:middle; }
@@ -1830,7 +1840,7 @@ function admin_field(array $f, $val, string $board): void
     <a href="?board=tools" class="<?= $tools ? 'active' : '' ?>">Tools</a>
     <?php endif; ?>
   </nav>
-  <main<?= (!$tools && $board === 'slides') ? ' class="main-wide"' : '' ?>>
+  <main<?= (!$tools && in_array($board, ['slides', 'rotation'], true)) ? ' class="main-wide"' : '' ?>>
     <?php if ($flash): ?><div class="flash<?= $flashOk ? '' : ' bad' ?>"><?= h($flash) ?></div><?php endif; ?>
 
     <?php if ($tools): ?>
