@@ -52,6 +52,31 @@ if (!defined('TICKER_LAT')) {
     define('TICKER_DEMO', cfg('ticker.TICKER_DEMO', false));               // true = render a sample alert for layout testing
 }
 
+if (!function_exists('signage_ticker_event_kind')) {
+/** NWS event name → banner kind (warning/watch/advisory/statement). */
+function signage_ticker_event_kind(string $event): string
+{
+    $e = strtolower(trim($event));
+    if ($e === '' || $e === 'weather alert') {
+        return 'alert';
+    }
+    if (str_ends_with($e, ' warning') || $e === 'warning') {
+        return 'warning';
+    }
+    if (str_ends_with($e, ' watch') || $e === 'watch') {
+        return 'watch';
+    }
+    if (str_ends_with($e, ' advisory') || $e === 'advisory') {
+        return 'advisory';
+    }
+    if (str_ends_with($e, ' statement') || $e === 'statement') {
+        return 'statement';
+    }
+
+    return 'alert';
+}
+}
+
 if (!function_exists('signage_ticker_alerts')) {
 function signage_ticker_alerts(): array
 {
@@ -59,12 +84,14 @@ function signage_ticker_alerts(): array
         return [[
             'event'    => 'Beach Hazards Statement',
             'severity' => 'Moderate',
+            'kind'     => 'statement',
             'headline' => 'Beach Hazards Statement issued until 10 PM EDT this evening — '
                         . 'dangerous swimming conditions and structural currents expected '
                         . 'along Lake Michigan beaches near Grand Haven and Holland.',
         ], [
             'event'    => 'Severe Thunderstorm Warning',
             'severity' => 'Severe',
+            'kind'     => 'warning',
             'headline' => 'Severe Thunderstorm Warning for Ottawa County until 8:45 PM — '
                         . '60 mph wind gusts and quarter size hail possible.',
         ]];
@@ -102,6 +129,7 @@ function signage_ticker_alerts(): array
         $out[] = [
             'event'    => (string)($p['event'] ?? 'Weather Alert'),
             'severity' => $sev,
+            'kind'     => signage_ticker_event_kind((string)($p['event'] ?? '')),
             'headline' => (string)($p['headline'] ?? $p['event'] ?? ''),
         ];
     }
@@ -166,10 +194,15 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
     return d.innerHTML;
   }
 
-  function isSevere(alerts) {
-    return alerts.some(function (a) {
-      return a.severity === 'Severe' || a.severity === 'Extreme';
+  function topAlertKind(alerts) {
+    var rank = { warning: 4, watch: 3, advisory: 2, statement: 1, alert: 0 };
+    var labels = { warning: 'Warning', watch: 'Watch', advisory: 'Advisory', statement: 'Statement', alert: 'Advisory' };
+    var top = 'alert';
+    alerts.forEach(function (a) {
+      var k = a.kind || 'alert';
+      if ((rank[k] || 0) > (rank[top] || 0)) top = k;
     });
+    return { kind: top, label: labels[top] || 'Advisory' };
   }
 
   function itemHtml(a) {
@@ -232,7 +265,8 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
       return;
     }
 
-    var severe = isSevere(data.alerts);
+    var banner = topAlertKind(data.alerts);
+    var severe = banner.kind === 'warning';
     var mode = data.mode === 'static' ? 'static' : 'scroll';
     var items = '';
     if (mode === 'static') {
@@ -247,7 +281,7 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
 
     root.innerHTML =
       '<div id="signage-ticker" class="' + (severe ? 'tk-severe ' : '') + (mode === 'static' ? 'tk-static' : '') + '">'
-      + '<div class="tk-tag"><span class="tk-dot"></span>' + (severe ? 'Warning' : 'Advisory') + '</div>'
+      + '<div class="tk-tag"><span class="tk-dot"></span>' + esc(banner.label) + '</div>'
       + '<div class="tk-scroll"><div class="tk-track" id="tk-track">' + items + '</div></div></div>';
 
     document.documentElement.style.setProperty('--signage-ticker-inset', '<?= SIGNAGE_TICKER_H ?>px');
