@@ -340,7 +340,33 @@ function admin_entry_owner(?array $entry): ?string
     return $owner !== '' ? $owner : null;
 }
 
-/** Legacy entries without owner are super-admin only. */
+/** @return list<string> */
+function admin_normalize_shared(mixed $raw): array
+{
+    $ids = [];
+    if (is_array($raw)) {
+        foreach ($raw as $id) {
+            $id = trim((string)$id);
+            if ($id !== '') {
+                $ids[$id] = true;
+            }
+        }
+    }
+    $list = array_keys($ids);
+    sort($list);
+    return $list;
+}
+
+/** @param array<string,mixed>|null $entry @return list<string> */
+function admin_entry_shared_users(?array $entry): array
+{
+    if (!is_array($entry)) {
+        return [];
+    }
+    return admin_normalize_shared($entry['shared'] ?? []);
+}
+
+/** Legacy entries without owner are super-admin only unless shared. */
 function admin_entry_visible(?array $entry): bool
 {
     if (!is_array($entry)) {
@@ -349,8 +375,15 @@ function admin_entry_visible(?array $entry): bool
     if (admin_is_super()) {
         return true;
     }
+    $uid = admin_user_id();
+    if ($uid === null) {
+        return false;
+    }
     $owner = admin_entry_owner($entry);
-    return $owner !== null && $owner === admin_user_id();
+    if ($owner !== null && $owner === $uid) {
+        return true;
+    }
+    return in_array($uid, admin_entry_shared_users($entry), true);
 }
 
 function admin_can_edit_entry(?array $entry): bool
@@ -366,15 +399,167 @@ function admin_stamp_owner(array $entry, ?array $prev = null): array
         if ($prevOwner !== null && !array_key_exists('owner', $entry)) {
             $entry['owner'] = $prevOwner;
         }
+        if (!array_key_exists('shared', $entry)) {
+            $shared = admin_entry_shared_users($prev);
+            if ($shared !== []) {
+                $entry['shared'] = $shared;
+            }
+        }
     }
     if (admin_is_super()) {
         return $entry;
     }
     $uid = admin_user_id();
-    if ($uid !== null) {
+    if ($uid === null) {
+        return $entry;
+    }
+    $prevOwner = admin_entry_owner($prev);
+    if ($prev === null || $prevOwner === null) {
         $entry['owner'] = $uid;
+    } elseif ($prevOwner === $uid) {
+        $entry['owner'] = $uid;
+    } elseif (!array_key_exists('owner', $entry)) {
+        $entry['owner'] = $prevOwner;
     }
     return $entry;
+}
+
+/** @param array<string,mixed> $entry @param array<string,mixed> $postRow */
+function admin_apply_sharing_from_post(array $entry, array $postRow): array
+{
+    if (!admin_is_super() || empty($postRow['_sharing_form'])) {
+        return $entry;
+    }
+    $owner = trim((string)($postRow['owner'] ?? ''));
+    if ($owner === '') {
+        unset($entry['owner']);
+    } else {
+        $entry['owner'] = $owner;
+    }
+    $shared = [];
+    if (isset($postRow['shared']) && is_array($postRow['shared'])) {
+        foreach ($postRow['shared'] as $id) {
+            $id = trim((string)$id);
+            if ($id !== '' && $id !== ($entry['owner'] ?? '')) {
+                $shared[$id] = true;
+            }
+        }
+    }
+    $sharedList = array_keys($shared);
+    sort($sharedList);
+    if ($sharedList === []) {
+        unset($entry['shared']);
+    } else {
+        $entry['shared'] = $sharedList;
+    }
+    return $entry;
+}
+
+/** @param array<string,mixed> $entry @param array<string,mixed> $postRow */
+function admin_finalize_entry(array $entry, ?array $prev, array $postRow): array
+{
+    $entry = admin_stamp_owner($entry, $prev);
+    return admin_apply_sharing_from_post($entry, $postRow);
+}
+
+/** @return list<array{id:string,username:string}> */
+function admin_sharing_user_options(): array
+{
+    $out = [];
+    foreach (users_list() as $user) {
+        if (!is_array($user) || !empty($user['disabled'])) {
+            continue;
+        }
+        $id = trim((string)($user['id'] ?? ''));
+        if ($id === '') {
+            continue;
+        }
+        $out[] = [
+            'id' => $id,
+            'username' => (string)($user['username'] ?? $id),
+        ];
+    }
+    usort($out, static fn($a, $b) => strcasecmp($a['username'], $b['username']));
+    return $out;
+}
+
+/** Preserve checkbox arrays (e.g. shared[]) when normalizing POST rows. */
+function admin_normalize_form_row(array $row): array
+{
+    $out = [];
+    foreach ($row as $k => $v) {
+        if (is_array($v)) {
+            $out[$k] = $v;
+        } else {
+            $out[$k] = trim((string)$v);
+        }
+    }
+    return $out;
+}
+
+function admin_username_for_id(string $userId): string
+{
+    $user = users_find_by_id($userId);
+    if (!is_array($user)) {
+        return $userId;
+    }
+    return (string)($user['username'] ?? $userId);
+}
+
+/** @param array<string,mixed>|null $entry */
+function admin_entry_access_summary(?array $entry): string
+{
+    if (!is_array($entry)) {
+        return '';
+    }
+    $owner = admin_entry_owner($entry);
+    $shared = admin_entry_shared_users($entry);
+    if ($owner === null && $shared === []) {
+        return 'Super only (no owner)';
+    }
+    $parts = [];
+    if ($owner !== null) {
+        $parts[] = admin_username_for_id($owner);
+    }
+    if ($shared !== []) {
+        $names = array_map('admin_username_for_id', $shared);
+        $parts[] = 'shared: ' . implode(', ', $names);
+    }
+    return implode(' · ', $parts);
+}
+
+/** Super-admin: owner dropdown + shared-with checkboxes. */
+function admin_entry_sharing_html(string $prefix, ?array $entry): void
+{
+    if (!admin_is_super()) {
+        return;
+    }
+    $users = admin_sharing_user_options();
+    if ($users === []) {
+        return;
+    }
+    $owner = admin_entry_owner($entry);
+    $sharedSet = array_flip(admin_entry_shared_users($entry));
+    echo '<div class="entry-sharing">';
+    echo '<input type="hidden" name="' . h($prefix . '[_sharing_form]') . '" value="1">';
+    echo '<label class="mini">Owner</label>';
+    echo '<select name="' . h($prefix . '[owner]') . '">';
+    echo '<option value="">(none — super only)</option>';
+    foreach ($users as $u) {
+        echo '<option value="' . h($u['id']) . '"' . ($owner === $u['id'] ? ' selected' : '') . '>'
+            . h($u['username']) . '</option>';
+    }
+    echo '</select>';
+    echo '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+    echo '<div class="slide-screen-checks entry-sharing-users">';
+    foreach ($users as $u) {
+        if ($owner !== null && $u['id'] === $owner) {
+            continue;
+        }
+        echo '<label><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
+            . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
+    }
+    echo '</div></div>';
 }
 
 /** @param list<array<string,mixed>> $list */
@@ -405,14 +590,7 @@ function admin_filter_owned_map(array $map): array
 function admin_merge_owned_list(array $existing, array $posted): array
 {
     if (admin_is_super()) {
-        $out = [];
-        foreach ($posted as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $out[] = admin_stamp_owner($row, admin_find_owned_list_entry($existing, $row));
-        }
-        return $out;
+        return $posted;
     }
     $kept = array_values(array_filter($existing, static fn($e) => is_array($e) && !admin_entry_visible($e)));
     $ownedOut = [];
@@ -424,7 +602,7 @@ function admin_merge_owned_list(array $existing, array $posted): array
         if ($prev !== null && !admin_entry_visible($prev)) {
             continue;
         }
-        $ownedOut[] = admin_stamp_owner($row, $prev);
+        $ownedOut[] = admin_finalize_entry($row, $prev, $row);
     }
     return array_merge($kept, $ownedOut);
 }
@@ -433,14 +611,7 @@ function admin_merge_owned_list(array $existing, array $posted): array
 function admin_merge_owned_map(array $existing, array $posted): array
 {
     if (admin_is_super()) {
-        $out = [];
-        foreach ($posted as $k => $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $out[(string)$k] = admin_stamp_owner($row, is_array($existing[$k] ?? null) ? $existing[$k] : null);
-        }
-        return $out;
+        return $posted;
     }
     $out = [];
     foreach ($existing as $k => $row) {
@@ -457,7 +628,7 @@ function admin_merge_owned_map(array $existing, array $posted): array
         if ($prev !== null && !admin_entry_visible($prev)) {
             continue;
         }
-        $out[$key] = admin_stamp_owner($row, $prev);
+        $out[$key] = admin_finalize_entry($row, $prev, $row);
     }
     return $out;
 }
@@ -484,15 +655,26 @@ function admin_merge_owned_scalar_map(array $existing, array $posted): array
     }
     foreach ($posted as $k => $v) {
         $key = trim((string)$k);
-        $val = trim((string)$v);
-        if ($key === '' || $val === '') {
+        if ($key === '') {
             continue;
         }
         $prev = $existing[$key] ?? null;
         if (is_array($prev) && !admin_entry_visible($prev)) {
             continue;
         }
-        $out[$key] = admin_stamp_owner(['value' => $val], is_array($prev) ? $prev : null);
+        if (is_array($v)) {
+            $val = trim((string)($v['value'] ?? ''));
+            if ($val === '') {
+                continue;
+            }
+            $out[$key] = admin_finalize_entry($v, is_array($prev) ? $prev : null, $v);
+        } else {
+            $val = trim((string)$v);
+            if ($val === '') {
+                continue;
+            }
+            $out[$key] = admin_finalize_entry(['value' => $val], is_array($prev) ? $prev : null, []);
+        }
     }
     return $out;
 }

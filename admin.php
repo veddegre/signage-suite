@@ -247,13 +247,14 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $outV = [];
                 foreach ($rows as $row) {
                     if (!is_array($row)) continue;
-                    $row = array_map(fn($v) => trim((string)$v), $row);
+                    $row = admin_normalize_form_row($row);
                     if ($keyed) {
                         $k = $row['_key'] ?? '';
                         if ($k === '') continue;
                         if ($scalar) {
                             if (($row['_value'] ?? '') === '') continue;
-                            $outV[$k] = $row['_value'];
+                            $prev = is_array($existingRows[$k] ?? null) ? $existingRows[$k] : null;
+                            $outV[$k] = admin_finalize_entry(['value' => $row['_value']], $prev, $row);
                         } else {
                             $obj = [];
                             foreach ($f['columns'] as $col) {
@@ -285,7 +286,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                                 if ($v === '') continue;
                                 $obj[$col['key']] = ($col['cast'] ?? '') === 'int' ? (int)$v : $v;
                             }
-                            if ($obj !== []) $outV[$k] = $obj;
+                            if ($obj !== []) {
+                                $prev = is_array($existingRows[$k] ?? null) ? $existingRows[$k] : null;
+                                $outV[$k] = admin_finalize_entry($obj, $prev, $row);
+                            }
                         }
                     } else {
                         $obj = [];
@@ -323,20 +327,17 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                             $any = true;
                             $obj[$col['key']] = ($col['cast'] ?? '') === 'int' ? (int)$v : $v;
                         }
-                        if ($any) $outV[] = $obj;
+                        if ($any) {
+                            $prev = admin_find_owned_list_entry($existingRows, $obj);
+                            $outV[] = admin_finalize_entry($obj, $prev, $row);
+                        }
                     }
                 }
-                if (!admin_is_super()) {
-                    if ($keyed && $scalar) {
-                        $outV = admin_merge_owned_scalar_map($existingRows, $outV);
-                    } elseif ($keyed) {
-                        $outV = admin_merge_owned_map($existingRows, $outV);
-                    } else {
-                        $outV = admin_merge_owned_list($existingRows, $outV);
-                    }
-                } elseif ($keyed && !$scalar && $outV !== []) {
+                if ($keyed && $scalar) {
+                    $outV = admin_merge_owned_scalar_map($existingRows, $outV);
+                } elseif ($keyed) {
                     $outV = admin_merge_owned_map($existingRows, $outV);
-                } elseif (!$keyed && $outV !== []) {
+                } elseif ($outV !== []) {
                     $outV = admin_merge_owned_list($existingRows, $outV);
                 }
                 if ($outV === []) unset($conf[$cfgKey]); else $conf[$cfgKey] = $outV;
@@ -350,11 +351,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         require_once __DIR__ . '/slides_lib.php';
         $allScreenKeys = array_keys(rotation_screens());
         sort($allScreenKeys);
+        $existingSlides = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
         $outV = [];
         foreach ($_POST['SLIDES'] ?? [] as $row) {
             if (!is_array($row)) {
                 continue;
             }
+            $row = admin_normalize_form_row($row);
             $obj = [];
             foreach (['file', 'caption', 'schedule', 'date_start', 'date_end', 'month_day', 'month_day_end', 'weekdays'] as $k) {
                 $v = trim((string)($row[$k] ?? ''));
@@ -393,10 +396,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $obj['screens'] = $screens;
             }
             if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '' || ($obj['schedule'] ?? '') !== '') {
-                $outV[] = $obj;
+                $prev = admin_find_owned_list_entry($existingSlides, $obj);
+                $outV[] = admin_finalize_entry($obj, $prev, $row);
             }
         }
-        $existingSlides = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
         $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
         if ($mergedSlides === []) {
             unset($conf['slides.SLIDES']);
@@ -407,11 +410,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     if ($board === 'rotator') {
         $allScreenKeys = array_keys(rotation_screens());
         sort($allScreenKeys);
+        $existingPhotos = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
         $outV = [];
         foreach ($_POST['PHOTOS'] ?? [] as $row) {
             if (!is_array($row)) {
                 continue;
             }
+            $row = admin_normalize_form_row($row);
             $obj = [];
             foreach (['file', 'caption', 'group'] as $k) {
                 $v = trim((string)($row[$k] ?? ''));
@@ -445,10 +450,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $obj['screens'] = $screens;
             }
             if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '') {
-                $outV[] = $obj;
+                $prev = admin_find_owned_list_entry($existingPhotos, $obj);
+                $outV[] = admin_finalize_entry($obj, $prev, $row);
             }
         }
-        $existingPhotos = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
         $mergedPhotos = admin_merge_owned_list($existingPhotos, $outV);
         if ($mergedPhotos === []) {
             unset($conf['rotator.PHOTOS']);
@@ -472,7 +477,20 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         } else {
             $existingPages = is_array($conf['splunk.PAGES'] ?? null) ? $conf['splunk.PAGES'] : [];
             $outV = splunk_pages_from_post($_POST['PAGES'] ?? []);
-            $mergedPages = admin_merge_owned_map($existingPages, $outV);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = splunk_normalize_page_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
             if ($mergedPages === []) {
                 unset($conf['splunk.PAGES'], $conf['splunk.PANELS']);
             } else {
@@ -1494,6 +1512,12 @@ function admin_field(array $f, $val, string $board): void
   .slide-card-flags { display:flex; flex-wrap:wrap; gap:16px; margin-top:4px; }
   .slide-card-flags label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); }
   .slide-card-screens { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+  .entry-sharing { margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
+  .entry-sharing select { width:100%; max-width:280px; padding:8px 10px; font-size:14px;
+    background:#0f1728; border:1px solid var(--line); border-radius:8px; color:var(--snow); margin-top:4px; }
+  .entry-sharing-shared-label { display:block; margin-top:10px; }
+  .entry-sharing-users { margin-top:6px; }
+  .entry-sharing-cell { min-width:220px; vertical-align:top; }
   .slide-screen-checks { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:8px; }
   .slide-screen-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); }
   .slide-screen-checks label[hidden] { display:none; }
@@ -1885,7 +1909,7 @@ function admin_field(array $f, $val, string $board): void
         </table>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column. Content operators only see items they create; legacy unowned content is super-admin only.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column. Operators see items they own or that are shared with them; legacy unowned content is super-admin only until an owner is assigned.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -2593,6 +2617,7 @@ function admin_field(array $f, $val, string $board): void
                   <input type="text" name="VIDEOS[<?= (int)$vri ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="lantern.mp4 in videos/">
                 </div>
               </div>
+              <?php admin_entry_sharing_html('VIDEOS[' . (int)$vri . ']', $row); ?>
               <div class="video-card-meta">
                 <?php if ($st): ?>
                   <?php if ($st['file']): ?>
@@ -2691,6 +2716,7 @@ function admin_field(array $f, $val, string $board): void
                 <?php endif; ?>
               </div>
             </div>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
             <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(splunk_page_url($pk)) ?></code></div>
 
             <div class="splunk-playlist video-playlist" data-splunk-panels-deck="<?= h($pk) ?>">
@@ -2831,6 +2857,7 @@ function admin_field(array $f, $val, string $board): void
                   ]); ?>
                 </div>
                 <?php endif; ?>
+                <?php admin_entry_sharing_html('PHOTOS[' . (int)$ri . ']', $row); ?>
               </details>
               <?php if ($fileOk):
                 $deleteFile = rotator_safe_filename($fileLabel);
@@ -3079,6 +3106,7 @@ function admin_field(array $f, $val, string $board): void
                   ]); ?>
                 </div>
                 <?php endif; ?>
+                <?php admin_entry_sharing_html('SLIDES[' . (int)$ri . ']', $row); ?>
               </details>
               <?php if ($fileOk):
                 $deleteFile = slide_safe_filename($fileLabel);
@@ -3235,6 +3263,7 @@ function admin_field(array $f, $val, string $board): void
                   <?php if (($board === 'rss' && $f['key'] === 'FEEDS')
                       || ($board === 'web' && $f['key'] === 'SITES')
                       || (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS')): ?><th></th><?php endif; ?>
+                  <?php if (admin_is_super()): ?><th>Access</th><?php endif; ?>
                   <th></th>
                 </tr></thead>
                 <tbody>
@@ -3309,6 +3338,22 @@ function admin_field(array $f, $val, string $board): void
                       <td>
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $dashPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($dashPrev !== '' ? $dashPrev : '#') ?>" target="_blank" rel="noopener" data-board-preview>Preview ↗</a>
+                      </td>
+                      <?php endif; ?>
+                      <?php if (admin_is_super()):
+                        $shareEntry = null;
+                        if (!empty($f['keyed'])) {
+                            $shareKey = (string)($row['_key'] ?? '');
+                            if ($shareKey !== '' && is_array($val) && array_key_exists($shareKey, $val)) {
+                                $rawEntry = $val[$shareKey];
+                                $shareEntry = is_array($rawEntry) ? $rawEntry : null;
+                            }
+                        } elseif (is_array($row)) {
+                            $shareEntry = $row;
+                        }
+                      ?>
+                      <td class="entry-sharing-cell">
+                        <?php admin_entry_sharing_html($f['key'] . '[' . (int)$ri . ']', $shareEntry); ?>
                       </td>
                       <?php endif; ?>
                       <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
@@ -3610,6 +3655,9 @@ function admin_field(array $f, $val, string $board): void
 </div>
 
 <script>
+<?php if ($authed && admin_is_super()): ?>
+window.SHARING_USER_OPTIONS = <?= json_encode(admin_sharing_user_options(), JSON_UNESCAPED_UNICODE) ?>;
+<?php endif; ?>
 const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1' . (signage_ticker_enabled() ? '&safebottom=' . SIGNAGE_TICKER_H : '')) ?>;
 
 function rssPreviewUrl(key) {
@@ -3776,6 +3824,12 @@ function addRow(btn) {
     prevA.textContent = 'Preview ↗';
     prevTd.appendChild(prevA);
     tr.appendChild(prevTd);
+  }
+  if (window.SHARING_USER_OPTIONS && window.SHARING_USER_OPTIONS.length) {
+    const shareTd = document.createElement('td');
+    shareTd.className = 'entry-sharing-cell';
+    shareTd.innerHTML = entrySharingHtml(field + '[' + idx + ']', '', []);
+    tr.appendChild(shareTd);
   }
   const td = document.createElement('td');
   td.innerHTML = '<button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button>';
@@ -4158,6 +4212,34 @@ function initRotationTargetFilter() {
   });
 }
 
+function entrySharingHtml(prefix, ownerId, sharedIds) {
+  const users = window.SHARING_USER_OPTIONS || [];
+  if (!users.length) return '';
+  ownerId = ownerId || '';
+  sharedIds = sharedIds || [];
+  const sharedSet = {};
+  sharedIds.forEach(function (id) { sharedSet[id] = true; });
+  let html = '<div class="entry-sharing">';
+  html += '<input type="hidden" name="' + prefix + '[_sharing_form]" value="1">';
+  html += '<label class="mini">Owner</label><select name="' + prefix + '[owner]">';
+  html += '<option value="">(none — super only)</option>';
+  users.forEach(function (u) {
+    html += '<option value="' + u.id.replace(/"/g, '&quot;') + '"' + (ownerId === u.id ? ' selected' : '') + '>'
+      + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+  });
+  html += '</select>';
+  html += '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+  html += '<div class="slide-screen-checks entry-sharing-users">';
+  users.forEach(function (u) {
+    if (ownerId && u.id === ownerId) return;
+    html += '<label><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
+      + (sharedSet[u.id] ? ' checked' : '') + '> '
+      + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
 function photoScreenChecksHtml(idx) {
   const opts = window.PHOTO_SCREEN_OPTIONS || [];
   if (!opts.length) return '';
@@ -4169,6 +4251,7 @@ function photoScreenChecksHtml(idx) {
     formMarker: true
   });
   html += '</div>';
+  html += entrySharingHtml('PHOTOS[' + idx + ']', '', []);
   return html;
 }
 
@@ -4185,6 +4268,7 @@ function slideScreenChecksHtml(idx) {
     formMarker: true
   });
   html += '</div>';
+  html += entrySharingHtml('SLIDES[' + idx + ']', '', []);
   return html;
 }
 
@@ -4757,6 +4841,7 @@ function addVideoCard() {
       '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=…"></div>' +
       '<div style="grid-column:2 / -1"><label class="mini">or local file</label><input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
     '</div>' +
+    entrySharingHtml('VIDEOS[' + idx + ']', '', []) +
     '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>Save, then fetch or upload file</span></div>';
   deck.appendChild(card);
   bindVideoCard(card);
@@ -5021,6 +5106,7 @@ function addSplunkPage() {
       '</div>' +
     '</div>' +
     '<div class="help" style="margin-bottom:10px">Rotation URL: <code>splunk.php?d=' + pageKey + '</code></div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', []) +
     '<div class="splunk-playlist video-playlist" data-splunk-panels-deck="' + pageKey + '">' +
       '<div class="rotation-playlist-empty">No panels yet — add one below.</div>' +
     '</div>' +
