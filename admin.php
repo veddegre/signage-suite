@@ -1515,17 +1515,23 @@ function admin_field(array $f, $val, string $board): void
   .entry-sharing { margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
   .entry-sharing select { width:100%; max-width:280px; padding:8px 10px; font-size:14px;
     background:#0f1728; border:1px solid var(--line); border-radius:8px; color:var(--snow); margin-top:4px; }
-  .entry-sharing-shared-label { display:block; margin-top:10px; }
-  .entry-sharing-users-scroll { max-height:168px; overflow-y:auto; margin-top:6px; padding-right:4px; }
-  .entry-sharing-users-scroll label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); padding:3px 0; }
+  .entry-sharing-shared-label { display:block; margin-top:10px; margin-bottom:4px; }
+  .entry-sharing-panel-head { margin-bottom:8px; font-size:13px; color:var(--snow); }
+  .entry-sharing-owner-list { display:flex; flex-direction:column; gap:2px; max-height:120px; overflow-y:auto; margin-top:4px; padding-right:2px; }
+  .entry-sharing-owner-list label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); padding:4px 2px; cursor:pointer; }
+  .entry-sharing-owner-list input { width:15px; height:15px; min-width:15px; accent-color:var(--beacon); margin:0; }
+  .entry-sharing-users-scroll { max-height:140px; overflow-y:auto; margin-top:4px; padding-right:4px; border-top:1px solid var(--line); padding-top:8px; }
+  .entry-sharing-users-scroll label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); padding:4px 2px; cursor:pointer; }
   .entry-sharing-users-scroll input { width:15px; height:15px; min-width:15px; accent-color:var(--beacon); margin:0; }
-  .entry-sharing--popover { margin:0; padding:0; border:0; position:relative; }
-  .entry-sharing-trigger { padding:6px 10px; font-size:13px; max-width:132px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .entry-sharing-menu { position:fixed; z-index:300; min-width:240px; max-width:280px; padding:12px;
-    background:var(--lake-night); border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 28px rgba(0,0,0,.45); }
+  .entry-sharing--popover { margin:0; padding:0; border:0; }
+  .entry-sharing-trigger { padding:8px 10px; font-size:14px; width:100%; min-width:96px; max-width:118px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+  .entry-sharing-backdrop { position:fixed; inset:0; z-index:900; background:rgba(5,10,18,.55); }
+  .entry-sharing-menu { position:fixed; z-index:901; width:min(280px, calc(100vw - 24px)); padding:14px;
+    background:var(--harbor); border:1px solid var(--line); border-radius:12px; box-shadow:0 16px 40px rgba(0,0,0,.55); }
+  .entry-sharing-menu[hidden] { display:none !important; }
   .entry-sharing-menu select { width:100%; max-width:none; margin-top:4px; }
-  .entry-sharing-menu .entry-sharing-shared-label { margin-top:10px; }
-  .entry-sharing-cell { width:1%; white-space:nowrap; vertical-align:middle; padding-right:4px !important; }
+  .entry-sharing-cell { width:118px; max-width:118px; vertical-align:middle; padding-right:6px !important; }
   table.rows td.entry-sharing-cell .entry-sharing-trigger { display:block; }
   .slide-screen-checks { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:8px; }
   .slide-screen-checks label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); }
@@ -4235,36 +4241,93 @@ function entryAccessTriggerLabel(ownerId, sharedIds) {
   return label + ' · +' + sharedIds.length;
 }
 
+function entrySharingOwnerValue(root) {
+  const sel = root.querySelector('select[data-entry-sharing-owner]');
+  if (sel) return sel.value;
+  const checked = root.querySelector('[data-entry-sharing-owner]:checked');
+  return checked ? checked.value : '';
+}
+
+function syncEntrySharingSharedList(root) {
+  const ownerId = entrySharingOwnerValue(root);
+  root.querySelectorAll('[data-entry-sharing-user]').forEach(function (label) {
+    const uid = label.getAttribute('data-entry-sharing-user') || '';
+    const hide = ownerId !== '' && uid === ownerId;
+    label.hidden = hide;
+    if (hide) {
+      const cb = label.querySelector('[data-entry-sharing-shared]');
+      if (cb) cb.checked = false;
+    }
+  });
+}
+
 function syncEntrySharingTrigger(root) {
   const trigger = root.querySelector('[data-entry-sharing-trigger]');
-  const ownerSel = root.querySelector('[data-entry-sharing-owner]');
-  if (!trigger || !ownerSel) return;
+  if (!trigger) return;
   const shared = [];
   root.querySelectorAll('[data-entry-sharing-shared]:checked').forEach(function (cb) {
     shared.push(cb.value);
   });
-  trigger.textContent = entryAccessTriggerLabel(ownerSel.value, shared);
+  trigger.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared);
 }
 
-function positionEntrySharingMenu(root) {
+function positionEntrySharingMenu(root, menu, trigger) {
+  if (!trigger || !menu || menu.hidden) return;
+  const r = trigger.getBoundingClientRect();
+  const mh = menu.offsetHeight;
+  const mw = menu.offsetWidth;
+  let top = r.bottom + 8;
+  if (top + mh > window.innerHeight - 8) {
+    top = Math.max(8, r.top - mh - 8);
+  }
+  let left = r.right - mw;
+  left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
+  menu.style.top = top + 'px';
+  menu.style.left = left + 'px';
+}
+
+function entrySharingBackdrop() {
+  let backdrop = document.getElementById('entrySharingBackdrop');
+  if (!backdrop) {
+    backdrop = document.createElement('div');
+    backdrop.id = 'entrySharingBackdrop';
+    backdrop.className = 'entry-sharing-backdrop';
+    backdrop.hidden = true;
+    backdrop.addEventListener('click', function () { closeEntrySharingMenus(); });
+    document.body.appendChild(backdrop);
+  }
+  return backdrop;
+}
+
+function closeEntrySharingMenus() {
+  document.querySelectorAll('[data-entry-sharing-menu]').forEach(function (menu) {
+    menu.hidden = true;
+    const root = menu._sharingRoot;
+    if (root && menu.parentNode === document.body) {
+      root.appendChild(menu);
+    }
+    menu._sharingRoot = null;
+  });
+  const backdrop = document.getElementById('entrySharingBackdrop');
+  if (backdrop) backdrop.hidden = true;
+  document.querySelectorAll('[data-entry-sharing-trigger]').forEach(function (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function openEntrySharingMenu(root) {
   const trigger = root.querySelector('[data-entry-sharing-trigger]');
   const menu = root.querySelector('[data-entry-sharing-menu]');
-  if (!trigger || !menu || menu.hidden) return;
-  menu.style.visibility = 'hidden';
+  if (!trigger || !menu) return;
+  closeEntrySharingMenus();
+  menu._sharingRoot = root;
+  document.body.appendChild(menu);
   menu.hidden = false;
-  const r = trigger.getBoundingClientRect();
-  const mw = menu.offsetWidth;
-  const left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8));
-  menu.style.top = (r.bottom + 6) + 'px';
-  menu.style.left = left + 'px';
-  menu.style.visibility = '';
-}
-
-function closeEntrySharingMenus(exceptMenu) {
-  document.querySelectorAll('[data-entry-sharing-menu]').forEach(function (menu) {
-    if (exceptMenu && menu === exceptMenu) return;
-    menu.hidden = true;
-  });
+  trigger.setAttribute('aria-expanded', 'true');
+  syncEntrySharingSharedList(root);
+  positionEntrySharingMenu(root, menu, trigger);
+  const backdrop = entrySharingBackdrop();
+  backdrop.hidden = false;
 }
 
 function initEntrySharingPopovers(scope) {
@@ -4274,39 +4337,61 @@ function initEntrySharingPopovers(scope) {
     const trigger = root.querySelector('[data-entry-sharing-trigger]');
     const menu = root.querySelector('[data-entry-sharing-menu]');
     if (!trigger || !menu) return;
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
     trigger.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      const opening = menu.hidden;
-      closeEntrySharingMenus(opening ? menu : null);
-      menu.hidden = !opening;
-      if (!menu.hidden) positionEntrySharingMenu(root);
+      if (!menu.hidden && menu.parentNode === document.body) {
+        closeEntrySharingMenus();
+        return;
+      }
+      openEntrySharingMenu(root);
     });
     menu.addEventListener('click', function (e) { e.stopPropagation(); });
     root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared]').forEach(function (el) {
-      el.addEventListener('change', function () { syncEntrySharingTrigger(root); });
+      el.addEventListener('change', function () {
+        syncEntrySharingSharedList(root);
+        syncEntrySharingTrigger(root);
+      });
     });
   });
 }
 
-function entrySharingFieldsHtml(prefix, ownerId, sharedIds) {
+function entrySharingFieldsHtml(prefix, ownerId, sharedIds, popover) {
   const users = window.SHARING_USER_OPTIONS || [];
   ownerId = ownerId || '';
   sharedIds = sharedIds || [];
   const sharedSet = {};
   sharedIds.forEach(function (id) { sharedSet[id] = true; });
-  let html = '<label class="mini">Owner</label>';
-  html += '<select name="' + prefix + '[owner]" data-entry-sharing-owner><option value="">Super only</option>';
-  users.forEach(function (u) {
-    html += '<option value="' + u.id.replace(/"/g, '&quot;') + '"' + (ownerId === u.id ? ' selected' : '') + '>'
-      + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
-  });
-  html += '</select><span class="mini entry-sharing-shared-label">Also shared with</span>';
-  html += '<div class="entry-sharing-users-scroll entry-sharing-users">';
+  const formAttr = popover ? ' form="boardform"' : '';
+  const formAttr = popover ? ' form="boardform"' : '';
+  let html = popover ? '<div class="entry-sharing-panel-head"><strong>Access</strong></div>' : '';
+  html += '<label class="mini">Owner</label>';
+  if (popover) {
+    html += '<div class="entry-sharing-owner-list" data-entry-sharing-owner-list>';
+    html += '<label><input type="radio" name="' + prefix + '[owner]" value="" data-entry-sharing-owner'
+      + (ownerId === '' ? ' checked' : '') + formAttr + '> Super only</label>';
+    users.forEach(function (u) {
+      html += '<label><input type="radio" name="' + prefix + '[owner]" value="' + u.id.replace(/"/g, '&quot;') + '"'
+        + ' data-entry-sharing-owner' + (ownerId === u.id ? ' checked' : '') + formAttr + '> '
+        + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
+    });
+    html += '</div>';
+  } else {
+    html += '<select name="' + prefix + '[owner]" data-entry-sharing-owner><option value="">Super only</option>';
+    users.forEach(function (u) {
+      html += '<option value="' + u.id.replace(/"/g, '&quot;') + '"' + (ownerId === u.id ? ' selected' : '') + '>'
+        + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</option>';
+    });
+    html += '</select>';
+  }
+  html += '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+  html += '<div class="entry-sharing-users-scroll entry-sharing-users" data-entry-sharing-shared-list">';
   users.forEach(function (u) {
     if (ownerId && u.id === ownerId) return;
-    html += '<label><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
-      + ' data-entry-sharing-shared' + (sharedSet[u.id] ? ' checked' : '') + '> '
+    html += '<label data-entry-sharing-user="' + u.id.replace(/"/g, '&quot;') + '"><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
+      + ' data-entry-sharing-shared' + (sharedSet[u.id] ? ' checked' : '') + formAttr + '> '
       + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
   });
   html += '</div>';
@@ -4321,12 +4406,12 @@ function entrySharingHtml(prefix, ownerId, sharedIds, compact) {
     html += '<div class="entry-sharing entry-sharing--popover" data-entry-sharing>';
     html += '<button type="button" class="secondary entry-sharing-trigger" data-entry-sharing-trigger>'
       + entryAccessTriggerLabel(ownerId, sharedIds).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</button>';
-    html += '<div class="entry-sharing-menu" hidden data-entry-sharing-menu">';
-    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds);
+    html += '<div class="entry-sharing-menu" hidden data-entry-sharing-menu" role="dialog" aria-label="Access">';
+    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, true);
     html += '</div></div>';
   } else {
     html += '<div class="entry-sharing">';
-    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds);
+    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, false);
     html += '</div>';
   }
   return html;
@@ -4605,13 +4690,19 @@ document.addEventListener('DOMContentLoaded', function () {
   initKeyedBoardPreviews();
   initRotationDecks();
   initRotationGlobalAdd();
-  document.addEventListener('click', function () { closeEntrySharingMenus(); });
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-entry-sharing-menu], [data-entry-sharing-trigger], #entrySharingBackdrop')) return;
+    closeEntrySharingMenus();
+  });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeEntrySharingMenus();
   });
   window.addEventListener('resize', function () {
     document.querySelectorAll('[data-entry-sharing-menu]').forEach(function (menu) {
-      if (!menu.hidden) positionEntrySharingMenu(menu.closest('[data-entry-sharing]'));
+      if (menu.hidden || !menu._sharingRoot) return;
+      const root = menu._sharingRoot;
+      const trigger = root.querySelector('[data-entry-sharing-trigger]');
+      positionEntrySharingMenu(root, menu, trigger);
     });
   });
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {

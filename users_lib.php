@@ -550,27 +550,43 @@ function admin_entry_access_trigger_label(?array $entry): string
 }
 
 /** @param list<array{id:string,username:string}> $users */
-function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users): void
+function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users, bool $popover = false): void
 {
     $owner = admin_entry_owner($entry);
     $sharedSet = array_flip(admin_entry_shared_users($entry));
-    echo '<label class="mini">Owner</label>';
-    echo '<select name="' . h($prefix . '[owner]') . '" data-entry-sharing-owner>';
-    echo '<option value="">Super only</option>';
-    foreach ($users as $u) {
-        echo '<option value="' . h($u['id']) . '"' . ($owner === $u['id'] ? ' selected' : '') . '>'
-            . h($u['username']) . '</option>';
+    $formAttr = $popover ? ' form="boardform"' : '';
+    if ($popover) {
+        echo '<div class="entry-sharing-panel-head"><strong>Access</strong></div>';
     }
-    echo '</select>';
+    echo '<label class="mini">Owner</label>';
+    if ($popover) {
+        echo '<div class="entry-sharing-owner-list" data-entry-sharing-owner-list>';
+        echo '<label><input type="radio" name="' . h($prefix . '[owner]') . '" value="" data-entry-sharing-owner'
+            . ($owner === null ? ' checked' : '') . $formAttr . '> Super only</label>';
+        foreach ($users as $u) {
+            echo '<label><input type="radio" name="' . h($prefix . '[owner]') . '" value="' . h($u['id']) . '"'
+                . ' data-entry-sharing-owner'
+                . ($owner === $u['id'] ? ' checked' : '') . $formAttr . '> ' . h($u['username']) . '</label>';
+        }
+        echo '</div>';
+    } else {
+        echo '<select name="' . h($prefix . '[owner]') . '" data-entry-sharing-owner>';
+        echo '<option value="">Super only</option>';
+        foreach ($users as $u) {
+            echo '<option value="' . h($u['id']) . '"' . ($owner === $u['id'] ? ' selected' : '') . '>'
+                . h($u['username']) . '</option>';
+        }
+        echo '</select>';
+    }
     echo '<span class="mini entry-sharing-shared-label">Also shared with</span>';
-    echo '<div class="entry-sharing-users-scroll entry-sharing-users">';
+    echo '<div class="entry-sharing-users-scroll entry-sharing-users" data-entry-sharing-shared-list>';
     foreach ($users as $u) {
         if ($owner !== null && $u['id'] === $owner) {
             continue;
         }
-        echo '<label><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
+        echo '<label data-entry-sharing-user="' . h($u['id']) . '"><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
             . ' data-entry-sharing-shared'
-            . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
+            . (isset($sharedSet[$u['id']]) ? ' checked' : '') . $formAttr . '> ' . h($u['username']) . '</label>';
     }
     echo '</div>';
 }
@@ -591,12 +607,12 @@ function admin_entry_sharing_html(string $prefix, ?array $entry, bool $compact =
         echo '<div class="entry-sharing entry-sharing--popover" data-entry-sharing>';
         echo '<button type="button" class="secondary entry-sharing-trigger" data-entry-sharing-trigger>'
             . h($label) . '</button>';
-        echo '<div class="entry-sharing-menu" hidden data-entry-sharing-menu>';
-        admin_entry_sharing_fields($prefix, $entry, $users);
+        echo '<div class="entry-sharing-menu" hidden data-entry-sharing-menu role="dialog" aria-label="Access">';
+        admin_entry_sharing_fields($prefix, $entry, $users, true);
         echo '</div></div>';
     } else {
         echo '<div class="entry-sharing">';
-        admin_entry_sharing_fields($prefix, $entry, $users);
+        admin_entry_sharing_fields($prefix, $entry, $users, false);
         echo '</div>';
     }
 }
