@@ -2437,9 +2437,16 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
       <div class="sub">Changes save to <code>config/settings.json</code>.
-        <?php if ($board === 'rotation'): ?>
-          <a href="<?= h(rotation_screen_preview_url('main')) ?>" target="_blank" rel="noopener">Preview main rotation ↗</a>
-          · kiosk URL <code><?= h(rotation_screen_kiosk_url('main')) ?></code>
+        <?php if ($board === 'rotation'):
+          $rotationHeaderScreen = admin_operator_screen_locked()
+              ? (string)(admin_operator_screen_key() ?? '')
+              : 'main';
+          if ($rotationHeaderScreen !== ''): ?>
+          <a href="<?= h(rotation_screen_preview_url($rotationHeaderScreen)) ?>" target="_blank" rel="noopener"><?= admin_operator_screen_locked() ? 'Preview your rotation ↗' : 'Preview main rotation ↗' ?></a>
+          · kiosk URL <code><?= h(rotation_screen_kiosk_url($rotationHeaderScreen)) ?></code>
+          <?php else: ?>
+          <span class="help" style="margin:0">No display assigned — ask a super admin under <strong>Users</strong>.</span>
+          <?php endif; ?>
         <?php elseif ($board === 'splunk'): ?>
           Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
         <?php elseif ($board === 'grafana'): ?>
@@ -2803,7 +2810,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                     $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
                 }
             }
-            $playlistOpen = $screenKey === 'main' && $pageCount <= 6;
+            $playlistOpen = admin_operator_screen_locked()
+                ? $screenKey === admin_operator_screen_key()
+                : ($screenKey === 'main' && $pageCount <= 6);
           ?>
           <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $playlistOpen ? ' open' : '' ?>>
             <summary>
