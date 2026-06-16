@@ -221,6 +221,15 @@ if ($authed && $board === 'video' && isset($_GET['deleted'])) {
     }
 }
 
+if ($authed && $board === 'video' && isset($_GET['uploaded'])) {
+    $uploaded = video_normalize_key((string)$_GET['uploaded']);
+    if ($uploaded !== null) {
+        $flash = 'Uploaded video "' . $uploaded . '". '
+            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+        $flashOk = true;
+    }
+}
+
 if ($authed && $board === 'rss' && isset($_GET['deleted'])) {
     $deleted = admin_normalize_registry_key((string)$_GET['deleted']);
     if ($deleted !== null) {
@@ -1105,6 +1114,61 @@ if ($authed && $board === 'video' && admin_can_board('video')) {
                 }
                 $flash = (string)($result['error'] ?? 'Could not delete video.');
                 $flashOk = false;
+            }
+        }
+    } elseif (($_POST['action'] ?? '') === 'upload_video') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } elseif (!isset($_FILES['video'])) {
+            $flash = 'Upload did not arrive — the file may exceed PHP post_max_size ('
+                . ini_get('post_max_size') . '). Videos allow up to ' . video_upload_max_label()
+                . ' — raise post_max_size and upload_max_filesize on the server.';
+            $flashOk = false;
+        } else {
+            $videoDir = video_dir();
+            if (!is_dir($videoDir)) {
+                @mkdir($videoDir, 0775, true);
+            }
+            protect_dirs();
+            $rawKey = trim((string)($_POST['video_key'] ?? ''));
+            if ($rawKey === '') {
+                $rawKey = pathinfo((string)($_FILES['video']['name'] ?? ''), PATHINFO_FILENAME);
+            }
+            $key = video_normalize_key($rawKey);
+            if ($key === null) {
+                $flash = 'Enter a valid key (letters, numbers, hyphen, underscore).';
+                $flashOk = false;
+            } else {
+                $registry = is_array($rawConf['video.VIDEOS'] ?? null) ? $rawConf['video.VIDEOS'] : [];
+                if (admin_registry_find_entry($registry, $key) !== null
+                    && !admin_can_delete_registry_entry($registry, $key)) {
+                    $flash = 'You do not have permission to replace that video.';
+                    $flashOk = false;
+                } else {
+                    $saved = video_save_upload($_FILES['video'], $videoDir, $key);
+                    if (empty($saved['ok'])) {
+                        $flash = (string)($saved['error'] ?? 'Could not save upload.');
+                        $flashOk = false;
+                    } else {
+                        $title = trim((string)($_POST['video_title'] ?? ''));
+                        $registered = video_register_upload($key, (string)$saved['name'], $title !== '' ? ['title' => $title] : []);
+                        if (empty($registered['ok'])) {
+                            @unlink($videoDir . '/' . basename((string)$saved['name']));
+                            $flash = (string)($registered['error'] ?? 'Could not update playlist.');
+                            $flashOk = false;
+                        } else {
+                            $screens = admin_filter_deploy_screens(admin_default_deploy_screens());
+                            foreach ($screens as $screen) {
+                                $sync = video_sync_rotation($screen);
+                                rotation_pages_write($sync['screen'], $sync['pages']);
+                            }
+                            cfg_reload();
+                            header('Location: ?board=video&uploaded=' . rawurlencode((string)$registered['key']));
+                            exit;
+                        }
+                    }
+                }
             }
         }
     }
@@ -3334,11 +3398,28 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $videosRegistryFull = is_array($rawConf['video.VIDEOS'] ?? null) ? $rawConf['video.VIDEOS'] : [];
           $mutedVal = current_val($rawConf, $board, 'MUTED');
         ?>
+          <?php if (admin_is_super()): ?>
           <div class="field" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--harbor)">
             <label class="check"><input type="checkbox" name="MUTED"
               <?= ($mutedVal ?? true) ? 'checked' : '' ?>> Mute all videos</label>
-            <div class="help" style="margin-top:8px;margin-bottom:0">Leave checked for silent wall displays. Uncheck to play audio —
+            <div class="help" style="margin-top:8px;margin-bottom:0">Global setting for every display. Leave checked for silent wall displays. Uncheck to play audio —
               Pi/kiosk boxes must be set up with <code>setup-kiosk.sh</code> (autoplay policy is already included).</div>
+          </div>
+          <?php endif; ?>
+
+          <div class="upload-box" style="margin-bottom:18px">
+            <h3 style="margin:0 0 10px">Upload video</h3>
+            <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=video">
+              <input type="hidden" name="action" value="upload_video">
+              <input type="hidden" name="board" value="video">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="text" name="video_key" placeholder="Key (e.g. lantern)" style="min-width:140px" aria-label="Video key">
+              <input type="text" name="video_title" placeholder="Title (optional)" style="min-width:160px" aria-label="Video title">
+              <input type="file" name="video" accept="video/mp4,video/webm,video/x-matroska,.mp4,.webm,.mkv" required>
+              <button class="save" type="submit">Upload</button>
+            </form>
+            <div class="help" style="margin-top:10px;margin-bottom:0">MP4, WebM, or MKV up to <?= h(video_upload_max_label()) ?>.
+              Key defaults from the filename if left blank. Adds the video to your playlist and syncs rotation on your display.</div>
           </div>
 
           <div class="section-title">Video playlist</div>
@@ -3348,7 +3429,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             listed in <strong>Admin → Rotation</strong> as <code>video.php?v=KEY</code> — or check the box below to add them automatically.</div>
           <?php else: ?>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
-            and a <strong>local file</strong> in <code>videos/</code> (e.g. <code>lantern.mp4</code>). YouTube downloads are managed by a super admin.
+            and a <strong>local file</strong> in <code>videos/</code> — upload above or type the filename. YouTube downloads are managed by a super admin.
             After saving, add videos to your display via the deploy checkbox below or <strong>Admin → Rotation</strong>.</div>
           <?php endif; ?>
 

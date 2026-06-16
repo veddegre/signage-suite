@@ -56,6 +56,177 @@ function video_duration(string $path): ?float
     return $d > 0 ? $d : null;
 }
 
+/** Max local video upload size enforced by admin (bytes). Matches setup-server.sh upload_max_filesize. */
+function video_upload_max_bytes(): int
+{
+    return 20 * 1024 * 1024;
+}
+
+function video_upload_max_label(): string
+{
+    return '20 MB';
+}
+
+function video_upload_error_message(int $code): string
+{
+    return match ($code) {
+        UPLOAD_ERR_INI_SIZE => 'Video exceeds PHP upload_max_filesize ('
+            . ini_get('upload_max_filesize') . '). Videos allow up to '
+            . video_upload_max_label() . ' — raise upload_max_filesize and post_max_size on the server.',
+        UPLOAD_ERR_FORM_SIZE => 'Video exceeds the form upload limit.',
+        UPLOAD_ERR_PARTIAL => 'Upload was interrupted — try again.',
+        UPLOAD_ERR_NO_FILE => 'No file was selected.',
+        UPLOAD_ERR_NO_TMP_DIR => 'Server temp directory missing — check PHP upload_tmp_dir.',
+        UPLOAD_ERR_CANT_WRITE => 'Server could not write the upload — check disk permissions.',
+        UPLOAD_ERR_EXTENSION => 'A PHP extension blocked the upload.',
+        default => 'Upload failed (error ' . $code . ') — try again.',
+    };
+}
+
+function video_upload_extension(string $tmpPath, string $origName): ?string
+{
+    $extMap = [
+        'video/mp4' => 'mp4',
+        'video/webm' => 'webm',
+        'video/x-matroska' => 'mkv',
+    ];
+    if ($tmpPath !== '' && is_file($tmpPath)) {
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($tmpPath) ?: '';
+        if (isset($extMap[$mime])) {
+            return $extMap[$mime];
+        }
+        if ($mime === 'application/octet-stream') {
+            $guess = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (in_array($guess, ['mp4', 'webm', 'mkv'], true)) {
+                return $guess;
+            }
+        }
+    }
+
+    return match (strtolower(pathinfo($origName, PATHINFO_EXTENSION))) {
+        'mp4' => 'mp4',
+        'webm' => 'webm',
+        'mkv' => 'mkv',
+        default => null,
+    };
+}
+
+function video_unique_filename(string $base, string $ext, ?string $dir = null): string
+{
+    $dir = $dir ?? video_dir();
+    $base = preg_replace('/[^a-zA-Z0-9._-]+/', '-', $base);
+    $base = trim($base, '-._');
+    if ($base === '') {
+        $base = 'video';
+    }
+    $name = $base . '.' . $ext;
+    if (!is_file($dir . '/' . $name)) {
+        return $name;
+    }
+
+    return $base . '-' . substr(bin2hex(random_bytes(3)), 0, 6) . '.' . $ext;
+}
+
+/**
+ * Save one uploaded video file into videos/.
+ * @return array{ok:bool,name?:string,error?:string}
+ */
+function video_save_upload(array $file, ?string $dir = null, ?string $preferBase = null): array
+{
+    $dir = $dir ?? video_dir();
+    $max = video_upload_max_bytes();
+    $err = (int)($file['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($err !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'error' => video_upload_error_message($err)];
+    }
+    if (($file['size'] ?? 0) > $max) {
+        return ['ok' => false, 'error' => 'Video must be under ' . video_upload_max_label() . '.'];
+    }
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        return ['ok' => false, 'error' => 'Could not create ' . $dir . ' — check permissions.'];
+    }
+    $tmp = (string)($file['tmp_name'] ?? '');
+    $orig = (string)($file['name'] ?? 'video.mp4');
+    $ext = video_upload_extension($tmp, $orig);
+    if ($ext === null) {
+        return ['ok' => false, 'error' => 'Only MP4, WebM, or MKV videos are allowed.'];
+    }
+    $base = $preferBase !== null && $preferBase !== ''
+        ? $preferBase
+        : pathinfo($orig, PATHINFO_FILENAME);
+    $name = video_unique_filename((string)$base, $ext, $dir);
+    if (!@move_uploaded_file($tmp, $dir . '/' . $name)) {
+        return ['ok' => false, 'error' => 'Could not write to ' . $dir . ' — check permissions.'];
+    }
+
+    return ['ok' => true, 'name' => $name];
+}
+
+/**
+ * Register or update a playlist row for an uploaded file.
+ * @return array{ok:bool,key?:string,error?:string}
+ */
+function video_register_upload(string $key, string $filename, array $extra = []): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    $safeKey = video_normalize_key($key);
+    $filename = basename($filename);
+    if ($safeKey === null || $filename === '' || !preg_match('/\.(mp4|webm|mkv)$/i', $filename)) {
+        return ['ok' => false, 'error' => 'Invalid video key or filename.'];
+    }
+
+    $registry = video_registry();
+    $prev = is_array($registry[$safeKey] ?? null) ? $registry[$safeKey] : null;
+    if ($prev !== null && !admin_is_super() && !admin_entry_visible($prev)) {
+        return ['ok' => false, 'error' => 'You do not have permission to update that video.'];
+    }
+
+    $oldFiles = $prev !== null ? video_entry_disk_files($safeKey, $prev) : [];
+
+    $row = ['file' => $filename];
+    $title = trim((string)($extra['title'] ?? ''));
+    if ($title !== '') {
+        $row['title'] = $title;
+    }
+    if ($prev !== null && isset($prev['youtube']) && trim((string)$prev['youtube']) !== '') {
+        $row['youtube'] = (string)$prev['youtube'];
+    }
+
+    if (!cfg_update(function (array $conf) use ($safeKey, $row, $prev): array|false {
+        $registry = $conf['video.VIDEOS'] ?? [];
+        if (!is_array($registry)) {
+            $registry = [];
+        }
+        $existing = is_array($registry[$safeKey] ?? null) ? $registry[$safeKey] : null;
+        if ($existing !== null && !admin_is_super() && !admin_entry_visible($existing)) {
+            return false;
+        }
+        $registry[$safeKey] = admin_stamp_owner($row, $existing ?? $prev);
+        $conf['video.VIDEOS'] = $registry;
+
+        return $conf;
+    })) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
+
+    $registry = video_registry();
+    foreach ($oldFiles as $basename) {
+        if ($basename === $filename) {
+            continue;
+        }
+        if (!video_registry_references_file($registry, $basename)) {
+            $path = video_dir() . '/' . $basename;
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    return ['ok' => true, 'key' => $safeKey];
+}
+
 function video_ytdlp_local_bin_path(): string
 {
     return __DIR__ . '/bin/yt-dlp';
