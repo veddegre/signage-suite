@@ -848,6 +848,9 @@ function admin_can_board(string $board): bool
     if ($board === 'account') {
         return admin_is_authenticated();
     }
+    if ($board === 'status') {
+        return admin_is_authenticated() && admin_can_board('rotation');
+    }
     if ($board === 'tools' || $board === 'users') {
         return admin_is_super();
     }

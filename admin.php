@@ -131,7 +131,7 @@ if ($authed && !signage_admin_idle_check()) {
 
 // ── Save handler ─────────────────────────────────────────────────────────────
 $board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));
-$virtualBoards = ['tools', 'users', 'account'];
+$virtualBoards = ['tools', 'users', 'account', 'status'];
 if ($board === '') {
     $board = $authed ? admin_default_board() : (string)array_key_first($schema);
 } elseif (!isset($schema[$board]) && !in_array($board, $virtualBoards, true)) {
@@ -143,6 +143,7 @@ if ($authed) {
 $tools = ($board === 'tools');
 $usersBoard = ($board === 'users');
 $accountBoard = ($board === 'account');
+$statusBoard = ($board === 'status');
 
 if ($authed && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $contentLen = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
@@ -185,7 +186,7 @@ if ($authed && $board === 'splunk' && admin_can_board('splunk') && ($_POST['acti
     exit;
 }
 
-if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'presence') {
+if ($authed && in_array($board, ['rotation', 'status'], true) && ($_GET['action'] ?? '') === 'presence') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
     echo json_encode(admin_filter_presence_dashboard(signage_presence_dashboard()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1316,52 +1317,98 @@ function admin_deploy_picker_from_screens(array $screens, array $checked, array 
     ], $cfg));
 }
 
-/** Per-display photo rotator sync — rendered on Rotation; deploy actions stay on Photo Rotator. */
+/** Per-display photo rotator sync — shown on Status page. */
 function admin_rotator_sync_panel(array $deployStatus, array $deckStats, string $deployMode, ?string $removeFormId = null): void
 {
     if ($deployStatus === []) {
         return;
     }
-    $gridId = 'rotation-photos-deploy-grid';
+    $gridId = 'status-photos-deploy-grid';
     ?>
-    <details class="panel panel-muted" style="margin-bottom:16px">
-      <summary>Photo rotator sync (<?= (int)$deckStats['on_disk'] ?> in deck)</summary>
-      <div class="panel-body" style="padding-top:8px">
-        <div class="help" style="margin-bottom:12px">
-          Sync status by display (<strong><?= h($deployMode) ?></strong> mode, <?= (int)$deckStats['playlist_entries'] ?> playlist entr<?= (int)$deckStats['playlist_entries'] === 1 ? 'y' : 'ies' ?>).
-          Deploy from <a href="?board=rotator&amp;tab=deploy">Photo Rotator → Deploy</a>.
-          <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px;margin-left:6px" href="<?= h(signage_board_preview_url('rotator.php')) ?>" target="_blank" rel="noopener">Preview slideshow ↗</a>
-        </div>
-        <input type="search" class="deploy-filter" placeholder="Filter displays…" autocomplete="off" data-deploy-filter="<?= h($gridId) ?>">
-        <div class="slides-deploy-grid" id="<?= h($gridId) ?>">
-          <?php foreach ($deployStatus as $screenKey => $dep): ?>
-          <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
-            <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
-            <div class="deploy-detail">
-              <?php if ($dep['mirrors_main']): ?>
-                <span class="pill">Mirrors main</span>
-              <?php elseif ($dep['on_playlist']): ?>
-                <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
-              <?php elseif ($dep['partial'] ?? false): ?>
-                <span class="pill warn">Partial</span>
-              <?php else: ?>
-                <span class="pill warn">Not deployed</span>
-              <?php endif; ?>
-            </div>
-            <div class="deploy-actions">
-              <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
-                 href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
-              <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
-              <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
-                      form="<?= h($removeFormId) ?>" name="action" value="remove_photos_rotation"
-                      onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove photos from <?= h($dep['name']) ?>?');">Remove</button>
-              <?php endif; ?>
-            </div>
-          </div>
-          <?php endforeach; ?>
-        </div>
+    <section class="status-section">
+      <h2 style="font-size:22px;margin-bottom:6px">Photo rotator</h2>
+      <div class="help" style="margin-bottom:12px">
+        <?= (int)$deckStats['on_disk'] ?> in deck · <strong><?= h($deployMode) ?></strong> mode ·
+        <?= (int)$deckStats['playlist_entries'] ?> playlist entr<?= (int)$deckStats['playlist_entries'] === 1 ? 'y' : 'ies' ?>.
+        Deploy from <a href="?board=rotator&amp;tab=deploy">Photo Rotator → Deploy</a>.
+        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px;margin-left:6px" href="<?= h(signage_board_preview_url('rotator.php')) ?>" target="_blank" rel="noopener">Preview slideshow ↗</a>
       </div>
-    </details>
+      <input type="search" class="deploy-filter" placeholder="Filter displays…" autocomplete="off" data-deploy-filter="<?= h($gridId) ?>">
+      <div class="slides-deploy-grid" id="<?= h($gridId) ?>">
+        <?php foreach ($deployStatus as $screenKey => $dep): ?>
+        <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
+          <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
+          <div class="deploy-detail">
+            <?php if ($dep['mirrors_main']): ?>
+              <span class="pill">Mirrors main</span>
+            <?php elseif ($dep['on_playlist']): ?>
+              <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
+            <?php elseif ($dep['partial'] ?? false): ?>
+              <span class="pill warn">Partial</span>
+            <?php else: ?>
+              <span class="pill warn">Not deployed</span>
+            <?php endif; ?>
+          </div>
+          <div class="deploy-actions">
+            <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+               href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+            <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
+            <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+                    form="<?= h($removeFormId) ?>" name="action" value="remove_photos_rotation"
+                    onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove photos from <?= h($dep['name']) ?>?');">Remove</button>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </section>
+    <?php
+}
+
+/** Per-display custom slides sync — shown on Status page. */
+function admin_slides_sync_panel(array $deployStatus, array $deckStats, ?string $removeFormId = null): void
+{
+    if ($deployStatus === []) {
+        return;
+    }
+    $gridId = 'status-slides-deploy-grid';
+    ?>
+    <section class="status-section">
+      <h2 style="font-size:22px;margin-bottom:6px">Custom slides</h2>
+      <div class="help" style="margin-bottom:12px">
+        <?= (int)$deckStats['on_disk'] ?> in deck · <?= (int)$deckStats['active_now'] ?> active now.
+        Deploy from <a href="?board=slides&amp;tab=deploy">Custom Slides → Deploy</a>.
+        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px;margin-left:6px" href="slides.php" target="_blank" rel="noopener">Preview deck ↗</a>
+      </div>
+      <input type="search" class="deploy-filter" placeholder="Filter displays…" autocomplete="off" data-deploy-filter="<?= h($gridId) ?>">
+      <div class="slides-deploy-grid" id="<?= h($gridId) ?>">
+        <?php foreach ($deployStatus as $screenKey => $dep): ?>
+        <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
+          <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
+          <div class="deploy-detail">
+            <?php if ($dep['mirrors_main']): ?>
+              <span class="pill">Mirrors main</span>
+            <?php elseif ($dep['on_playlist']): ?>
+              <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
+            <?php elseif ($dep['partial'] ?? false): ?>
+              <span class="pill warn">Partial</span>
+            <?php else: ?>
+              <span class="pill warn">Not deployed</span>
+            <?php endif; ?>
+          </div>
+          <div class="deploy-actions">
+            <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+               href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+            <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
+            <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+                    form="<?= h($removeFormId) ?>" name="action" value="remove_slides_rotation"
+                    onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove slides from <?= h($dep['name']) ?>?');">Remove</button>
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </section>
     <?php
 }
 
@@ -1548,8 +1595,8 @@ function admin_field(array $f, $val, string $board): void
   .rotation-card-edit[open] > summary { color:var(--beacon); }
   .rotation-card-head .rotation-card-head-meta { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin-left:auto; }
   #slide-deck-panel, #slide-library-panel, #add-slides-panel, #slides-deploy-panel { scroll-margin-top:12px; }
-  .slides-deploy-panel .deploy-stats { display:flex; flex-wrap:wrap; gap:8px 16px; margin-bottom:14px; font-size:14px; color:var(--mist); }
-  .slides-deploy-panel .deploy-stats strong { color:var(--snow); }
+  .status-section { margin-bottom:28px; padding-bottom:22px; border-bottom:1px solid var(--line); }
+  .status-section:last-child { border-bottom:0; margin-bottom:0; padding-bottom:0; }
   .slides-deploy-grid { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
   .slides-deploy-row { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--lake-night); }
   .slides-deploy-row .deploy-row-title { min-width:140px; font-size:14px; color:var(--snow); }
@@ -1872,24 +1919,25 @@ function admin_field(array $f, $val, string $board): void
         if (!isset($schema[$k])) continue;
         $navSeen[$k] = true;
       ?>
-        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && !$usersBoard && !$accountBoard && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
+        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && !$usersBoard && !$accountBoard && !$statusBoard && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
       <?php endforeach; ?>
     <?php endforeach;
     foreach ($schema as $k => $b) {
         if (!empty($navSeen[$k])) continue;
-        echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && !$usersBoard && !$accountBoard && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
+        echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && !$usersBoard && !$accountBoard && !$statusBoard && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
     }
     ?>
     <div class="sep"></div>
     <?php if (admin_can_manage_users()): ?>
     <a href="?board=users" class="<?= $usersBoard ? 'active' : '' ?>">Users</a>
     <?php endif; ?>
+    <a href="?board=status" class="<?= $statusBoard ? 'active' : '' ?>">Status</a>
     <a href="?board=account" class="<?= $accountBoard ? 'active' : '' ?>">Account</a>
     <?php if (admin_can_tools()): ?>
     <a href="?board=tools" class="<?= $tools ? 'active' : '' ?>">Tools</a>
     <?php endif; ?>
   </nav>
-  <main<?= (!$tools && in_array($board, ['slides', 'rotation'], true)) ? ' class="main-wide"' : '' ?>>
+  <main<?= (!$tools && in_array($board, ['slides', 'rotation', 'status'], true)) ? ' class="main-wide"' : '' ?>>
     <?php if ($flash): ?><div class="flash<?= $flashOk ? '' : ' bad' ?>"><?= h($flash) ?></div><?php endif; ?>
 
     <?php if ($tools): ?>
@@ -1905,6 +1953,37 @@ function admin_field(array $f, $val, string $board): void
       <h2 style="font-size:22px">config/settings.json</h2>
       <div class="sub">Only keys that differ from board defaults are stored. Edit by hand if you like — boards pick it up on next render.</div>
       <pre class="raw"><?= h(json_encode($rawConf, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}') ?></pre>
+
+    <?php elseif ($statusBoard): ?>
+      <h2>Status</h2>
+      <div class="sub">Live kiosk health and deck-to-rotation sync. Deploy actions stay on each media board.</div>
+
+      <section class="status-section">
+        <h2 style="font-size:22px;margin-bottom:6px">Sign status</h2>
+        <div class="help" style="margin-bottom:10px">Kiosks report while <code>board.php</code> is open (~30s). Offline = no heartbeat in <?= (int)SIGNAGE_PRESENCE_STALE_SEC ?>s.</div>
+        <div id="presencePanel" class="presence-panel">
+          <p class="help">Loading sign status…</p>
+        </div>
+        <div id="playLogPanel"></div>
+      </section>
+
+      <?php if (admin_can_board('slides')): ?>
+      <form id="slidesSyncRemoveForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="remove_screen" id="slidesSyncRemoveFormScreen" value="">
+      </form>
+      <?php admin_slides_sync_panel($slidesDeployStatus, $slidesDeckStats, 'slidesSyncRemoveForm'); ?>
+      <?php endif; ?>
+
+      <?php if (admin_can_board('rotator')): ?>
+      <form id="rotatorSyncRemoveForm" method="post" action="?board=rotator" hidden>
+        <input type="hidden" name="board" value="rotator">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="remove_screen" id="rotatorSyncRemoveFormScreen" value="">
+      </form>
+      <?php admin_rotator_sync_panel($rotatorDeployStatus, $rotatorDeckStats, rotator_deploy_mode(), 'rotatorSyncRemoveForm'); ?>
+      <?php endif; ?>
 
     <?php elseif ($accountBoard): ?>
       <h2>Account</h2>
@@ -2234,17 +2313,6 @@ function admin_field(array $f, $val, string $board): void
               }
           }
         ?>
-          <details class="panel" open style="margin-bottom:16px">
-            <summary>Sign status &amp; play log</summary>
-            <div class="panel-body" style="padding-top:8px">
-          <div class="help" style="margin-bottom:10px">Kiosks report while <code>board.php</code> is open (~30s). Offline = no heartbeat in <?= (int)SIGNAGE_PRESENCE_STALE_SEC ?>s.</div>
-          <div id="presencePanel" class="presence-panel">
-            <p class="help">Loading sign status…</p>
-          </div>
-          <div id="playLogPanel"></div>
-            </div>
-          </details>
-
           <?php if (admin_is_super()): ?>
           <details class="panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
@@ -2287,15 +2355,6 @@ function admin_field(array $f, $val, string $board): void
           </details>
           <?php elseif ($rotationScreens === []): ?>
           <div class="flash bad" style="margin-bottom:16px">No displays assigned to your account — ask a super admin to assign screens under <strong>Users</strong>.</div>
-          <?php endif; ?>
-
-          <?php if (admin_can_board('rotator')): ?>
-          <form id="rotatorSyncRemoveForm" method="post" action="?board=rotator" hidden>
-            <input type="hidden" name="board" value="rotator">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="remove_screen" id="rotatorSyncRemoveFormScreen" value="">
-          </form>
-          <?php admin_rotator_sync_panel($rotatorDeployStatus, $rotatorDeckStats, rotator_deploy_mode(), 'rotatorSyncRemoveForm'); ?>
           <?php endif; ?>
 
           <div class="section-title">Playlists</div>
@@ -3481,7 +3540,7 @@ function admin_field(array $f, $val, string $board): void
       </form>
       <?php if ($board === 'rotator'): ?>
       <div class="admin-tab-panel<?= $rotatorTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="photos-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push the current deck to rotation on selected displays. Per-display sync status lives on <a href="?board=rotation">Rotation → Photo rotator sync</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
+            <p class="help" style="margin-bottom:12px">Push the current deck to rotation on selected displays. Sync status is on <a href="?board=status">Status</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
             <form method="post" action="?board=rotator" class="slides-deploy-form">
               <input type="hidden" name="board" value="rotator">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -3516,12 +3575,7 @@ function admin_field(array $f, $val, string $board): void
       <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push slides to rotation immediately. Or check displays in the Save bar above and click <strong>Save</strong>.</p>
-            <div class="deploy-stats">
-              <span><strong><?= (int)$slidesDeckStats['on_disk'] ?></strong> in deck</span>
-              <span><strong><?= (int)$slidesDeckStats['active_now'] ?></strong> active now</span>
-              <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="slides.php" target="_blank" rel="noopener">Preview deck ↗</a>
-            </div>
+            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Sync status is on <a href="?board=status">Status</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -3535,36 +3589,7 @@ function admin_field(array $f, $val, string $board): void
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
-              <input type="search" class="deploy-filter" placeholder="Filter status list…" autocomplete="off" data-deploy-filter="slides-deploy-grid">
-              <div class="slides-deploy-grid" id="slides-deploy-grid">
-                <?php foreach ($slidesDeployStatus as $screenKey => $dep): ?>
-                <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
-                  <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
-                  <div class="deploy-detail">
-                    <?php if ($dep['mirrors_main']): ?>
-                      <span class="pill">Mirrors main</span>
-                    <?php elseif ($dep['on_playlist']): ?>
-                      <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
-                    <?php elseif ($dep['partial'] ?? false): ?>
-                      <span class="pill warn">Partial</span>
-                    <?php else: ?>
-                      <span class="pill warn">Not deployed</span>
-                    <?php endif; ?>
-                  </div>
-                  <div class="deploy-actions">
-                    <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
-                       href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
-                    <?php if (($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
-                    <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
-                            name="action" value="remove_slides_rotation"
-                            onclick="this.form.remove_screen.value='<?= h($screenKey) ?>'; return confirm('Remove slides from <?= h($dep['name']) ?>?');">Remove</button>
-                    <?php endif; ?>
-                  </div>
-                </div>
-                <?php endforeach; ?>
-              </div>
-              <input type="hidden" name="remove_screen" value="">
-              <div class="slides-deploy-tools">
+              <div class="slides-deploy-tools" style="margin-top:14px">
                 <button class="save" type="submit" name="action" value="deploy_slides">Deploy now</button>
               </div>
             </form>
@@ -5242,7 +5267,7 @@ function initPresencePanel() {
   }
 
   function load() {
-    fetch('admin.php?board=rotation&action=presence', { cache: 'no-store' })
+    fetch('admin.php?board=status&action=presence', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(render)
       .catch(function () {});
