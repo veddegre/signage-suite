@@ -1922,6 +1922,14 @@ function admin_field(array $f, $val, string $board): void
   .deck-bulk-bar[hidden] { display:none !important; }
   .deck-bulk-bar .deck-bulk-remove { border-color:rgba(255,107,107,.45); color:#ffb3b3; }
   .deck-bulk-bar .deck-bulk-remove:hover { background:rgba(255,107,107,.12); }
+  .deck-selection-bar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-bottom:12px; padding:10px 14px;
+                        background:rgba(255,179,71,.06); border:1px solid rgba(255,179,71,.28); border-radius:10px; font-size:13px; }
+  .deck-selection-count { font-weight:600; color:var(--snow); min-width:88px; }
+  .deck-selection-sep { color:var(--line); user-select:none; }
+  .deck-selection-assign { display:flex; align-items:center; gap:8px; margin:0; color:var(--snow); white-space:nowrap; }
+  .slide-card-select { flex-shrink:0; display:flex; align-items:flex-start; padding:2px 0 0; cursor:pointer; }
+  .slide-card-select input { width:16px; height:16px; accent-color:var(--beacon); cursor:pointer; margin:0; }
+  .slide-card.is-selected { border-color:var(--beacon); box-shadow:0 0 0 1px rgba(255,179,71,.22); }
   .deck-filter-empty { padding:24px; text-align:center; color:var(--mist); border:1px dashed var(--line); border-radius:10px; }
   .deck-list-compact { gap:8px; }
   .deck-list-compact .slide-card { padding:10px 12px; }
@@ -3803,7 +3811,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px">Drag to reorder. Use the toolbar to filter by display or search; expand a card only when you need to edit. Set <strong>Sec</strong> on each card for dwell time. New images go on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
+          <div class="help" style="margin-bottom:12px">Check slides, choose a display in <strong>Assign to</strong>, then add them to that screen. Filter and search to narrow the list; expand a card only when you need to edit. Set <strong>Sec</strong> for dwell time. New images on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -3826,6 +3834,23 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             <button type="button" class="secondary" id="slideDeckExpandAll" style="padding:6px 12px;font-size:13px">Expand all</button>
             <button type="button" class="secondary" id="slideDeckCollapseAll" style="padding:6px 12px;font-size:13px">Collapse all</button>
             <span class="deck-toolbar-count" id="slideDeckCount"></span>
+          </div>
+          <div class="deck-selection-bar" id="slideDeckSelectionBar">
+            <span class="deck-selection-count" id="slideDeckSelectionCount">0 selected</span>
+            <button type="button" class="secondary" id="slideDeckSelectVisible" style="padding:6px 12px;font-size:13px">Select visible</button>
+            <button type="button" class="secondary" id="slideDeckClearSelection" style="padding:6px 12px;font-size:13px">Clear</button>
+            <span class="deck-selection-sep" aria-hidden="true">|</span>
+            <label class="deck-selection-assign">Assign to
+              <select id="slideDeckAssignScreen" class="deck-toolbar-select" aria-label="Target display for selected slides">
+                <option value="">Choose display…</option>
+                <?php foreach ($slideScreenOptions as $opt): ?>
+                <option value="<?= h($opt['key']) ?>"><?= h($opt['name']) ?> (<?= h($opt['key']) ?>)</option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <button type="button" class="secondary" id="slideDeckSelectedAdd" style="padding:6px 12px;font-size:13px">Add to display</button>
+            <button type="button" class="secondary" id="slideDeckSelectedOnly" style="padding:6px 12px;font-size:13px">Only this display</button>
+            <button type="button" class="secondary deck-bulk-remove" id="slideDeckSelectedRemove" style="padding:6px 12px;font-size:13px">Remove from display</button>
           </div>
           <div class="deck-bulk-bar" id="slideDeckBulkBar" hidden>
             <span id="slideDeckBulkLabel">Bulk assign visible slides:</span>
@@ -3867,6 +3892,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                  data-slide-screens="<?= h($dataScreens) ?>"
                  data-slide-search="<?= h($searchBlob) ?>"<?= !empty($row['off']) ? ' data-slide-off="1"' : '' ?>>
               <div class="slide-card-head slide-card-head-with-thumb">
+                <label class="slide-card-select" title="Select for display assignment">
+                  <input type="checkbox" data-slide-select aria-label="Select slide">
+                </label>
                 <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
                 <?php if ($thumbUrl): ?>
                 <a href="<?= h($previewUrl ?? $thumbUrl) ?>" target="_blank" rel="noopener" title="Preview slide">
@@ -4882,6 +4910,7 @@ function initSlideDeck() {
   bindPlaylistDeckDrag(deck, '[data-slide-card]', '.drag-handle', reindexSlideDeck, function (card, d) {
     bindPlaylistCardHandle(card, d, '.drag-handle', reindexSlideDeck);
     bindSlideCard(card);
+    bindSlideCardSelection(card);
   });
   initSlideDeckToolbar();
   const hl = deck.querySelector('.slide-card-highlight');
@@ -5275,12 +5304,98 @@ function slideDeckBulkRemove() {
   applySlideDeckFilters();
 }
 
+function slideDeckAssignScreenLabel(screenKey) {
+  if (!screenKey) return '';
+  const sel = document.getElementById('slideDeckAssignScreen');
+  if (!sel) return screenKey;
+  const opt = sel.querySelector('option[value="' + CSS.escape(screenKey) + '"]');
+  return opt ? opt.textContent : screenKey;
+}
+
+function slideDeckSelectedCards() {
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return [];
+  return Array.from(deck.querySelectorAll('[data-slide-card]')).filter(function (card) {
+    const cb = card.querySelector('[data-slide-select]');
+    return cb && cb.checked;
+  });
+}
+
+function updateSlideDeckSelectionUI() {
+  const selected = slideDeckSelectedCards();
+  const countEl = document.getElementById('slideDeckSelectionCount');
+  if (countEl) countEl.textContent = selected.length + ' selected';
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    const cb = card.querySelector('[data-slide-select]');
+    card.classList.toggle('is-selected', !!(cb && cb.checked));
+  });
+}
+
+function slideDeckSelectVisible() {
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    if (card.hidden) return;
+    const cb = card.querySelector('[data-slide-select]');
+    if (cb) cb.checked = true;
+  });
+  updateSlideDeckSelectionUI();
+}
+
+function slideDeckClearSelection() {
+  document.querySelectorAll('#slideDeck [data-slide-select]').forEach(function (cb) { cb.checked = false; });
+  updateSlideDeckSelectionUI();
+}
+
+function slideDeckAssignSelected(mode) {
+  const screen = document.getElementById('slideDeckAssignScreen')?.value || '';
+  if (!screen) {
+    alert('Choose a display in Assign to first.');
+    return;
+  }
+  const selected = slideDeckSelectedCards();
+  if (!selected.length) {
+    alert('Select one or more slides using the checkboxes on the left.');
+    return;
+  }
+  if (mode === 'remove') {
+    const label = slideDeckAssignScreenLabel(screen);
+    const msg = 'Remove ' + label + ' from ' + selected.length + ' selected slide' + (selected.length === 1 ? '' : 's') + '?'
+      + '\n\nRemember to Save when done.';
+    if (!confirm(msg)) return;
+  }
+  selected.forEach(function (card) {
+    setSlideCardScreenTarget(card, mode, screen);
+  });
+  applySlideDeckFilters();
+  updateSlideDeckSelectionUI();
+}
+
+function bindSlideCardSelection(card) {
+  const cb = card.querySelector('[data-slide-select]');
+  if (!cb || cb.dataset.selectBound) return;
+  cb.dataset.selectBound = '1';
+  cb.addEventListener('change', updateSlideDeckSelectionUI);
+  cb.addEventListener('click', function (e) { e.stopPropagation(); });
+  const label = cb.closest('.slide-card-select');
+  if (label) {
+    label.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+  }
+}
+
 function initSlideDeckToolbar() {
   const deck = document.getElementById('slideDeck');
   if (!deck) return;
   deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
     syncSlideCardScreenMeta(card, true);
+    bindSlideCardSelection(card);
   });
+  if (window.ADMIN_OPERATOR_SCREEN_LOCKED && window.ADMIN_OPERATOR_SCREEN) {
+    const assignSel = document.getElementById('slideDeckAssignScreen');
+    if (assignSel) assignSel.value = String(window.ADMIN_OPERATOR_SCREEN);
+  }
   const search = document.getElementById('slideDeckSearch');
   const screenFilter = document.getElementById('slideDeckScreenFilter');
   const compact = document.getElementById('slideDeckCompact');
@@ -5323,6 +5438,12 @@ function initSlideDeckToolbar() {
   document.getElementById('slideDeckBulkAdd')?.addEventListener('click', function () { slideDeckBulkAssign('add'); });
   document.getElementById('slideDeckBulkAll')?.addEventListener('click', function () { slideDeckBulkAssign('all'); });
   document.getElementById('slideDeckBulkRemove')?.addEventListener('click', slideDeckBulkRemove);
+  document.getElementById('slideDeckSelectVisible')?.addEventListener('click', slideDeckSelectVisible);
+  document.getElementById('slideDeckClearSelection')?.addEventListener('click', slideDeckClearSelection);
+  document.getElementById('slideDeckSelectedAdd')?.addEventListener('click', function () { slideDeckAssignSelected('add'); });
+  document.getElementById('slideDeckSelectedOnly')?.addEventListener('click', function () { slideDeckAssignSelected('only'); });
+  document.getElementById('slideDeckSelectedRemove')?.addEventListener('click', function () { slideDeckAssignSelected('remove'); });
+  updateSlideDeckSelectionUI();
   applySlideDeckFilters();
 }
 
@@ -5768,12 +5889,15 @@ function addSlideCard() {
   let card;
   if (proto) {
     card = proto.cloneNode(true);
-    card.classList.remove('is-off', 'dragging', 'slide-card-highlight');
+    card.classList.remove('is-off', 'dragging', 'slide-card-highlight', 'is-selected');
     card.hidden = false;
     card.removeAttribute('data-slide-off');
     card.querySelectorAll('input[type="text"]').forEach(function (i) { i.value = ''; });
     card.querySelectorAll('input[type="checkbox"]').forEach(function (i) {
-      if (/\[screens\]/.test(i.name)) {
+      if (i.hasAttribute('data-slide-select')) {
+        i.checked = false;
+        i.removeAttribute('data-select-bound');
+      } else if (/\[screens\]/.test(i.name)) {
         i.checked = true;
       } else {
         i.checked = false;
@@ -5793,7 +5917,9 @@ function addSlideCard() {
     card.className = 'slide-card';
     card.setAttribute('data-slide-card', '');
     card.innerHTML =
-      '<div class="slide-card-head"><span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
+      '<div class="slide-card-head"><label class="slide-card-select" title="Select for display assignment">' +
+      '<input type="checkbox" data-slide-select aria-label="Select slide"></label>' +
+      '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
       '<div class="slide-card-title"><strong>New slide</strong><span class="slide-card-meta-line">' +
       '<span class="schedule-summary" data-schedule-summary>Always</span></span></div>' +
       '<button type="button" class="rowdel" onclick="this.closest(\'[data-slide-card]\').remove(); reindexSlideDeck();" title="Remove">×</button></div>' +
@@ -5814,10 +5940,12 @@ function addSlideCard() {
   deck.appendChild(card);
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexSlideDeck);
   bindSlideCard(card);
+  bindSlideCardSelection(card);
   initScreenPickers(card);
   syncSlideCardScreenMeta(card, true);
   reindexSlideDeck();
   applySlideDeckFilters();
+  updateSlideDeckSelectionUI();
 }
 
 function userScreenAssignedElsewhere(userId) {
