@@ -1680,7 +1680,11 @@ function admin_field(array $f, $val, string $board): void
   .panel > summary:hover { background:rgba(255,255,255,.03); }
   .panel-body { padding:0 20px 20px; border-top:1px solid var(--line); }
   .panel-body .upload-box, .panel-body .creator-box { border:0; background:transparent; padding:16px 0 0; border-radius:0; }
-  .panel-body .creator-box { padding-top:20px; margin-top:8px; border-top:1px dashed var(--line); }
+  .panel-body.rotation-display-settings-body .rows-scroll {
+    max-height:min(52vh, 460px);
+    overflow:auto;
+  }
+  main.admin-board-rotation, main.admin-board-rotator { overflow-anchor:none; }
   .panel-muted > summary { font-size:16px; font-family:'IBM Plex Sans',sans-serif; font-weight:600;
                            letter-spacing:.2px; text-transform:none; padding:12px 16px; }
   .section-title { font-family:'Big Shoulders Display'; font-size:22px; margin:8px 0 14px; }
@@ -2081,7 +2085,7 @@ function admin_field(array $f, $val, string $board): void
     <a href="?board=tools" class="<?= $tools ? 'active' : '' ?>">Tools</a>
     <?php endif; ?>
   </nav>
-  <main<?= (!$tools && in_array($board, ['slides', 'rotation', 'status'], true)) ? ' class="main-wide"' : '' ?>>
+  <main<?= (!$tools && in_array($board, ['slides', 'rotation', 'status'], true)) ? ' class="main-wide"' : '' ?><?= (!$tools && $board === 'rotation') ? ' admin-board-rotation' : '' ?><?= (!$tools && $board === 'rotator') ? ' admin-board-rotator' : '' ?>>
     <?php if ($flash): ?><div class="flash<?= $flashOk ? '' : ' bad' ?>"><?= h($flash) ?></div><?php endif; ?>
 
     <?php if ($tools): ?>
@@ -2481,7 +2485,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php if (admin_is_super()): ?>
           <details class="panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
-            <div class="panel-body" style="padding-top:8px">
+            <div class="panel-body rotation-display-settings-body" style="padding-top:8px">
           <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
@@ -4278,6 +4282,18 @@ function initSlideDeck() {
   }
 }
 
+function initAdminDetailsScrollFix(root) {
+  (root || document).querySelectorAll('details.panel, details.slide-card-edit, details.rotation-playlist-panel').forEach(function (d) {
+    if (d.dataset.scrollFixBound) return;
+    d.dataset.scrollFixBound = '1';
+    d.addEventListener('toggle', function () {
+      if (!d.open) return;
+      const y = window.scrollY;
+      requestAnimationFrame(function () { window.scrollTo(0, y); });
+    });
+  });
+}
+
 function initAdminTabs(tabRootId, boardName) {
   const root = document.getElementById(tabRootId);
   if (!root) return;
@@ -5011,6 +5027,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initKeyedBoardPreviews();
   initRotationDecks();
   initRotationGlobalAdd();
+  initAdminDetailsScrollFix(document);
   document.addEventListener('click', function (e) {
     if (e.target.closest('[data-entry-sharing-menu], [data-entry-sharing-trigger]')) return;
     closeEntrySharingMenus();

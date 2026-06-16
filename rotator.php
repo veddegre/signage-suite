@@ -118,9 +118,10 @@ function rotator_clock_js(): void
 
 function rotator_page_shell_open(string $title): void
 {
+    $rotatorFrame = signage_rotation_frame();
     ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"<?= $rotatorFrame ? ' class="rotator-frame"' : '' ?>>
 <head>
 <meta charset="UTF-8">
 <title><?= htmlspecialchars($title) ?></title>
@@ -131,7 +132,10 @@ function rotator_page_shell_open(string $title): void
   :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
-              font-family:'IBM Plex Sans',sans-serif; cursor:none; }
+              font-family:'IBM Plex Sans',sans-serif; cursor:none; overscroll-behavior:none; }
+  html.rotator-frame, html.rotator-frame body {
+    width:100%; max-width:1920px; position:fixed; inset:0; height:100%; max-height:100%;
+  }
   .layer { position:absolute; inset:0; background-position:center; background-size:contain;
            background-repeat:no-repeat; background-color:#000;
            opacity:0; transition:opacity 2.2s ease; }
@@ -161,7 +165,28 @@ function rotator_page_shell_open(string $title): void
 
 function rotator_page_shell_close(): void
 {
-    include __DIR__ . '/ticker.php';
+    if (signage_rotation_frame() || signage_safe_bottom() > 0) {
+        echo <<<'JS'
+<script>
+(function () {
+  function clampScroll() {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+  clampScroll();
+  window.addEventListener('scroll', clampScroll, { passive: true });
+  window.addEventListener('resize', clampScroll);
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(clampScroll).observe(document.documentElement);
+  }
+})();
+</script>
+JS;
+    }
+    if (!isset($_GET['noticker'])) {
+        include __DIR__ . '/ticker.php';
+    }
     echo '</body></html>';
 }
 
