@@ -1523,11 +1523,10 @@ function admin_field(array $f, $val, string $board): void
   .entry-sharing-users-scroll { max-height:140px; overflow-y:auto; margin-top:4px; padding-right:4px; border-top:1px solid var(--line); padding-top:8px; }
   .entry-sharing-users-scroll label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); padding:4px 2px; cursor:pointer; }
   .entry-sharing-users-scroll input { width:15px; height:15px; min-width:15px; accent-color:var(--beacon); margin:0; }
-  .entry-sharing--popover { margin:0; padding:0; border:0; }
+  .entry-sharing--popover { margin:0; padding:0; border:0; position:relative; }
   .entry-sharing-trigger { padding:8px 10px; font-size:14px; width:100%; min-width:96px; max-width:118px;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
-  .entry-sharing-backdrop { position:fixed; inset:0; z-index:900; background:rgba(5,10,18,.55); }
-  .entry-sharing-menu { position:fixed; z-index:901; width:min(280px, calc(100vw - 24px)); padding:14px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; position:relative; z-index:1; }
+  .entry-sharing-menu { position:fixed; z-index:1200; width:min(280px, calc(100vw - 24px)); padding:14px;
     background:var(--harbor); border:1px solid var(--line); border-radius:12px; box-shadow:0 16px 40px rgba(0,0,0,.55); }
   .entry-sharing-menu[hidden] { display:none !important; }
   .entry-sharing-menu select { width:100%; max-width:none; margin-top:4px; }
@@ -4271,9 +4270,11 @@ function syncEntrySharingTrigger(root) {
   trigger.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared);
 }
 
-function positionEntrySharingMenu(root, menu, trigger) {
+function positionEntrySharingMenu(menu, trigger) {
   if (!trigger || !menu || menu.hidden) return;
   const r = trigger.getBoundingClientRect();
+  menu.style.visibility = 'hidden';
+  menu.hidden = false;
   const mh = menu.offsetHeight;
   const mw = menu.offsetWidth;
   let top = r.bottom + 8;
@@ -4284,50 +4285,24 @@ function positionEntrySharingMenu(root, menu, trigger) {
   left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
   menu.style.top = top + 'px';
   menu.style.left = left + 'px';
-}
-
-function entrySharingBackdrop() {
-  let backdrop = document.getElementById('entrySharingBackdrop');
-  if (!backdrop) {
-    backdrop = document.createElement('div');
-    backdrop.id = 'entrySharingBackdrop';
-    backdrop.className = 'entry-sharing-backdrop';
-    backdrop.hidden = true;
-    backdrop.addEventListener('click', function () { closeEntrySharingMenus(); });
-    document.body.appendChild(backdrop);
-  }
-  return backdrop;
+  menu.style.visibility = '';
 }
 
 function closeEntrySharingMenus() {
   document.querySelectorAll('[data-entry-sharing-menu]').forEach(function (menu) {
     menu.hidden = true;
-    const root = menu._sharingRoot;
-    if (root && menu.parentNode === document.body) {
-      root.appendChild(menu);
-    }
-    menu._sharingRoot = null;
   });
-  const backdrop = document.getElementById('entrySharingBackdrop');
-  if (backdrop) backdrop.hidden = true;
   document.querySelectorAll('[data-entry-sharing-trigger]').forEach(function (btn) {
     btn.setAttribute('aria-expanded', 'false');
   });
 }
 
-function openEntrySharingMenu(root) {
-  const trigger = root.querySelector('[data-entry-sharing-trigger]');
-  const menu = root.querySelector('[data-entry-sharing-menu]');
-  if (!trigger || !menu) return;
+function openEntrySharingMenu(root, menu, trigger) {
   closeEntrySharingMenus();
-  menu._sharingRoot = root;
-  document.body.appendChild(menu);
   menu.hidden = false;
   trigger.setAttribute('aria-expanded', 'true');
   syncEntrySharingSharedList(root);
-  positionEntrySharingMenu(root, menu, trigger);
-  const backdrop = entrySharingBackdrop();
-  backdrop.hidden = false;
+  positionEntrySharingMenu(menu, trigger);
 }
 
 function initEntrySharingPopovers(scope) {
@@ -4342,11 +4317,11 @@ function initEntrySharingPopovers(scope) {
     trigger.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      if (!menu.hidden && menu.parentNode === document.body) {
+      if (!menu.hidden) {
         closeEntrySharingMenus();
         return;
       }
-      openEntrySharingMenu(root);
+      openEntrySharingMenu(root, menu, trigger);
     });
     menu.addEventListener('click', function (e) { e.stopPropagation(); });
     root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared]').forEach(function (el) {
@@ -4364,17 +4339,15 @@ function entrySharingFieldsHtml(prefix, ownerId, sharedIds, popover) {
   sharedIds = sharedIds || [];
   const sharedSet = {};
   sharedIds.forEach(function (id) { sharedSet[id] = true; });
-  const formAttr = popover ? ' form="boardform"' : '';
-  const formAttr = popover ? ' form="boardform"' : '';
   let html = popover ? '<div class="entry-sharing-panel-head"><strong>Access</strong></div>' : '';
   html += '<label class="mini">Owner</label>';
   if (popover) {
     html += '<div class="entry-sharing-owner-list" data-entry-sharing-owner-list>';
     html += '<label><input type="radio" name="' + prefix + '[owner]" value="" data-entry-sharing-owner'
-      + (ownerId === '' ? ' checked' : '') + formAttr + '> Super only</label>';
+      + (ownerId === '' ? ' checked' : '') + '> Super only</label>';
     users.forEach(function (u) {
       html += '<label><input type="radio" name="' + prefix + '[owner]" value="' + u.id.replace(/"/g, '&quot;') + '"'
-        + ' data-entry-sharing-owner' + (ownerId === u.id ? ' checked' : '') + formAttr + '> '
+        + ' data-entry-sharing-owner' + (ownerId === u.id ? ' checked' : '') + '> '
         + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
     });
     html += '</div>';
@@ -4391,7 +4364,7 @@ function entrySharingFieldsHtml(prefix, ownerId, sharedIds, popover) {
   users.forEach(function (u) {
     if (ownerId && u.id === ownerId) return;
     html += '<label data-entry-sharing-user="' + u.id.replace(/"/g, '&quot;') + '"><input type="checkbox" name="' + prefix + '[shared][]" value="' + u.id.replace(/"/g, '&quot;') + '"'
-      + ' data-entry-sharing-shared' + (sharedSet[u.id] ? ' checked' : '') + formAttr + '> '
+      + ' data-entry-sharing-shared' + (sharedSet[u.id] ? ' checked' : '') + '> '
       + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
   });
   html += '</div>';
@@ -4406,7 +4379,7 @@ function entrySharingHtml(prefix, ownerId, sharedIds, compact) {
     html += '<div class="entry-sharing entry-sharing--popover" data-entry-sharing>';
     html += '<button type="button" class="secondary entry-sharing-trigger" data-entry-sharing-trigger>'
       + entryAccessTriggerLabel(ownerId, sharedIds).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</button>';
-    html += '<div class="entry-sharing-menu" hidden data-entry-sharing-menu" role="dialog" aria-label="Access">';
+    html += '<div class="entry-sharing-menu" hidden data-entry-sharing-menu role="dialog" aria-label="Access">';
     html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, true);
     html += '</div></div>';
   } else {
@@ -4691,18 +4664,17 @@ document.addEventListener('DOMContentLoaded', function () {
   initRotationDecks();
   initRotationGlobalAdd();
   document.addEventListener('click', function (e) {
-    if (e.target.closest('[data-entry-sharing-menu], [data-entry-sharing-trigger], #entrySharingBackdrop')) return;
+    if (e.target.closest('[data-entry-sharing-menu], [data-entry-sharing-trigger]')) return;
     closeEntrySharingMenus();
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeEntrySharingMenus();
   });
   window.addEventListener('resize', function () {
-    document.querySelectorAll('[data-entry-sharing-menu]').forEach(function (menu) {
-      if (menu.hidden || !menu._sharingRoot) return;
-      const root = menu._sharingRoot;
+    document.querySelectorAll('[data-entry-sharing]').forEach(function (root) {
+      const menu = root.querySelector('[data-entry-sharing-menu]');
       const trigger = root.querySelector('[data-entry-sharing-trigger]');
-      positionEntrySharingMenu(root, menu, trigger);
+      if (menu && !menu.hidden) positionEntrySharingMenu(menu, trigger);
     });
   });
   document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {

@@ -554,7 +554,6 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
 {
     $owner = admin_entry_owner($entry);
     $sharedSet = array_flip(admin_entry_shared_users($entry));
-    $formAttr = $popover ? ' form="boardform"' : '';
     if ($popover) {
         echo '<div class="entry-sharing-panel-head"><strong>Access</strong></div>';
     }
@@ -562,11 +561,11 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
     if ($popover) {
         echo '<div class="entry-sharing-owner-list" data-entry-sharing-owner-list>';
         echo '<label><input type="radio" name="' . h($prefix . '[owner]') . '" value="" data-entry-sharing-owner'
-            . ($owner === null ? ' checked' : '') . $formAttr . '> Super only</label>';
+            . ($owner === null ? ' checked' : '') . '> Super only</label>';
         foreach ($users as $u) {
             echo '<label><input type="radio" name="' . h($prefix . '[owner]') . '" value="' . h($u['id']) . '"'
                 . ' data-entry-sharing-owner'
-                . ($owner === $u['id'] ? ' checked' : '') . $formAttr . '> ' . h($u['username']) . '</label>';
+                . ($owner === $u['id'] ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
         }
         echo '</div>';
     } else {
@@ -586,7 +585,7 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
         }
         echo '<label data-entry-sharing-user="' . h($u['id']) . '"><input type="checkbox" name="' . h($prefix . '[shared][]') . '" value="' . h($u['id']) . '"'
             . ' data-entry-sharing-shared'
-            . (isset($sharedSet[$u['id']]) ? ' checked' : '') . $formAttr . '> ' . h($u['username']) . '</label>';
+            . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
     }
     echo '</div>';
 }
