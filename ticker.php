@@ -276,6 +276,7 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
   if (typeof MutationObserver !== 'undefined') {
     new MutationObserver(function () {
       if (document.body.classList.contains('signage-blank')) apply({ alerts: [] });
+      else refresh();
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
 })();

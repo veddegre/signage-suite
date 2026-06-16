@@ -119,16 +119,24 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
   (function () {
     const screen = <?= json_encode($SCREEN) ?>;
     const q = screen === 'main' ? 'board.php?api=1' : ('board.php?api=1&screen=' + encodeURIComponent(screen));
+    function applyBlankState(on) {
+      var wasBlank = document.body.classList.contains('signage-blank');
+      document.body.classList.toggle('signage-blank', on);
+      if (wasBlank !== on) {
+        document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: on } }));
+      }
+    }
+    window.addEventListener('message', function (ev) {
+      if (!ev.data || ev.data.type !== 'signage-blank') return;
+      if (typeof ev.data.on !== 'boolean') return;
+      applyBlankState(ev.data.on);
+    });
     function syncBlank() {
       fetch(q, { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
           if (!data || typeof data.blank !== 'boolean') return;
-          var wasBlank = document.body.classList.contains('signage-blank');
-          document.body.classList.toggle('signage-blank', data.blank);
-          if (wasBlank !== data.blank) {
-            document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: data.blank } }));
-          }
+          applyBlankState(data.blank);
         })
         .catch(function () {});
     }

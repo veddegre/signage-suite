@@ -328,10 +328,28 @@ if (($_GET['api'] ?? '') === 'presence') {
       if (blankEl) blankEl.style.display = 'block';
       document.body.classList.add('signage-blank');
       document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: true } }));
+      notifyParentBlank(true);
       sendPresence('blank');
     } else {
-      location.reload();
+      if (blankEl) blankEl.style.display = 'none';
+      document.body.classList.remove('signage-blank');
+      document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: false } }));
+      notifyParentBlank(false);
+      if (PAGES.length === 0) {
+        document.getElementById('empty').style.display = 'flex';
+        sendPresence('empty');
+      } else {
+        rotate();
+      }
     }
+  }
+
+  function notifyParentBlank(on) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'signage-blank', on: on }, '*');
+      }
+    } catch (e) {}
   }
 
   function stopFrame(frame) {
@@ -410,8 +428,11 @@ if (($_GET['api'] ?? '') === 'presence') {
 
   if (!blankActive) {
     rotate();
+    notifyParentBlank(false);
   } else {
     document.body.classList.add('signage-blank');
+    document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: true } }));
+    notifyParentBlank(true);
     sendPresence('blank');
   }
 
