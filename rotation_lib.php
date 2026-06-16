@@ -426,7 +426,21 @@ function rotation_screen_kiosk_url(string $screen = 'main'): string
 function rotation_screen_active_pages(string $screen = 'main'): array
 {
     require_once __DIR__ . '/slides_lib.php';
-    $activeSlides = slides_active_entries();
+    $screen = rotation_normalize_screen_key($screen);
+    $scopeUid = null;
+    if ($screen !== 'main') {
+        require_once __DIR__ . '/users_lib.php';
+        $scopeUid = users_screen_assignments()[$screen] ?? null;
+    }
+
+    $slideDeck = cfg('slides.SLIDES', []);
+    if (!is_array($slideDeck)) {
+        $slideDeck = [];
+    }
+    if ($scopeUid !== null) {
+        $slideDeck = admin_filter_list_for_scope($slideDeck, $scopeUid);
+    }
+    $activeSlides = slides_active_entries($slideDeck);
     $activeFiles = [];
     foreach ($activeSlides as $slide) {
         $activeFiles[(string)$slide['file']] = true;

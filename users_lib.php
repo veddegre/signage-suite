@@ -1272,6 +1272,7 @@ function admin_filter_list_for_display(array $list): array
  */
 function admin_resolve_display_registry_key(array $map, string $requested, ?callable $normalize = null): ?string
 {
+    $normalize ??= static fn($k) => admin_normalize_registry_key((string)$k);
     $resolved = admin_registry_resolve_key($map, $requested, $normalize);
     if ($resolved !== null) {
         return $resolved;
@@ -1279,7 +1280,8 @@ function admin_resolve_display_registry_key(array $map, string $requested, ?call
     if ($map === []) {
         return null;
     }
-    if (admin_display_filter_active()) {
+    $want = $normalize($requested);
+    if ($want !== null && $want !== '') {
         return null;
     }
     $first = array_key_first($map);

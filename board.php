@@ -349,6 +349,10 @@ if (($_GET['api'] ?? '') === 'presence') {
     } catch (e) {}
   }
 
+  function boardNeedsScope(url) {
+    return /(?:^|[?&/])(family|rss|video|grafana|splunkdash|splunk|web|slides|rotator)\.php(?:[?&#]|$)/i.test(String(url));
+  }
+
   function rotate() {
     if (blankActive || PAGES.length === 0) return;
     clearRotateTimer();
@@ -363,7 +367,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     let revealed = false;
     const sep = p.url.includes('?') ? '&' : '?';
     let qs = 'noticker=1&settle=' + SETTLE;
-    if (SCREEN && SCREEN !== 'main') qs += '&screen=' + encodeURIComponent(SCREEN);
+    if (SCREEN && SCREEN !== 'main' && boardNeedsScope(p.url)) qs += '&screen=' + encodeURIComponent(SCREEN);
     if (!SHOW_CLOCK) qs += '&clock=0';
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();
     updateRotateDebug('loading…', p, idx, fullSrc);
