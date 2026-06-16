@@ -1085,7 +1085,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
 
 // ── Video board: delete / YouTube fetch / yt-dlp upkeep ─────────────────────
 $videoFetchLog = null;
-$videoMaintOpen = ($board === 'video');
+$videoMaintOpen = ($board === 'video' && admin_is_super());
 if ($authed && $board === 'video' && admin_can_board('video')) {
     if (($_POST['action'] ?? '') === 'delete_video') {
         if (!csrf_ok()) {
@@ -1166,6 +1166,10 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
     protect_dirs();
 
     if (($_POST['action'] ?? '') === 'video_fetch') {
+        if (!admin_is_super()) {
+            $flash = 'YouTube downloads are restricted to super admins.';
+            $flashOk = false;
+        } else {
         @set_time_limit(0);
         $result = video_fetch_all();
         $videoFetchLog = implode("\n", $result['lines']);
@@ -1175,15 +1179,20 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
             $flash = 'Download finished with errors — see log below.'; $flashOk = false;
         }
         $videoMaintOpen = true;
+        }
     }
 
     if (($_POST['action'] ?? '') === 'video_fetch_one') {
+        if (!admin_is_super()) {
+            $flash = 'YouTube downloads are restricted to super admins.';
+            $flashOk = false;
+        } else {
         @set_time_limit(0);
         $fetchKey = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_POST['video_key'] ?? ''));
         $registry = video_registry();
         $entry = is_array($registry[$fetchKey] ?? null) ? $registry[$fetchKey] : null;
-        if ($fetchKey === '' || $entry === null || (!admin_is_super() && !admin_entry_visible($entry))) {
-            $flash = 'That video is not available to your account.'; $flashOk = false;
+        if ($fetchKey === '' || $entry === null) {
+            $flash = 'That video is not available.'; $flashOk = false;
         } else {
         $result = video_fetch_one($fetchKey);
         $videoFetchLog = implode("\n", $result['lines']);
@@ -1194,9 +1203,14 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
         }
         }
         $videoMaintOpen = true;
+        }
     }
 
     if (($_POST['action'] ?? '') === 'ytdlp_update') {
+        if (!admin_is_super()) {
+            $flash = 'yt-dlp maintenance is restricted to super admins.';
+            $flashOk = false;
+        } else {
         $result = video_ytdlp_update();
         $videoFetchLog = implode("\n", $result['lines']);
         if ($result['ok']) {
@@ -1205,16 +1219,26 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
             $flash = $result['message']; $flashOk = false;
         }
         $videoMaintOpen = true;
+        }
     }
 
     if (($_POST['action'] ?? '') === 'ytdlp_refresh') {
+        if (!admin_is_super()) {
+            $flash = 'yt-dlp maintenance is restricted to super admins.';
+            $flashOk = false;
+        } else {
         video_ytdlp_latest_release(true);
         video_deno_latest_release(true);
         $flash = 'Checked GitHub for the latest yt-dlp and deno releases.';
         $videoMaintOpen = true;
+        }
     }
 
     if (($_POST['action'] ?? '') === 'deno_update') {
+        if (!admin_is_super()) {
+            $flash = 'yt-dlp maintenance is restricted to super admins.';
+            $flashOk = false;
+        } else {
         $result = video_deno_update();
         $videoFetchLog = implode("\n", $result['lines']);
         if ($result['ok']) {
@@ -1223,9 +1247,14 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
             $flash = $result['message']; $flashOk = false;
         }
         $videoMaintOpen = true;
+        }
     }
 
     if (($_POST['action'] ?? '') === 'upload_youtube_cookies' && isset($_FILES['youtube_cookies'])) {
+        if (!admin_is_super()) {
+            $flash = 'yt-dlp maintenance is restricted to super admins.';
+            $flashOk = false;
+        } else {
         $result = video_ytdlp_save_cookies_upload($_FILES['youtube_cookies']);
         if ($result['ok']) {
             $flash = $result['message'];
@@ -1233,6 +1262,7 @@ if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
             $flash = $result['message']; $flashOk = false;
         }
         $videoMaintOpen = true;
+        }
     }
 }
 
@@ -1357,12 +1387,15 @@ function current_val(array $rawConf, string $board, string $key)
 }
 $videoYtdlpStatus = null;
 $videoDenoStatus = null;
+$videoYtdlpSupport = null;
 $videoStatuses = [];
 $videoStatusByKey = [];
 if ($authed && $board === 'video') {
-    $videoYtdlpStatus = video_ytdlp_status();
-    $videoDenoStatus = video_deno_status();
-    $videoYtdlpSupport = video_ytdlp_support_status();
+    if (admin_is_super()) {
+        $videoYtdlpStatus = video_ytdlp_status();
+        $videoDenoStatus = video_deno_status();
+        $videoYtdlpSupport = video_ytdlp_support_status();
+    }
     foreach (video_registry() as $k => $v) {
         if (!is_array($v)) {
             continue;
@@ -2658,7 +2691,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
       </form>
       <?php endif; ?>
 
-      <?php if ($board === 'video' && $videoYtdlpStatus !== null): ?>
+      <?php if ($board === 'video' && admin_is_super()): ?>
       <?php if ($videoFetchLog): ?>
         <pre class="video-log"><?= h($videoFetchLog) ?></pre>
       <?php endif; ?>
@@ -3309,11 +3342,17 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="section-title">Video playlist</div>
+          <?php if (admin_is_super()): ?>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
             and either a YouTube URL or a local filename in <code>videos/</code>. After saving, videos appear on the wall only when
             listed in <strong>Admin → Rotation</strong> as <code>video.php?v=KEY</code> — or check the box below to add them automatically.</div>
+          <?php else: ?>
+          <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
+            and a <strong>local file</strong> in <code>videos/</code> (e.g. <code>lantern.mp4</code>). YouTube downloads are managed by a super admin.
+            After saving, add videos to your display via the deploy checkbox below or <strong>Admin → Rotation</strong>.</div>
+          <?php endif; ?>
 
-          <div class="video-playlist" id="videoPlaylist" data-field="VIDEOS">
+          <div class="video-playlist" id="videoPlaylist" data-field="VIDEOS" data-show-youtube="<?= admin_is_super() ? '1' : '0' ?>">
             <?php $vri = 0; foreach ($videoRows as $vk => $row):
               if (!is_array($row)) $row = [];
               $st = $videoStatusByKey[$vk] ?? null;
@@ -3339,12 +3378,16 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <label class="mini">Title (optional)</label>
                   <input type="text" name="VIDEOS[<?= (int)$vri ?>][title]" value="<?= h((string)($row['title'] ?? '')) ?>" placeholder="On-screen title" data-video-title>
                 </div>
+                <?php if (admin_is_super()): ?>
                 <div>
                   <label class="mini">YouTube URL</label>
                   <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/watch?v=…">
                 </div>
-                <div style="grid-column:2 / -1">
-                  <label class="mini">or local file</label>
+                <?php elseif (trim((string)($row['youtube'] ?? '')) !== ''): ?>
+                <input type="hidden" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)$row['youtube']) ?>">
+                <?php endif; ?>
+                <div style="grid-column:<?= admin_is_super() ? '2 / -1' : '1 / -1' ?>">
+                  <label class="mini"><?= admin_is_super() ? 'or local file' : 'Local file' ?></label>
                   <input type="text" name="VIDEOS[<?= (int)$vri ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="lantern.mp4 in videos/">
                 </div>
               </div>
@@ -3354,7 +3397,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <?php if ($st['file']): ?>
                     <span>File: <code><?= h($st['file']) ?></code></span>
                   <?php else: ?>
-                    <span>Not downloaded yet</span>
+                    <span><?= admin_is_super() ? 'Not downloaded yet' : 'No file yet' ?></span>
                   <?php endif; ?>
                   <?php if ($st['duration_label']): ?>
                     <span>Length: <?= h($st['duration_label']) ?></span>
@@ -3368,7 +3411,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                 <?php endif; ?>
                 <div class="video-card-actions">
                   <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(video_rotation_url($vk)) ?>" target="_blank" rel="noopener">Preview</a>
-                  <?php if ($st && $st['fetchable']): ?>
+                  <?php if (admin_is_super() && $st && $st['fetchable']): ?>
                     <button type="submit" class="secondary" form="video-fetch-<?= h(preg_replace('/[^a-z0-9_\-]/i', '', $vk)) ?>">Fetch</button>
                   <?php endif; ?>
                   <?php if ($canDeleteVideo): ?>
@@ -4343,7 +4386,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
       </div>
       <?php endif; ?>
-      <?php if ($board === 'video'): foreach ($videoStatuses as $st):
+      <?php if ($board === 'video' && admin_is_super()): foreach ($videoStatuses as $st):
         if (empty($st['fetchable'])) continue;
         $fid = preg_replace('/[^a-z0-9_\-]/i', '', $st['key']);
         if ($fid === '') continue;
@@ -5857,6 +5900,7 @@ function addVideoCard() {
   if (!deck) return;
   reindexVideoPlaylist();
   const idx = deck.querySelectorAll('[data-video-card]').length;
+  const showYoutube = deck.dataset.showYoutube === '1';
   const card = document.createElement('div');
   card.className = 'video-card';
   card.setAttribute('data-video-card', '');
@@ -5869,11 +5913,17 @@ function addVideoCard() {
     '<div class="video-card-grid">' +
       '<div><label class="mini">Key</label><input type="text" name="VIDEOS[' + idx + '][_key]" placeholder="lantern" required data-video-key></div>' +
       '<div><label class="mini">Title (optional)</label><input type="text" name="VIDEOS[' + idx + '][title]" placeholder="On-screen title" data-video-title></div>' +
-      '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=…"></div>' +
-      '<div style="grid-column:2 / -1"><label class="mini">or local file</label><input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
+      (showYoutube
+        ? '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=…"></div>'
+        : '') +
+      '<div style="grid-column:' + (showYoutube ? '2 / -1' : '1 / -1') + '"><label class="mini">' +
+        (showYoutube ? 'or local file' : 'Local file') +
+      '</label><input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
     '</div>' +
     entrySharingHtml('VIDEOS[' + idx + ']', '', []) +
-    '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>Save, then fetch or upload file</span></div>';
+    '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>' +
+      (showYoutube ? 'Save, then fetch or upload file' : 'Save after adding a file in videos/') +
+    '</span></div>';
   deck.appendChild(card);
   bindVideoCard(card);
   bindVideoCardDrag(card, deck);
