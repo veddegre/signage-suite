@@ -1907,7 +1907,33 @@ function admin_field(array $f, $val, string $board): void
   .field-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px 20px; }
   .field-grid .field { margin-bottom:0; }
   .deck-list { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
+  .deck-toolbar { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin-bottom:14px; padding:12px 14px;
+                  background:var(--lake-night); border:1px solid var(--line); border-radius:10px;
+                  position:sticky; top:0; z-index:25; }
+  .deck-toolbar-search { flex:1 1 220px; min-width:160px; max-width:420px; padding:8px 12px; font-size:14px;
+                         background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .deck-toolbar-select { padding:8px 12px; font-size:14px; background:var(--harbor); border:1px solid var(--line);
+                         border-radius:8px; color:var(--snow); min-width:160px; }
+  .deck-toolbar-check { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--snow); margin:0; white-space:nowrap; }
+  .deck-toolbar-count { font-size:13px; color:var(--mist); margin-left:auto; white-space:nowrap; }
+  .deck-bulk-bar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:-6px 0 12px; padding:10px 14px;
+                   background:rgba(255,179,71,.08); border:1px solid rgba(255,179,71,.35); border-radius:10px; font-size:13px; }
+  .deck-bulk-bar[hidden] { display:none !important; }
+  .deck-filter-empty { padding:24px; text-align:center; color:var(--mist); border:1px dashed var(--line); border-radius:10px; }
+  .deck-list-compact { gap:8px; }
+  .deck-list-compact .slide-card { padding:10px 12px; }
+  .deck-list-compact .slide-card-head { margin-bottom:6px; align-items:center; }
+  .deck-list-compact .slide-card-thumb { width:56px; height:32px; }
+  .deck-list-compact .slide-card-head strong { font-size:14px; margin-bottom:2px;
+    display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+  .deck-list-compact .slide-card-meta-line { font-size:11px; gap:4px 8px; }
+  .deck-list-compact .slide-card-quick { margin:0 0 6px; max-width:72px; }
+  .deck-list-compact .slide-card-quick .mini { font-size:10px; }
+  .deck-list-compact .slide-card-edit > summary { padding:4px 0; font-size:12px; }
+  .deck-list-compact .slide-card-actions { margin-top:6px; }
+  .slide-screen-pill { font-size:11px !important; }
   .slide-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .slide-card[hidden] { display:none !important; }
   .slide-card.is-off { opacity:.55; }
   .slide-card.dragging { opacity:.55; }
   .slide-card-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; }
@@ -3774,11 +3800,37 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px">Drag to reorder. Set <strong>Sec</strong> on each card; expand for schedule and display targeting. New images go on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
+          <div class="help" style="margin-bottom:12px">Drag to reorder. Use the toolbar to filter by display or search; expand a card only when you need to edit. Set <strong>Sec</strong> on each card for dwell time. New images go on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
-          <div class="deck-list" id="slideDeck" data-field="SLIDES">
+          <?php
+          $slideDeckLarge = count($slideRows) > 24;
+          $slideScreenOptions = admin_screen_options($rotationScreens);
+          ?>
+          <div class="deck-toolbar" id="slideDeckToolbar">
+            <input type="search" id="slideDeckSearch" class="deck-toolbar-search" placeholder="Search by label or filename…" autocomplete="off">
+            <select id="slideDeckScreenFilter" class="deck-toolbar-select" aria-label="Filter by display">
+              <option value="">All displays</option>
+              <?php foreach ($slideScreenOptions as $opt): ?>
+              <option value="<?= h($opt['key']) ?>"><?= h($opt['name']) ?> (<?= h($opt['key']) ?>)</option>
+              <?php endforeach; ?>
+              <option value="__none__">Hidden on all displays</option>
+              <option value="__disabled__">Disabled slides only</option>
+            </select>
+            <label class="deck-toolbar-check"><input type="checkbox" id="slideDeckCompact"<?= $slideDeckLarge ? ' checked' : '' ?>> Compact</label>
+            <button type="button" class="secondary" id="slideDeckExpandAll" style="padding:6px 12px;font-size:13px">Expand all</button>
+            <button type="button" class="secondary" id="slideDeckCollapseAll" style="padding:6px 12px;font-size:13px">Collapse all</button>
+            <span class="deck-toolbar-count" id="slideDeckCount"></span>
+          </div>
+          <div class="deck-bulk-bar" id="slideDeckBulkBar" hidden>
+            <span id="slideDeckBulkLabel">Bulk assign visible slides:</span>
+            <button type="button" class="secondary" id="slideDeckBulkOnly" style="padding:6px 12px;font-size:13px">Only this display</button>
+            <button type="button" class="secondary" id="slideDeckBulkAdd" style="padding:6px 12px;font-size:13px">Add this display</button>
+            <button type="button" class="secondary" id="slideDeckBulkAll" style="padding:6px 12px;font-size:13px">All displays</button>
+          </div>
+          <div class="deck-filter-empty" id="slideDeckFilterEmpty" hidden>No slides match the current search or display filter.</div>
+          <div class="deck-list<?= $slideDeckLarge ? ' deck-list-compact' : '' ?>" id="slideDeck" data-field="SLIDES">
             <?php if ($slideRows === []): ?>
             <div class="slide-deck-empty">No slides yet — use <strong>Add / Create</strong> to upload or design one.</div>
             <?php endif; ?>
@@ -3797,8 +3849,18 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               $displayLabel = slide_display_label($fileLabel, $slideRows);
               $slideScreens = array_key_exists('screens', $row) ? slide_target_screens($row) : [];
               $slideAllScreens = !array_key_exists('screens', $row);
+              $screenSummary = admin_screen_picker_summary(
+                  $slideScreenOptions,
+                  $slideAllScreens ? array_column($slideScreenOptions, 'key') : $slideScreens,
+                  'deck'
+              );
+              $dataScreens = $slideAllScreens ? 'all' : implode(',', $slideScreens);
+              $searchBlob = strtolower(trim($displayLabel . ' ' . $fileLabel . ' ' . $schedSummary));
             ?>
-            <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?><?= $highlightCard ? ' slide-card-highlight' : '' ?>" data-slide-card data-slide-file="<?= h($fileLabel) ?>">
+            <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?><?= $highlightCard ? ' slide-card-highlight' : '' ?>"
+                 data-slide-card data-slide-file="<?= h($fileLabel) ?>"
+                 data-slide-screens="<?= h($dataScreens) ?>"
+                 data-slide-search="<?= h($searchBlob) ?>"<?= !empty($row['off']) ? ' data-slide-off="1"' : '' ?>>
               <div class="slide-card-head slide-card-head-with-thumb">
                 <span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>
                 <?php if ($thumbUrl): ?>
@@ -3814,6 +3876,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <span class="slide-card-meta-line">
                     <?php if ($activeNow): ?><span class="pill ok">Active now</span><?php endif; ?>
                     <?php if (!$fileOk && $fileLabel !== ''): ?><span class="pill warn">File missing</span><?php endif; ?>
+                    <span class="pill slide-screen-pill" data-slide-screen-pill><?= h($screenSummary) ?></span>
                     <span class="schedule-summary" data-schedule-summary><?= h($schedSummary) ?></span>
                   </span>
                 </div>
@@ -4670,6 +4733,7 @@ function syncSlideCard(card) {
       summary.textContent = parts.join(' · ');
     }
   }
+  syncSlideCardSearchMeta(card);
 }
 
 function reindexSlideDeck() {
@@ -4782,7 +4846,10 @@ function bindSlideCard(card) {
   card.querySelectorAll('input[type="text"]').forEach(function (inp) {
     if (inp.dataset.summaryBound) return;
     inp.dataset.summaryBound = '1';
-    inp.addEventListener('input', function () { syncSlideCard(card); });
+    inp.addEventListener('input', function () {
+      syncSlideCard(card);
+      applySlideDeckFilters();
+    });
   });
   const fileInp = card.querySelector('input[name*="[file]"]');
   const head = card.querySelector('.slide-card-title strong');
@@ -4796,7 +4863,10 @@ function bindSlideCard(card) {
     off.dataset.bound = '1';
     off.addEventListener('change', function () {
       card.classList.toggle('is-off', off.checked);
+      if (off.checked) card.setAttribute('data-slide-off', '1');
+      else card.removeAttribute('data-slide-off');
       syncSlideCard(card);
+      applySlideDeckFilters();
     });
   }
 }
@@ -4808,6 +4878,7 @@ function initSlideDeck() {
     bindPlaylistCardHandle(card, d, '.drag-handle', reindexSlideDeck);
     bindSlideCard(card);
   });
+  initSlideDeckToolbar();
   const hl = deck.querySelector('.slide-card-highlight');
   if (hl) {
     setTimeout(function () { hl.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
@@ -5042,11 +5113,157 @@ function bindScreenPicker(picker) {
         cb.checked = pickAll;
       });
       updateScreenPickerSummary(picker);
+      const card = picker.closest('[data-slide-card]');
+      if (card) syncSlideCardScreenMeta(card);
     });
   });
   picker.querySelectorAll('.screen-picker-list input[type=checkbox]').forEach(function (cb) {
-    cb.addEventListener('change', function () { updateScreenPickerSummary(picker); });
+    cb.addEventListener('change', function () {
+      updateScreenPickerSummary(picker);
+      const card = picker.closest('[data-slide-card]');
+      if (card) syncSlideCardScreenMeta(card);
+    });
   });
+}
+
+function syncSlideCardScreenMeta(card, skipFilter) {
+  const picker = card.querySelector('[data-screen-picker]');
+  if (!picker) return;
+  if (picker.dataset.locked === '1') {
+    card.dataset.slideScreens = window.ADMIN_OPERATOR_SCREEN || 'all';
+  } else {
+    const boxes = picker.querySelectorAll('.screen-picker-list input[type=checkbox]');
+    const total = boxes.length;
+    const checked = [];
+    boxes.forEach(function (cb) { if (cb.checked) checked.push(cb.value); });
+    if (checked.length === total) card.dataset.slideScreens = 'all';
+    else if (checked.length === 0) card.dataset.slideScreens = '';
+    else card.dataset.slideScreens = checked.join(',');
+  }
+  const pill = card.querySelector('[data-slide-screen-pill]');
+  if (pill) pill.textContent = screenPickerSummaryText(picker);
+  if (!skipFilter) applySlideDeckFilters();
+}
+
+function syncSlideCardSearchMeta(card) {
+  const parts = [];
+  const cap = card.querySelector('input[name*="[caption]"]');
+  const file = card.querySelector('input[name*="[file]"]');
+  const summary = card.querySelector('[data-schedule-summary]');
+  if (cap && cap.value.trim()) parts.push(cap.value.trim());
+  if (file && file.value.trim()) parts.push(file.value.trim());
+  if (summary && summary.textContent) parts.push(summary.textContent);
+  card.dataset.slideSearch = parts.join(' ').toLowerCase();
+}
+
+function slideDeckScreenFilterLabel(value) {
+  if (!value) return '';
+  if (value === '__none__') return 'Hidden on all displays';
+  if (value === '__disabled__') return 'Disabled slides';
+  const sel = document.getElementById('slideDeckScreenFilter');
+  if (!sel) return value;
+  const opt = sel.querySelector('option[value="' + CSS.escape(value) + '"]');
+  return opt ? opt.textContent : value;
+}
+
+function applySlideDeckFilters() {
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  const q = (document.getElementById('slideDeckSearch')?.value || '').trim().toLowerCase();
+  const screen = document.getElementById('slideDeckScreenFilter')?.value || '';
+  const cards = deck.querySelectorAll('[data-slide-card]');
+  let shown = 0;
+  cards.forEach(function (card) {
+    let ok = true;
+    if (q && (card.dataset.slideSearch || '').indexOf(q) === -1) ok = false;
+    if (ok && screen) {
+      if (screen === '__disabled__') ok = card.classList.contains('is-off');
+      else if (screen === '__none__') ok = card.dataset.slideScreens === '';
+      else {
+        const scr = card.dataset.slideScreens || 'all';
+        ok = scr === 'all' || (',' + scr + ',').indexOf(',' + screen + ',') >= 0;
+      }
+    }
+    card.hidden = !ok;
+    if (ok) shown++;
+  });
+  const countEl = document.getElementById('slideDeckCount');
+  if (countEl) countEl.textContent = shown + ' of ' + cards.length + ' shown';
+  const emptyEl = document.getElementById('slideDeckFilterEmpty');
+  if (emptyEl) emptyEl.hidden = shown > 0 || cards.length === 0;
+  const bulk = document.getElementById('slideDeckBulkBar');
+  const bulkLabel = document.getElementById('slideDeckBulkLabel');
+  if (bulk) {
+    const showBulk = screen && screen.indexOf('__') !== 0;
+    bulk.hidden = !showBulk;
+    if (bulkLabel && showBulk) {
+      bulkLabel.textContent = 'Bulk assign ' + shown + ' visible slide' + (shown === 1 ? '' : 's') + ' for ' + slideDeckScreenFilterLabel(screen) + ':';
+    }
+  }
+}
+
+function setSlideCardScreenTarget(card, mode, screenKey) {
+  const picker = card.querySelector('[data-screen-picker]');
+  if (!picker || picker.dataset.locked === '1') return;
+  picker.querySelectorAll('.screen-picker-list input[type=checkbox]').forEach(function (cb) {
+    if (mode === 'all') cb.checked = true;
+    else if (mode === 'only') cb.checked = (cb.value === screenKey);
+    else if (mode === 'add') cb.checked = cb.checked || (cb.value === screenKey);
+  });
+  updateScreenPickerSummary(picker);
+  syncSlideCardScreenMeta(card);
+}
+
+function slideDeckBulkAssign(mode) {
+  const screen = document.getElementById('slideDeckScreenFilter')?.value || '';
+  if (!screen || screen.indexOf('__') === 0) return;
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    if (card.hidden) return;
+    setSlideCardScreenTarget(card, mode, screen);
+  });
+}
+
+function initSlideDeckToolbar() {
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    syncSlideCardScreenMeta(card, true);
+  });
+  const search = document.getElementById('slideDeckSearch');
+  const screenFilter = document.getElementById('slideDeckScreenFilter');
+  const compact = document.getElementById('slideDeckCompact');
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = '1';
+    search.addEventListener('input', applySlideDeckFilters);
+  }
+  if (screenFilter && !screenFilter.dataset.bound) {
+    screenFilter.dataset.bound = '1';
+    screenFilter.addEventListener('change', applySlideDeckFilters);
+  }
+  if (compact && !compact.dataset.bound) {
+    compact.dataset.bound = '1';
+    try {
+      const saved = sessionStorage.getItem('slideDeckCompact');
+      if (saved === '1' || saved === '0') compact.checked = saved === '1';
+    } catch (e) {}
+    deck.classList.toggle('deck-list-compact', compact.checked);
+    compact.addEventListener('change', function () {
+      deck.classList.toggle('deck-list-compact', compact.checked);
+      try { sessionStorage.setItem('slideDeckCompact', compact.checked ? '1' : '0'); } catch (e) {}
+    });
+  }
+  document.getElementById('slideDeckExpandAll')?.addEventListener('click', function () {
+    deck.querySelectorAll('details.slide-card-edit').forEach(function (d) { d.open = true; });
+  });
+  document.getElementById('slideDeckCollapseAll')?.addEventListener('click', function () {
+    deck.querySelectorAll('details.slide-card-edit').forEach(function (d) { d.open = false; });
+  });
+  document.getElementById('slideDeckBulkOnly')?.addEventListener('click', function () { slideDeckBulkAssign('only'); });
+  document.getElementById('slideDeckBulkAdd')?.addEventListener('click', function () { slideDeckBulkAssign('add'); });
+  document.getElementById('slideDeckBulkAll')?.addEventListener('click', function () { slideDeckBulkAssign('all'); });
+  applySlideDeckFilters();
 }
 
 function initScreenPickers(root) {
@@ -5491,7 +5708,9 @@ function addSlideCard() {
   let card;
   if (proto) {
     card = proto.cloneNode(true);
-    card.classList.remove('is-off', 'dragging');
+    card.classList.remove('is-off', 'dragging', 'slide-card-highlight');
+    card.hidden = false;
+    card.removeAttribute('data-slide-off');
     card.querySelectorAll('input[type="text"]').forEach(function (i) { i.value = ''; });
     card.querySelectorAll('input[type="checkbox"]').forEach(function (i) {
       if (/\[screens\]/.test(i.name)) {
@@ -5536,7 +5755,9 @@ function addSlideCard() {
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexSlideDeck);
   bindSlideCard(card);
   initScreenPickers(card);
+  syncSlideCardScreenMeta(card, true);
   reindexSlideDeck();
+  applySlideDeckFilters();
 }
 
 function userScreenAssignedElsewhere(userId) {
