@@ -391,10 +391,18 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             sort($screens);
             if (!isset($row['screens'])) {
                 if (!empty($row['_screens_form'])) {
-                    $obj['screens'] = [];
+                    $obj['screens'] = admin_operator_screen_locked()
+                        ? [admin_operator_screen_key()]
+                        : [];
                 }
             } elseif ($screens !== $allScreenKeys) {
                 $obj['screens'] = $screens;
+            }
+            if (admin_operator_screen_locked()) {
+                $opScreen = (string)admin_operator_screen_key();
+                if ($opScreen !== '' && (!isset($obj['screens']) || $obj['screens'] === [])) {
+                    $obj['screens'] = [$opScreen];
+                }
             }
             if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '' || ($obj['schedule'] ?? '') !== '') {
                 $prev = admin_find_owned_list_entry($existingSlides, $obj);
@@ -445,10 +453,18 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             sort($screens);
             if (!isset($row['screens'])) {
                 if (!empty($row['_screens_form'])) {
-                    $obj['screens'] = [];
+                    $obj['screens'] = admin_operator_screen_locked()
+                        ? [admin_operator_screen_key()]
+                        : [];
                 }
             } elseif ($screens !== $allScreenKeys) {
                 $obj['screens'] = $screens;
+            }
+            if (admin_operator_screen_locked()) {
+                $opScreen = (string)admin_operator_screen_key();
+                if ($opScreen !== '' && (!isset($obj['screens']) || $obj['screens'] === [])) {
+                    $obj['screens'] = [$opScreen];
+                }
             }
             if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '') {
                 $prev = admin_find_owned_list_entry($existingPhotos, $obj);
@@ -501,6 +517,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
     }
     if ($board === 'rotation') {
+        $existingScreens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
+        $protectedScreens = array_flip(users_protected_screen_keys());
         if (admin_is_super()) {
         $screensOut = [];
         foreach ($_POST['SCREENS'] ?? [] as $row) {
@@ -549,6 +567,14 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 ];
             }
             $screensOut[$key] = $entry;
+        }
+        foreach ($protectedScreens as $pkey => $_) {
+            if (!isset($screensOut[$pkey]) && isset($existingScreens[$pkey])) {
+                $prev = $existingScreens[$pkey];
+                $screensOut[$pkey] = is_array($prev) ? $prev : ['name' => (string)$prev];
+                $flash = 'Display "' . $pkey . '" is assigned to an operator and cannot be removed — unassign in Users first.';
+                $flashOk = false;
+            }
         }
         if ($screensOut === []) {
             unset($conf['rotation.SCREENS']);
@@ -1262,8 +1288,32 @@ function admin_screen_picker_summary(array $options, array $checked, string $mod
  */
 function admin_screen_picker(string $prefix, array $options, array $checked, array $cfg = []): void
 {
+    $cfg = admin_screen_picker_operator_cfg($cfg);
     if ($options === []) {
         echo '<span class="help" style="margin:0">No displays configured.</span>';
+        return;
+    }
+    $lockScreen = (string)($cfg['lock_screen'] ?? '');
+    if (!empty($cfg['locked']) && $lockScreen !== '') {
+        $lockName = $lockScreen;
+        foreach ($options as $opt) {
+            if ($opt['key'] === $lockScreen) {
+                $lockName = (string)$opt['name'];
+                break;
+            }
+        }
+        $nameKey = (string)($cfg['name_key'] ?? 'screens');
+        $flat = !empty($cfg['flat']);
+        $flatName = (string)($cfg['name'] ?? 'deploy_screens');
+        $checkboxName = $flat ? $flatName . '[]' : $prefix . '[' . $nameKey . '][]';
+        echo '<div class="screen-picker screen-picker-locked" data-screen-picker data-locked="1">';
+        if (!empty($cfg['form_marker'])) {
+            $mk = (string)($cfg['form_marker_key'] ?? '_screens_form');
+            echo '<input type="hidden" name="' . h($prefix . '[' . $mk . ']') . '" value="1">';
+        }
+        echo '<input type="hidden" name="' . h($checkboxName) . '" value="' . h($lockScreen) . '">';
+        echo '<span class="help" style="margin:0">Your display: <strong>' . h($lockName) . '</strong> <code>' . h($lockScreen) . '</code></span>';
+        echo '</div>';
         return;
     }
     $nameKey = (string)($cfg['name_key'] ?? 'screens');
@@ -1273,6 +1323,8 @@ function admin_screen_picker(string $prefix, array $options, array $checked, arr
     $compact = !array_key_exists('compact', $cfg) || (bool)$cfg['compact'];
     $label = (string)($cfg['label'] ?? '');
     $extraClass = (string)($cfg['class'] ?? '');
+    $hideQuickNone = !empty($cfg['hide_none']) || $summaryMode === 'assign';
+    $hideQuickAll = !empty($cfg['hide_all']) || $summaryMode === 'assign';
     $checkedSet = array_flip($checked);
     $checkboxName = $flat ? $flatName . '[]' : $prefix . '[' . $nameKey . '][]';
     $pickerClass = 'screen-picker' . ($compact ? ' screen-picker-compact' : '') . ($extraClass !== '' ? ' ' . $extraClass : '');
@@ -1291,8 +1343,12 @@ function admin_screen_picker(string $prefix, array $options, array $checked, arr
         echo '<div class="screen-picker-panel" hidden>';
         echo '<input type="search" class="screen-picker-filter" placeholder="Filter displays…" autocomplete="off">';
         echo '<div class="screen-picker-quick">';
-        echo '<button type="button" class="secondary" data-pick="all">All</button>';
-        echo '<button type="button" class="secondary" data-pick="none">None</button>';
+        if (!$hideQuickAll) {
+            echo '<button type="button" class="secondary" data-pick="all">All</button>';
+        }
+        if (!$hideQuickNone) {
+            echo '<button type="button" class="secondary" data-pick="none">None</button>';
+        }
         echo '</div>';
     } elseif ($label !== '') {
         echo '<span class="mini">' . h($label) . '</span>';
@@ -1309,6 +1365,47 @@ function admin_screen_picker(string $prefix, array $options, array $checked, arr
         echo '</div>';
     }
     echo '</div>';
+}
+
+/** @param array<string,mixed> $cfg */
+function admin_screen_picker_operator_cfg(array $cfg = []): array
+{
+    if (admin_operator_screen_locked()) {
+        $cfg['locked'] = true;
+        $cfg['lock_screen'] = (string)admin_operator_screen_key();
+        $cfg['hide_none'] = true;
+        $cfg['hide_all'] = true;
+    }
+    return $cfg;
+}
+
+/** One display per operator — radio list in Users admin. @param array<string,string> $assignedElsewhere screen key => username */
+function admin_user_screen_picker(string $prefix, array $options, array $checked, array $assignedElsewhere): void
+{
+    if ($options === []) {
+        echo '<span class="help" style="margin:0">No displays configured yet — add screens under Rotation.</span>';
+        return;
+    }
+    $checkedKey = (string)($checked[0] ?? '');
+    echo '<div class="screen-picker screen-picker-assign" data-screen-picker data-summary-mode="assign" data-assign-single="1">';
+    echo '<div class="help" style="margin:0 0 8px">One display per operator.</div>';
+    echo '<div class="screen-picker-list slide-screen-checks">';
+    echo '<label data-screen-key=""><input type="radio" name="' . h($prefix . '[screen]') . '" value=""'
+        . ($checkedKey === '' ? ' checked' : '') . '> <span class="help" style="margin:0">Unassigned</span></label>';
+    foreach ($options as $opt) {
+        $k = (string)$opt['key'];
+        $blocked = isset($assignedElsewhere[$k]);
+        $isChecked = $checkedKey === $k;
+        echo '<label data-screen-key="' . h($k) . '"' . ($blocked && !$isChecked ? ' class="screen-assign-taken"' : '') . '>';
+        echo '<input type="radio" name="' . h($prefix . '[screen]') . '" value="' . h($k) . '"'
+            . ($isChecked ? ' checked' : '') . ($blocked && !$isChecked ? ' disabled' : '') . '>';
+        echo ' ' . h((string)$opt['name']);
+        if ($blocked && !$isChecked) {
+            echo ' <span class="help">(' . h($assignedElsewhere[$k]) . ')</span>';
+        }
+        echo '</label>';
+    }
+    echo '</div></div>';
 }
 
 /** @return list<string> */
@@ -1689,6 +1786,8 @@ function admin_field(array $f, $val, string $board): void
     background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
   .screen-picker-quick { display:flex; gap:8px; margin-bottom:8px; }
   .screen-picker-quick button { padding:4px 10px; font-size:12px; }
+  .screen-picker-assign .screen-assign-taken { opacity:.55; }
+  .screen-picker-locked { padding:4px 0; }
   .screen-picker-compact .screen-picker-list { max-height:168px; overflow:auto; margin-top:0; padding-right:4px; }
   .screen-picker-inline { margin-top:0; }
   .screen-picker-deploy-tab { margin-bottom:14px; }
@@ -2034,11 +2133,12 @@ function admin_field(array $f, $val, string $board): void
       <h2>Account</h2>
       <div class="sub">Signed in as <strong><?= h(admin_username()) ?></strong>
         — <?= admin_is_super() ? 'super admin (full access)' : 'screen operator' ?>.</div>
-      <?php if (!admin_is_super()): ?>
-      <div class="help" style="margin-bottom:18px">You only see and edit content you own. Legacy items without an owner are super-admin only. Assigned displays:
-        <?php $allowed = admin_allowed_screen_keys(); ?>
+      <?php if (!admin_is_super()):
+        $allowed = admin_allowed_screen_keys();
+      ?>
+      <div class="help" style="margin-bottom:18px">You manage one display:
         <?php if ($allowed === []): ?>
-          <span class="pill warn">none — ask a super admin to assign screens</span>
+          <span class="pill warn">none — ask a super admin to assign a display under <strong>Users</strong></span>
         <?php else: ?>
           <?php foreach ($allowed as $sk): ?>
             <code><?= h($sk) ?></code>
@@ -2062,6 +2162,8 @@ function admin_field(array $f, $val, string $board): void
 
     <?php elseif ($usersBoard):
       $allScreens = rotation_screens();
+      $screenAssignments = users_screen_assignments();
+      $usersById = users_by_id();
     ?>
       <h2>Users</h2>
       <div class="sub">Local accounts — SSO can be added later via <code>auth_provider</code> on each user.</div>
@@ -2091,9 +2193,16 @@ function admin_field(array $f, $val, string $board): void
                 <?php if (($urow['role'] ?? '') === 'super'): ?>
                   <span class="help" style="margin:0">All displays</span>
                 <?php else:
-                  admin_screen_picker('USERS[' . (int)$ui . ']', admin_screen_options($allScreens), $urow['screens'] ?? [], [
-                      'summary_mode' => 'assign',
-                  ]);
+                  $assignedElsewhere = [];
+                  foreach ($screenAssignments as $sk => $uid) {
+                      if ($uid !== (string)$urow['id']) {
+                          $owner = $usersById[$uid] ?? null;
+                          $assignedElsewhere[$sk] = is_array($owner)
+                              ? (string)($owner['username'] ?? $uid)
+                              : $uid;
+                      }
+                  }
+                  admin_user_screen_picker('USERS[' . (int)$ui . ']', admin_screen_options($allScreens), $urow['screens'] ?? [], $assignedElsewhere);
                 endif; ?>
               </td>
               <td style="text-align:center"><input type="checkbox" name="USERS[<?= (int)$ui ?>][disabled]" value="1"
@@ -2106,7 +2215,7 @@ function admin_field(array $f, $val, string $board): void
         </table>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column. Operators see items they own or that are shared with them; legacy unowned content is super-admin only until an owner is assigned.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column. Each <strong>operator</strong> gets exactly one display — displays already assigned to another operator are disabled. To remove a display from Rotation, unassign it here first.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -2116,8 +2225,19 @@ function admin_field(array $f, $val, string $board): void
       foreach ($allScreens as $sk => $sm) {
           $userScreenOptionsJs[] = ['key' => $sk, 'name' => (string)($sm['name'] ?? $sk)];
       }
+      $userScreenAssignmentsJs = [];
+      foreach ($screenAssignments as $sk => $uid) {
+          $owner = $usersById[$uid] ?? null;
+          $userScreenAssignmentsJs[$sk] = [
+              'userId' => $uid,
+              'username' => is_array($owner) ? (string)($owner['username'] ?? $uid) : $uid,
+          ];
+      }
       ?>
-      <script>window.USER_SCREEN_OPTIONS = <?= json_encode($userScreenOptionsJs, JSON_UNESCAPED_UNICODE) ?>;</script>
+      <script>window.USER_SCREEN_OPTIONS = <?= json_encode($userScreenOptionsJs, JSON_UNESCAPED_UNICODE) ?>;
+window.USER_SCREEN_ASSIGNMENTS = <?= json_encode($userScreenAssignmentsJs, JSON_UNESCAPED_UNICODE) ?>;
+window.ADMIN_OPERATOR_SCREEN = <?= json_encode(admin_operator_screen_key()) ?>;
+window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_locked()) ?>;</script>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
@@ -2369,9 +2489,13 @@ function admin_field(array $f, $val, string $board): void
                 <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
-                <?php foreach ($scrRows as $sri => $srow): ?>
-                <tr>
-                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][_key]" value="<?= h((string)($srow['_key'] ?? '')) ?>" placeholder="garage"></td>
+                <?php foreach ($scrRows as $sri => $srow):
+                  $screenKey = (string)($srow['_key'] ?? '');
+                  $assignedUser = $screenKey !== '' ? users_screen_assigned_username($screenKey) : null;
+                  $screenProtected = $assignedUser !== null;
+                ?>
+                <tr<?= $screenProtected ? ' data-screen-protected="1"' : '' ?>>
+                  <td><input type="text" name="SCREENS[<?= (int)$sri ?>][_key]" value="<?= h((string)($srow['_key'] ?? '')) ?>" placeholder="garage"<?= $screenProtected ? ' readonly title="Unassign in Users before renaming"' : '' ?>></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][name]" value="<?= h((string)($srow['name'] ?? '')) ?>" placeholder="Garage TV"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][show_ticker]" value="1" <?= !empty($srow['show_ticker']) ? 'checked' : '' ?>></td>
@@ -2392,7 +2516,11 @@ function admin_field(array $f, $val, string $board): void
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_on]" value="<?= h((string)($srow['cec_on'] ?? '6')) ?>" placeholder="6" style="width:52px"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
-                  <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
+                  <td><?php if ($screenProtected): ?>
+                    <span class="pill ok" title="Assigned to operator — unassign in Users to remove"><?= h($assignedUser) ?></span>
+                  <?php else: ?>
+                    <button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button>
+                  <?php endif; ?></td>
                 </tr>
                 <?php endforeach; ?>
               </tbody>
@@ -2408,6 +2536,7 @@ function admin_field(array $f, $val, string $board): void
           <div class="section-title">Playlists</div>
           <div class="rotation-global-add" id="rotationGlobalAdd">
             <div class="rotation-global-add-row">
+              <?php if (count($rotationScreens) > 1): ?>
               <div>
                 <label class="mini" for="rotationTargetScreen">Add to display</label>
                 <?php if (count($rotationScreens) > ADMIN_SCREEN_PICKER_COMPACT): ?>
@@ -2421,6 +2550,17 @@ function admin_field(array $f, $val, string $board): void
                   <?php endforeach; ?>
                 </select>
               </div>
+              <?php else:
+                $onlySk = (string)array_key_first($rotationScreens);
+                $onlyDid = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $onlySk);
+              ?>
+              <div>
+                <span class="help" style="margin:0">Your display: <strong><?= h(rotation_screen_display_name($onlySk, $rotationScreens)) ?></strong> <code><?= h($onlySk) ?></code></span>
+                <select id="rotationTargetScreen" hidden aria-hidden="true">
+                  <option value="<?= h($onlyDid) ?>" selected><?= h($onlySk) ?></option>
+                </select>
+              </div>
+              <?php endif; ?>
               <button type="button" class="addrow" onclick="addRotationPage(document.getElementById('rotationTargetScreen').value)">+ Page</button>
               <button type="button" class="secondary" onclick="loadRotationStarter(document.getElementById('rotationTargetScreen').value)">Starter playlist</button>
               <button type="button" class="secondary" id="rotationCopyMainBtn" onclick="copyRotationFromMain(document.getElementById('rotationTargetScreen').value)">Copy from main</button>
@@ -4255,6 +4395,7 @@ function updateScreenPickerSummary(picker) {
 function bindScreenPicker(picker) {
   if (picker.dataset.screenPickerBound) return;
   picker.dataset.screenPickerBound = '1';
+  if (picker.dataset.locked === '1') return;
   updateScreenPickerSummary(picker);
   const toggle = picker.querySelector('.screen-picker-toggle');
   const panel = picker.querySelector('.screen-picker-panel');
@@ -4306,6 +4447,24 @@ function screenPickerHtml(prefix, opts, checkedKeys, cfg) {
   if (!opts.length) {
     return '<span class="help" style="margin:0">No displays configured.</span>';
   }
+  if (window.ADMIN_OPERATOR_SCREEN_LOCKED && window.ADMIN_OPERATOR_SCREEN) {
+    const lockScreen = String(window.ADMIN_OPERATOR_SCREEN);
+    let lockName = lockScreen;
+    opts.forEach(function (o) {
+      if (String(o.key) === lockScreen) lockName = String(o.name);
+    });
+    const nameKey = cfg.nameKey || 'screens';
+    const flat = !!cfg.flat;
+    const flatName = cfg.name || 'deploy_screens';
+    const checkboxName = flat ? flatName + '[]' : prefix + '[' + nameKey + '][]';
+    let html = '<div class="screen-picker screen-picker-locked" data-screen-picker data-locked="1">';
+    if (cfg.formMarker) {
+      html += '<input type="hidden" name="' + prefix + '[' + (cfg.formMarkerKey || '_screens_form') + ']" value="1">';
+    }
+    html += '<input type="hidden" name="' + checkboxName + '" value="' + lockScreen.replace(/"/g, '&quot;') + '">';
+    html += '<span class="help" style="margin:0">Your display: <strong>' + lockName.replace(/</g, '&lt;') + '</strong> <code>' + lockScreen.replace(/</g, '&lt;') + '</code></span></div>';
+    return html;
+  }
   const compact = cfg.compact !== false;
   const summaryMode = cfg.summaryMode || 'deck';
   const nameKey = cfg.nameKey || 'screens';
@@ -4313,6 +4472,8 @@ function screenPickerHtml(prefix, opts, checkedKeys, cfg) {
   const flatName = cfg.name || 'deploy_screens';
   const checkboxName = flat ? flatName + '[]' : prefix + '[' + nameKey + '][]';
   const checked = new Set((checkedKeys || []).map(String));
+  const hideQuickNone = cfg.hideNone || summaryMode === 'assign';
+  const hideQuickAll = cfg.hideAll || summaryMode === 'assign';
   let html = '<div class="screen-picker' + (compact ? ' screen-picker-compact' : '') +
     (cfg.class ? ' ' + cfg.class : '') + '" data-screen-picker data-summary-mode="' + summaryMode + '">';
   if (cfg.formMarker) {
@@ -4323,8 +4484,10 @@ function screenPickerHtml(prefix, opts, checkedKeys, cfg) {
     html += '<button type="button" class="screen-picker-toggle secondary" aria-expanded="false">Choose…</button></div>';
     html += '<div class="screen-picker-panel" hidden>';
     html += '<input type="search" class="screen-picker-filter" placeholder="Filter displays…" autocomplete="off">';
-    html += '<div class="screen-picker-quick"><button type="button" class="secondary" data-pick="all">All</button>';
-    html += '<button type="button" class="secondary" data-pick="none">None</button></div>';
+    html += '<div class="screen-picker-quick">';
+    if (!hideQuickAll) html += '<button type="button" class="secondary" data-pick="all">All</button>';
+    if (!hideQuickNone) html += '<button type="button" class="secondary" data-pick="none">None</button>';
+    html += '</div>';
   } else if (cfg.label) {
     html += '<span class="mini">' + cfg.label + '</span>';
   }
@@ -4747,13 +4910,47 @@ function addSlideCard() {
   reindexSlideDeck();
 }
 
-function userScreensCellHtml(idx, role, checkedKeys) {
+function userScreenAssignedElsewhere(userId) {
+  const taken = {};
+  const map = window.USER_SCREEN_ASSIGNMENTS || {};
+  const selfId = String(userId || '');
+  Object.keys(map).forEach(function (sk) {
+    const entry = map[sk];
+    if (!entry || String(entry.userId) === selfId) return;
+    taken[sk] = entry.username || entry.userId || sk;
+  });
+  return taken;
+}
+
+function userScreensCellHtml(idx, role, checkedKeys, userId) {
   if (role === 'super') {
     return '<span class="help" style="margin:0">All displays</span>';
   }
-  return screenPickerHtml('USERS[' + idx + ']', window.USER_SCREEN_OPTIONS || [], checkedKeys, {
-    summaryMode: 'assign'
+  const opts = window.USER_SCREEN_OPTIONS || [];
+  const assignedElsewhere = userScreenAssignedElsewhere(userId);
+  const checkedKey = (checkedKeys && checkedKeys.length) ? String(checkedKeys[0]) : '';
+  let html = '<div class="screen-picker screen-picker-assign" data-screen-picker data-summary-mode="assign" data-assign-single="1">';
+  html += '<div class="help" style="margin:0 0 8px">One display per operator.</div>';
+  html += '<div class="screen-picker-list slide-screen-checks">';
+  html += '<label data-screen-key=""><input type="radio" name="USERS[' + idx + '][screen]" value=""'
+    + (checkedKey === '' ? ' checked' : '') + '> <span class="help" style="margin:0">Unassigned</span></label>';
+  opts.forEach(function (o) {
+    const sk = String(o.key);
+    const key = sk.replace(/"/g, '&quot;');
+    const name = String(o.name).replace(/</g, '&lt;');
+    const isChecked = checkedKey === sk;
+    const blocked = Object.prototype.hasOwnProperty.call(assignedElsewhere, sk);
+    const owner = blocked ? String(assignedElsewhere[sk]).replace(/</g, '&lt;') : '';
+    html += '<label data-screen-key="' + key + '"' + (blocked && !isChecked ? ' class="screen-assign-taken"' : '') + '>';
+    html += '<input type="radio" name="USERS[' + idx + '][screen]" value="' + key + '"'
+      + (isChecked ? ' checked' : '') + (blocked && !isChecked ? ' disabled' : '') + '> ' + name;
+    if (blocked && !isChecked) {
+      html += ' <span class="help">(' + owner + ')</span>';
+    }
+    html += '</label>';
   });
+  html += '</div></div>';
+  return html;
 }
 
 function bindUserRow(tr) {
@@ -4767,10 +4964,12 @@ function bindUserRow(tr) {
     const cell = tr.querySelector('td.wide');
     if (!cell) return;
     const checked = [];
-    cell.querySelectorAll('input[name*="[screens]"]:checked').forEach(function (cb) {
-      checked.push(cb.value);
+    cell.querySelectorAll('input[name*="[screen]"]:checked, input[name*="[screens]"]:checked').forEach(function (cb) {
+      if (cb.value) checked.push(cb.value);
     });
-    cell.innerHTML = userScreensCellHtml(idx, sel.value, checked);
+    const idInput = tr.querySelector('input[name*="[id]"]');
+    const userId = idInput ? idInput.value : '';
+    cell.innerHTML = userScreensCellHtml(idx, sel.value, checked, userId);
     initScreenPickers(tr);
   });
 }
@@ -4785,7 +4984,7 @@ function addUserRow() {
     '<td><input type="hidden" name="USERS[' + idx + '][id]" value="">' +
     '<input type="text" name="USERS[' + idx + '][username]" placeholder="username" required></td>' +
     '<td><select name="USERS[' + idx + '][role]"><option value="operator" selected>operator</option><option value="super">super</option></select></td>' +
-    '<td class="wide">' + userScreensCellHtml(idx, 'operator', []) + '</td>' +
+    '<td class="wide">' + userScreensCellHtml(idx, 'operator', [], '') + '</td>' +
     '<td style="text-align:center"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1" style="width:20px;height:20px;accent-color:var(--beacon)"></td>' +
     '<td><input type="password" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user"></td>' +
     '<td><button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button></td>';

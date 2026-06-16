@@ -119,6 +119,77 @@ function users_normalize_role(string $role): string
 }
 
 /** @return list<string> */
+/** Max displays per operator account (one operator ↔ one display). */
+const USERS_OPERATOR_SCREEN_MAX = 1;
+
+/** @return array<string,string> display key => operator user id */
+function users_screen_assignments(): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $map = [];
+    foreach (users_list() as $user) {
+        if (!is_array($user) || users_normalize_role((string)($user['role'] ?? '')) === 'super') {
+            continue;
+        }
+        $uid = (string)($user['id'] ?? '');
+        if ($uid === '') {
+            continue;
+        }
+        foreach (users_normalize_screens($user['screens'] ?? []) as $sk) {
+            $map[$sk] = $uid;
+        }
+    }
+    return $map;
+}
+
+/** @return list<string> Displays assigned to an operator — cannot be deleted until unassigned. */
+function users_protected_screen_keys(): array
+{
+    return array_keys(users_screen_assignments());
+}
+
+function users_screen_assigned_username(string $screen): ?string
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === '') {
+        return null;
+    }
+    $uid = users_screen_assignments()[$screen] ?? null;
+    if ($uid === null) {
+        return null;
+    }
+    $user = users_find_by_id($uid);
+    return is_array($user) ? (string)($user['username'] ?? '') : null;
+}
+
+/** @param array<string,mixed> $row */
+function users_screens_from_row(array $row): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $single = rotation_normalize_screen_key((string)($row['screen'] ?? ''));
+    if ($single !== '') {
+        return [$single];
+    }
+    return users_normalize_screens($row['screens'] ?? []);
+}
+
+/** Single assigned display for the current operator; null for super or when unassigned. */
+function admin_operator_screen_key(): ?string
+{
+    if (admin_is_super()) {
+        return null;
+    }
+    $keys = admin_allowed_screen_keys();
+    return $keys[0] ?? null;
+}
+
+function admin_operator_screen_locked(): bool
+{
+    return admin_operator_screen_key() !== null;
+}
+
+/** @return list<string> */
 function users_normalize_screens($raw): array
 {
     require_once __DIR__ . '/rotation_lib.php';
@@ -153,7 +224,7 @@ function users_public_row(?array $user): ?array
         'id' => (string)$user['id'],
         'username' => (string)($user['username'] ?? ''),
         'role' => users_normalize_role((string)($user['role'] ?? 'operator')),
-        'screens' => users_normalize_screens($user['screens'] ?? []),
+        'screens' => array_slice(users_normalize_screens($user['screens'] ?? []), 0, USERS_OPERATOR_SCREEN_MAX),
         'auth_provider' => (string)($user['auth_provider'] ?? 'local'),
         'disabled' => !empty($user['disabled']),
     ];
@@ -252,7 +323,7 @@ function admin_username(): string
     return is_array($user) ? (string)($user['username'] ?? '') : '';
 }
 
-/** @return list<string> Screen keys this session may manage. Super = all displays. */
+/** @return list<string> Screen keys this session may manage. Super = all displays; operators = one assigned display. */
 function admin_allowed_screen_keys(): array
 {
     require_once __DIR__ . '/rotation_lib.php';
@@ -268,6 +339,7 @@ function admin_allowed_screen_keys(): array
     foreach (users_normalize_screens($user['screens'] ?? []) as $key) {
         if (isset($allowed[$key])) {
             $out[] = $key;
+            break;
         }
     }
     return $out;
@@ -1001,6 +1073,7 @@ function users_save_from_post(array $rows): array
     $out = [];
     $usernames = [];
     $superCount = 0;
+    $screenOwners = [];
 
     foreach ($rows as $row) {
         if (!is_array($row)) {
@@ -1034,11 +1107,28 @@ function users_save_from_post(array $rows): array
             'id' => $id,
             'username' => $username,
             'role' => $role,
-            'screens' => $role === 'super' ? [] : users_normalize_screens($row['screens'] ?? []),
+            'screens' => $role === 'super' ? [] : users_screens_from_row($row),
             'auth_provider' => $authProvider,
             'external_id' => is_array($prev) ? ($prev['external_id'] ?? null) : null,
             'disabled' => !empty($row['disabled']),
         ];
+
+        if ($role === 'operator') {
+            $screens = $entry['screens'];
+            if (count($screens) > USERS_OPERATOR_SCREEN_MAX) {
+                return ['ok' => false, 'error' => 'Operator ' . $username . ' may have only one display.'];
+            }
+            if (count($screens) === 1) {
+                $sk = $screens[0];
+                if (isset($screenOwners[$sk])) {
+                    return [
+                        'ok' => false,
+                        'error' => 'Display "' . $sk . '" is already assigned to ' . $screenOwners[$sk] . '.',
+                    ];
+                }
+                $screenOwners[$sk] = $username;
+            }
+        }
 
         $newPassword = (string)($row['new_password'] ?? '');
         if ($newPassword !== '') {
@@ -1089,7 +1179,7 @@ function users_admin_rows(): array
             'id' => (string)($user['id'] ?? ''),
             'username' => (string)($user['username'] ?? ''),
             'role' => users_normalize_role((string)($user['role'] ?? 'operator')),
-            'screens' => users_normalize_screens($user['screens'] ?? []),
+            'screens' => array_slice(users_normalize_screens($user['screens'] ?? []), 0, USERS_OPERATOR_SCREEN_MAX),
             'disabled' => !empty($user['disabled']),
             'auth_provider' => (string)($user['auth_provider'] ?? 'local'),
         ];
