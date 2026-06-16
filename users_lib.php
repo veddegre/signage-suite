@@ -885,6 +885,17 @@ function admin_entry_sharing_html(string $prefix, ?array $entry, bool $compact =
     }
 }
 
+/** True when POST likely hit PHP max_input_vars (large deck saves can truncate). */
+function admin_post_input_vars_saturated(): bool
+{
+    $max = (int)ini_get('max_input_vars');
+    if ($max <= 0) {
+        return false;
+    }
+
+    return count($_POST, COUNT_RECURSIVE) >= $max - 16;
+}
+
 /** @param list<array<string,mixed>> $list */
 function admin_filter_owned_list(array $list): array
 {

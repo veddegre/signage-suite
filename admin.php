@@ -297,6 +297,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         if ($board === 'rotation' && strpos($f['key'], 'PAGES_') === 0) {
             continue;
         }
+        if ($board === 'slides' && $f['key'] === 'SLIDES') {
+            continue;
+        }
+        if ($board === 'rotator' && $f['key'] === 'PHOTOS') {
+            continue;
+        }
         if ($board === 'rotation' && !admin_is_super()) {
             if (in_array($f['key'], $rotationSuperFieldKeys, true)) {
                 continue;
@@ -442,132 +448,70 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     }
     if ($board === 'slides') {
         require_once __DIR__ . '/slides_lib.php';
-        $allScreenKeys = array_keys(rotation_screens());
-        sort($allScreenKeys);
         $existingSlides = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
-        $outV = [];
-        foreach ($_POST['SLIDES'] ?? [] as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $row = admin_normalize_form_row($row);
-            $obj = [];
-            foreach (['file', 'caption', 'schedule', 'date_start', 'date_end', 'month_day', 'month_day_end', 'weekdays'] as $k) {
-                $v = trim((string)($row[$k] ?? ''));
-                if ($v !== '') {
-                    $obj[$k] = $v;
+        $jsonRaw = trim((string)($_POST['SLIDES_JSON'] ?? ''));
+        if ($jsonRaw !== '') {
+            $decoded = json_decode($jsonRaw, true);
+            if (!is_array($decoded)) {
+                $errors[] = 'Slide deck data invalid — not saved.';
+            } else {
+                $outV = slides_parse_post_rows($decoded, $existingSlides);
+                $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
+                if ($mergedSlides === []) {
+                    unset($conf['slides.SLIDES']);
+                } else {
+                    $conf['slides.SLIDES'] = $mergedSlides;
                 }
             }
-            foreach (['dwell', 'day_of_month', 'hour_from', 'hour_to'] as $k) {
-                $v = trim((string)($row[$k] ?? ''));
-                if ($v !== '') {
-                    $obj[$k] = (int)$v;
-                }
-            }
-            if (!empty($row['priority'])) {
-                $obj['priority'] = true;
-            }
-            if (!empty($row['off'])) {
-                $obj['off'] = true;
-            }
-            $screens = [];
-            if (isset($row['screens']) && is_array($row['screens'])) {
-                foreach ($row['screens'] as $scr) {
-                    $sk = rotation_normalize_screen_key((string)$scr);
-                    if ($sk !== '') {
-                        $screens[$sk] = true;
-                    }
-                }
-            }
-            $screens = array_keys($screens);
-            sort($screens);
-            if (!isset($row['screens'])) {
-                if (!empty($row['_screens_form'])) {
-                    $obj['screens'] = admin_operator_screen_locked()
-                        ? [admin_operator_screen_key()]
-                        : [];
-                }
-            } elseif ($screens !== $allScreenKeys) {
-                $obj['screens'] = $screens;
-            }
-            if (admin_operator_screen_locked()) {
-                $opScreen = (string)admin_operator_screen_key();
-                if ($opScreen !== '' && (!isset($obj['screens']) || $obj['screens'] === [])) {
-                    $obj['screens'] = [$opScreen];
-                }
-            }
-            if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '' || ($obj['schedule'] ?? '') !== '') {
-                $prev = admin_find_owned_list_entry($existingSlides, $obj);
-                $outV[] = admin_finalize_entry($obj, $prev, $row);
-            }
-        }
-        $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
-        if ($mergedSlides === []) {
-            unset($conf['slides.SLIDES']);
         } else {
-            $conf['slides.SLIDES'] = $mergedSlides;
+            $postRows = is_array($_POST['SLIDES'] ?? null) ? $_POST['SLIDES'] : [];
+            if ($postRows !== [] && count($existingSlides) > count($postRows) && admin_post_input_vars_saturated()) {
+                $errors[] = 'Slide deck save may have been truncated (PHP max_input_vars=' . (int)ini_get('max_input_vars')
+                    . '). Reload the page and save again.';
+            } else {
+                $outV = slides_parse_post_rows($postRows, $existingSlides);
+                $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
+                if ($mergedSlides === []) {
+                    unset($conf['slides.SLIDES']);
+                } else {
+                    $conf['slides.SLIDES'] = $mergedSlides;
+                }
+            }
         }
     }
     if ($board === 'rotator') {
+        require_once __DIR__ . '/rotator_lib.php';
         $allScreenKeys = array_keys(rotation_screens());
         sort($allScreenKeys);
         $existingPhotos = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
-        $outV = [];
-        foreach ($_POST['PHOTOS'] ?? [] as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $row = admin_normalize_form_row($row);
-            $obj = [];
-            foreach (['file', 'caption', 'group'] as $k) {
-                $v = trim((string)($row[$k] ?? ''));
-                if ($v !== '') {
-                    $obj[$k] = $k === 'group' ? rotator_normalize_group($v) : $v;
+        $jsonRaw = trim((string)($_POST['PHOTOS_JSON'] ?? ''));
+        if ($jsonRaw !== '') {
+            $decoded = json_decode($jsonRaw, true);
+            if (!is_array($decoded)) {
+                $errors[] = 'Photo deck data invalid — not saved.';
+            } else {
+                $outV = rotator_parse_post_rows($decoded, $existingPhotos, $allScreenKeys);
+                $mergedPhotos = admin_merge_owned_list($existingPhotos, $outV);
+                if ($mergedPhotos === []) {
+                    unset($conf['rotator.PHOTOS']);
+                } else {
+                    $conf['rotator.PHOTOS'] = $mergedPhotos;
                 }
             }
-            $v = trim((string)($row['dwell'] ?? ''));
-            if ($v !== '') {
-                $obj['dwell'] = (int)$v;
-            }
-            if (!empty($row['off'])) {
-                $obj['off'] = true;
-            }
-            $screens = [];
-            if (isset($row['screens']) && is_array($row['screens'])) {
-                foreach ($row['screens'] as $scr) {
-                    $sk = rotation_normalize_screen_key((string)$scr);
-                    if ($sk !== '') {
-                        $screens[$sk] = true;
-                    }
-                }
-            }
-            $screens = array_keys($screens);
-            sort($screens);
-            if (!isset($row['screens'])) {
-                if (!empty($row['_screens_form'])) {
-                    $obj['screens'] = admin_operator_screen_locked()
-                        ? [admin_operator_screen_key()]
-                        : [];
-                }
-            } elseif ($screens !== $allScreenKeys) {
-                $obj['screens'] = $screens;
-            }
-            if (admin_operator_screen_locked()) {
-                $opScreen = (string)admin_operator_screen_key();
-                if ($opScreen !== '' && (!isset($obj['screens']) || $obj['screens'] === [])) {
-                    $obj['screens'] = [$opScreen];
-                }
-            }
-            if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '') {
-                $prev = admin_find_owned_list_entry($existingPhotos, $obj);
-                $outV[] = admin_finalize_entry($obj, $prev, $row);
-            }
-        }
-        $mergedPhotos = admin_merge_owned_list($existingPhotos, $outV);
-        if ($mergedPhotos === []) {
-            unset($conf['rotator.PHOTOS']);
         } else {
-            $conf['rotator.PHOTOS'] = $mergedPhotos;
+            $postRows = is_array($_POST['PHOTOS'] ?? null) ? $_POST['PHOTOS'] : [];
+            if ($postRows !== [] && count($existingPhotos) > count($postRows) && admin_post_input_vars_saturated()) {
+                $errors[] = 'Photo deck save may have been truncated (PHP max_input_vars=' . (int)ini_get('max_input_vars')
+                    . '). Reload the page and save again.';
+            } else {
+                $outV = rotator_parse_post_rows($postRows, $existingPhotos, $allScreenKeys);
+                $mergedPhotos = admin_merge_owned_list($existingPhotos, $outV);
+                if ($mergedPhotos === []) {
+                    unset($conf['rotator.PHOTOS']);
+                } else {
+                    $conf['rotator.PHOTOS'] = $mergedPhotos;
+                }
+            }
         }
     }
     if ($board === 'splunk') {
@@ -4739,6 +4683,95 @@ function reindexSlideDeck() {
   });
 }
 
+function collectMediaDeckRow(card, includeSchedule) {
+  const row = {};
+  function text(namePart) {
+    const el = card.querySelector('[name*="' + namePart + '"]');
+    if (!el || el.type === 'checkbox' || el.type === 'radio') return '';
+    return String(el.value || '').trim();
+  }
+  function intVal(namePart) {
+    const v = text(namePart);
+    return v === '' ? null : parseInt(v, 10);
+  }
+  ['file', 'caption', 'group'].forEach(function (k) {
+    const v = text('[' + k + ']');
+    if (v) row[k] = v;
+  });
+  if (includeSchedule) {
+    ['schedule', 'date_start', 'date_end', 'month_day', 'month_day_end', 'weekdays'].forEach(function (k) {
+      const v = text('[' + k + ']');
+      if (v) row[k] = v;
+    });
+    ['dwell', 'day_of_month', 'hour_from', 'hour_to'].forEach(function (k) {
+      const v = intVal('[' + k + ']');
+      if (v !== null && !isNaN(v)) row[k] = v;
+    });
+    if (card.querySelector('[name*="[priority]"]:checked')) row.priority = true;
+  } else {
+    const v = intVal('[dwell]');
+    if (v !== null && !isNaN(v)) row.dwell = v;
+  }
+  if (card.querySelector('[name*="[off]"]:checked')) row.off = true;
+  const screens = [];
+  card.querySelectorAll('[name*="[screens]"]:checked').forEach(function (cb) { screens.push(cb.value); });
+  if (card.querySelector('[name*="[_screens_form]"]')) row._screens_form = '1';
+  if (screens.length) row.screens = screens;
+  const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
+  const ownerSelect = card.querySelector('select[name*="[owner]"]');
+  const owner = ownerChecked ? ownerChecked.value : (ownerSelect ? ownerSelect.value : '');
+  if (owner) row.owner = owner;
+  const shared = [];
+  card.querySelectorAll('[name*="[shared]"]:checked').forEach(function (cb) { shared.push(cb.value); });
+  if (shared.length) row.shared = shared;
+  if (card.querySelector('[name*="[_sharing_form]"]')) row._sharing_form = '1';
+  return row;
+}
+
+function serializeSlideDeckForSave() {
+  const form = document.getElementById('boardform');
+  const deck = document.getElementById('slideDeck');
+  if (!form || !deck) return;
+  const rows = [];
+  deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    const row = collectMediaDeckRow(card, true);
+    if ((row.file || '') !== '' || (row.caption || '') !== '' || (row.schedule || '') !== '') {
+      rows.push(row);
+    }
+  });
+  let inp = form.querySelector('input[name="SLIDES_JSON"]');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'SLIDES_JSON';
+    form.appendChild(inp);
+  }
+  inp.value = JSON.stringify(rows);
+  deck.querySelectorAll('[name^="SLIDES["]').forEach(function (el) { el.disabled = true; });
+}
+
+function serializePhotoDeckForSave() {
+  const form = document.getElementById('boardform');
+  const deck = document.getElementById('photoDeck');
+  if (!form || !deck) return;
+  const rows = [];
+  deck.querySelectorAll('[data-photo-card]').forEach(function (card) {
+    const row = collectMediaDeckRow(card, false);
+    if ((row.file || '') !== '' || (row.caption || '') !== '') {
+      rows.push(row);
+    }
+  });
+  let inp = form.querySelector('input[name="PHOTOS_JSON"]');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'PHOTOS_JSON';
+    form.appendChild(inp);
+  }
+  inp.value = JSON.stringify(rows);
+  deck.querySelectorAll('[name^="PHOTOS["]').forEach(function (el) { el.disabled = true; });
+}
+
 function bindSlideCard(card) {
   const sel = card.querySelector('[data-schedule-select]');
   if (sel && !sel.dataset.bound) {
@@ -5616,6 +5649,15 @@ document.addEventListener('DOMContentLoaded', function () {
   initSlidesSectionNav();
   initPhotoDeck();
   initPhotosSectionNav();
+  const boardForm = document.getElementById('boardform');
+  if (boardForm) {
+    boardForm.addEventListener('submit', function () {
+      const action = boardForm.querySelector('input[name="action"]');
+      if (!action || action.value !== 'save') return;
+      if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
+      if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
+    });
+  }
   initScreenPickers(document);
   initEntrySharingPopovers(document);
   initDeployPanelFilters();

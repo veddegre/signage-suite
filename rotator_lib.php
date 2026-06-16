@@ -391,6 +391,72 @@ function rotator_remove_from_deck(array $deck, string $file): array
     }));
 }
 
+/**
+ * Parse posted photo deck rows (PHOTOS[] or PHOTOS_JSON) for admin save.
+ * @param list<array<string,mixed>> $rows
+ * @param list<array<string,mixed>> $existingPhotos
+ * @param list<string> $allScreenKeys
+ * @return list<array<string,mixed>>
+ */
+function rotator_parse_post_rows(array $rows, array $existingPhotos, array $allScreenKeys): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    require_once __DIR__ . '/users_lib.php';
+    $outV = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $row = admin_normalize_form_row($row);
+        $obj = [];
+        foreach (['file', 'caption', 'group'] as $k) {
+            $v = trim((string)($row[$k] ?? ''));
+            if ($v !== '') {
+                $obj[$k] = $k === 'group' ? rotator_normalize_group($v) : $v;
+            }
+        }
+        $v = trim((string)($row['dwell'] ?? ''));
+        if ($v !== '') {
+            $obj['dwell'] = (int)$v;
+        }
+        if (!empty($row['off'])) {
+            $obj['off'] = true;
+        }
+        $screens = [];
+        if (isset($row['screens']) && is_array($row['screens'])) {
+            foreach ($row['screens'] as $scr) {
+                $sk = rotation_normalize_screen_key((string)$scr);
+                if ($sk !== '') {
+                    $screens[$sk] = true;
+                }
+            }
+        }
+        $screens = array_keys($screens);
+        sort($screens);
+        if (!isset($row['screens'])) {
+            if (!empty($row['_screens_form'])) {
+                $obj['screens'] = admin_operator_screen_locked()
+                    ? [admin_operator_screen_key()]
+                    : [];
+            }
+        } elseif ($screens !== $allScreenKeys) {
+            $obj['screens'] = $screens;
+        }
+        if (admin_operator_screen_locked()) {
+            $opScreen = (string)admin_operator_screen_key();
+            if ($opScreen !== '' && (!isset($obj['screens']) || $obj['screens'] === [])) {
+                $obj['screens'] = [$opScreen];
+            }
+        }
+        if (($obj['file'] ?? '') !== '' || ($obj['caption'] ?? '') !== '') {
+            $prev = admin_find_owned_list_entry($existingPhotos, $obj);
+            $outV[] = admin_finalize_entry($obj, $prev, $row);
+        }
+    }
+
+    return $outV;
+}
+
 function rotator_append_to_deck(string $filename, array $extra = []): bool
 {
     require_once __DIR__ . '/users_lib.php';
