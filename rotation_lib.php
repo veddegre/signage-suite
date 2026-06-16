@@ -11,7 +11,43 @@ function rotation_normalize_screen_key(string $key): string
     return $key !== '' ? $key : 'main';
 }
 
-/** @return array{name:string,shuffle:bool,show_ticker:bool,show_clock:bool,schedule:array{enabled:bool,off:int,on:int},cec:array{enabled:bool,off:int,on:int,device:int}} */
+function rotation_global_fade_ms(): int
+{
+    return max(0, (int)cfg('rotation.FADE_MS', 800));
+}
+
+function rotation_global_settle_ms(): int
+{
+    return max(0, (int)cfg('rotation.SETTLE_MS', 1200));
+}
+
+function rotation_global_hang_ms(): int
+{
+    return max(0, (int)cfg('rotation.HANG_MS', 20000));
+}
+
+/** @param array<string,mixed>|null $scr @return array{fade_ms:int,settle_ms:int,hang_ms:int} */
+function rotation_screen_transition_from_scr(?array $scr): array
+{
+    $fade = rotation_global_fade_ms();
+    $settle = rotation_global_settle_ms();
+    $hang = rotation_global_hang_ms();
+    if ($scr !== null) {
+        if (isset($scr['fade_ms']) && trim((string)$scr['fade_ms']) !== '') {
+            $fade = max(0, (int)$scr['fade_ms']);
+        }
+        if (isset($scr['settle_ms']) && trim((string)$scr['settle_ms']) !== '') {
+            $settle = max(0, (int)$scr['settle_ms']);
+        }
+        if (isset($scr['hang_ms']) && trim((string)$scr['hang_ms']) !== '') {
+            $hang = max(0, (int)$scr['hang_ms']);
+        }
+    }
+
+    return ['fade_ms' => $fade, 'settle_ms' => $settle, 'hang_ms' => $hang];
+}
+
+/** @return array{name:string,shuffle:bool,show_ticker:bool,show_clock:bool,show_debug:bool,weighted:bool,fade_ms:int,settle_ms:int,hang_ms:int,schedule:array{enabled:bool,off:int,on:int},cec:array{enabled:bool,off:int,on:int,device:int}} */
 function rotation_screen_settings(string $screen = 'main'): array
 {
     $screen = rotation_normalize_screen_key($screen);
@@ -25,6 +61,7 @@ function rotation_screen_settings(string $screen = 'main'): array
             }
         }
     }
+    $transition = rotation_screen_transition_from_scr(null);
     $defaults = [
         'name' => $screen === 'main' ? 'Main Display' : $screen,
         'shuffle' => false,
@@ -32,6 +69,9 @@ function rotation_screen_settings(string $screen = 'main'): array
         'show_clock' => true,
         'show_debug' => false,
         'weighted' => false,
+        'fade_ms' => $transition['fade_ms'],
+        'settle_ms' => $transition['settle_ms'],
+        'hang_ms' => $transition['hang_ms'],
         'schedule' => rotation_schedule_defaults(),
         'cec' => rotation_cec_defaults(),
     ];
@@ -46,6 +86,9 @@ function rotation_screen_settings(string $screen = 'main'): array
             'show_clock' => true,
             'show_debug' => false,
             'weighted' => false,
+            'fade_ms' => $transition['fade_ms'],
+            'settle_ms' => $transition['settle_ms'],
+            'hang_ms' => $transition['hang_ms'],
             'schedule' => rotation_schedule_defaults(),
             'cec' => rotation_cec_defaults(),
         ];
@@ -58,6 +101,7 @@ function rotation_screen_settings(string $screen = 'main'): array
     $showClock = !array_key_exists('show_clock', $scr) || !empty($scr['show_clock']);
     $showDebug = !empty($scr['show_debug']);
     $weighted = !empty($scr['weighted']);
+    $transition = rotation_screen_transition_from_scr($scr);
 
     return [
         'name' => $name !== '' ? $name : ($screen === 'main' ? 'Main Display' : $screen),
@@ -66,6 +110,9 @@ function rotation_screen_settings(string $screen = 'main'): array
         'show_clock' => $showClock,
         'show_debug' => $showDebug,
         'weighted' => $weighted,
+        'fade_ms' => $transition['fade_ms'],
+        'settle_ms' => $transition['settle_ms'],
+        'hang_ms' => $transition['hang_ms'],
         'schedule' => rotation_schedule_from_screen($scr),
         'cec' => rotation_cec_from_screen($scr),
     ];
@@ -112,6 +159,9 @@ function rotation_admin_screen_row(string $key, $rv): array
         'show_clock' => !array_key_exists('show_clock', $row) || !empty($row['show_clock']),
         'show_debug' => !empty($row['show_debug']),
         'weighted' => !empty($row['weighted']),
+        'fade_ms' => isset($row['fade_ms']) ? (string)(int)$row['fade_ms'] : '',
+        'settle_ms' => isset($row['settle_ms']) ? (string)(int)$row['settle_ms'] : '',
+        'hang_ms' => isset($row['hang_ms']) ? (string)(int)$row['hang_ms'] : '',
         'schedule_enabled' => $sched['enabled'],
         'cec_enabled' => $cec['enabled'],
         'cec_off' => (string)$sched['off'],
@@ -446,9 +496,9 @@ function rotation_config_revision(string $screen = 'main'): string
         'weighted' => $settings['weighted'],
         'schedule' => $settings['schedule'],
         'cec' => $settings['cec'],
-        'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
-        'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
-        'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),
+        'fade_ms' => $settings['fade_ms'],
+        'settle_ms' => $settings['settle_ms'],
+        'hang_ms' => $settings['hang_ms'],
     ], JSON_UNESCAPED_SLASHES);
     return substr(sha1($blob ?: ''), 0, 12);
 }
@@ -474,9 +524,9 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'show_debug' => $settings['show_debug'],
         'schedule' => $settings['schedule'],
         'blank' => $blank,
-        'fade_ms' => (int)cfg('rotation.FADE_MS', 800),
-        'settle_ms' => (int)cfg('rotation.SETTLE_MS', 1200),
-        'hang_ms' => (int)cfg('rotation.HANG_MS', 20000),
+        'fade_ms' => $settings['fade_ms'],
+        'settle_ms' => $settings['settle_ms'],
+        'hang_ms' => $settings['hang_ms'],
         'revision' => rotation_config_revision($screen),
     ];
 }

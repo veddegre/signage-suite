@@ -519,6 +519,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             $entry['show_ticker'] = isset($row['show_ticker']);
             $entry['show_clock'] = isset($row['show_clock']);
             $entry['show_debug'] = isset($row['show_debug']);
+            foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
+                $tv = trim((string)($row[$transKey] ?? ''));
+                if ($tv === '') {
+                    continue;
+                }
+                $entry[$transKey] = max(0, (int)$tv);
+            }
             if (isset($row['weighted'])) {
                 $entry['weighted'] = true;
             }
@@ -551,6 +558,38 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
             $conf['rotation.SCREENS'] = $screensOut;
         }
+        }
+
+        if (!admin_is_super()) {
+            $screenOpts = $_POST['SCREEN_OPTS'] ?? [];
+            if (is_array($screenOpts) && $screenOpts !== []) {
+                $screens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
+                foreach ($screenOpts as $sk => $opts) {
+                    if (!is_array($opts)) {
+                        continue;
+                    }
+                    $sk = rotation_normalize_screen_key((string)$sk);
+                    if ($sk === '' || !admin_can_screen($sk)) {
+                        continue;
+                    }
+                    $entry = is_array($screens[$sk] ?? null) ? $screens[$sk] : ['name' => rotation_screen_display_name($sk, rotation_screens())];
+                    if (!is_array($entry)) {
+                        $entry = ['name' => (string)$entry];
+                    }
+                    $entry['show_ticker'] = isset($opts['show_ticker']);
+                    $entry['show_debug'] = isset($opts['show_debug']);
+                    foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
+                        $tv = trim((string)($opts[$transKey] ?? ''));
+                        if ($tv === '') {
+                            unset($entry[$transKey]);
+                        } else {
+                            $entry[$transKey] = max(0, (int)$tv);
+                        }
+                    }
+                    $screens[$sk] = $entry;
+                }
+                $conf['rotation.SCREENS'] = $screens;
+            }
         }
 
         $schemaPageKeys = [];
@@ -1679,6 +1718,12 @@ function admin_field(array $f, $val, string $board): void
   .video-playlist, .rotation-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; min-height:72px; }
   .rotation-playlist-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; text-align:center; }
   .rotation-screen-tools { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 6px; }
+  .rotation-display-options { margin:12px 0 14px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--harbor); }
+  .rotation-display-options .field-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px 14px; }
+  .rotation-display-options .field { margin:0; }
+  .rotation-display-options .l { font-size:12px; margin-bottom:4px; }
+  .rotation-display-options input[type="number"] { width:100%; max-width:120px; }
+  table.rows input.screen-ms { width:64px; }
   .rotation-playlist-panel { margin-top:16px; }
   .rotation-playlist-panel > summary { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding-right:48px; }
   .rotation-playlist-panel > summary code { font-size:13px; color:var(--beacon); font-weight:400; }
@@ -2317,11 +2362,11 @@ function admin_field(array $f, $val, string $board): void
           <details class="panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body" style="padding-top:8px">
-          <div class="help" style="margin-bottom:12px">Per-display ticker, clock, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main).</div>
+          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Ticker</th><th>Clock</th><th>Debug</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
+                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow): ?>
@@ -2334,6 +2379,9 @@ function admin_field(array $f, $val, string $board): void
                          name="SCREENS[<?= (int)$sri ?>][show_clock]" value="1" <?= !empty($srow['show_clock']) ? 'checked' : '' ?>></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][show_debug]" value="1" <?= !empty($srow['show_debug']) ? 'checked' : '' ?>></td>
+                  <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][fade_ms]" value="<?= h((string)($srow['fade_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_fade_ms() ?>"></td>
+                  <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][settle_ms]" value="<?= h((string)($srow['settle_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_settle_ms() ?>"></td>
+                  <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][hang_ms]" value="<?= h((string)($srow['hang_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_hang_ms() ?>"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][weighted]" value="1" <?= !empty($srow['weighted']) ? 'checked' : '' ?>></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
@@ -2430,6 +2478,7 @@ function admin_field(array $f, $val, string $board): void
               <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
               <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok">Weighted</span><?php endif; ?>
               <?php if ($screenSettings['show_debug']): ?><span class="pill">Debug</span><?php endif; ?>
+              <?php if (!$screenSettings['show_ticker']): ?><span class="pill warn">No ticker</span><?php endif; ?>
               <?php if ($screenSettings['schedule']['enabled']): ?><span class="pill ok">Blank <?= (int)$screenSettings['schedule']['off'] ?>→<?= (int)$screenSettings['schedule']['on'] ?></span><?php endif; ?>
               <?php if ($screenSettings['cec']['enabled']): ?><span class="pill">CEC</span><?php endif; ?>
               <span class="rotation-summary-actions">
@@ -2448,6 +2497,46 @@ function admin_field(array $f, $val, string $board): void
             <button type="button" class="secondary" onclick="document.getElementById('rotationTargetScreen').value='<?= h($deckId) ?>'; copyRotationFromMain('<?= h($deckId) ?>')">Copy from main</button>
             <?php endif; ?>
           </div>
+
+          <?php if (!admin_is_super()):
+            $scrValOpts = current_val($rawConf, $board, 'SCREENS');
+            $scrRaw = is_array($scrValOpts[$screenKey] ?? null) ? $scrValOpts[$screenKey] : [];
+            $fadeOpt = isset($scrRaw['fade_ms']) ? (string)(int)$scrRaw['fade_ms'] : '';
+            $settleOpt = isset($scrRaw['settle_ms']) ? (string)(int)$scrRaw['settle_ms'] : '';
+            $hangOpt = isset($scrRaw['hang_ms']) ? (string)(int)$scrRaw['hang_ms'] : '';
+          ?>
+          <div class="rotation-display-options">
+            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms).</div>
+            <div class="field-grid">
+              <div class="field">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
+                  <?= $screenSettings['show_ticker'] ? 'checked' : '' ?>> Weather alert ticker</label>
+              </div>
+              <div class="field">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_debug]" value="1"
+                  <?= $screenSettings['show_debug'] ? 'checked' : '' ?>> Debug overlay</label>
+              </div>
+              <div class="field">
+                <label class="l" for="screenFade-<?= h($screenKey) ?>">Crossfade (ms)</label>
+                <input type="number" min="0" step="1" id="screenFade-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][fade_ms]" value="<?= h($fadeOpt) ?>"
+                       placeholder="<?= (int)rotation_global_fade_ms() ?>">
+              </div>
+              <div class="field">
+                <label class="l" for="screenSettle-<?= h($screenKey) ?>">Settle after load (ms)</label>
+                <input type="number" min="0" step="1" id="screenSettle-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][settle_ms]" value="<?= h($settleOpt) ?>"
+                       placeholder="<?= (int)rotation_global_settle_ms() ?>">
+              </div>
+              <div class="field">
+                <label class="l" for="screenHang-<?= h($screenKey) ?>">Hung-page timeout (ms)</label>
+                <input type="number" min="0" step="1" id="screenHang-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][hang_ms]" value="<?= h($hangOpt) ?>"
+                       placeholder="<?= (int)rotation_global_hang_ms() ?>">
+              </div>
+            </div>
+          </div>
+          <?php endif; ?>
 
           <?php if ($effectivePages !== [] && $mirrorsMain): ?>
           <div class="rotation-effective-list mirror-note">Mirrors main — <?= (int)$activeEffective ?> page<?= $activeEffective === 1 ? '' : 's' ?> on wall</div>
@@ -2693,8 +2782,9 @@ function admin_field(array $f, $val, string $board): void
 
           <?php if (admin_is_super()): ?>
           <details class="panel panel-muted" style="margin-top:22px">
-            <summary>Transition settings</summary>
+            <summary>Default transition settings</summary>
             <div class="panel-body">
+              <div class="help" style="margin-bottom:12px">Used when a display leaves Crossfade / Settle / Hang blank in Display settings above.</div>
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
                   if (!in_array($f['key'], $rotationBoardKeys, true)) continue;
