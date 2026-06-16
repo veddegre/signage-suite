@@ -125,7 +125,7 @@ function splunk_pages_config(?array $rawConf = null): array
     }
 
     require_once __DIR__ . '/users_lib.php';
-    if (admin_preview_filter_active()) {
+    if (admin_display_filter_active()) {
         return [];
     }
 

@@ -363,6 +363,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     let revealed = false;
     const sep = p.url.includes('?') ? '&' : '?';
     let qs = 'noticker=1&settle=' + SETTLE;
+    if (SCREEN && SCREEN !== 'main') qs += '&screen=' + encodeURIComponent(SCREEN);
     if (!SHOW_CLOCK) qs += '&clock=0';
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();
     updateRotateDebug('loading…', p, idx, fullSrc);

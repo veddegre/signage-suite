@@ -29,9 +29,11 @@ if (!is_array($icsFeeds)) {
 define('ICS_FEEDS', admin_filter_list_for_display($icsFeeds));
 define('TRASH_WEEKDAY', cfg('family.TRASH_WEEKDAY', ''));
 define('RECYCLE_ANCHOR', cfg('family.RECYCLE_ANCHOR', ''));
-define('COUNTDOWNS', cfg('family.COUNTDOWNS', [
-
-]));
+$countdowns = cfg('family.COUNTDOWNS', []);
+if (!is_array($countdowns)) {
+    $countdowns = [];
+}
+define('COUNTDOWNS', admin_filter_scalar_map_for_display($countdowns));
 define('TIMEZONE', cfg('family.TIMEZONE', 'America/Detroit'));
 const CACHE_DIR = __DIR__ . '/cache';
 define('CACHE_TTL', cfg('family.CACHE_TTL', 600));

@@ -85,9 +85,9 @@ if (isset($_GET['img'])) {
         http_response_code(404);
         exit;
     }
-    if (admin_preview_filter_active()) {
+    if (admin_display_filter_active()) {
         $slide = slide_deck_by_file($name);
-        if ($slide === null || !admin_entry_visible($slide)) {
+        if (!is_array($slide) || !admin_entry_visible_for_user($slide, admin_display_scope_user_id())) {
             http_response_code(404);
             exit;
         }
@@ -114,7 +114,7 @@ if (isset($_GET['slide'])) {
         && empty($slide['off'])
         && slide_schedule_active($slide, $now);
     $active = $onDisk && ($preview || $scheduled);
-    if ($preview && admin_preview_filter_active() && (!is_array($slide) || !admin_entry_visible($slide))) {
+    if ($preview && admin_display_filter_active() && (!is_array($slide) || !admin_entry_visible_for_user($slide, admin_display_scope_user_id()))) {
         $active = false;
     }
     $pageTitle = is_array($slide) && trim((string)($slide['caption'] ?? '')) !== ''

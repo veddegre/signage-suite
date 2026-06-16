@@ -634,11 +634,25 @@ function admin_entry_visible(?array $entry): bool
     if ($uid === null) {
         return false;
     }
-    $owner = admin_entry_owner($entry);
-    if ($owner !== null && $owner === $uid) {
+
+    return admin_entry_visible_for_user($entry, $uid);
+}
+
+/** Whether one config row is visible to a specific user (null user = show all). */
+function admin_entry_visible_for_user(?array $entry, ?string $userId): bool
+{
+    if (!is_array($entry)) {
+        return false;
+    }
+    if ($userId === null || $userId === '') {
         return true;
     }
-    return in_array($uid, admin_entry_shared_users($entry), true);
+    $owner = admin_entry_owner($entry);
+    if ($owner !== null && $owner === $userId) {
+        return true;
+    }
+
+    return in_array($userId, admin_entry_shared_users($entry), true);
 }
 
 function admin_can_edit_entry(?array $entry): bool
@@ -1157,24 +1171,98 @@ function admin_preview_filter_active(): bool
     return isset($_GET['noticker']) && admin_preview_session_ready() && !admin_is_super();
 }
 
+/**
+ * Operator user id for signage board display scoping.
+ * Logged-in operators use their account; kiosk rotation passes ?screen= for assigned displays.
+ */
+function admin_display_scope_user_id(): ?string
+{
+    static $resolved = false;
+    static $uid = null;
+    if ($resolved) {
+        return $uid;
+    }
+    $resolved = true;
+
+    if (admin_preview_session_ready() && !admin_is_super()) {
+        $uid = admin_user_id();
+        if ($uid !== null && $uid !== '') {
+            return $uid;
+        }
+    }
+
+    if (!function_exists('rotation_normalize_screen_key')) {
+        require_once __DIR__ . '/rotation_lib.php';
+    }
+    $screen = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
+    if ($screen !== '' && $screen !== 'main') {
+        $uid = users_screen_assignments()[$screen] ?? null;
+    }
+
+    return $uid !== '' ? $uid : null;
+}
+
+function admin_display_filter_active(): bool
+{
+    return admin_display_scope_user_id() !== null;
+}
+
+/** @param list<array<string,mixed>> $list */
+function admin_filter_list_for_scope(array $list, ?string $userId): array
+{
+    if ($userId === null || $userId === '') {
+        return $list;
+    }
+
+    return array_values(array_filter(
+        $list,
+        static fn($row) => is_array($row) && admin_entry_visible_for_user($row, $userId)
+    ));
+}
+
+/** @param array<string,array<string,mixed>|mixed> $map */
+function admin_filter_map_for_scope(array $map, ?string $userId): array
+{
+    if ($userId === null || $userId === '') {
+        return $map;
+    }
+    $out = [];
+    foreach ($map as $k => $entry) {
+        if (is_array($entry) && admin_entry_visible_for_user($entry, $userId)) {
+            $out[$k] = $entry;
+        }
+    }
+
+    return $out;
+}
+
+/** @param array<string,mixed> $map */
+function admin_filter_scalar_map_for_display(array $map): array
+{
+    $uid = admin_display_scope_user_id();
+    if ($uid === null) {
+        return $map;
+    }
+    $out = [];
+    foreach ($map as $k => $v) {
+        if (is_array($v) && admin_entry_visible_for_user($v, $uid)) {
+            $out[(string)$k] = $v;
+        }
+    }
+
+    return $out;
+}
+
 /** @param array<string,array<string,mixed>|mixed> $map */
 function admin_filter_registry_for_display(array $map, ?callable $normalize = null): array
 {
-    if (!admin_preview_filter_active()) {
-        return $map;
-    }
-
-    return admin_filter_owned_map($map);
+    return admin_filter_map_for_scope($map, admin_display_scope_user_id());
 }
 
 /** @param list<array<string,mixed>> $list */
 function admin_filter_list_for_display(array $list): array
 {
-    if (!admin_preview_filter_active()) {
-        return $list;
-    }
-
-    return admin_filter_owned_list($list);
+    return admin_filter_list_for_scope($list, admin_display_scope_user_id());
 }
 
 /**
@@ -1191,7 +1279,7 @@ function admin_resolve_display_registry_key(array $map, string $requested, ?call
     if ($map === []) {
         return null;
     }
-    if (admin_preview_filter_active()) {
+    if (admin_display_filter_active()) {
         return null;
     }
     $first = array_key_first($map);
