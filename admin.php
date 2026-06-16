@@ -1581,7 +1581,7 @@ function admin_field(array $f, $val, string $board): void
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"<?= ($authed && $board === 'rotation') ? ' class="admin-rotation-page"' : '' ?>>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1601,7 +1601,7 @@ function admin_field(array $f, $val, string $board): void
   .top h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:34px; }
   .top h1 span { color:var(--beacon); }
   .top a { color:var(--mist); font-size:15px; }
-  .wrap { display:flex; min-height:calc(100vh - 79px); }
+  .wrap { display:flex; min-height:calc(100vh - 79px); min-width:0; overflow-x:hidden; }
   nav { width:220px; border-right:1px solid var(--line); padding:12px 0 18px; flex:0 0 auto; }
   nav a { display:block; padding:9px 22px; color:var(--snow); font-size:15px; }
   nav a:hover { background:var(--harbor); }
@@ -1609,8 +1609,8 @@ function admin_field(array $f, $val, string $board): void
   nav .sep { margin:12px 22px; border-top:1px solid var(--line); }
   nav .nav-label { padding:14px 22px 6px; font-size:11px; letter-spacing:1.2px; text-transform:uppercase;
                    color:var(--mist); opacity:.85; }
-  main { flex:1; padding:28px 34px 40px; max-width:920px; }
-  main.main-wide { max-width:none; width:100%; }
+  main { flex:1; padding:28px 34px 40px; max-width:920px; min-width:0; }
+  main.main-wide { max-width:none; width:100%; overflow-x:hidden; }
   h2 { font-family:'Big Shoulders Display'; font-weight:600; font-size:28px; margin-bottom:4px; }
   .sub { color:var(--mist); font-size:14px; margin-bottom:20px; line-height:1.45; }
   .sub a { margin-left:10px; }
@@ -1680,11 +1680,28 @@ function admin_field(array $f, $val, string $board): void
   .panel > summary:hover { background:rgba(255,255,255,.03); }
   .panel-body { padding:0 20px 20px; border-top:1px solid var(--line); }
   .panel-body .upload-box, .panel-body .creator-box { border:0; background:transparent; padding:16px 0 0; border-radius:0; }
+  .panel-body.rotation-display-settings-body { overflow:hidden; max-width:100%; min-width:0; }
   .panel-body.rotation-display-settings-body .rows-scroll {
+    display:block;
     max-height:min(52vh, 460px);
-    overflow:auto;
+    overflow-x:auto;
+    overflow-y:auto;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
   }
+  .panel-body.rotation-display-settings-body .rows-scroll table.rows[data-field="SCREENS"] {
+    width:max-content;
+    min-width:0;
+  }
+  details.rotation-display-settings-panel { max-width:100%; min-width:0; overflow:hidden; contain:inline-size; }
+  main.admin-board-rotation form#boardform { max-width:100%; min-width:0; overflow:hidden; }
   main.admin-board-rotation, main.admin-board-rotator { overflow-anchor:none; }
+  html.admin-rotation-page, body.admin-rotation-page { overflow-x:clip; max-width:100%; }
+  body.admin-rotation-page .top { overflow-x:clip; max-width:100vw; }
+  details.rotation-display-settings-panel > summary { scroll-margin:0; }
   .panel-muted > summary { font-size:16px; font-family:'IBM Plex Sans',sans-serif; font-weight:600;
                            letter-spacing:.2px; text-transform:none; padding:12px 16px; }
   .section-title { font-family:'Big Shoulders Display'; font-size:22px; margin:8px 0 14px; }
@@ -2007,7 +2024,7 @@ function admin_field(array $f, $val, string $board): void
   table.play-log td code { font-size:12px; color:var(--mist); word-break:break-all; }
 </style>
 </head>
-<body>
+<body<?= ($authed && $board === 'rotation') ? ' class="admin-rotation-page"' : '' ?>>
 <div class="top">
   <h1>Signage <span>&middot; Admin</span></h1>
   <?php if ($authed): ?>
@@ -2483,7 +2500,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           }
         ?>
           <?php if (admin_is_super()): ?>
-          <details class="panel" style="margin-bottom:16px">
+          <details class="panel rotation-display-settings-panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body rotation-display-settings-body" style="padding-top:8px">
           <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
@@ -4286,10 +4303,31 @@ function initAdminDetailsScrollFix(root) {
   (root || document).querySelectorAll('details.panel, details.slide-card-edit, details.rotation-playlist-panel').forEach(function (d) {
     if (d.dataset.scrollFixBound) return;
     d.dataset.scrollFixBound = '1';
-    d.addEventListener('toggle', function () {
-      if (!d.open) return;
+    function preserveScroll() {
       const y = window.scrollY;
-      requestAnimationFrame(function () { window.scrollTo(0, y); });
+      const fix = function () { window.scrollTo(0, y); };
+      fix();
+      requestAnimationFrame(function () {
+        fix();
+        requestAnimationFrame(fix);
+      });
+    }
+    d.addEventListener('toggle', preserveScroll);
+    const summary = d.querySelector('summary');
+    if (summary) {
+      summary.addEventListener('click', preserveScroll);
+    }
+    d.querySelectorAll('.rows-scroll').forEach(function (el) {
+      el.addEventListener('wheel', function (e) {
+        const dx = Math.abs(e.deltaX);
+        const dy = Math.abs(e.deltaY);
+        if (dx <= dy) return;
+        const max = el.scrollWidth - el.clientWidth;
+        if (max <= 0) return;
+        const atLeft = el.scrollLeft <= 0;
+        const atRight = el.scrollLeft >= max - 1;
+        if ((e.deltaX < 0 && atLeft) || (e.deltaX > 0 && atRight)) e.preventDefault();
+      }, { passive: false });
     });
   });
 }
