@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/json_store_lib.php';
+
 /**
  * CONFIG LOADER — shared by every board and by admin.php
  * Values live in config/settings.json, edited through admin.php (or by hand).
@@ -37,16 +39,35 @@ function cfg_path(): string
     return __DIR__ . '/config/settings.json';
 }
 
+/**
+ * Read fresh settings under the settings.json lock, merge, and write.
+ * Use this for any read-modify-write on settings.json.
+ *
+ * @param callable(array): (array|false|null) $mutator
+ */
+function cfg_update(callable $mutator): bool
+{
+    $result = signage_json_file_update(cfg_path(), $mutator, [
+        'default' => [],
+        'pretty' => true,
+        'sort_keys' => true,
+        'ensure_dir' => true,
+    ]);
+    if ($result['ok']) {
+        $GLOBALS['__cfg_cache'] = $result['data'];
+
+        return true;
+    }
+
+    return false;
+}
+
+/** Replace settings.json entirely (serialized with other writers). */
 function cfg_write(array $conf): bool
 {
-    $dir = __DIR__ . '/config';
-    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) return false;
     ksort($conf);
-    $tmp = $dir . '/settings.json.tmp';
-    $json = json_encode($conf, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    if ($json === false) return false;
-    if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-    return @rename($tmp, cfg_path());
+
+    return cfg_update(static fn(): array => $conf);
 }
 
 /** Height reserved at the bottom for the weather alert ticker overlay. */

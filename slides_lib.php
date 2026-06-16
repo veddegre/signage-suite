@@ -309,20 +309,24 @@ function slide_delete_file(string $file): array
         return ['ok' => false, 'error' => 'Invalid filename.'];
     }
 
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-    $deck = $conf['slides.SLIDES'] ?? [];
-    if (is_array($deck)) {
-        $deck = slide_remove_from_deck($deck, $safe);
-        if ($deck === []) {
-            unset($conf['slides.SLIDES']);
-        } else {
-            $conf['slides.SLIDES'] = $deck;
+    if (!cfg_update(function (array $conf) use ($safe): array {
+        $deck = $conf['slides.SLIDES'] ?? [];
+        if (is_array($deck)) {
+            $deck = slide_remove_from_deck($deck, $safe);
+            if ($deck === []) {
+                unset($conf['slides.SLIDES']);
+            } else {
+                $conf['slides.SLIDES'] = $deck;
+            }
         }
-    }
-    if (!cfg_write($conf)) {
+
+        return $conf;
+    })) {
         return ['ok' => false, 'error' => 'Could not update settings.json.'];
     }
     cfg_reload();
+
+    $deck = cfg('slides.SLIDES', []);
 
     $path = slides_dir() . '/' . $safe;
     if (is_file($path)) {
@@ -331,7 +335,7 @@ function slide_delete_file(string $file): array
 
     require_once __DIR__ . '/rotation_lib.php';
     foreach (array_keys(rotation_screens()) as $screen) {
-        $sync = rotation_sync_slides($screen, $conf['slides.SLIDES'] ?? []);
+        $sync = rotation_sync_slides($screen, is_array($deck) ? $deck : []);
         rotation_pages_write($sync['screen'], $sync['pages']);
     }
     cfg_reload();
@@ -343,18 +347,17 @@ function slide_delete_file(string $file): array
 function slide_append_to_deck(string $filename, array $extra = []): bool
 {
     require_once __DIR__ . '/users_lib.php';
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-    $deck = $conf['slides.SLIDES'] ?? [];
-    if (!is_array($deck)) {
-        $deck = [];
-    }
-    $deck[] = admin_stamp_owner(array_merge(['file' => $filename, 'schedule' => 'always'], $extra), null);
-    $conf['slides.SLIDES'] = $deck;
-    if (!cfg_write($conf)) {
-        return false;
-    }
-    cfg_reload();
-    return true;
+
+    return cfg_update(function (array $conf) use ($filename, $extra): array {
+        $deck = $conf['slides.SLIDES'] ?? [];
+        if (!is_array($deck)) {
+            $deck = [];
+        }
+        $deck[] = admin_stamp_owner(array_merge(['file' => $filename, 'schedule' => 'always'], $extra), null);
+        $conf['slides.SLIDES'] = $deck;
+
+        return $conf;
+    });
 }
 
 /** Unique filename inside the slide directory. */

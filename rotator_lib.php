@@ -394,24 +394,27 @@ function rotator_remove_from_deck(array $deck, string $file): array
 function rotator_append_to_deck(string $filename, array $extra = []): bool
 {
     require_once __DIR__ . '/users_lib.php';
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-    $deck = $conf['rotator.PHOTOS'] ?? [];
-    if (!is_array($deck)) {
-        $deck = [];
-    }
     $safe = rotator_safe_filename($filename);
     if ($safe === null) {
         return false;
     }
-    foreach ($deck as $photo) {
-        if (is_array($photo) && rotator_safe_filename((string)($photo['file'] ?? '')) === $safe) {
-            return true;
+
+    return cfg_update(function (array $conf) use ($safe, $extra): array {
+        $deck = $conf['rotator.PHOTOS'] ?? [];
+        if (!is_array($deck)) {
+            $deck = [];
         }
-    }
-    $row = admin_stamp_owner(['file' => $safe] + $extra, null);
-    $deck[] = $row;
-    $conf['rotator.PHOTOS'] = $deck;
-    return cfg_write($conf);
+        foreach ($deck as $photo) {
+            if (is_array($photo) && rotator_safe_filename((string)($photo['file'] ?? '')) === $safe) {
+                return $conf;
+            }
+        }
+        $row = admin_stamp_owner(['file' => $safe] + $extra, null);
+        $deck[] = $row;
+        $conf['rotator.PHOTOS'] = $deck;
+
+        return $conf;
+    });
 }
 
 /**
@@ -425,20 +428,24 @@ function rotator_delete_file(string $file): array
         return ['ok' => false, 'error' => 'Invalid filename.'];
     }
 
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-    $deck = $conf['rotator.PHOTOS'] ?? [];
-    if (is_array($deck)) {
-        $deck = rotator_remove_from_deck($deck, $safe);
-        if ($deck === []) {
-            unset($conf['rotator.PHOTOS']);
-        } else {
-            $conf['rotator.PHOTOS'] = $deck;
+    if (!cfg_update(function (array $conf) use ($safe): array {
+        $deck = $conf['rotator.PHOTOS'] ?? [];
+        if (is_array($deck)) {
+            $deck = rotator_remove_from_deck($deck, $safe);
+            if ($deck === []) {
+                unset($conf['rotator.PHOTOS']);
+            } else {
+                $conf['rotator.PHOTOS'] = $deck;
+            }
         }
-    }
-    if (!cfg_write($conf)) {
+
+        return $conf;
+    })) {
         return ['ok' => false, 'error' => 'Could not update settings.json.'];
     }
     cfg_reload();
+
+    $deck = cfg('rotator.PHOTOS', []);
 
     $path = rotator_photo_dir() . '/' . $safe;
     if (is_file($path)) {
@@ -447,7 +454,7 @@ function rotator_delete_file(string $file): array
 
     require_once __DIR__ . '/rotation_lib.php';
     foreach (array_keys(rotation_screens()) as $screen) {
-        $sync = rotation_sync_photos($screen, $conf['rotator.PHOTOS'] ?? []);
+        $sync = rotation_sync_photos($screen, is_array($deck) ? $deck : []);
         rotation_pages_write($sync['screen'], $sync['pages']);
     }
     cfg_reload();
@@ -458,24 +465,23 @@ function rotator_delete_file(string $file): array
 /** Import existing disk files into the deck when PHOTOS was never configured. */
 function rotator_migrate_deck_from_files(): bool
 {
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-    if (array_key_exists('rotator.PHOTOS', $conf)) {
-        return false;
-    }
     $files = rotator_list_photos();
     if ($files === []) {
         return false;
     }
-    $deck = [];
-    foreach ($files as $file) {
-        $deck[] = ['file' => $file];
-    }
-    $conf['rotator.PHOTOS'] = $deck;
-    if (!cfg_write($conf)) {
-        return false;
-    }
-    cfg_reload();
-    return true;
+
+    return cfg_update(function (array $conf) use ($files): array|false {
+        if (array_key_exists('rotator.PHOTOS', $conf)) {
+            return false;
+        }
+        $deck = [];
+        foreach ($files as $file) {
+            $deck[] = ['file' => $file];
+        }
+        $conf['rotator.PHOTOS'] = $deck;
+
+        return $conf;
+    });
 }
 
 /**

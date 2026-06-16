@@ -4,6 +4,7 @@
  */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/json_store_lib.php';
 require_once __DIR__ . '/rotation_lib.php';
 
 const SIGNAGE_PRESENCE_STALE_SEC = 120;
@@ -34,12 +35,12 @@ function signage_presence_read_all(): array
 
 function signage_presence_write_all(array $data): bool
 {
-    $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if ($json === false) {
-        return false;
-    }
+    $result = signage_json_file_update(signage_presence_path(), static fn(): array => $data, [
+        'default' => [],
+        'ensure_dir' => true,
+    ]);
 
-    return @file_put_contents(signage_presence_path(), $json, LOCK_EX) !== false;
+    return (bool)($result['ok'] ?? false);
 }
 
 function signage_presence_stats_day(): string
@@ -219,9 +220,6 @@ function signage_presence_touch(string $screen, array $payload): void
     $now = time();
     $today = signage_presence_stats_day();
 
-    $all = signage_presence_read_all();
-    $prev = is_array($all[$screen] ?? null) ? $all[$screen] : [];
-
     $isBlank = !empty($payload['blank']);
     $status = trim((string)($payload['status'] ?? ''));
     $pageUrl = $isBlank ? '' : trim((string)($payload['page_url'] ?? ''));
@@ -230,61 +228,78 @@ function signage_presence_touch(string $screen, array $payload): void
         $pageLabel = rotation_page_label($pageUrl);
     }
 
-    $playsToday = (int)($prev['plays_today'] ?? 0);
-    $playsTotal = (int)($prev['plays_total'] ?? 0);
-    $pageStats = is_array($prev['page_stats'] ?? null) ? $prev['page_stats'] : [];
-    $statsDay = (string)($prev['stats_day'] ?? '');
-    $playLog = is_array($prev['play_log'] ?? null) ? $prev['play_log'] : [];
-    $pageLast = is_array($prev['page_last'] ?? null) ? $prev['page_last'] : [];
+    signage_json_file_update(signage_presence_path(), function (array $all) use (
+        $screen,
+        $now,
+        $today,
+        $isBlank,
+        $status,
+        $pageUrl,
+        $pageLabel,
+        $payload
+    ): array {
+        $prev = is_array($all[$screen] ?? null) ? $all[$screen] : [];
 
-    if ($statsDay !== $today) {
-        $playsToday = 0;
-        $pageStats = [];
-        $statsDay = $today;
-    }
+        $playsToday = (int)($prev['plays_today'] ?? 0);
+        $playsTotal = (int)($prev['plays_total'] ?? 0);
+        $pageStats = is_array($prev['page_stats'] ?? null) ? $prev['page_stats'] : [];
+        $statsDay = (string)($prev['stats_day'] ?? '');
+        $playLog = is_array($prev['play_log'] ?? null) ? $prev['play_log'] : [];
+        $pageLast = is_array($prev['page_last'] ?? null) ? $prev['page_last'] : [];
 
-    $lastPlayUrl = (string)($prev['last_play_url'] ?? '');
-    if (!$isBlank && $pageUrl !== '' && $status === 'on screen' && $pageUrl !== $lastPlayUrl) {
-        $playsToday++;
-        $playsTotal++;
-        $pageStats[$pageUrl] = (int)($pageStats[$pageUrl] ?? 0) + 1;
-        $pageStats = signage_presence_trim_page_stats($pageStats);
-        $lastPlayUrl = $pageUrl;
-        $pageLast[$pageUrl] = $now;
-        array_unshift($playLog, [
-            'ts' => $now,
-            'url' => $pageUrl,
-            'label' => $pageLabel,
-        ]);
-        if (count($playLog) > SIGNAGE_PLAY_LOG_MAX) {
-            $playLog = array_slice($playLog, 0, SIGNAGE_PLAY_LOG_MAX);
+        if ($statsDay !== $today) {
+            $playsToday = 0;
+            $pageStats = [];
+            $statsDay = $today;
         }
-    }
-    if ($isBlank) {
-        $lastPlayUrl = '';
-    }
 
-    $all[$screen] = [
-        'screen' => $screen,
-        'last_seen' => $now,
-        'blank' => $isBlank,
-        'page_url' => $pageUrl,
-        'page_label' => $pageLabel,
-        'page_index' => (int)($payload['page_index'] ?? -1),
-        'page_total' => (int)($payload['page_total'] ?? 0),
-        'status' => $status,
-        'revision' => trim((string)($payload['revision'] ?? '')),
-        'plays_today' => $playsToday,
-        'plays_total' => $playsTotal,
-        'stats_day' => $statsDay,
-        'page_stats' => $pageStats,
-        'page_last' => $pageLast,
-        'play_log' => $playLog,
-        'last_play_url' => $lastPlayUrl,
-        'first_seen' => (int)($prev['first_seen'] ?? $now),
-    ];
+        $lastPlayUrl = (string)($prev['last_play_url'] ?? '');
+        if (!$isBlank && $pageUrl !== '' && $status === 'on screen' && $pageUrl !== $lastPlayUrl) {
+            $playsToday++;
+            $playsTotal++;
+            $pageStats[$pageUrl] = (int)($pageStats[$pageUrl] ?? 0) + 1;
+            $pageStats = signage_presence_trim_page_stats($pageStats);
+            $lastPlayUrl = $pageUrl;
+            $pageLast[$pageUrl] = $now;
+            array_unshift($playLog, [
+                'ts' => $now,
+                'url' => $pageUrl,
+                'label' => $pageLabel,
+            ]);
+            if (count($playLog) > SIGNAGE_PLAY_LOG_MAX) {
+                $playLog = array_slice($playLog, 0, SIGNAGE_PLAY_LOG_MAX);
+            }
+        }
+        if ($isBlank) {
+            $lastPlayUrl = '';
+        }
 
-    signage_presence_write_all($all);
+        $all[$screen] = [
+            'screen' => $screen,
+            'last_seen' => $now,
+            'blank' => $isBlank,
+            'page_url' => $pageUrl,
+            'page_label' => $pageLabel,
+            'page_index' => (int)($payload['page_index'] ?? -1),
+            'page_total' => (int)($payload['page_total'] ?? 0),
+            'status' => $status,
+            'revision' => trim((string)($payload['revision'] ?? '')),
+            'plays_today' => $playsToday,
+            'plays_total' => $playsTotal,
+            'stats_day' => $statsDay,
+            'page_stats' => $pageStats,
+            'page_last' => $pageLast,
+            'play_log' => $playLog,
+            'last_play_url' => $lastPlayUrl,
+            'first_seen' => (int)($prev['first_seen'] ?? $now),
+        ];
+
+        return $all;
+    }, [
+        'default' => [],
+        'ensure_dir' => true,
+        'lock_wait_sec' => 3.0,
+    ]);
 }
 
 /** @return array<string, mixed> */

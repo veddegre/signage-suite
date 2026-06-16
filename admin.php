@@ -6,7 +6,7 @@
  *
  * First visit: create a super admin using the one-time key in config/setup.key
  * (on the server via SSH — not downloadable over HTTP). Accounts live in
- * config/users.json (local auth today; SSO-ready via auth_provider per user).
+ * config/users.json (local + OIDC SSO via Entra ID or Authentik).
  * Change your password under Account; manage users under Users (super only).
  * Tools (raw JSON, cache) is super-admin only.
  */
@@ -24,6 +24,8 @@ require_once __DIR__ . '/traffic_lib.php';
 require_once __DIR__ . '/splunk_lib.php';
 require_once __DIR__ . '/web_lib.php';
 require_once __DIR__ . '/users_lib.php';
+require_once __DIR__ . '/sso_lib.php';
+require_once __DIR__ . '/audit_lib.php';
 
 slide_background_ensure_assets();
 slide_background_ensure_photos();
@@ -65,6 +67,37 @@ $needSetup = users_need_setup();
 $flash   = null;
 $flashOk = true;
 
+// ── SSO (before auth gate) ───────────────────────────────────────────────────
+if (!$needSetup && ($_GET['sso'] ?? '') === 'start') {
+    sso_start_login();
+}
+if (!$needSetup && ($_GET['sso'] ?? '') === 'callback') {
+    $gate = signage_login_allowed();
+    if (!$gate['ok']) {
+        $flash = 'Too many failed attempts — try again in ' . (int)ceil(($gate['wait'] ?? 900) / 60) . ' minutes.';
+        $flashOk = false;
+    } else {
+        $ssoResult = sso_handle_callback();
+        if ($ssoResult['ok'] && is_array($ssoResult['user'])) {
+            admin_login_user($ssoResult['user']);
+            signage_login_succeeded();
+            audit_log('auth.sso_login', 'Signed in via ' . sso_provider_label());
+            header('Location: admin.php');
+            exit;
+        }
+        signage_login_failed();
+        usleep(400000);
+        audit_log('auth.sso_failed', (string)($ssoResult['error'] ?? 'SSO sign-in failed.'));
+        $flash = (string)($ssoResult['error'] ?? 'SSO sign-in failed.');
+        $flashOk = false;
+    }
+}
+if (!empty($_SESSION['sso_error'])) {
+    $flash = (string)$_SESSION['sso_error'];
+    $flashOk = false;
+    unset($_SESSION['sso_error']);
+}
+
 // ── Auth actions ─────────────────────────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'setup' && $needSetup) {
     $username = users_normalize_username((string)($_POST['username'] ?? 'admin'));
@@ -87,6 +120,7 @@ if (($_POST['action'] ?? '') === 'setup' && $needSetup) {
                 admin_login_user($user);
                 signage_setup_key_consume();
                 signage_login_succeeded();
+                audit_log('auth.setup', 'Created super admin ' . (string)($user['username'] ?? ''));
                 $needSetup = false;
                 $flash = 'Super admin account created. Welcome!';
             } else {
@@ -110,14 +144,21 @@ if (($_POST['action'] ?? '') === 'login' && !$needSetup) {
         if ($user !== null) {
             admin_login_user($user);
             signage_login_succeeded();
+            audit_log('auth.login', 'Local login');
         } else {
             signage_login_failed();
             usleep(400000);
+            audit_log('auth.login_failed', 'Invalid credentials', [
+                'actor' => users_normalize_username((string)($_POST['username'] ?? '')),
+            ]);
             $flash = 'Invalid username or password.'; $flashOk = false;
         }
     }
 }
 if (($_GET['logout'] ?? '') === '1') {
+    if (admin_is_authenticated()) {
+        audit_log('auth.logout', 'Logged out');
+    }
     admin_logout_user();
     header('Location: admin.php');
     exit;
@@ -131,7 +172,7 @@ if ($authed && !signage_admin_idle_check()) {
 
 // ── Save handler ─────────────────────────────────────────────────────────────
 $board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));
-$virtualBoards = ['tools', 'users', 'account', 'status'];
+$virtualBoards = ['tools', 'users', 'account', 'status', 'audit'];
 if ($board === '') {
     $board = $authed ? admin_default_board() : (string)array_key_first($schema);
 } elseif (!isset($schema[$board]) && !in_array($board, $virtualBoards, true)) {
@@ -144,6 +185,7 @@ $tools = ($board === 'tools');
 $usersBoard = ($board === 'users');
 $accountBoard = ($board === 'account');
 $statusBoard = ($board === 'status');
+$auditBoard = ($board === 'audit');
 
 if ($authed && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $contentLen = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
@@ -199,8 +241,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         $flashOk = false;
     } else {
     $rotationSuperFieldKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
     $errors = [];
+    $saveWarnFlash = null;
+    $saveWarnFlashOk = true;
+    $applyBoardSave = function (array $conf) use ($board, $schema, $rotationSuperFieldKeys, &$errors, &$saveWarnFlash, &$saveWarnFlashOk) {
     foreach ($schema[$board]['fields'] as $f) {
         if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
             continue;
@@ -572,8 +616,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             if (!isset($screensOut[$pkey]) && isset($existingScreens[$pkey])) {
                 $prev = $existingScreens[$pkey];
                 $screensOut[$pkey] = is_array($prev) ? $prev : ['name' => (string)$prev];
-                $flash = 'Display "' . $pkey . '" is assigned to an operator and cannot be removed — unassign in Users first.';
-                $flashOk = false;
+                $saveWarnFlash = 'Display "' . $pkey . '" is assigned to an operator and cannot be removed — unassign in Users first.';
+                $saveWarnFlashOk = false;
             }
         }
         if ($screensOut === []) {
@@ -644,16 +688,26 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
     }
-    $conf = array_filter($conf, fn($v) => $v !== null);
-    if ($errors) {
-        $flash = implode(' ', $errors); $flashOk = false;
-    } else {
-        protect_dirs();
-        if (cfg_write($conf)) {
+        if ($errors !== []) {
+            return false;
+        }
+
+        return array_filter($conf, static fn($v) => $v !== null);
+    };
+    protect_dirs();
+    if (cfg_update($applyBoardSave)) {
+        if ($saveWarnFlash !== null) {
+            $flash = $saveWarnFlash;
+            $flashOk = $saveWarnFlashOk;
+        }
             if (isset($_POST['clear_cache']) && admin_can_tools()) {
-                foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) @unlink($cf);
+                foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) {
+                    if (audit_cache_preserve_basename(basename($cf))) {
+                        continue;
+                    }
+                    @unlink($cf);
+                }
             }
-            cfg_reload();
             $extra = '';
             if ($board === 'video') {
                 $screens = admin_filter_deploy_screens(admin_deploy_screens_from_post($_POST));
@@ -732,9 +786,18 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
             $flash = $schema[$board]['title'] . ' saved.'
                 . (isset($_POST['clear_cache']) && admin_can_tools() ? ' Cache cleared.' : '') . $extra;
+            audit_log('board.save', $schema[$board]['title'] . ' settings saved', ['board' => $board]);
             $schema = admin_schema();   // pick up structural changes (e.g. new rotation screens)
+    } else {
+        if ($errors !== []) {
+            $flash = implode(' ', $errors);
+            $flashOk = false;
+        } elseif (signage_json_last_error() === 'lock_timeout') {
+            $flash = 'Another admin save is in progress — wait a moment and try again.';
+            $flashOk = false;
         } else {
-            $flash = 'Could not write config/settings.json — check directory permissions.'; $flashOk = false;
+            $flash = 'Could not write config/settings.json — check directory permissions.';
+            $flashOk = false;
         }
     }
     }
@@ -744,6 +807,7 @@ if ($authed && admin_can_manage_users() && ($_POST['action'] ?? '') === 'save_us
     $result = users_save_from_post($_POST['USERS'] ?? []);
     if ($result['ok']) {
         $flash = 'Saved ' . (int)($result['count'] ?? 0) . ' user account' . ((int)($result['count'] ?? 0) === 1 ? '' : 's') . '.';
+        audit_log('users.save', 'Saved ' . (int)($result['count'] ?? 0) . ' user accounts');
     } else {
         $flash = (string)($result['error'] ?? 'Could not save users.');
         $flashOk = false;
@@ -755,8 +819,15 @@ if ($authed && ($_POST['action'] ?? '') === 'clearcache' && csrf_ok()) {
         $flash = 'Only super admins can clear the cache.'; $flashOk = false;
     } else {
     $n = 0;
-    foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) { @unlink($cf); $n++; }
+    foreach (glob(__DIR__ . '/cache/*.{dat,json}', GLOB_BRACE) ?: [] as $cf) {
+        if (audit_cache_preserve_basename(basename($cf))) {
+            continue;
+        }
+        @unlink($cf);
+        $n++;
+    }
     $flash = "Cleared $n cached file" . ($n === 1 ? '' : 's') . '.';
+    audit_log('cache.clear', "Cleared $n API cache files");
     }
 }
 
@@ -770,6 +841,7 @@ if ($authed && ($_POST['action'] ?? '') === 'changepassword' && csrf_ok()) {
         $result = admin_change_own_password($cur, $pw);
         if ($result['ok']) {
             $flash = 'Password updated.';
+            audit_log('auth.password_change', 'Password updated');
         } else {
             $flash = (string)($result['error'] ?? 'Could not update password.');
             $flashOk = false;
@@ -1664,6 +1736,8 @@ function admin_field(array $f, $val, string $board): void
            border-radius:14px; padding:38px; }
   .login h2 { margin-bottom:18px; }
   .login .field input { max-width:100%; }
+  .login-sso { display:inline-block; text-align:center; text-decoration:none; width:100%; box-sizing:border-box; }
+  .login-divider { text-align:center; color:var(--mist); margin:18px 0 14px; font-size:13px; letter-spacing:.5px; }
   pre.raw { background:var(--harbor); border:1px solid var(--line); border-radius:10px;
             padding:18px; font-family:'IBM Plex Mono',monospace; font-size:13.5px;
             overflow:auto; max-height:480px; }
@@ -2056,14 +2130,24 @@ function admin_field(array $f, $val, string $board): void
       </form>
     <?php else: ?>
       <h2>Log in</h2>
+      <?php if (sso_enabled()): ?>
+      <div class="actions" style="margin-top:0;margin-bottom:0">
+        <a class="save login-sso" href="admin.php?sso=start"><?= h(sso_login_button_label()) ?></a>
+      </div>
+      <?php if (sso_allow_local_fallback()): ?>
+      <div class="login-divider">or use local account</div>
+      <?php endif; ?>
+      <?php endif; ?>
+      <?php if (!sso_enabled() || sso_allow_local_fallback()): ?>
       <form method="post">
         <input type="hidden" name="action" value="login">
         <div class="field"><label class="l">Username</label>
-          <input type="text" name="username" autocomplete="username" autofocus required></div>
+          <input type="text" name="username" autocomplete="username"<?= sso_enabled() ? '' : ' autofocus' ?> required></div>
         <div class="field"><label class="l">Password</label>
-          <input type="password" name="password" autocomplete="current-password" required></div>
+          <input type="password" name="password" autocomplete="current-password"<?= sso_enabled() ? ' autofocus' : '' ?> required></div>
         <div class="actions"><button class="save">Log in</button></div>
       </form>
+      <?php endif; ?>
     <?php endif; ?>
   </div>
 
@@ -2084,12 +2168,12 @@ function admin_field(array $f, $val, string $board): void
         if (!isset($schema[$k])) continue;
         $navSeen[$k] = true;
       ?>
-        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && !$usersBoard && !$accountBoard && !$statusBoard && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
+        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && !$usersBoard && !$accountBoard && !$statusBoard && !$auditBoard && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
       <?php endforeach; ?>
     <?php endforeach;
     foreach ($schema as $k => $b) {
         if (!empty($navSeen[$k])) continue;
-        echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && !$usersBoard && !$accountBoard && !$statusBoard && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
+        echo '<a href="?board=' . h($k) . '" class="' . ((!$tools && !$usersBoard && !$accountBoard && !$statusBoard && !$auditBoard && $k === $board) ? 'active' : '') . '">' . h($b['title']) . "</a>\n";
     }
     ?>
     <div class="sep"></div>
@@ -2098,11 +2182,14 @@ function admin_field(array $f, $val, string $board): void
     <?php endif; ?>
     <a href="?board=status" class="<?= $statusBoard ? 'active' : '' ?>">Status</a>
     <a href="?board=account" class="<?= $accountBoard ? 'active' : '' ?>">Account</a>
+    <?php if (admin_can_audit()): ?>
+    <a href="?board=audit" class="<?= $auditBoard ? 'active' : '' ?>">Audit</a>
+    <?php endif; ?>
     <?php if (admin_can_tools()): ?>
     <a href="?board=tools" class="<?= $tools ? 'active' : '' ?>">Tools</a>
     <?php endif; ?>
   </nav>
-  <main<?= (!$tools && in_array($board, ['slides', 'rotation', 'status'], true)) ? ' class="main-wide"' : '' ?><?= (!$tools && $board === 'rotation') ? ' admin-board-rotation' : '' ?><?= (!$tools && $board === 'rotator') ? ' admin-board-rotator' : '' ?>>
+  <main<?= (!$tools && !$auditBoard && in_array($board, ['slides', 'rotation', 'status'], true)) ? ' class="main-wide"' : '' ?><?= ($auditBoard) ? ' class="main-wide"' : '' ?><?= (!$tools && !$auditBoard && $board === 'rotation') ? ' admin-board-rotation' : '' ?><?= (!$tools && !$auditBoard && $board === 'rotator') ? ' admin-board-rotator' : '' ?>>
     <?php if ($flash): ?><div class="flash<?= $flashOk ? '' : ' bad' ?>"><?= h($flash) ?></div><?php endif; ?>
 
     <?php if ($tools): ?>
@@ -2118,6 +2205,43 @@ function admin_field(array $f, $val, string $board): void
       <h2 style="font-size:22px">config/settings.json</h2>
       <div class="sub">Only keys that differ from board defaults are stored. Edit by hand if you like — boards pick it up on next render.</div>
       <pre class="raw"><?= h(json_encode($rawConf, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}') ?></pre>
+
+    <?php elseif ($auditBoard):
+      $auditRows = audit_recent(300);
+      try {
+          $auditTz = new DateTimeZone(rotation_timezone());
+      } catch (Throwable $e) {
+          $auditTz = new DateTimeZone('UTC');
+      }
+    ?>
+      <h2>Audit log</h2>
+      <div class="sub">Admin sign-ins, saves, and user changes. Stored in <code>cache/admin_audit.json</code> (not cleared with API cache).</div>
+      <?php if (!audit_enabled()): ?>
+      <div class="flash bad">Audit logging is disabled under <strong>Security → Enable audit log</strong>.</div>
+      <?php endif; ?>
+      <div class="rows-scroll" style="margin-top:12px">
+      <table class="play-log audit-log">
+        <thead><tr>
+          <th>When</th><th>User</th><th>Action</th><th>Detail</th><th>IP</th>
+        </tr></thead>
+        <tbody>
+          <?php if ($auditRows === []): ?>
+          <tr><td colspan="5" class="help" style="padding:16px">No entries yet.</td></tr>
+          <?php else: foreach ($auditRows as $row):
+            $ts = (int)($row['ts'] ?? 0);
+            $when = $ts > 0 ? (new DateTimeImmutable('@' . $ts))->setTimezone($auditTz)->format('Y-m-d H:i:s') : '—';
+          ?>
+          <tr>
+            <td style="white-space:nowrap"><?= h($when) ?></td>
+            <td><?= h((string)($row['username'] ?? '')) ?: '—' ?></td>
+            <td><?= h(audit_action_label((string)($row['action'] ?? ''))) ?></td>
+            <td><?= h((string)($row['summary'] ?? '')) ?></td>
+            <td style="white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-size:12px"><?= h((string)($row['ip'] ?? '')) ?></td>
+          </tr>
+          <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+      </div>
 
     <?php elseif ($statusBoard): ?>
       <h2>Status</h2>
@@ -2167,6 +2291,13 @@ function admin_field(array $f, $val, string $board): void
         <?php endif; ?>
       </div>
       <?php endif; ?>
+      <?php
+      $acctUser = admin_current_user();
+      $acctSso = is_array($acctUser) && (($acctUser['auth_provider'] ?? 'local') === 'sso');
+      ?>
+      <?php if ($acctSso): ?>
+      <div class="help" style="margin-bottom:24px">This account uses <?= h(sso_provider_label()) ?> SSO — password is managed by your identity provider.</div>
+      <?php else: ?>
       <h2 style="font-size:22px;margin-top:0">Change password</h2>
       <form method="post" style="margin-bottom:28px;max-width:420px">
         <input type="hidden" name="action" value="changepassword">
@@ -2180,6 +2311,7 @@ function admin_field(array $f, $val, string $board): void
           <input type="password" name="new_password2" autocomplete="new-password" required></div>
         <div class="actions"><button class="save">Update password</button></div>
       </form>
+      <?php endif; ?>
 
     <?php elseif ($usersBoard):
       $allScreens = rotation_screens();
@@ -2187,7 +2319,7 @@ function admin_field(array $f, $val, string $board): void
       $usersById = users_by_id();
     ?>
       <h2>Users</h2>
-      <div class="sub">Local accounts — SSO can be added later via <code>auth_provider</code> on each user.</div>
+      <div class="sub">Create accounts here first. Set <strong>Auth</strong> to SSO for Entra / Authentik users — username must match the IdP claim (usually email local-part). SSO links on first sign-in.</div>
       <form method="post" id="usersForm">
         <input type="hidden" name="action" value="save_users">
         <input type="hidden" name="board" value="users">
@@ -2195,14 +2327,26 @@ function admin_field(array $f, $val, string $board): void
         <div class="rows-scroll">
         <table class="rows" id="usersTable">
           <thead><tr>
-            <th>Username</th><th>Role</th><th>Displays</th><th>Disabled</th><th>New password</th><th></th>
+            <th>Username</th><th>Auth</th><th>Role</th><th>Displays</th><th>Disabled</th><th>Password</th><th></th>
           </tr></thead>
           <tbody>
-            <?php foreach ($userAdminRows as $ui => $urow): ?>
-            <tr>
+            <?php foreach ($userAdminRows as $ui => $urow):
+              $uAuth = ($urow['auth_provider'] ?? 'local') === 'sso' ? 'sso' : 'local';
+              $uLinked = ($urow['external_id'] ?? '') !== '';
+            ?>
+            <tr data-auth="<?= h($uAuth) ?>">
               <td>
                 <input type="hidden" name="USERS[<?= (int)$ui ?>][id]" value="<?= h((string)$urow['id']) ?>">
                 <input type="text" name="USERS[<?= (int)$ui ?>][username]" value="<?= h((string)$urow['username']) ?>" required>
+                <?php if ($uAuth === 'sso'): ?>
+                <div class="help" style="margin-top:4px;font-size:11px"><?= $uLinked ? 'Linked' : 'Pending first sign-in' ?></div>
+                <?php endif; ?>
+              </td>
+              <td>
+                <select name="USERS[<?= (int)$ui ?>][auth_provider]" class="user-auth-select">
+                  <option value="local" <?= $uAuth === 'local' ? 'selected' : '' ?>>Local</option>
+                  <option value="sso" <?= $uAuth === 'sso' ? 'selected' : '' ?>>SSO</option>
+                </select>
               </td>
               <td>
                 <select name="USERS[<?= (int)$ui ?>][role]">
@@ -2228,7 +2372,9 @@ function admin_field(array $f, $val, string $board): void
               </td>
               <td style="text-align:center"><input type="checkbox" name="USERS[<?= (int)$ui ?>][disabled]" value="1"
                 <?= !empty($urow['disabled']) ? 'checked' : '' ?> style="width:20px;height:20px;accent-color:var(--beacon)"></td>
-              <td><input type="password" name="USERS[<?= (int)$ui ?>][new_password]" autocomplete="new-password" placeholder="Leave blank to keep"></td>
+              <td><input type="password" class="user-password-input" name="USERS[<?= (int)$ui ?>][new_password]" autocomplete="new-password"
+                placeholder="<?= $uAuth === 'sso' ? 'SSO — no password' : 'Leave blank to keep' ?>"
+                <?= $uAuth === 'sso' ? 'disabled' : '' ?>></td>
               <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
             </tr>
             <?php endforeach; ?>
@@ -2236,7 +2382,7 @@ function admin_field(array $f, $val, string $board): void
         </table>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. New users need a password in the <strong>New password</strong> column. Each <strong>operator</strong> gets exactly one display — displays already assigned to another operator are disabled. To remove a display from Rotation, unassign it here first.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. Each <strong>operator</strong> gets exactly one display.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -3782,6 +3928,10 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
         </div>
         <?php endif; ?>
 
+        <?php if ($board === 'security'): ?>
+        <?= sso_admin_setup_html() ?>
+        <?php endif; ?>
+
         <div class="actions">
           <button class="save">Save</button>
           <?php if (admin_can_tools()): ?>
@@ -5007,8 +5157,25 @@ function userScreensCellHtml(idx, role, checkedKeys, userId) {
   return html;
 }
 
+function syncUserAuthRow(tr) {
+  const authSel = tr.querySelector('.user-auth-select');
+  const pw = tr.querySelector('.user-password-input');
+  if (!authSel || !pw) return;
+  const isSso = authSel.value === 'sso';
+  tr.dataset.auth = isSso ? 'sso' : 'local';
+  pw.disabled = isSso;
+  pw.value = '';
+  pw.placeholder = isSso ? 'SSO — no password' : (pw.dataset.newUser ? 'Required for new user' : 'Leave blank to keep');
+}
+
 function bindUserRow(tr) {
   const sel = tr.querySelector('select[name*="[role]"]');
+  const authSel = tr.querySelector('.user-auth-select');
+  if (authSel && !authSel.dataset.bound) {
+    authSel.dataset.bound = '1';
+    authSel.addEventListener('change', function () { syncUserAuthRow(tr); });
+    syncUserAuthRow(tr);
+  }
   if (!sel || sel.dataset.bound) return;
   sel.dataset.bound = '1';
   sel.addEventListener('change', function () {
@@ -5037,10 +5204,11 @@ function addUserRow() {
   tr.innerHTML =
     '<td><input type="hidden" name="USERS[' + idx + '][id]" value="">' +
     '<input type="text" name="USERS[' + idx + '][username]" placeholder="username" required></td>' +
+    '<td><select name="USERS[' + idx + '][auth_provider]" class="user-auth-select"><option value="local" selected>Local</option><option value="sso">SSO</option></select></td>' +
     '<td><select name="USERS[' + idx + '][role]"><option value="operator" selected>operator</option><option value="super">super</option></select></td>' +
     '<td class="wide">' + userScreensCellHtml(idx, 'operator', [], '') + '</td>' +
     '<td style="text-align:center"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1" style="width:20px;height:20px;accent-color:var(--beacon)"></td>' +
-    '<td><input type="password" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user"></td>' +
+    '<td><input type="password" class="user-password-input" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user" data-new-user="1"></td>' +
     '<td><button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button></td>';
   tbody.appendChild(tr);
   bindUserRow(tr);

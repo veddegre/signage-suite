@@ -1333,7 +1333,11 @@ function video_sync_rotation(string $screen = 'main'): array
 
 function video_rotation_pages_write(string $screen, array $pages): bool
 {
-    $conf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
-    $conf['rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', $screen)] = $pages;
-    return cfg_write($conf);
+    $key = 'rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+
+    return cfg_update(function (array $conf) use ($key, $pages): array {
+        $conf[$key] = $pages;
+
+        return $conf;
+    });
 }

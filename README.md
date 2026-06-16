@@ -12,7 +12,7 @@ Seventeen self-contained PHP pages, all 1920×1080, all sharing the same dark-na
 
     sudo bash setup-kiosk.sh "http://your-server/boards/board.php" [scale]
 
-Then open **admin.php** in a browser, create your admin password, and configure boards. See [Server setup](#setup-serversh--the-web-host) and [Kiosk setup](#setup-kiosksh--the-display-device) below for options.
+Then open **admin.php** in a browser, create your super admin account, and configure boards. Optional: enable SSO (Entra ID or Authentik) under **Security**. See [Admin access](#admin-access), [SSO setup](#sso-setup-entra-id--authentik), [Server setup](#setup-serversh--the-web-host), and [Kiosk setup](#setup-kiosksh--the-display-device).
 
 ## Server requirements (manual install)
 
@@ -33,16 +33,111 @@ If you prefer not to use `setup-server.sh`, you need PHP 8.1+ with curl, xml, mb
 (Adjust the path to wherever the boards live. On nginx: `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }`.) Verify after deploying: `curl -I http://server/boards/config/settings.json` should return 403.
 
 ## Configuration: admin.php (start here)
-All settings are managed through **admin.php** — a web frontend covering every board. On first visit it asks you to create an admin password (stored as a hash in `config/admin.json`). Change it anytime under **Tools → Change admin password**; delete `admin.json` on the server to fully reset (a new `setup.key` is required for setup). Settings save to `config/settings.json`; **the board PHP files are never modified**, so the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
 
-How it works: each board's old `const` values are now built-in defaults. A blank field in the admin means "use the default"; anything you enter overrides it. Password and API-key fields are left blank on save to mean "unchanged" — the admin never echoes secrets back into the HTML. The Tools page can clear the API cache (handy after changing keys) and shows the raw JSON, which you can also edit by hand.
+All settings are managed through **admin.php** — a web frontend covering every board. Settings save to `config/settings.json`; **the board PHP files are never modified**, so the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
 
-Notes for the security-minded:
-- `config/settings.json` holds your API tokens. The admin drops a deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` automatically (Apache). **On nginx add:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }` (adjust the path).
-- Login is session-based with CSRF protection, strict session cookies, idle timeout, and login lockout after repeated failures.
-- **First admin setup** requires a one-time key from `config/setup.key` on the server (created automatically, blocked from HTTP). SSH in to read it — prevents a stranger from claiming admin on a public host.
-- **Outbound fetch policy:** RSS/ICS URLs block private IPs unless **Admin → Security → Allow private URL fetches** is enabled. YouTube downloads only accept `youtube.com` / `youtu.be`. yt-dlp updates verify SHA-256 from the official GitHub release.
-- Still put **HTTPS** in front if admin is reachable from the internet (reverse proxy or Cloudflare Tunnel). For defense in depth, VPN or Cloudflare Access is recommended on semi-public hosts.
+How it works: each board's old `const` values are built-in defaults. A blank field in the admin means "use the default"; anything you enter overrides it. Password and API-key fields are left blank on save to mean "unchanged" — the admin never echoes secrets back into the HTML. The **Tools** page (super admin only) can clear the API cache and shows the raw JSON, which you can also edit by hand.
+
+### Admin access
+
+Accounts live in `config/users.json` (not in the web-readable tree — blocked like `settings.json`). On first visit you create a **super admin** using a one-time key from `config/setup.key` on the server (SSH in to read it — prevents a stranger from claiming admin on a public host).
+
+| Role | Access |
+|------|--------|
+| **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
+| **Operator** | Content boards + **Rotation** for their assigned display only; **Account** and **Status** |
+
+**Navigation:** sidebar groups boards (Setup, Weather & home, Monitoring, Media, Dashboards). **Users** and **Tools** are super-admin only. **Status**, **Account**, and logout are in the sidebar footer.
+
+- **Account** — change your local password (hidden for SSO-linked accounts).
+- **Users** — create local or SSO users, assign roles, assign exactly **one display** per operator (radio picker). Displays assigned to an operator cannot be deleted from **Rotation** until unassigned here.
+- **Status** — live sign health (kiosk heartbeats), recent play log, and photo/slides sync-to-rotation panels. Deploy actions stay on each media board; Status is read-mostly monitoring.
+- **Security** — idle timeout, outbound URL policy, [SSO](#sso-setup-entra-id--authentik), and audit settings.
+- **Audit** (super admin) — sign-ins, failed logins, board saves, user changes, cache clears. Not wiped when clearing API cache.
+
+**Login:** local username/password, optional **Sign in with …** when SSO is enabled, session cookies with CSRF protection, idle auto-logout, and lockout after repeated failures.
+
+### Content ownership & sharing
+
+Playlist rows (rotation pages, slides, photos, videos, RSS feeds, etc.) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). Operators only see and edit entries they own or that are shared with them. Super admins see everything and can reassign ownership. This keeps multi-user installs tidy when several people manage different displays.
+
+### Concurrent saves & JSON storage
+
+Settings, accounts, audit history, and kiosk presence are stored as JSON on disk (`config/settings.json`, `config/users.json`, `cache/admin_audit.json`, `cache/presence.json`). That keeps the stack simple — no database to install — and is a good fit for teams on the order of dozens of users.
+
+**Simultaneous admin saves** are handled with file locking across the full read → merge → write cycle. If two people save different boards at the same time, the second request waits briefly, reads the latest file, and applies its changes on top — so one save no longer silently overwrites the other. The same protection applies to deploy-to-rotation actions (slides, photos, video, RSS), SSO account linking, JIT provisioning, and kiosk heartbeats. If a lock cannot be acquired in time, admin shows *Another admin save is in progress — wait a moment and try again.*
+
+**Users page caveat:** that screen posts the entire user table on each save. Two super admins editing **Users** at the same time still means whoever saves last wins the whole table (not a corrupt file — just the usual full-form replace). Coordinate user changes, or save one at a time.
+
+Sidecar `*.lock` files next to the JSON files are normal; they are used only while a write is in progress.
+
+### SSO setup (Entra ID & Authentik)
+
+Admin login supports **OpenID Connect** — one implementation works for **Microsoft Entra ID**, **Authentik**, and any standard OIDC provider.
+
+**Prerequisites:** PHP **curl** extension (already required for boards). HTTPS in front of admin is strongly recommended for production SSO.
+
+#### 1. Configure the identity provider
+
+Register a **Web** OAuth2/OIDC application and note the **client ID**, **client secret**, and **issuer URL**.
+
+| Provider | Issuer URL | Redirect URI |
+|----------|------------|--------------|
+| **Entra ID** | `https://login.microsoftonline.com/<tenant-id>/v2.0` | Copy from admin after step 2 |
+| **Authentik** | Shown on the OAuth2/OpenID provider (often `https://auth.example.com/application/o/<slug>/` — **trailing slash must match exactly**) | Same |
+
+In Entra: App registration → **Authentication** → add redirect URI as **Web**. Create a client secret under **Certificates & secrets**.
+
+In Authentik: **Applications** → Provider (OAuth2/OpenID) + Application → add the redirect URI to the provider.
+
+#### 2. Enable SSO in Signage
+
+1. Log in as super admin → **Security**.
+2. Check **Enable SSO login**.
+3. Set **SSO provider** to `entra` or `authentik` (preset hints only — same OIDC flow).
+4. Fill **OIDC issuer URL**, **OIDC client ID**, **OIDC client secret**.
+5. Leave **OIDC scopes** at default `openid profile email` unless your IdP requires more.
+6. **Save**. The page shows your **Redirect URI** — paste it into Entra/Authentik if you have not already.
+
+Useful options:
+
+- **Username claim** — JWT field matched to admin username (default `preferred_username`; falls back to `email` / Entra `upn`).
+- **Auto-link by email** — on first SSO sign-in, match an existing user when the email local-part equals their username (e.g. `jane` ↔ `jane@contoso.com`).
+- **Allow local password login** — keep the username/password form when SSO is on (default: yes).
+- **SSO just-in-time provisioning** — auto-create **operator** accounts on first SSO sign-in (never super). Optional **allowed email domains** and **required groups/roles** in the token gate who gets provisioned.
+- **Enable audit log** — record admin actions (default on). View under **Audit** in the sidebar.
+
+#### 3. Create SSO users (or enable JIT)
+
+**Manual (default):** SSO does **not** auto-provision unless JIT is enabled. A super admin must create each user first:
+
+1. **Users** → **+ Add user** (or edit existing).
+2. Set **Auth** to **SSO**.
+3. **Username** must match what the IdP sends (usually the email local-part).
+4. Set role and display assignment → **Save users**.
+
+On first successful SSO sign-in the account **links** (status shows "Linked"); until then it shows "Pending first sign-in". Linked accounts authenticate only via SSO — no local password.
+
+**JIT provisioning:** enable **Security → SSO just-in-time provisioning**. First sign-in from Entra/Authentik creates an **operator** with no display assigned — a super admin assigns a screen under **Users**. Recommended for larger teams:
+
+1. Set **JIT allowed email domains** (e.g. `yourcompany.com`).
+2. Optionally set **JIT required groups/roles** — user must have any listed value in the token `groups` or `roles` claim (Entra: assign app roles or enable groups in token configuration; Authentik: groups appear in userinfo).
+3. New JIT users appear in **Users** as SSO operators; assign displays as usual.
+
+#### Troubleshooting SSO
+
+- **Could not load OpenID discovery** — wrong issuer URL or server cannot reach the IdP. Authentik on a private LAN still works (SSO calls are allowed to the configured issuer host even when **Allow private URL fetches** is off).
+- **No matching admin account** — create the user under **Users**, enable JIT, or check domain/group filters.
+- **ID token issuer mismatch** — Entra tenant URL or Authentik issuer trailing slash does not match exactly.
+- **Token exchange failed** — wrong client secret or redirect URI not registered in the IdP.
+
+### Notes for the security-minded
+
+- `config/settings.json` and `config/users.json` hold secrets and account data. The admin drops deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` automatically (Apache). **On nginx add:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }` (adjust the path).
+- **Concurrent writes:** board saves and rotation deploys use locked read-modify-write so overlapping admin work does not lose changes — see [Concurrent saves & JSON storage](#concurrent-saves--json-storage).
+- Login is session-based with CSRF protection, strict session cookies, configurable idle timeout (**Security → Admin idle timeout**), and login lockout after repeated failures.
+- **Outbound fetch policy:** RSS/ICS URLs block private IPs unless **Security → Allow private URL fetches** is enabled. YouTube downloads only accept `youtube.com` / `youtu.be`. yt-dlp updates verify SHA-256 from the official GitHub release.
+- Put **HTTPS** in front if admin is reachable from the internet (reverse proxy or Cloudflare Tunnel). For defense in depth, VPN or Cloudflare Access is recommended on semi-public hosts.
 - `php video.php fetch` still works from the CLI; admin can download YouTube entries and update yt-dlp from the Video Board page.
 
 ## index.php — Weather (built previously)
@@ -99,14 +194,14 @@ Lions, Tigers, Pistons, and Red Wings on a single 2×2 board with a **Next games
 - Each panel degrades independently — an unreachable AdGuard doesn't take down the Proxmox panel.
 
 ## rotator.php — Vedders Visuals Photo Rotator
-- **Upload:** admin → **Photo Rotator** — JPG/PNG up to 25 MB each (multiple files at once). Delete from the same page.
+- **Upload:** admin → **Photo Rotator** — JPG/PNG up to 25 MB each (multiple files at once). Delete from the same page. Deploy-to-rotation status is on **Status**.
 - **Setup:** photos land in `./photos/` by default (configurable **Photo directory**). The board serves images via `?img=` — they are not directly downloadable from the web root. You can still point **Photo directory** at an absolute path outside the webroot and copy files there manually.
 - Reads camera model + capture month from EXIF for the caption (`SHOW_EXIF`), dedupes "SONY SONY" style Make/Model overlap, crossfades every `INTERVAL_SEC`, honors `prefers-reduced-motion`, and reloads every 6h to pick up new files. Brand overlay text is configurable via **Brand wordmark** in admin.
 
 ## slides.php — Custom Slides
 Upload your own JPG/PNG/WebP images or build text slides in admin, then schedule each one independently.
 
-- **Upload / create:** new slides auto-deploy to **main** rotation. Use **Deploy to displays** at the top of **Custom Slides** to sync one playlist entry per slide to any screen — each entry uses that slide's dwell seconds.
+- **Upload / create:** new slides auto-deploy to **main** rotation. Use **Deploy to displays** at the top of **Custom Slides** to sync one playlist entry per slide to any screen — each entry uses that slide's dwell seconds. Sync status is on **Status**.
 - **Slide deck:** drag cards to reorder. Each card shows **Active now**, schedule summary, and per-slide timing. Save the deck with **Deploy to** checkboxes to sync rotation on selected displays.
 - **Rotation:** each enabled slide is its own playlist entry (`slides.php?slide=…`) with dwell from that slide's settings. Per-slide schedules control which entries are active on the wall (including priority takeover). In **Rotation**, slide entries appear grouped under **Custom slides** so long decks don't clutter the playlist.
 - **Slide creator:** same page — start from an occasion **template** (Birthday, Fall, Baseball, Bowling, etc.) or pick a **Photo scene** background (curated photography, dimmed for readability) or a **Theme color** gradient. Full-width edit fields, live preview at 1920×1080, **Create slide** saves into `./slides/`.
@@ -222,9 +317,13 @@ Every board includes this just before `</body>`. It renders **nothing** when the
 ### board.php — the rotation shell (multi-screen)
 Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's boards with crossfades. Screens, page lists, dwell times, and optional hour windows (0–23, overnight like 22→6 supported) are all edited in **admin.php → Rotation** — no file edits. Two stacked iframes preload each board before revealing it, a configurable hang timeout skips any page that fails to load, and the alert ticker lives in the shell so it persists across transitions.
 
+**Display settings (super admin):** open the **Display settings** panel on the Rotation page to configure per-screen options in one table — weather ticker, clock, debug overlay, crossfade/settle/hang timings (blank = global default), weighted/shuffle rotation, blank hours (CEC off/on), and HDMI-CEC. Kiosk URL per screen: `board.php?screen=KEY` (plain `board.php` = `main`). Operators see a smaller per-display options block inside their playlist panel.
+
 **Playlists:** each screen *is* a playlist — pages in order (or shuffled: check **Shuffle** on the screen's row and the play order randomizes once per full pass, so every page still appears once per cycle, hour windows and Skip still apply, and nothing repeats back-to-back), per-page dwell, per-page hour windows, and a **Skip** checkbox to bench a page without deleting its row (dwell and window settings are kept for when you re-enable it). Screens don't have to map to hardware: define an `ambient` or `guests` playlist and point any display or Channels capture at it when the occasion calls for it.
 
-**Multiple displays:** define screens on the Rotation page (one row per display — e.g. `main` / Living Room, `garage` / Garage Bench); after saving, each screen gets its own page-list editor. Point each device at its URL: plain `board.php` is the `main` screen, `board.php?screen=garage` is the garage. Any number of devices can share one URL (they render independently; the shared server-side cache means ten screens cost the same API usage as one), and a screen with no pages of its own — or an unknown `?screen=` value — falls back to the main rotation, so a freshly provisioned kiosk always shows something.
+**Multiple displays:** define screens under **Rotation → Display settings** (one row per display — e.g. `main` / Living Room, `garage` / Garage Bench); after saving, each screen gets its own playlist editor. Point each device at its URL: plain `board.php` is the `main` screen, `board.php?screen=garage` is the garage. Assign operators to exactly one display under **Users**. Any number of devices can share one URL (they render independently; the shared server-side cache means ten screens cost the same API usage as one), and a screen with no pages of its own — or an unknown `?screen=` value — falls back to the main rotation, so a freshly provisioned kiosk always shows something.
+
+**Status:** **admin.php → Status** shows which kiosks are online, what they are playing, and whether photo/slide decks are synced to each display's rotation — without cluttering the Rotation editor.
 
 Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `webcam.php`, `air.php`, `sports.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
 
@@ -262,7 +361,7 @@ Turns a fresh Raspberry Pi OS Lite (Bookworm) install into the kiosk:
 
 (Quote the URL when it contains `?screen=`. The optional scale argument — e.g. `2` — fills a 4K display, since boards are designed at 1920×1080.)
 
-It installs cage (minimal Wayland compositor) + Chromium, creates a systemd service that boots into the rotation and restarts on crash, schedules a nightly 04:00 browser restart to flush memory, and (by default) installs **HDMI-CEC power sync** — a timer on the player box that polls the server every minute and sends standby/on based on the schedule you set in **Admin → Rotation → Displays** (CEC checkbox, Off hr, On hr). Use `--no-cec` to skip CEC on boxes without a CEC-capable TV. Set **Rotation → Timezone** on the server so off/on hours match local wall time. Chromium runs with `--autoplay-policy=no-user-gesture-required`, so un-muted video works if you ever want sound. Any small x86 box works the same way — reuse the unit file.
+It installs cage (minimal Wayland compositor) + Chromium, creates a systemd service that boots into the rotation and restarts on crash, schedules a nightly 04:00 browser restart to flush memory, and (by default) installs **HDMI-CEC power sync** — a timer on the player box that polls the server every minute and sends standby/on based on the schedule you set in **Admin → Rotation → Display settings** (CEC checkbox, Off hr, On hr). Use `--no-cec` to skip CEC on boxes without a CEC-capable TV. Set **Rotation → Timezone** on the server so off/on hours match local wall time. Chromium runs with `--autoplay-policy=no-user-gesture-required`, so un-muted video works if you ever want sound. Any small x86 box works the same way — reuse the unit file.
 
 Re-run after pulling updates to refresh the CEC sync script:
 
@@ -292,5 +391,7 @@ Every board works unchanged as an Anthias web asset (`lake.php`, `air.php`, `spo
 
 ## General notes
 - Keep all files in one folder so they share `config/` and `cache/`.
-- Runtime directories created on first use: `config/` (settings + admin password hash), `cache/` (API responses), `videos/` (yt-dlp downloads), `slides/` (uploaded and creator-generated slide images), `photos/` (rotator uploads). `slide_backgrounds/` ships theme PNGs; `slide_backgrounds/photos/` is populated by `setup-server.sh` (or first admin visit) if not already in git.
+- Runtime directories created on first use: `config/` (settings, user accounts, setup key), `cache/` (API responses, SSO discovery cache, **admin audit log**, kiosk presence), `videos/` (yt-dlp downloads), `slides/` (uploaded and creator-generated slide images), `photos/` (rotator uploads). `slide_backgrounds/` ships theme PNGs; `slide_backgrounds/photos/` is populated by `setup-server.sh` (or first admin visit) if not already in git.
+- JSON state files may have companion `*.lock` files during writes; leave them in place.
+- Legacy single-password `config/admin.json` is migrated automatically to `config/users.json` on first login.
 - Every board shows a small diagnostic stamp bottom-right when an API call fails (HTTP code or curl error) while continuing to render from cache.

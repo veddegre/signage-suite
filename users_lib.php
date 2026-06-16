@@ -33,12 +33,19 @@ function users_load_raw(): array
     return is_array($data) ? $data : ['users' => []];
 }
 
+function users_file_update(callable $mutator): bool
+{
+    $result = signage_json_file_update(USERS_FILE, $mutator, [
+        'default' => ['users' => []],
+        'pretty' => true,
+    ]);
+
+    return (bool)($result['ok'] ?? false);
+}
+
 function users_save_raw(array $data): bool
 {
-    if (!is_dir(__DIR__ . '/config')) {
-        @mkdir(__DIR__ . '/config', 0775, true);
-    }
-    return @file_put_contents(USERS_FILE, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX) !== false;
+    return users_file_update(static fn(): array => $data);
 }
 
 /** Import legacy single-hash admin.json into users.json once. */
@@ -252,8 +259,185 @@ function users_find_by_id(string $id): ?array
     return users_by_id()[$id] ?? null;
 }
 
+function users_find_by_external_id(string $externalId): ?array
+{
+    $externalId = trim($externalId);
+    if ($externalId === '') {
+        return null;
+    }
+    foreach (users_list() as $user) {
+        if (!is_array($user)) {
+            continue;
+        }
+        if ((string)($user['external_id'] ?? '') === $externalId) {
+            return $user;
+        }
+    }
+    return null;
+}
+
+/** Link an existing user to an SSO subject on successful sign-in. */
+function users_link_sso_account(string $userId, string $externalId): bool
+{
+    $externalId = trim($externalId);
+    if ($externalId === '') {
+        return false;
+    }
+    $found = false;
+    $ok = users_file_update(function (array $data) use ($userId, $externalId, &$found): array|false {
+        $users = $data['users'] ?? [];
+        if (!is_array($users)) {
+            return false;
+        }
+        foreach ($users as &$user) {
+            if (!is_array($user) || (string)($user['id'] ?? '') !== $userId) {
+                continue;
+            }
+            $user['external_id'] = $externalId;
+            $user['auth_provider'] = 'sso';
+            unset($user['hash']);
+            $found = true;
+            break;
+        }
+        unset($user);
+        if (!$found) {
+            return false;
+        }
+        $data['users'] = $users;
+
+        return $data;
+    });
+
+    return $ok && $found;
+}
+
 /**
- * Local username/password login (SSO will add a parallel entry point later).
+ * Match an OIDC login to a configured admin user and link external_id when needed.
+ * @param array<string,mixed> $claims Verified ID token + optional userinfo claims.
+ * @return array<string,mixed>|null Public user row on success.
+ */
+function admin_authenticate_sso(array $claims): ?array
+{
+    require_once __DIR__ . '/sso_lib.php';
+
+    $sub = trim((string)($claims['sub'] ?? ''));
+    if ($sub === '') {
+        return null;
+    }
+
+    $user = users_find_by_external_id($sub);
+    if ($user === null) {
+        $username = sso_claim_username($claims);
+        if ($username !== '') {
+            $user = users_find_by_username($username);
+        }
+    }
+    if ($user === null && sso_auto_link_email()) {
+        $email = sso_claim_email($claims);
+        if ($email !== '') {
+            $local = users_normalize_username(strtok($email, '@') ?: '');
+            if ($local !== '') {
+                $user = users_find_by_username($local);
+            }
+        }
+    }
+
+    if ($user !== null && !empty($user['disabled'])) {
+        return null;
+    }
+    if ($user === null) {
+        $provisioned = users_provision_sso($claims);
+        if ($provisioned !== null) {
+            return users_public_row($provisioned);
+        }
+        return null;
+    }
+
+    if ((string)($user['external_id'] ?? '') !== $sub) {
+        users_link_sso_account((string)$user['id'], $sub);
+        $user = users_find_by_id((string)$user['id']);
+        if ($user === null) {
+            return null;
+        }
+    }
+
+    return users_public_row($user);
+}
+
+/**
+ * Create a new SSO user on first sign-in when JIT provisioning is enabled.
+ * @param array<string,mixed> $claims
+ * @return array<string,mixed>|null Full user row on success.
+ */
+function users_provision_sso(array $claims): ?array
+{
+    require_once __DIR__ . '/sso_lib.php';
+
+    if (!sso_jit_enabled()) {
+        return null;
+    }
+
+    $sub = trim((string)($claims['sub'] ?? ''));
+    $username = sso_claim_username($claims);
+    if ($sub === '' || $username === '') {
+        return null;
+    }
+    if (!sso_jit_email_allowed($claims) || !sso_jit_groups_allowed($claims)) {
+        return null;
+    }
+    if (users_find_by_external_id($sub) !== null || users_find_by_username($username) !== null) {
+        return null;
+    }
+
+    $entry = [
+        'id' => users_new_id(),
+        'username' => $username,
+        'role' => sso_jit_default_role(),
+        'screens' => [],
+        'auth_provider' => 'sso',
+        'external_id' => $sub,
+        'disabled' => false,
+    ];
+
+    $created = false;
+    if (!users_file_update(function (array $data) use ($entry, $sub, $username, &$created): array|false {
+        $users = $data['users'] ?? [];
+        if (!is_array($users)) {
+            $users = [];
+        }
+        foreach ($users as $user) {
+            if (!is_array($user)) {
+                continue;
+            }
+            if ((string)($user['external_id'] ?? '') === $sub
+                || users_normalize_username((string)($user['username'] ?? '')) === $username) {
+                return false;
+            }
+        }
+        $users[] = $entry;
+        $data['users'] = $users;
+        $created = true;
+
+        return $data;
+    })) {
+        return null;
+    }
+    if (!$created) {
+        return null;
+    }
+
+    require_once __DIR__ . '/audit_lib.php';
+    audit_log('sso.jit_provision', 'Created operator ' . $username, [
+        'actor' => $username,
+        'role' => 'operator',
+        'external_id' => $sub,
+    ]);
+
+    return $entry;
+}
+
+/**
+ * Local username/password login.
  * @return array<string,mixed>|null Public user row on success.
  */
 function admin_authenticate_local(string $username, string $password): ?array
@@ -952,13 +1136,19 @@ function admin_enforce_board_access(string &$board, ?string &$flash, ?bool &$fla
         $flashOk = false;
         return;
     }
+    if ($board === 'audit' && !admin_can_audit()) {
+        $board = admin_default_board();
+        $flash = 'That section is restricted to super admins.';
+        $flashOk = false;
+        return;
+    }
     if ($board === 'users' && !admin_can_manage_users()) {
         $board = admin_default_board();
         $flash = 'That section is restricted to super admins.';
         $flashOk = false;
         return;
     }
-    if ($board !== 'tools' && $board !== 'users' && !admin_can_board($board)) {
+    if ($board !== 'tools' && $board !== 'users' && $board !== 'audit' && !admin_can_board($board)) {
         $board = admin_default_board();
         $flash = 'You do not have access to that section.';
         $flashOk = false;
@@ -1021,41 +1211,53 @@ function admin_change_own_password(string $currentPassword, string $newPassword)
 /** @return array{ok:bool,error?:string} */
 function users_change_password(string $userId, string $currentOrNew, string $newPassword, bool $requireCurrent = false): array
 {
-    $data = users_load_raw();
-    $users = $data['users'] ?? [];
-    if (!is_array($users)) {
-        return ['ok' => false, 'error' => 'No users configured.'];
-    }
     if (strlen($newPassword) < 8) {
         return ['ok' => false, 'error' => 'Password must be at least 8 characters.'];
     }
-    $found = false;
-    foreach ($users as &$user) {
-        if (!is_array($user) || (string)($user['id'] ?? '') !== $userId) {
-            continue;
+
+    $result = ['ok' => false, 'error' => 'User not found.'];
+    $saved = users_file_update(function (array $data) use ($userId, $currentOrNew, $newPassword, $requireCurrent, &$result): array|false {
+        $users = $data['users'] ?? [];
+        if (!is_array($users)) {
+            $result = ['ok' => false, 'error' => 'No users configured.'];
+
+            return false;
         }
-        if ((string)($user['auth_provider'] ?? 'local') !== 'local') {
-            return ['ok' => false, 'error' => 'SSO accounts cannot set a local password here.'];
-        }
-        if ($requireCurrent) {
-            $hash = (string)($user['hash'] ?? '');
-            if ($hash === '' || !password_verify($currentOrNew, $hash)) {
-                return ['ok' => false, 'error' => 'Current password is wrong.'];
+        $found = false;
+        foreach ($users as &$user) {
+            if (!is_array($user) || (string)($user['id'] ?? '') !== $userId) {
+                continue;
             }
+            if ((string)($user['auth_provider'] ?? 'local') !== 'local') {
+                $result = ['ok' => false, 'error' => 'SSO accounts cannot set a local password here.'];
+
+                return false;
+            }
+            if ($requireCurrent) {
+                $hash = (string)($user['hash'] ?? '');
+                if ($hash === '' || !password_verify($currentOrNew, $hash)) {
+                    $result = ['ok' => false, 'error' => 'Current password is wrong.'];
+
+                    return false;
+                }
+            }
+            $user['hash'] = password_hash($newPassword, PASSWORD_DEFAULT);
+            $found = true;
+            break;
         }
-        $user['hash'] = password_hash($newPassword, PASSWORD_DEFAULT);
-        $found = true;
-        break;
-    }
-    unset($user);
-    if (!$found) {
-        return ['ok' => false, 'error' => 'User not found.'];
-    }
-    $data['users'] = $users;
-    if (!users_save_raw($data)) {
-        return ['ok' => false, 'error' => 'Could not write users file.'];
-    }
-    return ['ok' => true];
+        unset($user);
+        if (!$found) {
+            $result = ['ok' => false, 'error' => 'User not found.'];
+
+            return false;
+        }
+        $data['users'] = $users;
+        $result = ['ok' => true];
+
+        return $data;
+    });
+
+    return $saved ? $result : ['ok' => false, 'error' => 'Could not write users file.'];
 }
 
 /**
@@ -1098,9 +1300,9 @@ function users_save_from_post(array $rows): array
         }
 
         $prev = $existing[$id] ?? null;
-        $authProvider = is_array($prev) ? (string)($prev['auth_provider'] ?? 'local') : 'local';
-        if ($authProvider !== 'local' && $authProvider !== 'sso') {
-            $authProvider = 'local';
+        $authProvider = strtolower(trim((string)($row['auth_provider'] ?? '')));
+        if ($authProvider !== 'sso' && $authProvider !== 'local') {
+            $authProvider = is_array($prev) ? (string)($prev['auth_provider'] ?? 'local') : 'local';
         }
 
         $entry = [
@@ -1131,7 +1333,9 @@ function users_save_from_post(array $rows): array
         }
 
         $newPassword = (string)($row['new_password'] ?? '');
-        if ($newPassword !== '') {
+        if ($authProvider === 'sso') {
+            // SSO accounts authenticate via OIDC — no local password.
+        } elseif ($newPassword !== '') {
             if (strlen($newPassword) < 8) {
                 return ['ok' => false, 'error' => 'Passwords must be at least 8 characters.'];
             }
@@ -1139,7 +1343,7 @@ function users_save_from_post(array $rows): array
         } elseif (is_array($prev) && !empty($prev['hash'])) {
             $entry['hash'] = (string)$prev['hash'];
         } else {
-            return ['ok' => false, 'error' => 'Set a password for new user ' . $username . '.'];
+            return ['ok' => false, 'error' => 'Set a password for new local user ' . $username . '.'];
         }
 
         $out[] = $entry;
@@ -1152,7 +1356,16 @@ function users_save_from_post(array $rows): array
         return ['ok' => false, 'error' => 'At least one super admin is required.'];
     }
 
-    if (!users_save_raw(['users' => $out])) {
+    $saveError = null;
+    if (!users_file_update(function (array $data) use ($out, &$saveError): array|false {
+        $data['users'] = $out;
+
+        return $data;
+    })) {
+        if (signage_json_last_error() === 'lock_timeout') {
+            return ['ok' => false, 'error' => 'Another user save is in progress — wait a moment and try again.'];
+        }
+
         return ['ok' => false, 'error' => 'Could not write users file.'];
     }
 
@@ -1182,6 +1395,7 @@ function users_admin_rows(): array
             'screens' => array_slice(users_normalize_screens($user['screens'] ?? []), 0, USERS_OPERATOR_SCREEN_MAX),
             'disabled' => !empty($user['disabled']),
             'auth_provider' => (string)($user['auth_provider'] ?? 'local'),
+            'external_id' => (string)($user['external_id'] ?? ''),
         ];
     }
     usort($rows, static fn($a, $b) => strcasecmp((string)$a['username'], (string)$b['username']));
