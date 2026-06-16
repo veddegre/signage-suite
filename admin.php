@@ -294,6 +294,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         if ($board === 'rotation' && $f['key'] === 'SCREENS') {
             continue;
         }
+        if ($board === 'rotation' && strpos($f['key'], 'PAGES_') === 0) {
+            continue;
+        }
         if ($board === 'rotation' && !admin_is_super()) {
             if (in_array($f['key'], $rotationSuperFieldKeys, true)) {
                 continue;
@@ -666,30 +669,21 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
 
-        $schemaPageKeys = [];
-        foreach ($schema[$board]['fields'] as $sf) {
-            if (strpos($sf['key'], 'PAGES_') === 0) {
-                $schemaPageKeys[$sf['key']] = true;
-            }
-        }
         foreach ($_POST as $name => $rows) {
             if (!is_string($name) || !preg_match('/^PAGES_[a-z0-9_-]+$/i', $name)) {
                 continue;
             }
-            if (!empty($schemaPageKeys[$name]) || !is_array($rows)) {
+            if (!is_array($rows)) {
                 continue;
             }
-            $screenKey = substr($name, 6);
-            if (!admin_can_screen($screenKey)) {
+            $screenKey = rotation_normalize_screen_key(substr($name, 6));
+            if ($screenKey === '') {
                 continue;
             }
-            $cfgKey = "$board.$name";
-            $outV = rotation_parse_pages_rows($rows);
-            if ($outV === []) {
-                unset($conf[$cfgKey]);
-            } else {
-                $conf[$cfgKey] = $outV;
+            if (!admin_is_super() && !admin_can_screen($screenKey)) {
+                continue;
             }
+            $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
         }
     }
         if ($errors !== []) {

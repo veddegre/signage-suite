@@ -463,8 +463,75 @@ function rotation_screens(): array
 function rotation_screen_own_pages(string $screen = 'main'): array
 {
     $screen = rotation_normalize_screen_key($screen);
-    $pages = cfg("rotation.PAGES_$screen", null);
-    return is_array($pages) ? $pages : [];
+    $key = 'rotation.PAGES_' . $screen;
+    if (!isset($GLOBALS['__cfg_cache']) || $GLOBALS['__cfg_cache'] === null) {
+        cfg('_', null);
+    }
+    $conf = $GLOBALS['__cfg_cache'] ?? [];
+    if (!array_key_exists($key, $conf) || !is_array($conf[$key])) {
+        return [];
+    }
+
+    return $conf[$key];
+}
+
+/**
+ * Apply posted playlist rows for one screen onto settings (rotation board save).
+ * @param array<string,mixed> $conf
+ * @param array<string,mixed> $rawRows raw $_POST rows keyed by index
+ * @return array<string,mixed>
+ */
+function rotation_merge_pages_from_post(array $conf, string $screen, array $rawRows): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === '') {
+        return $conf;
+    }
+    $cfgKey = 'rotation.PAGES_' . $screen;
+    $existing = is_array($conf[$cfgKey] ?? null) ? $conf[$cfgKey] : [];
+    $parsed = rotation_parse_pages_rows($rawRows);
+    if (admin_is_super()) {
+        if ($parsed === []) {
+            unset($conf[$cfgKey]);
+        } else {
+            $conf[$cfgKey] = $parsed;
+        }
+
+        return $conf;
+    }
+    $out = [];
+    foreach ($parsed as $row) {
+        $url = trim((string)($row['url'] ?? ''));
+        $postRow = null;
+        foreach ($rawRows as $raw) {
+            if (!is_array($raw)) {
+                continue;
+            }
+            if (trim((string)($raw['url'] ?? '')) === $url) {
+                $postRow = admin_normalize_form_row($raw);
+                break;
+            }
+        }
+        $prev = null;
+        foreach ($existing as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            if (trim((string)($entry['url'] ?? '')) === $url) {
+                $prev = $entry;
+                break;
+            }
+        }
+        $out[] = admin_finalize_entry($row, $prev, $postRow ?? $row);
+    }
+    if ($out === []) {
+        unset($conf[$cfgKey]);
+    } else {
+        $conf[$cfgKey] = $out;
+    }
+
+    return $conf;
 }
 
 /** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
@@ -550,7 +617,7 @@ function rotation_screen_active_pages(string $screen = 'main'): array
         static function ($p) use ($activeFiles, $hasSlideEntries) {
             if (!is_array($p)
                 || trim((string)($p['url'] ?? '')) === ''
-                || (int)($p['dwell'] ?? 0) <= 0
+                || rotation_page_dwell($p) <= 0
                 || !empty($p['off'])) {
                 return false;
             }
@@ -1122,7 +1189,10 @@ function rotation_upsert_url(string $screen, string $url, int $dwell): array
         $screen = 'main';
     }
     $url = trim($url);
-    $pages = rotation_screen_pages($screen);
+    $pages = rotation_screen_own_pages($screen);
+    if ($pages === [] && $screen === 'main') {
+        $pages = rotation_screen_effective_pages('main');
+    }
     $added = false;
     $updated = false;
     foreach ($pages as &$page) {
@@ -1414,7 +1484,7 @@ function rotation_sync_photos(string $screen = 'main', ?array $deck = null): arr
 {
     require_once __DIR__ . '/rotator_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    $pages = rotation_screen_pages($screen);
+    $pages = rotation_screen_own_pages($screen);
     $expected = rotator_rotation_pages($deck, $screen);
     $expectedByUrl = [];
     foreach ($expected as $row) {
@@ -1483,7 +1553,7 @@ function rotation_sync_photos(string $screen = 'main', ?array $deck = null): arr
 function rotation_remove_all_photos(string $screen): array
 {
     $screen = rotation_normalize_screen_key($screen);
-    $pages = rotation_screen_pages($screen);
+    $pages = rotation_screen_own_pages($screen);
     $stripped = rotation_strip_photo_pages($pages);
     return [
         'pages' => $stripped,
@@ -1660,7 +1730,7 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null): arr
 {
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    $pages = rotation_screen_pages($screen);
+    $pages = rotation_screen_own_pages($screen);
     $expected = slides_rotation_pages($deck, $screen);
     $expectedByUrl = [];
     foreach ($expected as $row) {
@@ -1872,7 +1942,7 @@ function slides_deploy_status(?array $deck = null): array
 function rotation_remove_all_slides(string $screen): array
 {
     $screen = rotation_normalize_screen_key($screen);
-    $pages = rotation_screen_pages($screen);
+    $pages = rotation_screen_own_pages($screen);
     $stripped = rotation_strip_slide_pages($pages);
     return [
         'pages' => $stripped,
@@ -1969,7 +2039,10 @@ function rotation_sync_rss(string $screen = 'main'): array
     if ($screen === '') {
         $screen = 'main';
     }
-    $pages = rotation_screen_pages($screen);
+    $pages = rotation_screen_own_pages($screen);
+    if ($pages === [] && $screen === 'main') {
+        $pages = rotation_screen_effective_pages('main');
+    }
     $added = [];
     $updated = [];
     $feeds = cfg('rss.FEEDS', []);
