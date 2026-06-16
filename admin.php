@@ -1316,6 +1316,55 @@ function admin_deploy_picker_from_screens(array $screens, array $checked, array 
     ], $cfg));
 }
 
+/** Per-display photo rotator sync — rendered on Rotation; deploy actions stay on Photo Rotator. */
+function admin_rotator_sync_panel(array $deployStatus, array $deckStats, string $deployMode, ?string $removeFormId = null): void
+{
+    if ($deployStatus === []) {
+        return;
+    }
+    $gridId = 'rotation-photos-deploy-grid';
+    ?>
+    <details class="panel panel-muted" style="margin-bottom:16px">
+      <summary>Photo rotator sync (<?= (int)$deckStats['on_disk'] ?> in deck)</summary>
+      <div class="panel-body" style="padding-top:8px">
+        <div class="help" style="margin-bottom:12px">
+          Sync status by display (<strong><?= h($deployMode) ?></strong> mode, <?= (int)$deckStats['playlist_entries'] ?> playlist entr<?= (int)$deckStats['playlist_entries'] === 1 ? 'y' : 'ies' ?>).
+          Deploy from <a href="?board=rotator&amp;tab=deploy">Photo Rotator → Deploy</a>.
+          <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px;margin-left:6px" href="<?= h(signage_board_preview_url('rotator.php')) ?>" target="_blank" rel="noopener">Preview slideshow ↗</a>
+        </div>
+        <input type="search" class="deploy-filter" placeholder="Filter displays…" autocomplete="off" data-deploy-filter="<?= h($gridId) ?>">
+        <div class="slides-deploy-grid" id="<?= h($gridId) ?>">
+          <?php foreach ($deployStatus as $screenKey => $dep): ?>
+          <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
+            <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
+            <div class="deploy-detail">
+              <?php if ($dep['mirrors_main']): ?>
+                <span class="pill">Mirrors main</span>
+              <?php elseif ($dep['on_playlist']): ?>
+                <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
+              <?php elseif ($dep['partial'] ?? false): ?>
+                <span class="pill warn">Partial</span>
+              <?php else: ?>
+                <span class="pill warn">Not deployed</span>
+              <?php endif; ?>
+            </div>
+            <div class="deploy-actions">
+              <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
+                 href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
+              <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
+              <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+                      form="<?= h($removeFormId) ?>" name="action" value="remove_photos_rotation"
+                      onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove photos from <?= h($dep['name']) ?>?');">Remove</button>
+              <?php endif; ?>
+            </div>
+          </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </details>
+    <?php
+}
+
 function admin_field(array $f, $val, string $board): void
 {
     if ($f['type'] === 'bool'): ?>
@@ -2238,6 +2287,15 @@ function admin_field(array $f, $val, string $board): void
           </details>
           <?php elseif ($rotationScreens === []): ?>
           <div class="flash bad" style="margin-bottom:16px">No displays assigned to your account — ask a super admin to assign screens under <strong>Users</strong>.</div>
+          <?php endif; ?>
+
+          <?php if (admin_can_board('rotator')): ?>
+          <form id="rotatorSyncRemoveForm" method="post" action="?board=rotator" hidden>
+            <input type="hidden" name="board" value="rotator">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="remove_screen" id="rotatorSyncRemoveFormScreen" value="">
+          </form>
+          <?php admin_rotator_sync_panel($rotatorDeployStatus, $rotatorDeckStats, rotator_deploy_mode(), 'rotatorSyncRemoveForm'); ?>
           <?php endif; ?>
 
           <div class="section-title">Playlists</div>
@@ -3423,12 +3481,7 @@ function admin_field(array $f, $val, string $board): void
       </form>
       <?php if ($board === 'rotator'): ?>
       <div class="admin-tab-panel<?= $rotatorTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="photos-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push photos to rotation immediately. Or check displays in the Save bar above and click <strong>Save</strong>.</p>
-            <div class="deploy-stats">
-              <span><strong><?= (int)$rotatorDeckStats['on_disk'] ?></strong> in deck</span>
-              <span><strong><?= (int)$rotatorDeckStats['playlist_entries'] ?></strong> playlist entries (<?= h($deployMode) ?> mode)</span>
-              <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h(signage_board_preview_url('rotator.php')) ?>" target="_blank" rel="noopener">Preview slideshow ↗</a>
-            </div>
+            <p class="help" style="margin-bottom:12px">Push the current deck to rotation on selected displays. Per-display sync status lives on <a href="?board=rotation">Rotation → Photo rotator sync</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
             <form method="post" action="?board=rotator" class="slides-deploy-form">
               <input type="hidden" name="board" value="rotator">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -3442,36 +3495,7 @@ function admin_field(array $f, $val, string $board): void
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
               <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
-              <input type="search" class="deploy-filter" placeholder="Filter status list…" autocomplete="off" data-deploy-filter="photos-deploy-grid">
-              <div class="slides-deploy-grid" id="photos-deploy-grid">
-                <?php foreach ($rotatorDeployStatus as $screenKey => $dep): ?>
-                <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
-                  <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
-                  <div class="deploy-detail">
-                    <?php if ($dep['mirrors_main']): ?>
-                      <span class="pill">Mirrors main</span>
-                    <?php elseif ($dep['on_playlist']): ?>
-                      <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
-                    <?php elseif ($dep['partial'] ?? false): ?>
-                      <span class="pill warn">Partial</span>
-                    <?php else: ?>
-                      <span class="pill warn">Not deployed</span>
-                    <?php endif; ?>
-                  </div>
-                  <div class="deploy-actions">
-                    <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
-                       href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
-                    <?php if (($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
-                    <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
-                            name="action" value="remove_photos_rotation"
-                            onclick="this.form.remove_screen.value='<?= h($screenKey) ?>'; return confirm('Remove photos from <?= h($dep['name']) ?>?');">Remove</button>
-                    <?php endif; ?>
-                  </div>
-                </div>
-                <?php endforeach; ?>
-              </div>
-              <input type="hidden" name="remove_screen" value="">
-              <div class="slides-deploy-tools">
+              <div class="slides-deploy-tools" style="margin-top:14px">
                 <button class="save" type="submit" name="action" value="deploy_photos">Deploy now</button>
               </div>
             </form>
