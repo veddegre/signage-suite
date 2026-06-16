@@ -13,13 +13,11 @@ const LEGACY_ADMIN_FILE = __DIR__ . '/config/admin.json';
 
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
-    'rotation', 'slides', 'rotator', 'video', 'rss',
-    'splunk', 'grafana', 'splunkdash', 'web', 'family', 'homelab',
-    'account',
+    'rotation', 'slides', 'rotator', 'account',
 ];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
-const ADMIN_OPERATOR_SETTINGS_BOARDS = ['slides', 'rotator', 'video', 'rss'];
+const ADMIN_OPERATOR_SETTINGS_BOARDS = ['slides', 'rotator'];
 
 function users_load_raw(): array
 {

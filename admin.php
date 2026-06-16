@@ -1040,7 +1040,7 @@ if ($authed && $board === 'slides') {
 // ── Video board: YouTube fetch / yt-dlp upkeep ──────────────────────────────
 $videoFetchLog = null;
 $videoMaintOpen = ($board === 'video');
-if ($authed && $board === 'video' && csrf_ok()) {
+if ($authed && $board === 'video' && admin_can_board('video') && csrf_ok()) {
     $videoDir = video_dir();
     if (!is_dir($videoDir)) {
         @mkdir($videoDir, 0775, true);
@@ -1062,12 +1062,18 @@ if ($authed && $board === 'video' && csrf_ok()) {
     if (($_POST['action'] ?? '') === 'video_fetch_one') {
         @set_time_limit(0);
         $fetchKey = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_POST['video_key'] ?? ''));
+        $registry = video_registry();
+        $entry = is_array($registry[$fetchKey] ?? null) ? $registry[$fetchKey] : null;
+        if ($fetchKey === '' || $entry === null || (!admin_is_super() && !admin_entry_visible($entry))) {
+            $flash = 'That video is not available to your account.'; $flashOk = false;
+        } else {
         $result = video_fetch_one($fetchKey);
         $videoFetchLog = implode("\n", $result['lines']);
         if ($result['ok']) {
             $flash = 'Downloaded "' . $fetchKey . '".';
         } else {
             $flash = 'Download failed for "' . $fetchKey . '" — see log below.'; $flashOk = false;
+        }
         }
         $videoMaintOpen = true;
     }
@@ -1451,7 +1457,7 @@ function admin_screen_picker_operator_cfg(array $cfg = []): array
     return $cfg;
 }
 
-/** One display per operator — radio list in Users admin. @param array<string,string> $assignedElsewhere screen key => username */
+/** One display per operator — compact select in Users admin. @param array<string,string> $assignedElsewhere screen key => username */
 function admin_user_screen_picker(string $prefix, array $options, array $checked, array $assignedElsewhere): void
 {
     if ($options === []) {
@@ -1459,25 +1465,24 @@ function admin_user_screen_picker(string $prefix, array $options, array $checked
         return;
     }
     $checkedKey = (string)($checked[0] ?? '');
-    echo '<div class="screen-picker screen-picker-assign" data-screen-picker data-summary-mode="assign" data-assign-single="1">';
-    echo '<div class="help" style="margin:0 0 8px">One display per operator.</div>';
-    echo '<div class="screen-picker-list slide-screen-checks">';
-    echo '<label data-screen-key=""><input type="radio" name="' . h($prefix . '[screen]') . '" value=""'
-        . ($checkedKey === '' ? ' checked' : '') . '> <span class="help" style="margin:0">Unassigned</span></label>';
+    echo '<label class="l">Display</label>';
+    echo '<select name="' . h($prefix . '[screen]') . '" class="user-screen-select">';
+    echo '<option value=""' . ($checkedKey === '' ? ' selected' : '') . '>Unassigned</option>';
     foreach ($options as $opt) {
         $k = (string)$opt['key'];
         $blocked = isset($assignedElsewhere[$k]);
         $isChecked = $checkedKey === $k;
-        echo '<label data-screen-key="' . h($k) . '"' . ($blocked && !$isChecked ? ' class="screen-assign-taken"' : '') . '>';
-        echo '<input type="radio" name="' . h($prefix . '[screen]') . '" value="' . h($k) . '"'
-            . ($isChecked ? ' checked' : '') . ($blocked && !$isChecked ? ' disabled' : '') . '>';
-        echo ' ' . h((string)$opt['name']);
+        $label = (string)$opt['name'];
         if ($blocked && !$isChecked) {
-            echo ' <span class="help">(' . h($assignedElsewhere[$k]) . ')</span>';
+            $label .= ' (' . $assignedElsewhere[$k] . ')';
         }
-        echo '</label>';
+        echo '<option value="' . h($k) . '"'
+            . ($isChecked ? ' selected' : '')
+            . ($blocked && !$isChecked ? ' disabled' : '')
+            . '>' . h($label) . '</option>';
     }
-    echo '</div></div>';
+    echo '</select>';
+    echo '<div class="help" style="margin-top:6px">One display per operator.</div>';
 }
 
 /** @return list<string> */
@@ -1886,6 +1891,23 @@ function admin_field(array $f, $val, string $board): void
   .screen-picker-compact .screen-picker-list { max-height:168px; overflow:auto; margin-top:0; padding-right:4px; }
   .screen-picker-inline { margin-top:0; }
   .screen-picker-deploy-tab { margin-bottom:14px; }
+  .users-list { display:flex; flex-direction:column; gap:14px; margin-top:12px; }
+  .user-card { border:1px solid var(--line); border-radius:12px; padding:16px 18px; background:var(--harbor); }
+  .user-card-head { display:flex; gap:12px; align-items:flex-start; }
+  .user-card-identity { flex:1; min-width:0; }
+  .user-card-identity input[type=text] { width:100%; max-width:420px; }
+  .user-card-head .rowdel { flex-shrink:0; margin-top:22px; }
+  .user-card-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(148px, 1fr)); gap:12px 18px; margin-top:14px; }
+  .user-card-fields .field { margin:0; }
+  .user-card-fields .l { display:block; margin-bottom:5px; }
+  .user-card-fields select,
+  .user-card-fields input[type=password] { width:100%; max-width:100%; min-width:0; }
+  .user-field-disabled { display:flex; align-items:flex-end; padding-bottom:6px; }
+  .user-field-disabled .check { margin:0; }
+  .user-card-display { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); max-width:420px; }
+  .user-card-display .user-screen-select { width:100%; max-width:100%; }
+  .user-card-display .help { margin-top:6px; }
+  .user-card[data-role=super] .user-card-display { display:none; }
   .deploy-save-screens { margin-bottom:4px; }
   .deploy-filter { width:100%; max-width:360px; margin-bottom:12px; padding:8px 11px; font-size:14px;
     background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
@@ -2324,39 +2346,53 @@ function admin_field(array $f, $val, string $board): void
         <input type="hidden" name="action" value="save_users">
         <input type="hidden" name="board" value="users">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <div class="rows-scroll">
-        <table class="rows" id="usersTable">
-          <thead><tr>
-            <th>Username</th><th>Auth</th><th>Role</th><th>Displays</th><th>Disabled</th><th>Password</th><th></th>
-          </tr></thead>
-          <tbody>
+        <div class="users-list" id="usersList">
             <?php foreach ($userAdminRows as $ui => $urow):
               $uAuth = ($urow['auth_provider'] ?? 'local') === 'sso' ? 'sso' : 'local';
               $uLinked = ($urow['external_id'] ?? '') !== '';
+              $uRole = ($urow['role'] ?? '') === 'super' ? 'super' : 'operator';
             ?>
-            <tr data-auth="<?= h($uAuth) ?>">
-              <td>
-                <input type="hidden" name="USERS[<?= (int)$ui ?>][id]" value="<?= h((string)$urow['id']) ?>">
-                <input type="text" name="USERS[<?= (int)$ui ?>][username]" value="<?= h((string)$urow['username']) ?>" required>
-                <?php if ($uAuth === 'sso'): ?>
-                <div class="help" style="margin-top:4px;font-size:11px"><?= $uLinked ? 'Linked' : 'Pending first sign-in' ?></div>
-                <?php endif; ?>
-              </td>
-              <td>
-                <select name="USERS[<?= (int)$ui ?>][auth_provider]" class="user-auth-select">
-                  <option value="local" <?= $uAuth === 'local' ? 'selected' : '' ?>>Local</option>
-                  <option value="sso" <?= $uAuth === 'sso' ? 'selected' : '' ?>>SSO</option>
-                </select>
-              </td>
-              <td>
-                <select name="USERS[<?= (int)$ui ?>][role]">
-                  <option value="super" <?= ($urow['role'] ?? '') === 'super' ? 'selected' : '' ?>>super</option>
-                  <option value="operator" <?= ($urow['role'] ?? '') === 'operator' ? 'selected' : '' ?>>operator</option>
-                </select>
-              </td>
-              <td class="wide">
-                <?php if (($urow['role'] ?? '') === 'super'): ?>
-                  <span class="help" style="margin:0">All displays</span>
+            <article class="user-card" data-auth="<?= h($uAuth) ?>" data-role="<?= h($uRole) ?>">
+              <input type="hidden" name="USERS[<?= (int)$ui ?>][id]" value="<?= h((string)$urow['id']) ?>">
+              <div class="user-card-head">
+                <div class="user-card-identity field">
+                  <label class="l">Username</label>
+                  <input type="text" name="USERS[<?= (int)$ui ?>][username]" value="<?= h((string)$urow['username']) ?>" required autocomplete="off">
+                  <?php if ($uAuth === 'sso'): ?>
+                  <div class="help"><?= $uLinked ? 'SSO linked' : 'Pending first sign-in' ?></div>
+                  <?php endif; ?>
+                </div>
+                <button type="button" class="rowdel" title="Remove user" onclick="this.closest('.user-card').remove()">×</button>
+              </div>
+              <div class="user-card-fields">
+                <div class="field user-field-auth">
+                  <label class="l">Auth</label>
+                  <select name="USERS[<?= (int)$ui ?>][auth_provider]" class="user-auth-select">
+                    <option value="local" <?= $uAuth === 'local' ? 'selected' : '' ?>>Local</option>
+                    <option value="sso" <?= $uAuth === 'sso' ? 'selected' : '' ?>>SSO</option>
+                  </select>
+                </div>
+                <div class="field user-field-role">
+                  <label class="l">Role</label>
+                  <select name="USERS[<?= (int)$ui ?>][role]" class="user-role-select">
+                    <option value="super" <?= $uRole === 'super' ? 'selected' : '' ?>>Super admin</option>
+                    <option value="operator" <?= $uRole === 'operator' ? 'selected' : '' ?>>Operator</option>
+                  </select>
+                </div>
+                <div class="field user-field-disabled">
+                  <label class="check"><input type="checkbox" name="USERS[<?= (int)$ui ?>][disabled]" value="1"
+                    <?= !empty($urow['disabled']) ? 'checked' : '' ?>> Disabled</label>
+                </div>
+                <div class="field user-field-password">
+                  <label class="l">Password</label>
+                  <input type="password" class="user-password-input" name="USERS[<?= (int)$ui ?>][new_password]" autocomplete="new-password"
+                    placeholder="<?= $uAuth === 'sso' ? 'SSO — no password' : 'Leave blank to keep' ?>"
+                    <?= $uAuth === 'sso' ? 'disabled' : '' ?>>
+                </div>
+              </div>
+              <div class="user-card-display user-display-cell">
+                <?php if ($uRole === 'super'): ?>
+                  <span class="help" style="margin:0">Super admins can access all displays.</span>
                 <?php else:
                   $assignedElsewhere = [];
                   foreach ($screenAssignments as $sk => $uid) {
@@ -2369,17 +2405,9 @@ function admin_field(array $f, $val, string $board): void
                   }
                   admin_user_screen_picker('USERS[' . (int)$ui . ']', admin_screen_options($allScreens), $urow['screens'] ?? [], $assignedElsewhere);
                 endif; ?>
-              </td>
-              <td style="text-align:center"><input type="checkbox" name="USERS[<?= (int)$ui ?>][disabled]" value="1"
-                <?= !empty($urow['disabled']) ? 'checked' : '' ?> style="width:20px;height:20px;accent-color:var(--beacon)"></td>
-              <td><input type="password" class="user-password-input" name="USERS[<?= (int)$ui ?>][new_password]" autocomplete="new-password"
-                placeholder="<?= $uAuth === 'sso' ? 'SSO — no password' : 'Leave blank to keep' ?>"
-                <?= $uAuth === 'sso' ? 'disabled' : '' ?>></td>
-              <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
-            </tr>
+              </div>
+            </article>
             <?php endforeach; ?>
-          </tbody>
-        </table>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
         <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. Each <strong>operator</strong> gets exactly one display.</div>
@@ -5128,53 +5156,48 @@ function userScreenAssignedElsewhere(userId) {
 
 function userScreensCellHtml(idx, role, checkedKeys, userId) {
   if (role === 'super') {
-    return '<span class="help" style="margin:0">All displays</span>';
+    return '<span class="help" style="margin:0">Super admins can access all displays.</span>';
   }
   const opts = window.USER_SCREEN_OPTIONS || [];
   const assignedElsewhere = userScreenAssignedElsewhere(userId);
   const checkedKey = (checkedKeys && checkedKeys.length) ? String(checkedKeys[0]) : '';
-  let html = '<div class="screen-picker screen-picker-assign" data-screen-picker data-summary-mode="assign" data-assign-single="1">';
-  html += '<div class="help" style="margin:0 0 8px">One display per operator.</div>';
-  html += '<div class="screen-picker-list slide-screen-checks">';
-  html += '<label data-screen-key=""><input type="radio" name="USERS[' + idx + '][screen]" value=""'
-    + (checkedKey === '' ? ' checked' : '') + '> <span class="help" style="margin:0">Unassigned</span></label>';
+  let html = '<label class="l">Display</label><select name="USERS[' + idx + '][screen]" class="user-screen-select">';
+  html += '<option value=""' + (checkedKey === '' ? ' selected' : '') + '>Unassigned</option>';
   opts.forEach(function (o) {
     const sk = String(o.key);
-    const key = sk.replace(/"/g, '&quot;');
     const name = String(o.name).replace(/</g, '&lt;');
     const isChecked = checkedKey === sk;
     const blocked = Object.prototype.hasOwnProperty.call(assignedElsewhere, sk);
     const owner = blocked ? String(assignedElsewhere[sk]).replace(/</g, '&lt;') : '';
-    html += '<label data-screen-key="' + key + '"' + (blocked && !isChecked ? ' class="screen-assign-taken"' : '') + '>';
-    html += '<input type="radio" name="USERS[' + idx + '][screen]" value="' + key + '"'
-      + (isChecked ? ' checked' : '') + (blocked && !isChecked ? ' disabled' : '') + '> ' + name;
-    if (blocked && !isChecked) {
-      html += ' <span class="help">(' + owner + ')</span>';
-    }
-    html += '</label>';
+    let label = name;
+    if (blocked && !isChecked) label += ' (' + owner + ')';
+    html += '<option value="' + sk.replace(/"/g, '&quot;') + '"'
+      + (isChecked ? ' selected' : '')
+      + (blocked && !isChecked ? ' disabled' : '')
+      + '>' + label + '</option>';
   });
-  html += '</div></div>';
+  html += '</select><div class="help">One display per operator.</div>';
   return html;
 }
 
-function syncUserAuthRow(tr) {
-  const authSel = tr.querySelector('.user-auth-select');
-  const pw = tr.querySelector('.user-password-input');
+function syncUserAuthRow(card) {
+  const authSel = card.querySelector('.user-auth-select');
+  const pw = card.querySelector('.user-password-input');
   if (!authSel || !pw) return;
   const isSso = authSel.value === 'sso';
-  tr.dataset.auth = isSso ? 'sso' : 'local';
+  card.dataset.auth = isSso ? 'sso' : 'local';
   pw.disabled = isSso;
   pw.value = '';
   pw.placeholder = isSso ? 'SSO — no password' : (pw.dataset.newUser ? 'Required for new user' : 'Leave blank to keep');
 }
 
-function bindUserRow(tr) {
-  const sel = tr.querySelector('select[name*="[role]"]');
-  const authSel = tr.querySelector('.user-auth-select');
+function bindUserRow(card) {
+  const sel = card.querySelector('.user-role-select');
+  const authSel = card.querySelector('.user-auth-select');
   if (authSel && !authSel.dataset.bound) {
     authSel.dataset.bound = '1';
-    authSel.addEventListener('change', function () { syncUserAuthRow(tr); });
-    syncUserAuthRow(tr);
+    authSel.addEventListener('change', function () { syncUserAuthRow(card); });
+    syncUserAuthRow(card);
   }
   if (!sel || sel.dataset.bound) return;
   sel.dataset.bound = '1';
@@ -5182,37 +5205,46 @@ function bindUserRow(tr) {
     const idxMatch = sel.name.match(/USERS\[([^\]]+)\]/);
     if (!idxMatch) return;
     const idx = idxMatch[1];
-    const cell = tr.querySelector('td.wide');
+    card.dataset.role = sel.value;
+    const cell = card.querySelector('.user-display-cell');
     if (!cell) return;
-    const checked = [];
-    cell.querySelectorAll('input[name*="[screen]"]:checked, input[name*="[screens]"]:checked').forEach(function (cb) {
-      if (cb.value) checked.push(cb.value);
-    });
-    const idInput = tr.querySelector('input[name*="[id]"]');
+    const select = cell.querySelector('.user-screen-select');
+    const checked = select && select.value ? [select.value] : [];
+    const idInput = card.querySelector('input[name*="[id]"]');
     const userId = idInput ? idInput.value : '';
     cell.innerHTML = userScreensCellHtml(idx, sel.value, checked, userId);
-    initScreenPickers(tr);
   });
 }
 
 function addUserRow() {
-  const table = document.getElementById('usersTable');
-  if (!table) return;
-  const tbody = table.querySelector('tbody');
+  const list = document.getElementById('usersList');
+  if (!list) return;
   const idx = 'n' + (Date.now() % 1e7);
-  const tr = document.createElement('tr');
-  tr.innerHTML =
-    '<td><input type="hidden" name="USERS[' + idx + '][id]" value="">' +
-    '<input type="text" name="USERS[' + idx + '][username]" placeholder="username" required></td>' +
-    '<td><select name="USERS[' + idx + '][auth_provider]" class="user-auth-select"><option value="local" selected>Local</option><option value="sso">SSO</option></select></td>' +
-    '<td><select name="USERS[' + idx + '][role]"><option value="operator" selected>operator</option><option value="super">super</option></select></td>' +
-    '<td class="wide">' + userScreensCellHtml(idx, 'operator', [], '') + '</td>' +
-    '<td style="text-align:center"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1" style="width:20px;height:20px;accent-color:var(--beacon)"></td>' +
-    '<td><input type="password" class="user-password-input" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user" data-new-user="1"></td>' +
-    '<td><button type="button" class="rowdel" onclick="this.closest(\'tr\').remove()">×</button></td>';
-  tbody.appendChild(tr);
-  bindUserRow(tr);
-  initScreenPickers(tr);
+  const card = document.createElement('article');
+  card.className = 'user-card';
+  card.dataset.auth = 'local';
+  card.dataset.role = 'operator';
+  card.innerHTML =
+    '<input type="hidden" name="USERS[' + idx + '][id]" value="">' +
+    '<div class="user-card-head">' +
+      '<div class="user-card-identity field">' +
+        '<label class="l">Username</label>' +
+        '<input type="text" name="USERS[' + idx + '][username]" placeholder="username" required autocomplete="off">' +
+      '</div>' +
+      '<button type="button" class="rowdel" title="Remove user" onclick="this.closest(\'.user-card\').remove()">×</button>' +
+    '</div>' +
+    '<div class="user-card-fields">' +
+      '<div class="field user-field-auth"><label class="l">Auth</label>' +
+        '<select name="USERS[' + idx + '][auth_provider]" class="user-auth-select"><option value="local" selected>Local</option><option value="sso">SSO</option></select></div>' +
+      '<div class="field user-field-role"><label class="l">Role</label>' +
+        '<select name="USERS[' + idx + '][role]" class="user-role-select"><option value="operator" selected>Operator</option><option value="super">Super admin</option></select></div>' +
+      '<div class="field user-field-disabled"><label class="check"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1"> Disabled</label></div>' +
+      '<div class="field user-field-password"><label class="l">Password</label>' +
+        '<input type="password" class="user-password-input" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user" data-new-user="1"></div>' +
+    '</div>' +
+    '<div class="user-card-display user-display-cell">' + userScreensCellHtml(idx, 'operator', [], '') + '</div>';
+  list.appendChild(card);
+  bindUserRow(card);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -5224,7 +5256,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initEntrySharingPopovers(document);
   initDeployPanelFilters();
   initRotationTargetFilter();
-  document.querySelectorAll('#usersTable tbody tr').forEach(bindUserRow);
+  document.querySelectorAll('#usersList .user-card').forEach(bindUserRow);
   initVideoPlaylist();
   initSplunkPanels();
   initPresencePanel();

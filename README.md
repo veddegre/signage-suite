@@ -45,7 +45,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Operator** | Content boards + **Rotation** for their assigned display only; **Account** and **Status** |
+| **Operator** | **Slides**, **Photo Rotator**, and **Rotation** for their assigned display only; **Account** and **Status** |
 
 **Navigation:** sidebar groups boards (Setup, Weather & home, Monitoring, Media, Dashboards). **Users** and **Tools** are super-admin only. **Status**, **Account**, and logout are in the sidebar footer.
 
@@ -59,7 +59,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 
 ### Content ownership & sharing
 
-Playlist rows (rotation pages, slides, photos, videos, RSS feeds, etc.) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). Operators only see and edit entries they own or that are shared with them. Super admins see everything and can reassign ownership. This keeps multi-user installs tidy when several people manage different displays.
+Playlist rows on **Slides** and **Photo Rotator** (and other operator boards) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). **RSS** and **Video** boards are super-admin only — feeds and videos default to super-only until shared. Operators only see and edit entries they own or that are shared with them.
 
 ### Concurrent saves & JSON storage
 

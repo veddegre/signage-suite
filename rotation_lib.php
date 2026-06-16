@@ -763,6 +763,9 @@ function rotation_quick_add_items(): array
             if (!is_array($feed)) {
                 continue;
             }
+            if (!rotation_quick_add_entry_allowed($feed)) {
+                continue;
+            }
             $items[] = [
                 'label' => 'RSS — ' . trim((string)($feed['name'] ?? $key)),
                 'url' => rss_feed_url((string)$key),
@@ -775,6 +778,9 @@ function rotation_quick_add_items(): array
     require_once __DIR__ . '/video_lib.php';
     foreach (video_registry() as $key => $v) {
         if (!is_array($v)) {
+            continue;
+        }
+        if (!rotation_quick_add_entry_allowed($v)) {
             continue;
         }
         $title = trim((string)($v['title'] ?? ''));
@@ -793,6 +799,9 @@ function rotation_quick_add_items(): array
             if (!is_array($d)) {
                 continue;
             }
+            if (!rotation_quick_add_entry_allowed($d)) {
+                continue;
+            }
             $title = trim((string)($d['title'] ?? $key));
             $items[] = [
                 'label' => 'Grafana — ' . $title,
@@ -807,6 +816,9 @@ function rotation_quick_add_items(): array
     if (is_array($dashboards)) {
         foreach ($dashboards as $key => $d) {
             if (!is_array($d)) {
+                continue;
+            }
+            if (!rotation_quick_add_entry_allowed($d)) {
                 continue;
             }
             $url = trim((string)($d['url'] ?? ''));
@@ -828,6 +840,9 @@ function rotation_quick_add_items(): array
         if (!is_array($page)) {
             continue;
         }
+        if (!rotation_quick_add_entry_allowed($page)) {
+            continue;
+        }
         $title = trim((string)($page['title'] ?? $key));
         $items[] = [
             'label' => 'Splunk — ' . $title,
@@ -842,6 +857,9 @@ function rotation_quick_add_items(): array
         if (!is_array($site)) {
             continue;
         }
+        if (!rotation_quick_add_entry_allowed($site)) {
+            continue;
+        }
         $title = trim((string)($site['title'] ?? $key));
         $items[] = [
             'label' => 'Web — ' . $title,
@@ -852,6 +870,19 @@ function rotation_quick_add_items(): array
     }
 
     return $items;
+}
+
+/** @param array<string,mixed> $entry */
+function rotation_quick_add_entry_allowed(array $entry): bool
+{
+    if (!function_exists('admin_entry_visible')) {
+        require_once __DIR__ . '/users_lib.php';
+    }
+    if (function_exists('admin_is_super') && admin_is_super()) {
+        return true;
+    }
+
+    return admin_entry_visible($entry);
 }
 
 function rotation_screen_display_name(string $screenKey, array $screens): string
