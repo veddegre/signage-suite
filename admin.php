@@ -3768,17 +3768,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 
           <div class="slides-form-footer slides-save-deploy">
             <?php
-            $rotatorDeployPickerDefault = [];
-            foreach ($rotatorDeployStatus as $screenKey => $dep) {
-                if ($dep['on_playlist'] || $screenKey === 'main') {
-                    $rotatorDeployPickerDefault[] = $screenKey;
-                }
-            }
-            $rotatorDeployPickerChecked = admin_deploy_picker_checked('rotator', $rotatorDeployPickerDefault);
+            $rotatorDeployPickerChecked = admin_deploy_picker_checked('rotator', []);
             $rotatorDeployRemembered = admin_deploy_screens_remembered('rotator') !== null;
             ?>
             <div class="deploy-checks" data-deploy-board="rotator" data-deploy-remembered="<?= $rotatorDeployRemembered ? '1' : '0' ?>">
-              <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
+              <span class="help" style="margin:0;width:100%">Optional: also update rotation when you Save (use the <strong>Deploy</strong> tab to push to TVs).</span>
               <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployPickerChecked); ?>
             </div>
           </div>
@@ -3824,7 +3818,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px">Check slides, choose a display in <strong>Assign to</strong>, then add them to that screen — <strong>Save</strong> before <strong>Deploy</strong>. Filter with <strong>Hidden on all displays</strong> to find slides missing display targets. Set <strong>Sec</strong> for dwell time. New images on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
+          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores the deck. <strong>Deploy</strong> pushes slides to rotation. Assign displays with checkboxes + <strong>Assign to</strong>, then Save, then Deploy.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -4095,17 +4089,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 
           <div class="slides-form-footer slides-save-deploy">
             <?php
-            $slidesDeployPickerDefault = [];
-            foreach ($slidesDeployStatus as $screenKey => $dep) {
-                if ($dep['on_playlist'] || $screenKey === 'main') {
-                    $slidesDeployPickerDefault[] = $screenKey;
-                }
-            }
-            $slidesDeployPickerChecked = admin_deploy_picker_checked('slides', $slidesDeployPickerDefault);
+            $slidesDeployPickerChecked = admin_deploy_picker_checked('slides', []);
             $slidesDeployRemembered = admin_deploy_screens_remembered('slides') !== null;
             ?>
             <div class="deploy-checks" data-deploy-board="slides" data-deploy-remembered="<?= $slidesDeployRemembered ? '1' : '0' ?>">
-              <span class="help" style="margin:0;width:100%">On Save, update rotation on:<?= $slideDeckLarge ? ' <em>(uncheck all for a faster deck-only save — use Deploy tab after)</em>' : '' ?></span>
+              <span class="help" style="margin:0;width:100%">Optional: also update rotation when you Save (use the <strong>Deploy</strong> tab to push to TVs).</span>
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployPickerChecked); ?>
             </div>
           </div>
@@ -5586,10 +5574,6 @@ function initDeployPanelFilters() {
   });
 }
 
-function deployScreensStorageKey(board) {
-  return 'signage:deploy_screens:' + board;
-}
-
 function collectDeployScreensChecked(board) {
   const out = [];
   const sel = '#boardform .deploy-checks[data-deploy-board="' + board + '"] input[name="deploy_screens[]"]';
@@ -5617,35 +5601,14 @@ function appendDeployScreensToForm(form, screens) {
   });
 }
 
-function persistDeployScreensSelection(board) {
-  try {
-    localStorage.setItem(deployScreensStorageKey(board), JSON.stringify(collectDeployScreensChecked(board)));
-  } catch (e) {}
-}
-
 function initDeployScreensPersistence(board) {
   const deployChecks = document.querySelector('#boardform .deploy-checks[data-deploy-board="' + board + '"]');
   if (!deployChecks) return;
-  let fromStorage = null;
-  try {
-    const raw = localStorage.getItem(deployScreensStorageKey(board));
-    if (raw) fromStorage = JSON.parse(raw);
-  } catch (e) {}
-  const serverRemembered = deployChecks.dataset.deployRemembered === '1';
   const selector = '#boardform .deploy-checks[data-deploy-board="' + board + '"] input[name="deploy_screens[]"]';
-  if (!serverRemembered && Array.isArray(fromStorage) && fromStorage.length > 0) {
-    const set = new Set(fromStorage.map(String));
-    document.querySelectorAll(selector).forEach(function (cb) {
-      cb.checked = set.has(cb.value);
-    });
-  } else {
-    persistDeployScreensSelection(board);
-  }
   document.querySelectorAll(selector).forEach(function (cb) {
     if (cb.dataset.deployPersistBound) return;
     cb.dataset.deployPersistBound = '1';
     cb.addEventListener('change', function () {
-      persistDeployScreensSelection(board);
       const picker = cb.closest('[data-screen-picker]');
       if (picker) updateScreenPickerSummary(picker);
     });
@@ -6238,7 +6201,6 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
-      persistDeployScreensSelection('slides');
     });
   }
   initScreenPickers(document);

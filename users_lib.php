@@ -578,7 +578,7 @@ function admin_default_deploy_screens(): array
 
 function admin_deploy_screens_session_key(string $board): string
 {
-    return 'admin_deploy_' . preg_replace('/[^a-z]/', '', $board);
+    return 'admin_deploy_v2_' . preg_replace('/[^a-z]/', '', $board);
 }
 
 /** @return list<string> */
@@ -639,7 +639,8 @@ function admin_deploy_screens_for_action(string $board, array $post): array
     if ($remembered !== null) {
         return $remembered;
     }
-    return admin_default_deploy_screens();
+
+    return [];
 }
 
 /** @param list<string> $defaultChecked @return list<string> */
