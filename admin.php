@@ -905,9 +905,12 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         if ($screens === []) {
             $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
         } else {
-            $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
-            $result = slides_deploy_to_screens($screens, $deck);
             cfg_reload();
+            $deck = cfg('slides.SLIDES', []);
+            if (!is_array($deck)) {
+                $deck = [];
+            }
+            $result = slides_deploy_to_screens($screens, $deck);
             $remember = $result['screens'] ?? [];
             if ($remember === [] && !empty($result['skipped'])) {
                 $remember = array_values(array_diff($screens, $result['skipped']));

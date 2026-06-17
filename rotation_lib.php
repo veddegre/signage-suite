@@ -2316,6 +2316,8 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     if ($deckRepaired) {
         $fullDeck = $repairedDeck;
     }
+    $recoveryDeploy = slides_deck_targets_no_configured_screens($fullDeck);
+    $onDisk = count(slides_rotation_pages($fullDeck, null));
     $added = 0;
     $updated = 0;
     $slideCount = 0;
@@ -2323,18 +2325,39 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     $done = [];
     $deployed = [];
     $pageWrites = [];
+    if ($scopeFiles !== null && $scopeFiles === []) {
+        foreach ($screens as $screen) {
+            $screen = rotation_normalize_screen_key((string)$screen);
+            if ($screen !== '') {
+                $skipped[] = $screen;
+            }
+        }
+
+        return [
+            'added' => 0,
+            'updated' => 0,
+            'screens' => [],
+            'slide_count' => 0,
+            'skipped' => array_values(array_unique($skipped)),
+            'repaired' => $deckRepaired,
+            'recovery_deploy' => false,
+            'on_disk' => $onDisk,
+            'no_scope' => true,
+        ];
+    }
     foreach ($screens as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
         if ($screen === '' || isset($done[$screen])) {
             continue;
         }
         $done[$screen] = true;
-        $expected = slides_rotation_pages_for_scope($fullDeck, $screen, $scopeFiles);
+        $expected = slides_deploy_expected_pages($fullDeck, $screen, $scopeFiles);
         if ($expected === []) {
             $skipped[] = $screen;
             continue;
         }
-        $sync = rotation_sync_slides($screen, $fullDeck, $scopeFiles);
+        $syncScope = ($recoveryDeploy && $scopeFiles === null) ? null : $scopeFiles;
+        $sync = rotation_sync_slides($screen, $fullDeck, $syncScope);
         $deployed[] = $screen;
         $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
@@ -2353,6 +2376,9 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
         'slide_count' => $slideCount,
         'skipped' => $skipped,
         'repaired' => $deckRepaired,
+        'recovery_deploy' => $recoveryDeploy && $deployed !== [],
+        'on_disk' => $onDisk,
+        'no_scope' => false,
     ];
 }
 
@@ -2362,6 +2388,10 @@ function slides_deploy_flash_message(array $result): string
     $screenCount = count($result['screens'] ?? []);
     $skipped = $result['skipped'] ?? [];
     $skippedCount = is_array($skipped) ? count($skipped) : 0;
+    $onDisk = (int)($result['on_disk'] ?? 0);
+    if (!empty($result['no_scope'])) {
+        return 'No slides in the deck are yours to deploy. Ask a super admin to share slides with you or deploy as super admin.';
+    }
     $parts = [];
     if ($slideCount > 0 && $screenCount > 0) {
         $parts[] = 'synced ' . $slideCount . ' slide' . ($slideCount === 1 ? '' : 's')
@@ -2373,6 +2403,9 @@ function slides_deploy_flash_message(array $result): string
     if (($result['updated'] ?? 0) > 0) {
         $parts[] = (int)$result['updated'] . ' dwell/order update' . ((int)$result['updated'] === 1 ? '' : 's');
     }
+    if (!empty($result['recovery_deploy'])) {
+        $parts[] = 'used recovery deploy (deck slides were not assigned to any display — targeting reset in settings)';
+    }
     if ($skippedCount > 0) {
         $screenMap = rotation_screens();
         $labels = [];
@@ -2380,23 +2413,28 @@ function slides_deploy_flash_message(array $result): string
             $labels[] = rotation_screen_display_name((string)$sk, $screenMap);
         }
         $labelText = $labels !== [] ? implode(', ', $labels) : (string)$skippedCount . ' display' . ($skippedCount === 1 ? '' : 's');
-        $parts[] = 'skipped ' . $labelText
-            . ' (no slides target ' . ($skippedCount === 1 ? 'that display' : 'those displays')
-            . ' — on Deck, select slides → All displays → Save, then deploy again)';
+        if ($onDisk === 0) {
+            $parts[] = 'skipped ' . $labelText . ' (deck has no enabled slide files on disk — check File missing on Deck)';
+        } else {
+            $parts[] = 'skipped ' . $labelText . ' (no deployable slides for ' . ($skippedCount === 1 ? 'that display' : 'those displays') . ')';
+        }
     }
     if (!empty($result['repaired'])) {
-        $parts[] = 'restored display targeting in the deck (cleared hidden-from-all assignments)';
+        $parts[] = 'repaired display targeting in the deck';
     }
     if ($parts === []) {
         if ($skippedCount > 0) {
+            if ($onDisk === 0) {
+                return 'Deploy skipped — the deck lists no slide image files on the server (or every slide is disabled). Check the Deck tab for File missing warnings.';
+            }
             $screenMap = rotation_screens();
             $labels = [];
             foreach ($skipped as $sk) {
                 $labels[] = rotation_screen_display_name((string)$sk, $screenMap);
             }
             $which = $labels !== [] ? implode(', ', $labels) : 'the selected display(s)';
-            return 'No slides in the deck target ' . $which
-                . '. On the Deck tab, select slides → All displays → Save, then deploy only displays that show slides in deck on the Deploy tab.';
+            return 'Deploy skipped for ' . $which . ' — ' . $onDisk . ' slide file'
+                . ($onDisk === 1 ? '' : 's') . ' in deck but none could be pushed. Try All displays (deck) on the Deck tab, Save, then Deploy.';
         }
         return 'Slides already synced on selected displays.';
     }

@@ -1659,13 +1659,99 @@ function slides_repair_deck_screen_targets(array $deck): array
 }
 
 /**
- * Apply all deck targeting repairs (hidden slides, then whole-deck misconfig).
+ * Drop unknown display keys; clear targeting when nothing valid remains (→ all displays).
+ * @param list<array<string,mixed>> $deck
+ * @return list<array<string,mixed>>
+ */
+function slides_repair_deck_stale_screen_keys(array $deck): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $allKeys = array_keys(rotation_screens());
+    $known = array_flip($allKeys);
+    if ($known === []) {
+        return $deck;
+    }
+    sort($allKeys);
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        if (!array_key_exists('screens', $slide)) {
+            $out[] = $slide;
+            continue;
+        }
+        $targets = [];
+        foreach (slide_target_screens($slide) as $t) {
+            if (isset($known[$t])) {
+                $targets[$t] = true;
+            }
+        }
+        $targets = array_keys($targets);
+        sort($targets);
+        if ($targets === [] || $targets === $allKeys) {
+            unset($slide['screens']);
+        } else {
+            $slide['screens'] = $targets;
+        }
+        $out[] = $slide;
+    }
+
+    return $out;
+}
+
+/**
+ * Enabled on-disk slides exist but none are assigned to any configured display.
+ * @param list<array<string,mixed>> $deck
+ */
+function slides_deck_targets_no_configured_screens(array $deck): bool
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    if (slides_rotation_pages($deck, null) === []) {
+        return false;
+    }
+    foreach (array_keys(rotation_screens()) as $key) {
+        if (slides_rotation_pages($deck, (string)$key) !== []) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Apply all deck targeting repairs (hidden slides, stale keys, whole-deck misconfig).
  * @param list<array<string,mixed>> $deck
  * @return list<array<string,mixed>>
  */
 function slides_repair_deck(array $deck): array
 {
-    return slides_repair_deck_untargeted(slides_repair_deck_screen_targets($deck));
+    $deck = slides_repair_deck_screen_targets($deck);
+    $deck = slides_repair_deck_stale_screen_keys($deck);
+
+    return slides_repair_deck_untargeted($deck);
+}
+
+/**
+ * Rotation rows to deploy for one display (respects scope; recovery when targeting is broken).
+ * @param list<string>|null $scopeFiles
+ * @return list<array{url:string,dwell:int,file:string}>
+ */
+function slides_deploy_expected_pages(?array $deck, ?string $screen, ?array $scopeFiles): array
+{
+    $pages = slides_rotation_pages_for_scope($deck, $screen, $scopeFiles);
+    if ($pages !== []) {
+        return $pages;
+    }
+    if ($scopeFiles !== null && $scopeFiles === []) {
+        return [];
+    }
+    $deck = is_array($deck) ? $deck : [];
+    if (!slides_deck_targets_no_configured_screens($deck)) {
+        return [];
+    }
+
+    return slides_rotation_pages_for_scope($deck, null, $scopeFiles);
 }
 
 /**
