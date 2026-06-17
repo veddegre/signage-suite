@@ -2374,15 +2374,29 @@ function slides_deploy_flash_message(array $result): string
         $parts[] = (int)$result['updated'] . ' dwell/order update' . ((int)$result['updated'] === 1 ? '' : 's');
     }
     if ($skippedCount > 0) {
-        $parts[] = 'skipped ' . $skippedCount . ' display' . ($skippedCount === 1 ? '' : 's')
-            . ' (no slides target those displays in the deck)';
+        $screenMap = rotation_screens();
+        $labels = [];
+        foreach ($skipped as $sk) {
+            $labels[] = rotation_screen_display_name((string)$sk, $screenMap);
+        }
+        $labelText = $labels !== [] ? implode(', ', $labels) : (string)$skippedCount . ' display' . ($skippedCount === 1 ? '' : 's');
+        $parts[] = 'skipped ' . $labelText
+            . ' (no slides target ' . ($skippedCount === 1 ? 'that display' : 'those displays')
+            . ' — on Deck, select slides → All displays → Save, then deploy again)';
     }
     if (!empty($result['repaired'])) {
         $parts[] = 'restored display targeting on deck slides';
     }
     if ($parts === []) {
         if ($skippedCount > 0) {
-            return 'No slides in the deck target the selected display(s). Assign slides under Show on displays, Save, then deploy only the displays you need.';
+            $screenMap = rotation_screens();
+            $labels = [];
+            foreach ($skipped as $sk) {
+                $labels[] = rotation_screen_display_name((string)$sk, $screenMap);
+            }
+            $which = $labels !== [] ? implode(', ', $labels) : 'the selected display(s)';
+            return 'No slides in the deck target ' . $which
+                . '. On the Deck tab, select slides → All displays → Save, then deploy only displays that show slides in deck on the Deploy tab.';
         }
         return 'Slides already synced on selected displays.';
     }

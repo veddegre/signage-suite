@@ -905,10 +905,14 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         if ($screens === []) {
             $flash = 'Pick at least one display you are allowed to deploy to.'; $flashOk = false;
         } else {
-            admin_deploy_screens_remember('slides', $screens);
             $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
             $result = slides_deploy_to_screens($screens, $deck);
             cfg_reload();
+            $remember = $result['screens'] ?? [];
+            if ($remember === [] && !empty($result['skipped'])) {
+                $remember = array_values(array_diff($screens, $result['skipped']));
+            }
+            admin_deploy_screens_remember('slides', $remember);
             $flash = slides_deploy_flash_message($result);
             if (!empty($result['skipped'])) {
                 $flashOk = false;
@@ -1389,9 +1393,12 @@ $slidesDeckForUser = [];
 $slidesDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
 $slidesDeployStatus = [];
 if ($authed && in_array($board, ['slides', 'status'], true)) {
-    $slidesDeckForUser = admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []);
+    $slidesDeckFullConf = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+    $slidesDeckForUser = admin_filter_owned_list($slidesDeckFullConf);
     $slidesDeckStats = slides_deck_stats($slidesDeckForUser);
-    $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($slidesDeckForUser));
+    $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status(
+        admin_is_super() ? $slidesDeckFullConf : $slidesDeckForUser
+    ));
 }
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesOrphanFiles = ($board === 'slides')
@@ -1662,6 +1669,28 @@ function admin_deploy_picker_pending_screens(array $deployStatus): array
     }
 
     return $out;
+}
+
+/** Default Deploy tab selection: displays that have slides assigned in the deck. @param list<array<string,mixed>> $deck */
+function admin_slides_deploy_picker_checked(array $deck, array $deployStatus): array
+{
+    if (slides_deck_untargeted_misconfig($deck)) {
+        return admin_filter_deploy_screens(array_keys($deployStatus));
+    }
+    $actionable = slides_screens_in_deck($deck);
+    $remembered = admin_deploy_screens_remembered('slides');
+    if ($remembered === null) {
+        return admin_filter_deploy_screens($actionable);
+    }
+    $actionSet = array_flip($actionable);
+    $picked = [];
+    foreach ($remembered as $sk) {
+        if (isset($actionSet[$sk])) {
+            $picked[] = $sk;
+        }
+    }
+
+    return admin_filter_deploy_screens($picked !== [] ? $picked : $actionable);
 }
 
 /** Per-display photo rotator sync — shown on Status page. */
@@ -4381,15 +4410,12 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
       <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Assign targets on the <strong>Deck</strong> tab first (<strong>Show on displays</strong>), click <strong>Save</strong>, then deploy here. Sync status is on <a href="?board=status">Status</a>.</p>
+            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Only displays with slides assigned in the deck can be deployed (see <strong>N in deck</strong> in the picker). Assign targets on <strong>Deck</strong> → <strong>Show on displays</strong> → <strong>Save</strong>, then deploy here. Sync status is on <a href="?board=status">Status</a>.</p>
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
               <?php
-              $slidesDeployTabChecked = admin_deploy_picker_checked('slides', []);
-              if (slides_deck_untargeted_misconfig($slidesDeckForUser)) {
-                  $slidesDeployTabChecked = array_keys($slidesDeployStatus);
-              }
+              $slidesDeployTabChecked = admin_slides_deploy_picker_checked($slidesDeckFull, $slidesDeployStatus);
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
