@@ -931,14 +931,25 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         if ($screen === '' || !admin_can_screen($screen)) {
             $flash = 'Invalid display.'; $flashOk = false;
         } else {
-            $rm = rotation_remove_all_slides($screen);
-            if ($rm['removed'] && rotation_pages_write($rm['screen'], $rm['pages'])) {
-                cfg_reload();
-                $name = rotation_screen_display_name($screen, rotation_screens());
-                $flash = 'Removed ' . (int)$rm['removed_count'] . ' slide entr'
-                    . ((int)$rm['removed_count'] === 1 ? 'y' : 'ies') . ' from ' . $name . ' playlist.';
+            require_once __DIR__ . '/slides_lib.php';
+            $result = slides_remove_from_display($screen);
+            if (empty($result['ok'])) {
+                $flash = (string)($result['error'] ?? 'Could not remove slides from that display.');
+                $flashOk = false;
             } else {
-                $flash = 'Custom slides were not on that playlist.'; $flashOk = false;
+                $name = rotation_screen_display_name($screen, rotation_screens());
+                $parts = [];
+                if ((int)$result['removed_count'] > 0) {
+                    $parts[] = 'removed ' . (int)$result['removed_count'] . ' slide entr'
+                        . ((int)$result['removed_count'] === 1 ? 'y' : 'ies') . ' from ' . $name . ' rotation';
+                }
+                if (!empty($result['deck_updated'])) {
+                    $parts[] = 'updated deck so slides no longer target ' . $name;
+                }
+                $flash = $parts !== []
+                    ? 'Custom slides ' . implode('; ', $parts) . '.'
+                    : 'Custom slides removed from ' . $name . '.';
+                $flash .= ' Wall displays refresh within 30 seconds.';
             }
         }
     }
@@ -1762,10 +1773,10 @@ function admin_slides_sync_panel(array $deployStatus, array $deckStats, ?string 
           <div class="deploy-actions">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
                href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
-            <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false)) && !$dep['mirrors_main']): ?>
-            <button type="submit" class="secondary" style="padding:6px 12px;font-size:13px"
+            <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false) || (int)($dep['deck_targeted'] ?? 0) > 0) && !$dep['mirrors_main']): ?>
+            <button type="submit" class="secondary deck-bulk-remove" style="padding:6px 12px;font-size:13px"
                     form="<?= h($removeFormId) ?>" name="action" value="remove_slides_rotation"
-                    onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove slides from <?= h($dep['name']) ?>?');">Remove</button>
+                    onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove all custom slides from <?= h($dep['name']) ?>?\n\nThis clears them from rotation and stops them targeting this display in the deck.');">Remove</button>
             <?php endif; ?>
           </div>
         </div>
@@ -4414,7 +4425,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
       <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Only displays with slides assigned in the deck can be deployed (see <strong>N in deck</strong> in the picker). Assign targets on <strong>Deck</strong> → <strong>Show on displays</strong> → <strong>Save</strong>, then deploy here. Sync status is on <a href="?board=status">Status</a>.</p>
+            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays, or remove them from one display below. Assign targets on <strong>Deck</strong> → <strong>Show on displays</strong> → <strong>Save</strong>. Sync status is on <a href="?board=status">Status</a>.</p>
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -4425,6 +4436,37 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
               <div class="slides-deploy-tools" style="margin-top:14px">
                 <button class="save" type="submit" name="action" value="deploy_slides">Deploy now</button>
+              </div>
+            </form>
+            <form id="slidesDeployRemoveForm" method="post" action="?board=slides" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line)">
+              <input type="hidden" name="board" value="slides">
+              <input type="hidden" name="tab" value="deploy">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="hidden" name="remove_screen" id="slidesDeployRemoveFormScreen" value="">
+              <h3 style="font-size:16px;margin:0 0 8px">Remove from one display</h3>
+              <p class="help" style="margin-bottom:10px">Clears custom slides from that display&rsquo;s rotation and updates the deck so they no longer target it (other displays are unchanged).</p>
+              <input type="search" class="deploy-filter" placeholder="Filter displays…" autocomplete="off" data-deploy-filter="slides-deploy-remove-grid" style="margin-bottom:10px;max-width:320px">
+              <div class="slides-deploy-grid" id="slides-deploy-remove-grid">
+                <?php foreach ($slidesDeployStatus as $screenKey => $dep):
+                  if (!admin_can_screen((string)$screenKey) || !empty($dep['mirrors_main'])) {
+                      continue;
+                  }
+                  $canRemove = !empty($dep['on_playlist']) || !empty($dep['partial']) || (int)($dep['deck_targeted'] ?? 0) > 0;
+                ?>
+                <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
+                  <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
+                  <div class="deploy-detail"><?php admin_deploy_status_pills($dep); ?></div>
+                  <div class="deploy-actions">
+                    <?php if ($canRemove): ?>
+                    <button type="submit" class="secondary deck-bulk-remove" style="padding:6px 12px;font-size:13px"
+                            name="action" value="remove_slides_rotation"
+                            onclick="document.getElementById('slidesDeployRemoveFormScreen').value='<?= h($screenKey) ?>'; return confirm('Remove all custom slides from <?= h($dep['name']) ?>?\n\nRotation entries will be cleared and the deck will stop targeting this display.');">Remove all slides</button>
+                    <?php else: ?>
+                    <span class="help" style="margin:0">No slides on this display</span>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <?php endforeach; ?>
               </div>
             </form>
       </div>

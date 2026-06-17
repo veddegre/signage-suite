@@ -1755,6 +1755,137 @@ function slides_deploy_expected_pages(?array $deck, ?string $screen, ?array $sco
 }
 
 /**
+ * Normalize a display target list for storage (null = omit key → all displays).
+ * @param list<string> $targets
+ * @param list<string> $allKeys
+ * @return list<string>|null null means all displays (omit screens key)
+ */
+function slides_normalize_stored_screen_targets(array $targets, array $allKeys): ?array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $targets = array_values(array_unique(array_filter(array_map(
+        static fn($k) => rotation_normalize_screen_key((string)$k),
+        $targets
+    ))));
+    sort($targets);
+    $allKeys = array_values(array_unique(array_map(
+        static fn($k) => rotation_normalize_screen_key((string)$k),
+        $allKeys
+    )));
+    sort($allKeys);
+    if ($targets === []) {
+        return [];
+    }
+    if ($targets === $allKeys) {
+        return null;
+    }
+
+    return $targets;
+}
+
+/** @param array<string,mixed> $slide */
+function slides_untarget_screen_in_slide(array $slide, string $screen, array $allKeys): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    if (!array_key_exists('screens', $slide)) {
+        $remain = array_values(array_filter($allKeys, static fn($k) => $k !== $screen));
+    } else {
+        $remain = array_values(array_filter(
+            slide_target_screens($slide),
+            static fn($k) => $k !== $screen
+        ));
+    }
+    $stored = slides_normalize_stored_screen_targets($remain, $allKeys);
+    if ($stored === null) {
+        unset($slide['screens']);
+    } elseif ($stored === []) {
+        $slide['screens'] = [];
+    } else {
+        $slide['screens'] = $stored;
+    }
+
+    return $slide;
+}
+
+/**
+ * Stop slides in the deck from targeting one display (does not delete slide files).
+ * @param list<array<string,mixed>> $deck
+ * @return list<array<string,mixed>>
+ */
+function slides_untarget_screen_in_deck(array $deck, string $screen): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    require_once __DIR__ . '/users_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $allKeys = array_keys(rotation_screens());
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        if (!admin_is_super() && !admin_entry_visible($slide)) {
+            $out[] = $slide;
+            continue;
+        }
+        $out[] = slides_untarget_screen_in_slide($slide, $screen, $allKeys);
+    }
+
+    return $out;
+}
+
+/**
+ * Remove custom slides from one display's rotation playlist and deck targeting.
+ * @return array{ok:bool,screen:string,removed_count:int,deck_updated:bool,error?:string}
+ */
+function slides_remove_from_display(string $screen): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === '') {
+        return ['ok' => false, 'screen' => '', 'removed_count' => 0, 'deck_updated' => false, 'error' => 'Invalid display.'];
+    }
+    $rm = rotation_remove_all_slides($screen);
+    $deck = cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $newDeck = slides_untarget_screen_in_deck($deck, $screen);
+    $deckUpdated = $newDeck !== $deck;
+    if (!$rm['removed'] && !$deckUpdated) {
+        return [
+            'ok' => false,
+            'screen' => $screen,
+            'removed_count' => 0,
+            'deck_updated' => false,
+            'error' => 'Custom slides were not on that display.',
+        ];
+    }
+    $pageWrites = [];
+    if ($rm['removed']) {
+        $pageWrites[$screen] = $rm['pages'];
+    }
+    if ($pageWrites !== [] || $deckUpdated) {
+        if (!rotation_pages_write_batch($pageWrites, $deckUpdated ? $newDeck : null)) {
+            return [
+                'ok' => false,
+                'screen' => $screen,
+                'removed_count' => (int)$rm['removed_count'],
+                'deck_updated' => false,
+                'error' => 'Could not update settings.',
+            ];
+        }
+        cfg_reload();
+    }
+
+    return [
+        'ok' => true,
+        'screen' => $screen,
+        'removed_count' => (int)$rm['removed_count'],
+        'deck_updated' => $deckUpdated,
+    ];
+}
+
+/**
  * Clear accidental screens: [] so slides play on all displays again.
  * @return list<array<string,mixed>>
  */
