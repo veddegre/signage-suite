@@ -2104,6 +2104,11 @@ function admin_field(array $f, $val, string $board): void
   .rotation-display-options .field { margin:0; }
   .rotation-display-options .l { font-size:12px; margin-bottom:4px; }
   .rotation-display-options input[type="number"] { width:100%; max-width:120px; }
+  .rotation-weekdays { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; }
+  .rotation-weekday { display:flex; align-items:center; gap:3px; margin:0; font-size:11px; color:var(--mist); white-space:nowrap; }
+  .rotation-weekday input { width:14px; height:14px; margin:0; accent-color:var(--beacon); }
+  .rotation-weekdays-cell { min-width:188px; vertical-align:middle; }
+  .rotation-display-options .rotation-weekdays-field { grid-column:1 / -1; }
   table.rows input.screen-ms { width:64px; }
   .rotation-playlist-panel { margin-top:16px; }
   .rotation-playlist-panel > summary { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; padding-right:48px; }
@@ -2884,11 +2889,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <details class="panel rotation-display-settings-panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body rotation-display-settings-body" style="padding-top:8px">
-          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
+          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, active weekdays, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
+                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow):
@@ -2918,6 +2923,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                          name="SCREENS[<?= (int)$sri ?>][schedule_enabled]" value="1" <?= !empty($srow['schedule_enabled']) ? 'checked' : '' ?>></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_off]" value="<?= h((string)($srow['cec_off'] ?? '23')) ?>" placeholder="23" style="width:52px"></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_on]" value="<?= h((string)($srow['cec_on'] ?? '6')) ?>" placeholder="6" style="width:52px"></td>
+                  <td class="rotation-weekdays-cell"><?php rotation_admin_weekdays_html('SCREENS[' . (int)$sri . ']', $srow['weekdays'] ?? null); ?></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
                   <td><?php if ($screenProtected): ?>
@@ -3054,7 +3060,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             $schedOpt = $screenSettings['schedule'];
           ?>
           <div class="rotation-display-options">
-            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone.</div>
+            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone. Unchecked weekdays stay dark all day.</div>
             <div class="field-grid">
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
@@ -3067,6 +3073,13 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][schedule_enabled]" value="1"
                   <?= !empty($schedOpt['enabled']) ? 'checked' : '' ?>> Blank screen overnight</label>
+              </div>
+              <div class="field rotation-weekdays-field">
+                <span class="l">Active on</span>
+                <?php rotation_admin_weekdays_html(
+                    'SCREEN_OPTS[' . $screenKey . ']',
+                    array_key_exists('weekdays', $schedOpt) ? $schedOpt['weekdays'] : null
+                ); ?>
               </div>
               <div class="field">
                 <label class="l" for="screenOff-<?= h($screenKey) ?>">Blank from (hour 0–23)</label>
@@ -4630,6 +4643,20 @@ function initKeyedBoardPreviews() {
   document.querySelectorAll('table.rows[data-preview-script] tbody tr').forEach(bindKeyedBoardRow);
 }
 
+function rotationWeekdaysCellHtml(prefix) {
+  const days = [
+    ['Mon', 'Monday'], ['Tue', 'Tuesday'], ['Wed', 'Wednesday'], ['Thu', 'Thursday'],
+    ['Fri', 'Friday'], ['Sat', 'Saturday'], ['Sun', 'Sunday']
+  ];
+  let html = '<div class="rotation-weekdays" title="Active on these days only; other days stay blank all day. All seven = every day.">';
+  days.forEach(function (pair) {
+    html += '<label class="rotation-weekday"><input type="checkbox" name="' + prefix + '[weekdays][]" value="' + pair[1] + '" checked> '
+      + pair[0] + '</label>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function addRow(btn) {
   const wrap = btn.previousElementSibling;
   const table = wrap && wrap.classList && wrap.classList.contains('rows-scroll')
@@ -4645,6 +4672,7 @@ function addRow(btn) {
       if ($ff['type'] === 'rows') $colMap[$ff['key']] = array_map(fn($c) => ['key' => $c['key'],
         'wide' => !empty($c['wide']), 'ph' => $c['placeholder'] ?? '',
         'check' => ($c['type'] ?? '') === 'check',
+        'weekdays' => ($c['type'] ?? '') === 'weekdays',
         'select' => ($c['type'] ?? '') === 'select',
         'password' => ($c['type'] ?? '') === 'password',
         'palette' => ($c['type'] ?? '') === 'palette',
@@ -4661,6 +4689,11 @@ function addRow(btn) {
       inp.style.cssText = 'width:20px;height:20px;accent-color:var(--beacon);min-width:0';
       td.style.cssText = 'text-align:center;vertical-align:middle';
       if (field === 'SCREENS' && (c.key === 'show_ticker' || c.key === 'show_clock')) inp.checked = true;
+    } else if (c.weekdays) {
+      td.className = 'rotation-weekdays-cell';
+      td.innerHTML = rotationWeekdaysCellHtml(field + '[' + idx + ']');
+      tr.appendChild(td);
+      return;
     } else if (c.select) {
       inp = document.createElement('select');
       const blank = document.createElement('option');

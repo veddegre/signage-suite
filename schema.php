@@ -93,12 +93,15 @@ function admin_schema(): array
                            ['key' => 'schedule_enabled', 'label' => 'Blank', 'type' => 'check'],
                            ['key' => 'cec_off', 'label' => 'Off hr'],
                            ['key' => 'cec_on', 'label' => 'On hr'],
+                           ['key' => 'weekdays', 'label' => 'Days', 'type' => 'weekdays'],
                            ['key' => 'cec_enabled', 'label' => 'CEC', 'type' => 'check']],
              'help' => 'One row per physical display. Each kiosk points at board.php?screen=<key> '
                      . '(plain board.php = the "main" screen). Save after adding a screen and its '
                      . 'page list appears below. Keys enables ←/→ manual playlist control on that display. '
                      . 'A screen with no pages of its own falls back to main. '
-                     . 'Blank shows a dark screen during Off→On hours (rotation timezone). CEC is optional HDMI standby on Pi kiosks.'],
+                     . 'Blank shows a dark screen during Off→On hours (rotation timezone). Pick weekdays to limit '
+                     . 'when the display is active (e.g. Mon–Fri only — weekends stay blank all day). '
+                     . 'CEC is optional HDMI standby on Pi kiosks.'],
         ], rotation_page_fields(), [
             $tz,
             ['key' => 'FADE_MS', 'label' => 'Crossfade (ms)', 'type' => 'number'],

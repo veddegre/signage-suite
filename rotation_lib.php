@@ -142,11 +142,8 @@ function rotation_screen_clock_enabled(string $screen): bool
 function rotation_screen_blank_active(string $screen): bool
 {
     $sched = rotation_screen_settings($screen)['schedule'];
-    if (!$sched['enabled']) {
-        return false;
-    }
 
-    return rotation_in_off_window($sched['off'], $sched['on']);
+    return rotation_blank_schedule_active($sched);
 }
 
 function rotation_admin_screen_row(string $key, $rv): array
@@ -171,6 +168,7 @@ function rotation_admin_screen_row(string $key, $rv): array
         'cec_enabled' => $cec['enabled'],
         'cec_off' => (string)$sched['off'],
         'cec_on' => (string)$sched['on'],
+        'weekdays' => array_key_exists('weekdays', $sched) ? $sched['weekdays'] : null,
     ];
 }
 
@@ -178,6 +176,175 @@ function rotation_admin_screen_row(string $key, $rv): array
 function rotation_schedule_defaults(): array
 {
     return ['enabled' => false, 'off' => 23, 'on' => 6];
+}
+
+/** @return list<array{short:string,full:string}> */
+function rotation_weekday_options(): array
+{
+    return [
+        ['short' => 'Mon', 'full' => 'Monday'],
+        ['short' => 'Tue', 'full' => 'Tuesday'],
+        ['short' => 'Wed', 'full' => 'Wednesday'],
+        ['short' => 'Thu', 'full' => 'Thursday'],
+        ['short' => 'Fri', 'full' => 'Friday'],
+        ['short' => 'Sat', 'full' => 'Saturday'],
+        ['short' => 'Sun', 'full' => 'Sunday'],
+    ];
+}
+
+/** @return list<string> Full weekday names */
+function rotation_parse_weekdays(string $raw): array
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+    $out = [];
+    foreach (preg_split('/\s*,\s*/', $raw) as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+        foreach (rotation_weekday_options() as $opt) {
+            $full = $opt['full'];
+            if (strcasecmp($part, $full) === 0
+                || strcasecmp($part, $opt['short']) === 0
+                || (strlen($part) >= 3 && strncasecmp($part, $full, strlen($part)) === 0)) {
+                $out[$full] = true;
+                break;
+            }
+        }
+    }
+
+    return array_keys($out);
+}
+
+/** @param list<string> $raw @return list<string> */
+function rotation_normalize_weekdays_list(array $raw): array
+{
+    $out = [];
+    foreach ($raw as $item) {
+        foreach (rotation_parse_weekdays((string)$item) as $day) {
+            $out[$day] = true;
+        }
+    }
+    $list = array_keys($out);
+    usort($list, static function ($a, $b) {
+        $order = array_column(rotation_weekday_options(), 'full');
+        return array_search($a, $order, true) <=> array_search($b, $order, true);
+    });
+
+    return $list;
+}
+
+/**
+ * Weekdays from admin POST. Null when the form did not include weekday controls.
+ * @return list<string>|null
+ */
+function rotation_weekdays_from_post_row(array $row): ?array
+{
+    if (!array_key_exists('weekdays', $row)) {
+        return null;
+    }
+    if (!is_array($row['weekdays'])) {
+        return rotation_normalize_weekdays_list([trim((string)$row['weekdays'])]);
+    }
+    $days = [];
+    foreach ($row['weekdays'] as $item) {
+        foreach (rotation_parse_weekdays((string)$item) as $day) {
+            $days[$day] = true;
+        }
+    }
+
+    return array_keys($days);
+}
+
+/** @param list<string>|null $selected Full names; null = all days (legacy / unset) */
+function rotation_admin_weekdays_html(string $namePrefix, ?array $selected): void
+{
+    $allSelected = $selected === null;
+    $selSet = [];
+    if (is_array($selected)) {
+        foreach ($selected as $day) {
+            $selSet[(string)$day] = true;
+        }
+    }
+    echo '<div class="rotation-weekdays" title="Active on these days only; other days stay blank all day. All seven = every day.">';
+    foreach (rotation_weekday_options() as $opt) {
+        $full = $opt['full'];
+        $checked = $allSelected || !empty($selSet[$full]);
+        echo '<label class="rotation-weekday"><input type="checkbox" name="' . h($namePrefix . '[weekdays][]') . '" value="' . h($full) . '"'
+            . ($checked ? ' checked' : '') . '> ' . h($opt['short']) . '</label>';
+    }
+    echo '</div>';
+}
+
+function rotation_now(): DateTimeImmutable
+{
+    try {
+        return new DateTimeImmutable('now', new DateTimeZone(rotation_timezone()));
+    } catch (Throwable $e) {
+        return new DateTimeImmutable('now');
+    }
+}
+
+/** @param list<string> $weekdays Full weekday names */
+function rotation_today_in_weekdays(array $weekdays, ?DateTimeInterface $now = null): bool
+{
+    if ($weekdays === []) {
+        return false;
+    }
+    $now = $now ?? rotation_now();
+    $today = $now->format('l');
+    foreach ($weekdays as $day) {
+        if (strcasecmp($today, (string)$day) === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * True when the blank schedule says the display should be dark now.
+ * @param array{enabled?:bool,off?:int,on?:int,weekdays?:list<string>} $sched
+ */
+function rotation_blank_schedule_active(array $sched, ?DateTimeInterface $now = null): bool
+{
+    $now = $now ?? rotation_now();
+    if (array_key_exists('weekdays', $sched)) {
+        $weekdays = is_array($sched['weekdays']) ? $sched['weekdays'] : [];
+        if ($weekdays === [] || !rotation_today_in_weekdays($weekdays, $now)) {
+            return true;
+        }
+    }
+    if (empty($sched['enabled'])) {
+        return false;
+    }
+
+    return rotation_in_off_window(
+        (int)($sched['off'] ?? 23),
+        (int)($sched['on'] ?? 6),
+        (int)$now->format('G')
+    );
+}
+
+/** CEC standby follows blank weekdays and optional overnight hours. */
+function rotation_cec_standby_active(array $cec, array $sched, ?DateTimeInterface $now = null): bool
+{
+    if (empty($cec['enabled'])) {
+        return false;
+    }
+    $probe = [
+        'enabled' => !empty($sched['enabled']),
+        'off' => $cec['off'],
+        'on' => $cec['on'],
+    ];
+    if (array_key_exists('weekdays', $sched)) {
+        $probe['weekdays'] = $sched['weekdays'];
+    }
+
+    return rotation_blank_schedule_active($probe, $now);
 }
 
 /** @param array<string,mixed> $scr @return array{off:int,on:int} */
@@ -220,6 +387,11 @@ function rotation_schedule_from_screen(array $scr): array
         }
         if (isset($block['on'])) {
             $sched['on'] = max(0, min(23, (int)$block['on']));
+        }
+        if (array_key_exists('weekdays', $block)) {
+            $sched['weekdays'] = rotation_normalize_weekdays_list(
+                is_array($block['weekdays']) ? $block['weekdays'] : []
+            );
         }
 
         return $sched;
@@ -297,11 +469,21 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
     }
 
     $hours = rotation_blank_hours_from_post_row($row);
-    $entry['schedule'] = [
+    $schedule = [
         'enabled' => isset($row['schedule_enabled']),
         'off' => $hours['off'],
         'on' => $hours['on'],
     ];
+    $weekdaysPosted = rotation_weekdays_from_post_row($row);
+    if ($weekdaysPosted !== null) {
+        $normalized = rotation_normalize_weekdays_list($weekdaysPosted);
+        if (count($normalized) !== 7) {
+            $schedule['weekdays'] = $normalized;
+        }
+    } elseif (isset($entry['schedule']) && is_array($entry['schedule']) && array_key_exists('weekdays', $entry['schedule'])) {
+        $schedule['weekdays'] = $entry['schedule']['weekdays'];
+    }
+    $entry['schedule'] = $schedule;
 
     if (isset($row['cec_enabled'])) {
         $entry['cec'] = [
@@ -406,7 +588,8 @@ function rotation_cec_api_payload(string $screen = 'main'): array
     $tz = rotation_timezone();
     $hour = rotation_current_hour();
     $cec = rotation_screen_settings($screen)['cec'];
-    $standby = $cec['enabled'] && rotation_in_off_window($cec['off'], $cec['on'], $hour);
+    $sched = rotation_screen_settings($screen)['schedule'];
+    $standby = rotation_cec_standby_active($cec, $sched);
     return [
         'screen' => $screen,
         'timezone' => $tz,
@@ -450,6 +633,9 @@ function rotation_screens(): array
                     'off' => $sched['off'],
                     'on' => $sched['on'],
                 ];
+                if (array_key_exists('weekdays', $sched)) {
+                    $entry['schedule']['weekdays'] = $sched['weekdays'];
+                }
             }
             $cec = rotation_cec_from_screen($scr);
             if ($cec['enabled']) {
