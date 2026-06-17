@@ -1728,10 +1728,16 @@ function slides_effective_rotation_pages(?array $deck = null, ?string $screen = 
 /** Active slides that exist on disk, in configured order. */
 function slides_active_entries(?array $entries = null, ?string $dir = null): array
 {
+    static $cache = [];
+
     $dir = $dir ?? slides_dir();
     $entries = $entries ?? cfg('slides.SLIDES', []);
     if (!is_array($entries)) {
         return [];
+    }
+    $cacheKey = md5($dir . "\0" . json_encode($entries, JSON_UNESCAPED_SLASHES));
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
     }
 
     $tz  = new DateTimeZone(slides_timezone());
@@ -1754,9 +1760,7 @@ function slides_active_entries(?array $entries = null, ?string $dir = null): arr
     }
 
     $priority = array_values(array_filter($candidates, 'slide_is_priority'));
-    if ($priority !== []) {
-        return $priority;
-    }
+    $cache[$cacheKey] = $priority !== [] ? $priority : $candidates;
 
-    return $candidates;
+    return $cache[$cacheKey];
 }

@@ -27,8 +27,6 @@ require_once __DIR__ . '/users_lib.php';
 require_once __DIR__ . '/sso_lib.php';
 require_once __DIR__ . '/audit_lib.php';
 
-slide_background_ensure_assets();
-
 const ADMIN_FILE = __DIR__ . '/config/admin.json'; // legacy; migrated to users.json
 
 signage_admin_security_headers();
@@ -1362,7 +1360,7 @@ if ($authed && $board === 'rotator' && admin_can_board('rotator')) {
 }
 
 // Current value resolution for form display: configured value or null
-$rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+$rawConf = cfg_all();
 function current_val(array $rawConf, string $board, string $key)
 {
     return $rawConf["$board.$key"] ?? null;
@@ -1410,9 +1408,12 @@ foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
 }
 $rotationStarterPages = rotation_starter_pages();
-$rotationMainPages = rotation_screen_pages('main');
-if ($rotationMainPages === []) {
-    $rotationMainPages = $rotationStarterPages;
+$rotationMainPages = [];
+if ($authed && $board === 'rotation') {
+    $rotationMainPages = rotation_screen_pages('main');
+    if ($rotationMainPages === []) {
+        $rotationMainPages = $rotationStarterPages;
+    }
 }
 $slidesDeckForUser = [];
 $slidesDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
@@ -1435,7 +1436,7 @@ $slidesLibrary = ($board === 'slides')
     : [];
 if ($board === 'rotator') {
     rotator_migrate_deck_from_files();
-    $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : $rawConf;
+    $rawConf = cfg_all();
 }
 $rotatorDeckForUser = admin_filter_owned_list(is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : []);
 $rotatorDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
@@ -3809,6 +3810,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </details>
 
         <?php elseif ($board === 'slides'):
+          slide_background_ensure_assets();
           slide_background_ensure_photos();
           $rotationScreens = admin_filter_screens(rotation_screens());
           $slideVal = current_val($rawConf, $board, 'SLIDES');

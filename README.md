@@ -337,10 +337,11 @@ Onboards a fresh Ubuntu / Debian / Raspberry Pi OS machine as the signage **serv
     sudo bash setup-server.sh --nginx                       # nginx snippet instead of Apache
 
 What it installs and configures:
-- Apache (or an nginx snippet), PHP 8.x with curl, xml, mbstring, and gd, plus ffmpeg
+- Apache (or an nginx snippet), PHP 8.x with curl, xml, mbstring, gd, and **opcache**, plus ffmpeg
 - **yt-dlp** via pipx (default; use `--no-ytdlp` to skip) and optional weekly **`php video.php fetch`** cron (`--with-video-cron`)
 - Deploys board files to the web root, creates `config/`, `cache/`, `videos/`, and `slides/` owned by `www-data`
 - Blocks direct HTTP access to `config/`, `cache/`, and `slides/` (Apache `DirectoryMatch` or nginx `location`)
+- Enables **PHP OPcache** (`98-signage-opcache.ini`) — bytecode cache for faster admin and board requests; uses smaller pools on hosts under 2 GB RAM
 - Raises PHP / Apache / nginx timeouts to **1 hour** for admin YouTube downloads (`99-signage-timeouts.ini`)
 - Generates `slide_backgrounds/` theme PNGs if missing (php-gd)
 - Fetches `slide_backgrounds/photos/` from Unsplash/Pexels if missing (outbound HTTPS; skipped when already present)

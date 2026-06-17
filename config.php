@@ -34,6 +34,15 @@ function cfg_reload(): void
     $GLOBALS['__cfg_cache'] = null;
 }
 
+/** Full settings array from the in-process cache (loads settings.json once per request). */
+function cfg_all(): array
+{
+    cfg('_', null);
+    $conf = $GLOBALS['__cfg_cache'] ?? null;
+
+    return is_array($conf) ? $conf : [];
+}
+
 function cfg_path(): string
 {
     return __DIR__ . '/config/settings.json';

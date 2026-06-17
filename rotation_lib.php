@@ -793,8 +793,13 @@ function rotation_screen_kiosk_url(string $screen = 'main'): string
 /** @return list<array<string,mixed>> Active pages for the rotation shell (url set, dwell > 0, not skipped). */
 function rotation_screen_active_pages(string $screen = 'main'): array
 {
+    static $cache = [];
+
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
+    if (array_key_exists($screen, $cache)) {
+        return $cache[$screen];
+    }
     $scopeUid = null;
     if ($screen !== 'main') {
         require_once __DIR__ . '/users_lib.php';
@@ -826,7 +831,7 @@ function rotation_screen_active_pages(string $screen = 'main'): array
         }
     }
 
-    return array_values(array_filter(
+    $cache[$screen] = array_values(array_filter(
         $effective,
         static function ($p) use ($activeFiles, $hasSlideEntries) {
             if (!is_array($p)
@@ -846,6 +851,8 @@ function rotation_screen_active_pages(string $screen = 'main'): array
             return isset($activeFiles[$file]);
         }
     ));
+
+    return $cache[$screen];
 }
 
 /** @return list<array<string,mixed>> */
