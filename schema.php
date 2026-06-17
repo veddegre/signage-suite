@@ -84,6 +84,7 @@ function admin_schema(): array
                            ['key' => 'show_ticker', 'label' => 'Weather ticker', 'type' => 'check'],
                            ['key' => 'show_clock', 'label' => 'Clock', 'type' => 'check'],
                            ['key' => 'show_debug', 'label' => 'Debug', 'type' => 'check'],
+                           ['key' => 'keyboard_nav', 'label' => 'Keys', 'type' => 'check'],
                            ['key' => 'fade_ms', 'label' => 'Crossfade (ms)'],
                            ['key' => 'settle_ms', 'label' => 'Settle (ms)'],
                            ['key' => 'hang_ms', 'label' => 'Hang (ms)'],
@@ -95,7 +96,8 @@ function admin_schema(): array
                            ['key' => 'cec_enabled', 'label' => 'CEC', 'type' => 'check']],
              'help' => 'One row per physical display. Each kiosk points at board.php?screen=<key> '
                      . '(plain board.php = the "main" screen). Save after adding a screen and its '
-                     . 'page list appears below. A screen with no pages of its own falls back to main. '
+                     . 'page list appears below. Keys enables ←/→ manual playlist control on that display. '
+                     . 'A screen with no pages of its own falls back to main. '
                      . 'Blank shows a dark screen during Off→On hours (rotation timezone). CEC is optional HDMI standby on Pi kiosks.'],
         ], rotation_page_fields(), [
             $tz,

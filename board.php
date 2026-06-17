@@ -114,11 +114,13 @@ if (($_GET['api'] ?? '') === 'presence') {
   const SHOW_CLOCK = <?= json_encode((bool)$runtime['show_clock']) ?>;
   const BLANK_INIT = <?= json_encode($blankActive) ?>;
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
+  const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
   let front = 0, idx = -1, gen = 0, rotateTimer = null;
+  let pageHistory = [];
   let blankActive = BLANK_INIT;
   let presencePage = null;
   let presenceStatus = blankActive ? 'blank' : '';
@@ -216,6 +218,12 @@ if (($_GET['api'] ?? '') === 'presence') {
       }
       return;
     }
+    if (ev.data.type === 'signage-nav' && KEYBOARD_NAV) {
+      if (blankActive || PAGES.length === 0) return;
+      if (ev.data.dir === 'prev') rotateBack();
+      else if (ev.data.dir === 'next') rotateForward();
+      return;
+    }
     if (ev.data.type !== 'signage-done') return;
     var fromVisible = false;
     for (var i = 0; i < frames.length; i++) {
@@ -228,7 +236,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     }
     if (!fromVisible) return;
     clearRotateTimer();
-    rotate();
+    rotateForward();
   });
 
   function inWindow(p) {
@@ -372,12 +380,12 @@ if (($_GET['api'] ?? '') === 'presence') {
     return /(?:^|[?&/])(family|rss|video|grafana|splunkdash|splunk|web|slides|rotator)\.php(?:[?&#]|$)/i.test(String(url));
   }
 
-  function rotate() {
+  function rotateToIndex(targetIdx) {
     if (blankActive || PAGES.length === 0) return;
     clearRotateTimer();
     postToFrame(frames[0], { type: 'signage-stop' });
     postToFrame(frames[1], { type: 'signage-stop' });
-    idx = nextPage();
+    idx = targetIdx;
     const p = PAGES[idx];
     presencePage = p;
     const myGen = ++gen;
@@ -403,7 +411,6 @@ if (($_GET['api'] ?? '') === 'presence') {
       updateRotateDebug('on screen', p, idx, fullSrc);
       sendPresence('on screen');
       const dwellMs = (+p.dwell) * 1000;
-      // RSS boards report signage-done when their carousel finishes; dwell is only a safety cap.
       const safetyMs = isRssUrl(p.url) ? Math.max(dwellMs + 15000, 60000) : dwellMs;
       scheduleRotate(safetyMs);
     };
@@ -412,7 +419,6 @@ if (($_GET['api'] ?? '') === 'presence') {
     f.onload = () => setTimeout(function () {
       if (myGen !== gen) return;
       if (revealed) {
-        // Frame was revealed early (HANG) before this document finished loading.
         postToFrame(f, { type: 'signage-show' });
         return;
       }
@@ -424,6 +430,37 @@ if (($_GET['api'] ?? '') === 'presence') {
       reveal();
       updateRotateDebug('on screen (hang timeout)', p, idx, fullSrc);
     }, HANG);
+  }
+
+  function rotateForward() {
+    if (blankActive || PAGES.length === 0) return;
+    if (idx >= 0) {
+      pageHistory.push(idx);
+      if (pageHistory.length > 100) pageHistory.shift();
+    }
+    rotateToIndex(nextPage());
+  }
+
+  function rotateBack() {
+    if (blankActive || PAGES.length === 0 || pageHistory.length === 0) return;
+    rotateToIndex(pageHistory.pop());
+  }
+
+  function rotate() {
+    rotateForward();
+  }
+
+  if (KEYBOARD_NAV) {
+    document.addEventListener('keydown', function (e) {
+      if (blankActive || PAGES.length === 0) return;
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        rotateForward();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        rotateBack();
+      }
+    });
   }
 
   if (!blankActive) {

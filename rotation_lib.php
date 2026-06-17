@@ -47,7 +47,7 @@ function rotation_screen_transition_from_scr(?array $scr): array
     return ['fade_ms' => $fade, 'settle_ms' => $settle, 'hang_ms' => $hang];
 }
 
-/** @return array{name:string,shuffle:bool,show_ticker:bool,show_clock:bool,show_debug:bool,weighted:bool,fade_ms:int,settle_ms:int,hang_ms:int,schedule:array{enabled:bool,off:int,on:int},cec:array{enabled:bool,off:int,on:int,device:int}} */
+/** @return array{name:string,shuffle:bool,show_ticker:bool,show_clock:bool,show_debug:bool,keyboard_nav:bool,weighted:bool,fade_ms:int,settle_ms:int,hang_ms:int,schedule:array{enabled:bool,off:int,on:int},cec:array{enabled:bool,off:int,on:int,device:int}} */
 function rotation_screen_settings(string $screen = 'main'): array
 {
     $screen = rotation_normalize_screen_key($screen);
@@ -68,6 +68,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'show_ticker' => true,
         'show_clock' => true,
         'show_debug' => false,
+        'keyboard_nav' => false,
         'weighted' => false,
         'fade_ms' => $transition['fade_ms'],
         'settle_ms' => $transition['settle_ms'],
@@ -85,6 +86,7 @@ function rotation_screen_settings(string $screen = 'main'): array
             'show_ticker' => true,
             'show_clock' => true,
             'show_debug' => false,
+            'keyboard_nav' => false,
             'weighted' => false,
             'fade_ms' => $transition['fade_ms'],
             'settle_ms' => $transition['settle_ms'],
@@ -100,6 +102,7 @@ function rotation_screen_settings(string $screen = 'main'): array
     $showTicker = !array_key_exists('show_ticker', $scr) || !empty($scr['show_ticker']);
     $showClock = !array_key_exists('show_clock', $scr) || !empty($scr['show_clock']);
     $showDebug = !empty($scr['show_debug']);
+    $keyboardNav = !empty($scr['keyboard_nav']);
     $weighted = !empty($scr['weighted']);
     $transition = rotation_screen_transition_from_scr($scr);
 
@@ -109,6 +112,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'show_ticker' => $showTicker,
         'show_clock' => $showClock,
         'show_debug' => $showDebug,
+        'keyboard_nav' => $keyboardNav,
         'weighted' => $weighted,
         'fade_ms' => $transition['fade_ms'],
         'settle_ms' => $transition['settle_ms'],
@@ -158,6 +162,7 @@ function rotation_admin_screen_row(string $key, $rv): array
         'show_ticker' => !array_key_exists('show_ticker', $row) || !empty($row['show_ticker']),
         'show_clock' => !array_key_exists('show_clock', $row) || !empty($row['show_clock']),
         'show_debug' => !empty($row['show_debug']),
+        'keyboard_nav' => !empty($row['keyboard_nav']),
         'weighted' => !empty($row['weighted']),
         'fade_ms' => isset($row['fade_ms']) ? (string)(int)$row['fade_ms'] : '',
         'settle_ms' => isset($row['settle_ms']) ? (string)(int)$row['settle_ms'] : '',
@@ -270,6 +275,11 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
             $entry['weighted'] = true;
         } else {
             unset($entry['weighted']);
+        }
+        if (isset($row['keyboard_nav'])) {
+            $entry['keyboard_nav'] = true;
+        } else {
+            unset($entry['keyboard_nav']);
         }
         $entry['show_clock'] = isset($row['show_clock']);
     }
@@ -661,6 +671,7 @@ function rotation_config_revision(string $screen = 'main'): string
         'show_ticker' => $settings['show_ticker'],
         'show_clock' => $settings['show_clock'],
         'show_debug' => $settings['show_debug'],
+        'keyboard_nav' => $settings['keyboard_nav'],
         'weighted' => $settings['weighted'],
         'schedule' => $settings['schedule'],
         'cec' => $settings['cec'],
@@ -690,6 +701,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'show_ticker' => $settings['show_ticker'],
         'show_clock' => $settings['show_clock'],
         'show_debug' => $settings['show_debug'],
+        'keyboard_nav' => $settings['keyboard_nav'],
         'schedule' => $settings['schedule'],
         'blank' => $blank,
         'fade_ms' => $settings['fade_ms'],

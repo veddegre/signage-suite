@@ -2860,11 +2860,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <details class="panel rotation-display-settings-panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body rotation-display-settings-body" style="padding-top:8px">
-          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
+          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
+                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow):
@@ -2881,6 +2881,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                          name="SCREENS[<?= (int)$sri ?>][show_clock]" value="1" <?= !empty($srow['show_clock']) ? 'checked' : '' ?>></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][show_debug]" value="1" <?= !empty($srow['show_debug']) ? 'checked' : '' ?>></td>
+                  <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
+                         name="SCREENS[<?= (int)$sri ?>][keyboard_nav]" value="1" <?= !empty($srow['keyboard_nav']) ? 'checked' : '' ?> title="Arrow keys advance/back playlist"></td>
                   <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][fade_ms]" value="<?= h((string)($srow['fade_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_fade_ms() ?>"></td>
                   <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][settle_ms]" value="<?= h((string)($srow['settle_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_settle_ms() ?>"></td>
                   <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][hang_ms]" value="<?= h((string)($srow['hang_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_hang_ms() ?>"></td>
@@ -2998,6 +3000,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
               <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok">Weighted</span><?php endif; ?>
               <?php if ($screenSettings['show_debug']): ?><span class="pill">Debug</span><?php endif; ?>
+              <?php if (!empty($screenSettings['keyboard_nav'])): ?><span class="pill">Keys</span><?php endif; ?>
               <?php if (!$screenSettings['show_ticker']): ?><span class="pill warn">No ticker</span><?php endif; ?>
               <?php if ($screenSettings['schedule']['enabled']): ?><span class="pill ok">Blank <?= (int)$screenSettings['schedule']['off'] ?>→<?= (int)$screenSettings['schedule']['on'] ?></span><?php endif; ?>
               <?php if ($screenSettings['cec']['enabled']): ?><span class="pill">CEC</span><?php endif; ?>
