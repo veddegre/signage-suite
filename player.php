@@ -63,6 +63,7 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
 </head>
 <body<?= $blankActive ? ' class="signage-blank"' : '' ?>>
 <div id="stage"><iframe src="<?= htmlspecialchars($src) ?>" allow="autoplay; fullscreen"></iframe></div>
+<?php signage_kiosk_pointer_shield_html(); ?>
 <div id="hint">Tap to toggle fullscreen</div>
 
 <script>
@@ -156,6 +157,7 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
     setInterval(syncBlank, 30000);
   })();
 </script>
+<?php signage_kiosk_hide_pointer_script(); ?>
 <?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>
 </body>
 </html>

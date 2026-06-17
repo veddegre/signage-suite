@@ -67,6 +67,7 @@ echo "==> HDMI-CEC:   $([[ $WITH_CEC -eq 1 ]] && echo enabled || echo skipped)"
 echo "==> Installing packages"
 apt-get update -q
 apt-get install -y -q cage seatd curl python3
+apt-get install -y -q xcursorgen 2>/dev/null || apt-get install -y -q x11-utils 2>/dev/null || true
 # Chromium packaging differs by distro: Pi OS has a real deb named
 # chromium-browser; Ubuntu's chromium-browser/chromium packages are snap
 # shims. Try them in order, then fall back to installing the snap directly.
@@ -85,6 +86,13 @@ if [[ $WITH_CEC -eq 1 ]]; then
   apt-get install -y -q cec-utils 2>/dev/null || echo "==> cec-utils not available — CEC scheduling disabled on this box."
 fi
 
+if [[ -f "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh" ]]; then
+  echo "==> Installing transparent cursor theme (hide mouse on kiosk)"
+  bash "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh"
+else
+  echo "==> Warning: scripts/install-signage-blank-cursor.sh not found — cursor may remain visible." >&2
+fi
+
 echo "==> Writing /etc/signage/kiosk.conf"
 mkdir -p /etc/signage
 cat > /etc/signage/kiosk.conf <<EOF
@@ -99,6 +107,8 @@ echo "==> Writing /usr/local/bin/signage-kiosk"
 cat > /usr/local/bin/signage-kiosk <<EOF
 #!/usr/bin/env bash
 # Launched by signage.service — cage runs Chromium as the sole fullscreen app.
+export XCURSOR_THEME=signage-blank
+export XCURSOR_SIZE=24
 exec cage -- "$CHROMIUM" \\
   --kiosk "\$1" \\
   --force-device-scale-factor=$SCALE \\
@@ -160,6 +170,8 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=XCURSOR_THEME=signage-blank
+Environment=XCURSOR_SIZE=24
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
 Restart=always
 RestartSec=5
@@ -224,5 +236,9 @@ UPDATING
 The kiosk is just a browser — all content updates happen on the
 server through admin.php. The Pi only needs OS updates:
   sudo apt update && sudo apt full-upgrade
+
+CURSOR (if the mouse pointer is still visible after a server update):
+  sudo bash $SCRIPT_DIR/scripts/install-signage-blank-cursor.sh
+  sudo systemctl restart signage
 ============================================================
 NOTES

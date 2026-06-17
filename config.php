@@ -174,11 +174,57 @@ function signage_stamp_css(): string
 /** Hide the mouse pointer on kiosk displays (shell + signage boards). */
 function signage_kiosk_cursor_css(): string
 {
-    return 'html,body,html *,body *{cursor:none!important}';
+    return 'html,body,html *,body *{cursor:none!important}'
+         . signage_kiosk_pointer_shield_css();
+}
+
+/** Full-screen layer that captures the pointer above rotation iframes. */
+function signage_kiosk_pointer_shield_css(): string
+{
+    return '#signage-pointer-shield{position:fixed;inset:0;z-index:8000;'
+         . 'cursor:none!important;background:transparent;touch-action:none;}';
+}
+
+/** Transparent hit target — keeps the OS pointer off embedded iframes. */
+function signage_kiosk_pointer_shield_html(): void
+{
+    echo '<div id="signage-pointer-shield" aria-hidden="true"></div>';
 }
 
 /** Emit a style block that hides the kiosk pointer. */
 function signage_kiosk_cursor_style(): void
 {
     echo '<style>', signage_kiosk_cursor_css(), '</style>';
+}
+
+/** Request pointer lock so Chromium/Wayland kiosks hide the hardware cursor. */
+function signage_kiosk_hide_pointer_script(): void
+{
+    ?>
+<script>
+(function () {
+  function lockPointer() {
+    if (document.pointerLockElement) return;
+    var el = document.getElementById('signage-pointer-shield') || document.documentElement;
+    var req = el.requestPointerLock ? el.requestPointerLock()
+      : el.webkitRequestPointerLock ? el.webkitRequestPointerLock() : null;
+    if (req && req.catch) req.catch(function () {});
+  }
+  document.addEventListener('pointerlockchange', function () {
+    if (!document.pointerLockElement) lockPointer();
+  });
+  document.addEventListener('pointerlockerror', lockPointer);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', lockPointer);
+  } else {
+    lockPointer();
+  }
+  window.addEventListener('focus', lockPointer);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') lockPointer();
+  });
+  setInterval(lockPointer, 3000);
+})();
+</script>
+    <?php
 }

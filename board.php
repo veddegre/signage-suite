@@ -106,6 +106,7 @@ if (($_GET['api'] ?? '') === 'presence') {
 <?php if ($showDebug): ?><div id="rotate-debug" aria-live="polite"></div><?php endif; ?>
 <iframe id="fA" allow="autoplay; fullscreen"></iframe>
 <iframe id="fB" allow="autoplay; fullscreen"></iframe>
+<?php signage_kiosk_pointer_shield_html(); ?>
 <script>
   const PAGES   = <?= json_encode($runtime['pages'], JSON_UNESCAPED_SLASHES) ?>;
   const REVISION = <?= json_encode($runtime['revision']) ?>;
@@ -513,6 +514,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   // Nightly reload of the shell itself to keep long kiosk sessions fresh
   setTimeout(() => location.reload(), 24 * 60 * 60 * 1000);
 </script>
+<?php signage_kiosk_hide_pointer_script(); ?>
 <?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>
 </body>
 </html>
