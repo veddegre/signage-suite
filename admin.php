@@ -687,7 +687,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
                     if (!empty($result['skipped'])) {
-                        $saveWarnFlash = 'Some displays were skipped — slides are in the deck but did not match deploy targets. Use Custom Slides → Deploy after checking display targeting.';
+                        $saveWarnFlash = 'Some displays were skipped — slides are in the deck but not assigned to those screens. On the Deck tab, select slides → Assign to display → Save, then Deploy.';
                         $saveWarnFlashOk = false;
                     }
                 }
@@ -935,7 +935,13 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
             $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
             $result = slides_deploy_to_screens($screens, admin_media_deploy_deck($deck));
             cfg_reload();
-            $flash = slides_deploy_flash_message($result) . ' Wall displays refresh within 30 seconds.';
+            $flash = slides_deploy_flash_message($result);
+            if (!empty($result['skipped'])) {
+                $flashOk = false;
+            }
+            if ($flashOk) {
+                $flash .= ' Wall displays refresh within 30 seconds.';
+            }
         }
     }
 
@@ -3818,7 +3824,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px">Check slides, choose a display in <strong>Assign to</strong>, then add them to that screen. Filter and search to narrow the list; expand a card only when you need to edit. Set <strong>Sec</strong> for dwell time. New images on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
+          <div class="help" style="margin-bottom:12px">Check slides, choose a display in <strong>Assign to</strong>, then add them to that screen — <strong>Save</strong> before <strong>Deploy</strong>. Filter with <strong>Hidden on all displays</strong> to find slides missing display targets. Set <strong>Sec</strong> for dwell time. New images on <strong>Add / Create</strong>; push to TVs on <strong>Deploy</strong>.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -3857,6 +3863,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             </label>
             <button type="button" class="secondary" id="slideDeckSelectedAdd" style="padding:6px 12px;font-size:13px">Add to display</button>
             <button type="button" class="secondary" id="slideDeckSelectedOnly" style="padding:6px 12px;font-size:13px">Only this display</button>
+            <button type="button" class="secondary" id="slideDeckSelectedAll" style="padding:6px 12px;font-size:13px">All displays</button>
             <button type="button" class="secondary deck-bulk-remove" id="slideDeckSelectedRemove" style="padding:6px 12px;font-size:13px">Remove from display</button>
           </div>
           <div class="deck-bulk-bar" id="slideDeckBulkBar" hidden>
@@ -4357,7 +4364,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
       <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Sync status is on <a href="?board=status">Status</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
+            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Slides must be assigned to each display on the <strong>Deck</strong> tab and saved before deploy. Sync status is on <a href="?board=status">Status</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -5372,7 +5379,7 @@ function slideDeckClearSelection() {
 
 function slideDeckAssignSelected(mode) {
   const screen = document.getElementById('slideDeckAssignScreen')?.value || '';
-  if (!screen) {
+  if (mode !== 'all' && !screen) {
     alert('Choose a display in Assign to first.');
     return;
   }
@@ -5463,6 +5470,7 @@ function initSlideDeckToolbar() {
   document.getElementById('slideDeckClearSelection')?.addEventListener('click', slideDeckClearSelection);
   document.getElementById('slideDeckSelectedAdd')?.addEventListener('click', function () { slideDeckAssignSelected('add'); });
   document.getElementById('slideDeckSelectedOnly')?.addEventListener('click', function () { slideDeckAssignSelected('only'); });
+  document.getElementById('slideDeckSelectedAll')?.addEventListener('click', function () { slideDeckAssignSelected('all'); });
   document.getElementById('slideDeckSelectedRemove')?.addEventListener('click', function () { slideDeckAssignSelected('remove'); });
   updateSlideDeckSelectionUI();
   applySlideDeckFilters();
@@ -5597,7 +5605,7 @@ function initDeployScreensPersistence(board) {
   } catch (e) {}
   const serverRemembered = deployChecks.dataset.deployRemembered === '1';
   const selector = '#boardform .deploy-checks[data-deploy-board="' + board + '"] input[name="deploy_screens[]"]';
-  if (!serverRemembered && Array.isArray(fromStorage)) {
+  if (!serverRemembered && Array.isArray(fromStorage) && fromStorage.length > 0) {
     const set = new Set(fromStorage.map(String));
     document.querySelectorAll(selector).forEach(function (cb) {
       cb.checked = set.has(cb.value);

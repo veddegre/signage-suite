@@ -2031,11 +2031,13 @@ function rotation_remove_url(string $screen, string $url): array
 /**
  * Sync one rotation entry per enabled slide onto selected screens.
  * @param list<string> $screens
- * @return array{added:int,updated:int,screens:list<string>,slide_count:int}
+ * @return array{added:int,updated:int,screens:list<string>,slide_count:int,skipped:list<string>}
  */
 function slides_deploy_to_screens(array $screens, ?array $deck = null): array
 {
     require_once __DIR__ . '/slides_lib.php';
+    $deckStats = slides_deck_stats($deck);
+    $deckHasSlides = (int)($deckStats['on_disk'] ?? 0) > 0;
     $added = 0;
     $updated = 0;
     $slideCount = 0;
@@ -2047,12 +2049,13 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $done[$screen] = true;
-        $sync = rotation_sync_slides($screen, $deck);
         $expected = slides_rotation_pages($deck, $screen);
-        if ($expected !== [] && (int)$sync['slide_count'] === 0) {
+        $slidesOnPlaylist = rotation_playlist_slide_count(rotation_sync_source_pages($screen));
+        if ($expected === [] && $slidesOnPlaylist > 0 && $deckHasSlides) {
             $skipped[] = $screen;
             continue;
         }
+        $sync = rotation_sync_slides($screen, $deck);
         rotation_pages_write($sync['screen'], $sync['pages']);
         $added += (int)$sync['added'];
         $updated += (int)$sync['updated'];
@@ -2072,6 +2075,8 @@ function slides_deploy_flash_message(array $result): string
 {
     $slideCount = (int)($result['slide_count'] ?? 0);
     $screenCount = count($result['screens'] ?? []);
+    $skipped = $result['skipped'] ?? [];
+    $skippedCount = is_array($skipped) ? count($skipped) : 0;
     $parts = [];
     if ($slideCount > 0 && $screenCount > 0) {
         $parts[] = 'synced ' . $slideCount . ' slide' . ($slideCount === 1 ? '' : 's')
@@ -2083,7 +2088,14 @@ function slides_deploy_flash_message(array $result): string
     if (($result['updated'] ?? 0) > 0) {
         $parts[] = (int)$result['updated'] . ' dwell/order update' . ((int)$result['updated'] === 1 ? '' : 's');
     }
+    if ($skippedCount > 0) {
+        $parts[] = 'skipped ' . $skippedCount . ' display' . ($skippedCount === 1 ? '' : 's')
+            . ' (slides not assigned to those screens)';
+    }
     if ($parts === []) {
+        if ($skippedCount > 0) {
+            return 'No slides are assigned to the selected display(s). On the Deck tab, assign slides to displays, click Save, then deploy again.';
+        }
         return 'Slides already synced on selected displays.';
     }
     return 'Custom slides ' . implode('; ', $parts) . '.';
