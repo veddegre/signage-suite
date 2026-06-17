@@ -420,17 +420,18 @@ function slides_parse_post_rows(array $rows, array $existingSlides = []): array
                     $screens[$sk] = true;
                 }
             }
-        }
-        $screens = array_keys($screens);
-        sort($screens);
-        if (!isset($row['screens'])) {
-            if (!empty($row['_screens_form'])) {
-                $obj['screens'] = admin_operator_screen_locked()
-                    ? [admin_operator_screen_key()]
-                    : [];
+            $screens = array_keys($screens);
+            sort($screens);
+            if ($screens === []) {
+                $obj['screens'] = [];
+            } elseif ($screens !== $allScreenKeys) {
+                $obj['screens'] = $screens;
             }
-        } elseif ($screens !== $allScreenKeys) {
-            $obj['screens'] = $screens;
+        } elseif (!empty($row['_screens_form']) && admin_operator_screen_locked()) {
+            $opScreen = (string)admin_operator_screen_key();
+            if ($opScreen !== '') {
+                $obj['screens'] = [$opScreen];
+            }
         }
         if (admin_operator_screen_locked()) {
             $opScreen = (string)admin_operator_screen_key();
@@ -1608,6 +1609,71 @@ function slide_on_screen(array $slide, string $screen): bool
     return in_array(rotation_normalize_screen_key($screen), $targets, true);
 }
 
+/** True when every enabled on-disk slide is explicitly hidden from all displays (screens: []). */
+function slides_deck_untargeted_misconfig(?array $deck = null): bool
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck) || $deck === []) {
+        return false;
+    }
+    $dir = slides_dir();
+    $enabledOnDisk = 0;
+    $reachable = 0;
+    foreach ($deck as $slide) {
+        if (!is_array($slide) || !empty($slide['off'])) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file === null || !is_file($dir . '/' . $file)) {
+            continue;
+        }
+        $enabledOnDisk++;
+        if (!array_key_exists('screens', $slide) || slide_target_screens($slide) !== []) {
+            $reachable++;
+        }
+    }
+
+    return $enabledOnDisk > 0 && $reachable === 0;
+}
+
+/**
+ * Clear accidental screens: [] so slides play on all displays again.
+ * @return list<array<string,mixed>>
+ */
+function slides_repair_deck_untargeted(?array $deck = null): array
+{
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck) || !slides_deck_untargeted_misconfig($deck)) {
+        return is_array($deck) ? $deck : [];
+    }
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        if (array_key_exists('screens', $slide) && slide_target_screens($slide) === []) {
+            unset($slide['screens']);
+        }
+        $out[] = $slide;
+    }
+
+    return $out;
+}
+
+/** @param list<array<string,mixed>> $deck */
+function slides_persist_deck(array $deck): bool
+{
+    return cfg_update(function (array $conf) use ($deck): array {
+        if ($deck === []) {
+            unset($conf['slides.SLIDES']);
+        } else {
+            $conf['slides.SLIDES'] = $deck;
+        }
+
+        return $conf;
+    });
+}
+
 /**
  * Enabled on-disk slides as rotation page rows, in deck order.
  * @return list<array{url:string,dwell:int,file:string}>
@@ -1640,6 +1706,23 @@ function slides_rotation_pages(?array $deck = null, ?string $screen = null): arr
         ];
     }
     return $out;
+}
+
+/**
+ * Rotation rows for one display; recovers when the whole deck was accidentally untargeted.
+ * @return list<array{url:string,dwell:int,file:string}>
+ */
+function slides_effective_rotation_pages(?array $deck = null, ?string $screen = null): array
+{
+    $pages = slides_rotation_pages($deck, $screen);
+    if ($pages !== [] || $screen === null || $screen === '') {
+        return $pages;
+    }
+    if (!slides_deck_untargeted_misconfig($deck)) {
+        return [];
+    }
+
+    return slides_rotation_pages($deck, null);
 }
 
 /** Active slides that exist on disk, in configured order. */

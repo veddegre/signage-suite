@@ -455,7 +455,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $errors[] = 'Slide deck data invalid — not saved.';
             } else {
                 $outV = slides_parse_post_rows($decoded, $existingSlides);
-                $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
+                $mergedSlides = slides_repair_deck_untargeted(admin_merge_owned_list($existingSlides, $outV));
                 if ($mergedSlides === []) {
                     unset($conf['slides.SLIDES']);
                 } else {
@@ -469,7 +469,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     . '). Reload the page and save again.';
             } else {
                 $outV = slides_parse_post_rows($postRows, $existingSlides);
-                $mergedSlides = admin_merge_owned_list($existingSlides, $outV);
+                $mergedSlides = slides_repair_deck_untargeted(admin_merge_owned_list($existingSlides, $outV));
                 if ($mergedSlides === []) {
                     unset($conf['slides.SLIDES']);
                 } else {
@@ -3828,6 +3828,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
+          <?php if (slides_deck_untargeted_misconfig($slideRows)): ?>
+          <div class="slide-added-notice" style="border-color:rgba(255,107,107,.45);background:rgba(255,107,107,.08)">All slides are hidden from every display (no display targets). Select slides → <strong>All displays</strong>, Save, then Deploy — or use <strong>Deploy now</strong> to auto-restore.</div>
+          <?php endif; ?>
           <?php
           $slideDeckLarge = count($slideRows) > 24;
           $slideScreenOptions = admin_screen_options($rotationScreens);
@@ -4364,15 +4367,19 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
       <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Slides must be assigned to each display on the <strong>Deck</strong> tab and saved before deploy. Sync status is on <a href="?board=status">Status</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
+            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. If slides were hidden from all displays, <strong>Deploy now</strong> restores them automatically. Sync status is on <a href="?board=status">Status</a>.</p>
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
               <?php
               $slidesDeployTabChecked = [];
-              foreach ($slidesDeployStatus as $screenKey => $dep) {
-                  if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0)) {
-                      $slidesDeployTabChecked[] = $screenKey;
+              if (slides_deck_untargeted_misconfig($slidesDeckForUser)) {
+                  $slidesDeployTabChecked = array_keys($slidesDeployStatus);
+              } else {
+                  foreach ($slidesDeployStatus as $screenKey => $dep) {
+                      if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0)) {
+                          $slidesDeployTabChecked[] = $screenKey;
+                      }
                   }
               }
               ?>
@@ -4830,9 +4837,17 @@ function collectMediaDeckRow(card, includeSchedule) {
   }
   if (card.querySelector('[name*="[off]"]:checked')) row.off = true;
   const screens = [];
-  card.querySelectorAll('[name*="[screens]"]:checked').forEach(function (cb) { screens.push(cb.value); });
-  if (card.querySelector('[name*="[_screens_form]"]')) row._screens_form = '1';
-  if (screens.length) row.screens = screens;
+  const screenPicker = card.querySelector('[data-screen-picker]');
+  if (screenPicker && screenPicker.dataset.locked === '1') {
+    const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
+    if (hiddenScreen && hiddenScreen.value) screens.push(hiddenScreen.value);
+  } else {
+    card.querySelectorAll('[name*="[screens]"]:checked').forEach(function (cb) { screens.push(cb.value); });
+  }
+  if (card.querySelector('[name*="[_screens_form]"]')) {
+    row._screens_form = '1';
+    row.screens = screens;
+  }
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
   const ownerSelect = card.querySelector('select[name*="[owner]"]');
   const owner = ownerChecked ? ownerChecked.value : (ownerSelect ? ownerSelect.value : '');
