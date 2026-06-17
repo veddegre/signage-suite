@@ -169,6 +169,20 @@ function users_screen_assigned_username(string $screen): ?string
     return is_array($user) ? (string)($user['username'] ?? '') : null;
 }
 
+/** @return array<string,array{userId:string,username:string}> display key => operator */
+function admin_screen_operator_map(): array
+{
+    $out = [];
+    foreach (users_screen_assignments() as $sk => $uid) {
+        $out[$sk] = [
+            'userId' => $uid,
+            'username' => admin_username_for_id($uid),
+        ];
+    }
+
+    return $out;
+}
+
 /** @param array<string,mixed> $row */
 function users_screens_from_row(array $row): array
 {

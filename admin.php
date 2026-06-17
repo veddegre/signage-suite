@@ -1950,6 +1950,7 @@ function admin_field(array $f, $val, string $board): void
   .deck-list-compact .slide-card-edit > summary { padding:4px 0; font-size:12px; }
   .deck-list-compact .slide-card-actions { margin-top:6px; }
   .slide-screen-pill { font-size:11px !important; }
+  .slide-access-pill { font-size:11px !important; }
   .slide-card { background:var(--harbor); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
   .slide-card[hidden] { display:none !important; }
   .slide-card.is-off { opacity:.55; }
@@ -3802,6 +3803,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           $slidesDeckFull = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
           $slideFileFromEntry = static fn($e) => slide_safe_filename((string)($e['file'] ?? ''));
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
+          $sharingUserOptions = admin_is_super() ? admin_sharing_user_options() : [];
           $slidesTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
           if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
               $slidesTab = 'deck';
@@ -3818,7 +3820,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores the deck. <strong>Deploy</strong> pushes slides to rotation. Assign displays with checkboxes + <strong>Assign to</strong>, then Save, then Deploy.</div>
+          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores the deck. <strong>Deploy</strong> pushes slides to rotation. Use <strong>Assign to</strong> for which displays play a slide, and <strong>Share with</strong> so operators can see those slides on their display (display assignment alone is not enough). <strong>Add to display</strong> also shares with that display&rsquo;s operator. Save, then Deploy.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -3863,6 +3865,22 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             <button type="button" class="secondary" id="slideDeckSelectedOnly" style="padding:6px 12px;font-size:13px">Only this display</button>
             <button type="button" class="secondary" id="slideDeckSelectedAll" style="padding:6px 12px;font-size:13px">All displays</button>
             <button type="button" class="secondary deck-bulk-remove" id="slideDeckSelectedRemove" style="padding:6px 12px;font-size:13px">Remove from display</button>
+            <?php if ($sharingUserOptions !== []): ?>
+            <span class="deck-selection-sep" aria-hidden="true">|</span>
+            <label class="deck-selection-assign">Share with
+              <select id="slideDeckShareUser" class="deck-toolbar-select" aria-label="User to share selected slides with">
+                <option value="">Choose user…</option>
+                <?php foreach ($sharingUserOptions as $u): ?>
+                <option value="<?= h($u['id']) ?>"><?= h($u['username']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <button type="button" class="secondary" id="slideDeckShareAdd" style="padding:6px 12px;font-size:13px">Add share</button>
+            <button type="button" class="secondary" id="slideDeckShareOnly" style="padding:6px 12px;font-size:13px">Only this user</button>
+            <button type="button" class="secondary deck-bulk-remove" id="slideDeckShareRemove" style="padding:6px 12px;font-size:13px">Remove share</button>
+            <button type="button" class="secondary" id="slideDeckShareDisplayOwner" style="padding:6px 12px;font-size:13px" title="Share with the operator assigned to the display chosen in Assign to">Display owner</button>
+            <button type="button" class="secondary" id="slideDeckShareAllUsers" style="padding:6px 12px;font-size:13px" title="Add share for every user in the list">All users</button>
+            <?php endif; ?>
           </div>
           <div class="deck-bulk-bar" id="slideDeckBulkBar" hidden>
             <span id="slideDeckBulkLabel">Bulk assign visible slides:</span>
@@ -3923,6 +3941,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                     <?php if ($activeNow): ?><span class="pill ok">Active now</span><?php endif; ?>
                     <?php if (!$fileOk && $fileLabel !== ''): ?><span class="pill warn">File missing</span><?php endif; ?>
                     <span class="pill slide-screen-pill" data-slide-screen-pill><?= h($screenSummary) ?></span>
+                    <?php if (admin_is_super()): ?>
+                    <span class="pill slide-access-pill" data-slide-access-pill title="Owner and shared-with"><?= h(admin_entry_access_trigger_label($row)) ?></span>
+                    <?php endif; ?>
                     <span class="schedule-summary" data-schedule-summary><?= h($schedSummary) ?></span>
                   </span>
                 </div>
@@ -4519,6 +4540,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 <script>
 <?php if ($authed && admin_is_super()): ?>
 window.SHARING_USER_OPTIONS = <?= json_encode(admin_sharing_user_options(), JSON_UNESCAPED_UNICODE) ?>;
+window.SCREEN_OPERATOR_MAP = <?= json_encode(admin_screen_operator_map(), JSON_UNESCAPED_UNICODE) ?>;
 <?php endif; ?>
 const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1' . (signage_ticker_enabled() ? '&safebottom=' . SIGNAGE_TICKER_H : '')) ?>;
 
@@ -4846,8 +4868,12 @@ function collectMediaDeckRow(card, includeSchedule) {
   if (owner) row.owner = owner;
   const shared = [];
   card.querySelectorAll('[name*="[shared]"]:checked').forEach(function (cb) { shared.push(cb.value); });
-  if (shared.length) row.shared = shared;
-  if (card.querySelector('[name*="[_sharing_form]"]')) row._sharing_form = '1';
+  if (card.querySelector('[name*="[_sharing_form]"]')) {
+    row._sharing_form = '1';
+    row.shared = shared;
+  } else if (shared.length) {
+    row.shared = shared;
+  }
   return row;
 }
 
@@ -5314,6 +5340,116 @@ function setSlideCardScreenTarget(card, mode, screenKey) {
   });
   updateScreenPickerSummary(picker);
   syncSlideCardScreenMeta(card);
+  if (mode === 'add' || mode === 'only') {
+    const opId = screenOperatorUserId(screenKey);
+    if (opId) setSlideCardSharedUsers(card, 'add', [opId]);
+  } else if (mode === 'all') {
+    const map = window.SCREEN_OPERATOR_MAP || {};
+    const opIds = [];
+    Object.keys(map).forEach(function (sk) {
+      const id = map[sk] && map[sk].userId;
+      if (id) opIds.push(String(id));
+    });
+    if (opIds.length) setSlideCardSharedUsers(card, 'add', opIds);
+  }
+}
+
+function screenOperatorUserId(screenKey) {
+  const map = window.SCREEN_OPERATOR_MAP || {};
+  const ent = map[screenKey];
+  return ent && ent.userId ? String(ent.userId) : '';
+}
+
+function slideCardSharingRoot(card) {
+  return card.querySelector('.entry-sharing');
+}
+
+function setSlideCardSharedUsers(card, mode, userIds) {
+  const root = slideCardSharingRoot(card);
+  if (!root) return;
+  userIds = (userIds || []).map(String).filter(Boolean);
+  const userSet = new Set(userIds);
+  root.querySelectorAll('[data-entry-sharing-shared]').forEach(function (cb) {
+    const uid = cb.value;
+    if (mode === 'only') cb.checked = userSet.has(uid);
+    else if (mode === 'add' && userSet.has(uid)) cb.checked = true;
+    else if (mode === 'remove' && userSet.has(uid)) cb.checked = false;
+  });
+  syncEntrySharingSharedList(root);
+  syncSlideCardAccessMeta(card);
+}
+
+function syncSlideCardAccessMeta(card) {
+  const pill = card.querySelector('[data-slide-access-pill]');
+  const root = slideCardSharingRoot(card);
+  if (!pill || !root) return;
+  const shared = [];
+  root.querySelectorAll('[data-entry-sharing-shared]:checked').forEach(function (cb) {
+    shared.push(cb.value);
+  });
+  pill.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared);
+}
+
+function slideDeckShareUserLabel(userId) {
+  const users = window.SHARING_USER_OPTIONS || [];
+  const u = users.find(function (x) { return x.id === userId; });
+  return u ? u.username : userId;
+}
+
+function slideDeckShareSelected(mode, userIds) {
+  userIds = (userIds || []).map(String).filter(Boolean);
+  if (!userIds.length) {
+    alert('Choose a user in Share with first.');
+    return;
+  }
+  const selected = slideDeckSelectedCards();
+  if (!selected.length) {
+    alert('Select one or more slides using the checkboxes on the left.');
+    return;
+  }
+  if (mode === 'remove') {
+    const names = userIds.map(slideDeckShareUserLabel).join(', ');
+    const msg = 'Remove share with ' + names + ' from ' + selected.length + ' selected slide' + (selected.length === 1 ? '' : 's') + '?'
+      + '\n\nRemember to Save when done.';
+    if (!confirm(msg)) return;
+  }
+  selected.forEach(function (card) {
+    setSlideCardSharedUsers(card, mode, userIds);
+  });
+  updateSlideDeckSelectionUI();
+}
+
+function slideDeckShareDisplayOwner() {
+  const screen = document.getElementById('slideDeckAssignScreen')?.value || '';
+  if (!screen) {
+    alert('Choose a display in Assign to first.');
+    return;
+  }
+  const opId = screenOperatorUserId(screen);
+  if (!opId) {
+    alert('No operator is assigned to ' + slideDeckAssignScreenLabel(screen) + '.');
+    return;
+  }
+  slideDeckShareSelected('add', [opId]);
+}
+
+function slideDeckShareAllUsers() {
+  const users = window.SHARING_USER_OPTIONS || [];
+  const ids = users.map(function (u) { return u.id; });
+  if (!ids.length) return;
+  slideDeckShareSelected('add', ids);
+}
+
+function bindSlideCardSharing(card) {
+  const root = slideCardSharingRoot(card);
+  if (!root || root.dataset.slideSharingBound) return;
+  root.dataset.slideSharingBound = '1';
+  root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      syncEntrySharingSharedList(root);
+      syncSlideCardAccessMeta(card);
+    });
+  });
 }
 
 function slideDeckBulkAssign(mode) {
@@ -5434,7 +5570,9 @@ function initSlideDeckToolbar() {
   if (!deck) return;
   deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
     syncSlideCardScreenMeta(card, true);
+    syncSlideCardAccessMeta(card);
     bindSlideCardSelection(card);
+    bindSlideCardSharing(card);
   });
   if (window.ADMIN_OPERATOR_SCREEN_LOCKED && window.ADMIN_OPERATOR_SCREEN) {
     const assignSel = document.getElementById('slideDeckAssignScreen');
@@ -5488,6 +5626,20 @@ function initSlideDeckToolbar() {
   document.getElementById('slideDeckSelectedOnly')?.addEventListener('click', function () { slideDeckAssignSelected('only'); });
   document.getElementById('slideDeckSelectedAll')?.addEventListener('click', function () { slideDeckAssignSelected('all'); });
   document.getElementById('slideDeckSelectedRemove')?.addEventListener('click', function () { slideDeckAssignSelected('remove'); });
+  document.getElementById('slideDeckShareAdd')?.addEventListener('click', function () {
+    const uid = document.getElementById('slideDeckShareUser')?.value || '';
+    slideDeckShareSelected('add', [uid]);
+  });
+  document.getElementById('slideDeckShareOnly')?.addEventListener('click', function () {
+    const uid = document.getElementById('slideDeckShareUser')?.value || '';
+    slideDeckShareSelected('only', [uid]);
+  });
+  document.getElementById('slideDeckShareRemove')?.addEventListener('click', function () {
+    const uid = document.getElementById('slideDeckShareUser')?.value || '';
+    slideDeckShareSelected('remove', [uid]);
+  });
+  document.getElementById('slideDeckShareDisplayOwner')?.addEventListener('click', slideDeckShareDisplayOwner);
+  document.getElementById('slideDeckShareAllUsers')?.addEventListener('click', slideDeckShareAllUsers);
   updateSlideDeckSelectionUI();
   applySlideDeckFilters();
 }
@@ -6006,6 +6158,9 @@ function addSlideCard() {
       el.removeAttribute('data-summary-bound');
     });
     card.querySelectorAll('[data-screen-picker-bound]').forEach(function (el) { el.removeAttribute('data-screen-picker-bound'); });
+    card.querySelectorAll('[data-slide-sharing-bound]').forEach(function (el) { el.removeAttribute('data-slide-sharing-bound'); });
+    const ownerSel = card.querySelector('select[data-entry-sharing-owner]');
+    if (ownerSel) ownerSel.value = '';
     const handle = card.querySelector('.drag-handle');
     if (handle) handle.removeAttribute('data-drag-bound');
   } else {
@@ -6037,8 +6192,10 @@ function addSlideCard() {
   bindPlaylistCardHandle(card, deck, '.drag-handle', reindexSlideDeck);
   bindSlideCard(card);
   bindSlideCardSelection(card);
+  bindSlideCardSharing(card);
   initScreenPickers(card);
   syncSlideCardScreenMeta(card, true);
+  syncSlideCardAccessMeta(card);
   reindexSlideDeck();
   applySlideDeckFilters();
   updateSlideDeckSelectionUI();
