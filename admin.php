@@ -3917,6 +3917,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               );
               $dataScreens = $slideAllScreens ? 'all' : implode(',', $slideScreens);
               $searchBlob = strtolower(trim($displayLabel . ' ' . $fileLabel . ' ' . $schedSummary));
+              $canRemoveSlideFromDeck = admin_entry_owned_by_current_user($row);
             ?>
             <div class="slide-card<?= !empty($row['off']) ? ' is-off' : '' ?><?= $highlightCard ? ' slide-card-highlight' : '' ?>"
                  data-slide-card data-slide-file="<?= h($fileLabel) ?>"
@@ -3947,7 +3948,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                     <span class="schedule-summary" data-schedule-summary><?= h($schedSummary) ?></span>
                   </span>
                 </div>
+                <?php if ($canRemoveSlideFromDeck): ?>
                 <button type="button" class="rowdel" onclick="this.closest('[data-slide-card]').remove(); reindexSlideDeck();" title="Remove from deck (file stays in library)">×</button>
+                <?php endif; ?>
               </div>
               <div class="slide-card-quick">
                 <div>

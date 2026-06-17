@@ -751,6 +751,23 @@ function admin_can_edit_entry(?array $entry): bool
     return admin_entry_visible($entry);
 }
 
+/** True when the current user may delete or drop this deck/registry row (operators: own entries only). */
+function admin_entry_owned_by_current_user(?array $entry): bool
+{
+    if (!is_array($entry)) {
+        return false;
+    }
+    if (admin_is_super()) {
+        return true;
+    }
+    $uid = admin_user_id();
+    if ($uid === null) {
+        return false;
+    }
+
+    return admin_entry_owner($entry) === $uid;
+}
+
 /** @param array<string,mixed> $entry */
 function admin_stamp_owner(array $entry, ?array $prev = null): array
 {
@@ -1018,6 +1035,25 @@ function admin_merge_owned_list(array $existing, array $posted): array
         return $posted;
     }
     $kept = array_values(array_filter($existing, static fn($e) => is_array($e) && !admin_entry_visible($e)));
+    $postedFiles = [];
+    foreach ($posted as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $file = trim((string)($row['file'] ?? ''));
+        if ($file !== '') {
+            $postedFiles[$file] = true;
+        }
+    }
+    foreach ($existing as $entry) {
+        if (!is_array($entry) || !admin_entry_visible($entry) || admin_entry_owned_by_current_user($entry)) {
+            continue;
+        }
+        $file = trim((string)($entry['file'] ?? ''));
+        if ($file !== '' && !isset($postedFiles[$file])) {
+            $kept[] = $entry;
+        }
+    }
     $ownedOut = [];
     foreach ($posted as $row) {
         if (!is_array($row)) {
@@ -1235,12 +1271,12 @@ function admin_can_delete_deck_file(?array $deck, string $file, callable $safeNa
         }
     }
     if ($visibleEntry !== null) {
-        return admin_can_edit_entry($visibleEntry);
+        return admin_entry_owned_by_current_user($visibleEntry);
     }
     if ($hiddenMatch) {
         return false;
     }
-    return true;
+    return admin_is_super();
 }
 
 function admin_normalize_registry_key(string $key): ?string

@@ -69,10 +69,12 @@ if (($_GET['api'] ?? '') === 'presence') {
 <title>Signage</title>
 <style>
   * { margin:0; padding:0; }
-  html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; cursor:none; }
+  <?= signage_kiosk_cursor_css() ?>
+  html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; }
   iframe { position:absolute; top:0; left:0; width:1920px;
            height:calc(1080px - var(--signage-ticker-inset, 0px)); border:0;
-           opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease; }
+           opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease;
+           pointer-events:none; }
   iframe.show { opacity:1; }
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:#8aa0c0; font-family:system-ui,sans-serif; }
@@ -119,6 +121,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
+  const KIOSK_CURSOR_CSS = <?= json_encode(signage_kiosk_cursor_css()) ?>;
   let front = 0, idx = -1, gen = 0, rotateTimer = null;
   let pageHistory = [];
   let blankActive = BLANK_INIT;
@@ -194,6 +197,18 @@ if (($_GET['api'] ?? '') === 'presence') {
   function postToFrame(frame, msg) {
     try {
       if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, '*');
+    } catch (e) {}
+  }
+
+  function hideKioskCursor(frame) {
+    if (!frame) return;
+    try {
+      const doc = frame.contentDocument;
+      if (!doc || !doc.head || doc.getElementById('signage-kiosk-cursor')) return;
+      const style = doc.createElement('style');
+      style.id = 'signage-kiosk-cursor';
+      style.textContent = KIOSK_CURSOR_CSS;
+      doc.head.appendChild(style);
     } catch (e) {}
   }
 
@@ -418,6 +433,7 @@ if (($_GET['api'] ?? '') === 'presence') {
 
     stopFrame(f);
     f.onload = () => setTimeout(function () {
+      hideKioskCursor(f);
       if (myGen !== gen) return;
       if (revealed) {
         postToFrame(f, { type: 'signage-show' });

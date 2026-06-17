@@ -46,6 +46,7 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
 <title>Signage Player<?= $SCREEN !== 'main' ? ' — ' . htmlspecialchars($SCREEN) : '' ?></title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
+  <?= signage_kiosk_cursor_css() ?>
   html,body { width:100%; height:100%; background:#000; overflow:hidden; }
   #stage { position:absolute; top:50%; left:50%; width:1920px; height:1080px;
            transform-origin:center center; }

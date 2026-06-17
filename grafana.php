@@ -73,8 +73,9 @@ $src = $dash['url'] . (str_contains($dash['url'], '?') ? '&' : '?') . $qs;
 <title><?= h($dash['title']) ?></title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422; cursor:none; }
-  iframe { width:1920px; height:100%; border:0; display:block; }
+  <?= signage_kiosk_cursor_css() ?>
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422; }
+  iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; }
 </style>
 </head>
 <body>

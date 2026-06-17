@@ -170,3 +170,15 @@ function signage_stamp_css(): string
          . 'text-overflow:ellipsis;max-width:100%;}'
          . '.board>.stamp{grid-column:1/-1;align-self:end;}';
 }
+
+/** Hide the mouse pointer on kiosk displays (shell + signage boards). */
+function signage_kiosk_cursor_css(): string
+{
+    return 'html,body,html *,body *{cursor:none!important}';
+}
+
+/** Emit a style block that hides the kiosk pointer. */
+function signage_kiosk_cursor_style(): void
+{
+    echo '<style>', signage_kiosk_cursor_css(), '</style>';
+}

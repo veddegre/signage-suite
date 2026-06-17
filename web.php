@@ -40,9 +40,11 @@ $reload = $site['reload'];
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; overflow:hidden; background:var(--lake-night); cursor:none;
+  <?= signage_kiosk_cursor_css() ?>
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               font-family:system-ui,sans-serif; <?= signage_viewport_css() ?> }
-  iframe { width:1920px; height:100%; border:0; display:block; background:var(--lake-night); }
+  iframe { width:1920px; height:100%; border:0; display:block; background:var(--lake-night);
+            pointer-events:none; }
   #clock { position:fixed; top:36px; right:48px; z-index:9000; pointer-events:none;
            font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600; font-size:48px;
            color:var(--snow); font-variant-numeric:tabular-nums;

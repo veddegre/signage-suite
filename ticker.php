@@ -154,6 +154,7 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
 $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
 ?>
 <style>
+  <?= signage_kiosk_cursor_css() ?>
   #signage-ticker-root { position:fixed; left:0; right:0; bottom:0; z-index:9999; pointer-events:none; }
   #signage-ticker { display:flex; align-items:stretch; height:72px;
     font-family:'IBM Plex Sans',sans-serif;
