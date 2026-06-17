@@ -1,37 +1,17 @@
 #!/usr/bin/env bash
 # Install a transparent Xcursor theme for signage kiosks (cage / Wayland).
-# The compositor draws its own pointer — CSS cursor:none is not enough.
+# Uses a prebuilt cursor shipped in the repo — no xcursorgen / X11 packages needed.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 THEME_DIR="${1:-/usr/share/icons/signage-blank}"
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+SRC_CURSOR="$SCRIPT_DIR/signage-blank-cursor/cursors/left_ptr"
 
-if ! command -v xcursorgen >/dev/null 2>&1; then
-  echo "xcursorgen not found — install x11-utils or xcursorgen" >&2
+if [[ ! -f "$SRC_CURSOR" ]]; then
+  echo "Missing bundled cursor: $SRC_CURSOR" >&2
   exit 1
 fi
 
-python3 - "$TMP/blank.png" <<'PY'
-import struct, sys, zlib
-
-path = sys.argv[1]
-w, h = 1, 1
-raw = b'\x00' + b'\x00\x00\x00\x00'
-
-def chunk(tag, data):
-    crc = zlib.crc32(tag + data) & 0xffffffff
-    return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
-
-with open(path, 'wb') as f:
-    f.write(b'\x89PNG\r\n\x1a\n')
-    f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)))
-    f.write(chunk(b'IDAT', zlib.compress(raw)))
-    f.write(chunk(b'IEND', b''))
-PY
-
-printf '1 0 0 blank.png\n' > "$TMP/blank.cfg"
-xcursorgen -p "$TMP" "$TMP/blank.cfg" "$TMP/left_ptr"
 mkdir -p "$THEME_DIR/cursors"
 
 CURSOR_NAMES=(
@@ -43,13 +23,17 @@ CURSOR_NAMES=(
 )
 
 for name in "${CURSOR_NAMES[@]}"; do
-  install -m 644 "$TMP/left_ptr" "$THEME_DIR/cursors/$name"
+  install -m 644 "$SRC_CURSOR" "$THEME_DIR/cursors/$name"
 done
 
-cat > "$THEME_DIR/index.theme" <<EOF
+if [[ -f "$SCRIPT_DIR/signage-blank-cursor/index.theme" ]]; then
+  install -m 644 "$SCRIPT_DIR/signage-blank-cursor/index.theme" "$THEME_DIR/index.theme"
+else
+  cat > "$THEME_DIR/index.theme" <<EOF
 [Icon Theme]
 Name=Signage Blank
 Comment=Transparent cursor for signage kiosks
 EOF
+fi
 
 echo "Installed blank cursor theme at $THEME_DIR"

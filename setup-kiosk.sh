@@ -67,7 +67,6 @@ echo "==> HDMI-CEC:   $([[ $WITH_CEC -eq 1 ]] && echo enabled || echo skipped)"
 echo "==> Installing packages"
 apt-get update -q
 apt-get install -y -q cage seatd curl python3
-apt-get install -y -q xcursorgen 2>/dev/null || apt-get install -y -q x11-utils 2>/dev/null || true
 # Chromium packaging differs by distro: Pi OS has a real deb named
 # chromium-browser; Ubuntu's chromium-browser/chromium packages are snap
 # shims. Try them in order, then fall back to installing the snap directly.
