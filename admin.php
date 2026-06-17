@@ -1658,6 +1658,42 @@ function admin_deploy_picker_from_screens(array $screens, array $checked, array 
     ], $cfg));
 }
 
+/** Render sync / deploy pills for one display row on Status or Deploy tabs. */
+function admin_deploy_status_pills(array $dep): void
+{
+    if (!empty($dep['on_playlist'])) {
+        echo '<span class="pill ok">Synced</span> ' . (int)($dep['sync']['synced'] ?? 0) . '/' . (int)($dep['expected'] ?? 0);
+        return;
+    }
+    if (!empty($dep['partial'])) {
+        echo '<span class="pill warn">Partial</span> ' . (int)($dep['sync']['synced'] ?? 0) . '/' . (int)($dep['expected'] ?? 0);
+        return;
+    }
+    $targeted = (int)($dep['deck_targeted'] ?? 0);
+    if ($targeted > 0) {
+        echo '<span class="pill warn">' . $targeted . ' in deck</span> <span class="pill warn">Deploy required</span>';
+        return;
+    }
+    if (!empty($dep['mirrors_main'])) {
+        echo '<span class="pill">Mirrors main</span>';
+        return;
+    }
+    echo '<span class="pill warn">Not deployed</span>';
+}
+
+/** @param array<string,array<string,mixed>> $deployStatus @return list<string> */
+function admin_deploy_picker_pending_screens(array $deployStatus): array
+{
+    $out = [];
+    foreach ($deployStatus as $screenKey => $dep) {
+        if ((int)($dep['deck_targeted'] ?? 0) > 0 && empty($dep['on_playlist'])) {
+            $out[] = (string)$screenKey;
+        }
+    }
+
+    return $out;
+}
+
 /** Per-display photo rotator sync — shown on Status page. */
 function admin_rotator_sync_panel(array $deployStatus, array $deckStats, string $deployMode, ?string $removeFormId = null): void
 {
@@ -1669,8 +1705,8 @@ function admin_rotator_sync_panel(array $deployStatus, array $deckStats, string 
     <section class="status-section">
       <h2 style="font-size:22px;margin-bottom:6px">Photo rotator</h2>
       <div class="help" style="margin-bottom:12px">
-        <?= (int)$deckStats['on_disk'] ?> in deck · <strong><?= h($deployMode) ?></strong> mode ·
-        <?= (int)$deckStats['playlist_entries'] ?> playlist entr<?= (int)$deckStats['playlist_entries'] === 1 ? 'y' : 'ies' ?>.
+        <?= (int)$deckStats['on_disk'] ?> in deck · <strong><?= h($deployMode) ?></strong> mode.
+        Counts below are per display (photos may target specific screens).
         Deploy from <a href="?board=rotator&amp;tab=deploy">Photo Rotator → Deploy</a>.
         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px;margin-left:6px" href="<?= h(signage_board_preview_url('rotator.php')) ?>" target="_blank" rel="noopener">Preview slideshow ↗</a>
       </div>
@@ -1680,15 +1716,7 @@ function admin_rotator_sync_panel(array $deployStatus, array $deckStats, string 
         <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
           <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
           <div class="deploy-detail">
-            <?php if ($dep['mirrors_main']): ?>
-              <span class="pill">Mirrors main</span>
-            <?php elseif ($dep['on_playlist']): ?>
-              <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
-            <?php elseif ($dep['partial'] ?? false): ?>
-              <span class="pill warn">Partial</span>
-            <?php else: ?>
-              <span class="pill warn">Not deployed</span>
-            <?php endif; ?>
+            <?php admin_deploy_status_pills($dep); ?>
           </div>
           <div class="deploy-actions">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
@@ -1727,15 +1755,7 @@ function admin_slides_sync_panel(array $deployStatus, array $deckStats, ?string 
         <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
           <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
           <div class="deploy-detail">
-            <?php if ($dep['mirrors_main']): ?>
-              <span class="pill">Mirrors main</span>
-            <?php elseif ($dep['on_playlist']): ?>
-              <span class="pill ok">Synced</span> <?= (int)$dep['sync']['synced'] ?>/<?= (int)$dep['expected'] ?>
-            <?php elseif ($dep['partial'] ?? false): ?>
-              <span class="pill warn">Partial</span>
-            <?php else: ?>
-              <span class="pill warn">Not deployed</span>
-            <?php endif; ?>
+            <?php admin_deploy_status_pills($dep); ?>
           </div>
           <div class="deploy-actions">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
@@ -3009,8 +3029,13 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             $activeEffective = count(rotation_effective_playlist_lines(
                 array_values(array_filter($effectivePages, static fn($ep) => is_array($ep) && !empty($ep['url']) && empty($ep['off'])))
             ));
+            $slidesDeckRaw = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+            $deckTargetedForScreen = count(slides_rotation_pages($slidesDeckRaw, $screenKey));
             if ($mirrorsMain) {
                 $summaryNote = 'mirrors main (' . $activeEffective . ' page' . ($activeEffective === 1 ? '' : 's') . ')';
+                if ($deckTargetedForScreen > 0 && $slideEntryCount === 0) {
+                    $summaryNote .= ' · ' . $deckTargetedForScreen . ' slide' . ($deckTargetedForScreen === 1 ? '' : 's') . ' need deploy';
+                }
             } elseif ($pageCount === 0) {
                 $summaryNote = 'empty';
             } else {
@@ -3118,6 +3143,12 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 
           <?php if ($effectivePages !== [] && $mirrorsMain): ?>
           <div class="rotation-effective-list mirror-note">Mirrors main — <?= (int)$activeEffective ?> page<?= $activeEffective === 1 ? '' : 's' ?> on wall</div>
+          <?php endif; ?>
+          <?php if ($mirrorsMain && $deckTargetedForScreen > 0 && $slideEntryCount === 0): ?>
+          <div class="rotation-effective-list mirror-note" style="border-color:var(--warn);color:var(--warn)">
+            <?= (int)$deckTargetedForScreen ?> custom slide<?= $deckTargetedForScreen === 1 ? '' : 's' ?> target this display but are not on its playlist yet.
+            <a href="?board=slides&amp;tab=deploy">Deploy from Custom Slides</a>, check <code><?= h($screenKey) ?></code>, then <strong>Deploy now</strong>.
+          </div>
           <?php endif; ?>
 
           <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
@@ -4366,12 +4397,13 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <input type="hidden" name="board" value="rotator">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
               <?php
-              $rotatorDeployTabChecked = [];
+              $rotatorDeployTabChecked = admin_deploy_picker_pending_screens($rotatorDeployStatus);
               foreach ($rotatorDeployStatus as $screenKey => $dep) {
                   if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $rotatorDeckStats['on_disk'] > 0)) {
                       $rotatorDeployTabChecked[] = $screenKey;
                   }
               }
+              $rotatorDeployTabChecked = array_values(array_unique($rotatorDeployTabChecked));
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
               <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
@@ -4405,11 +4437,13 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               if (slides_deck_untargeted_misconfig($slidesDeckForUser)) {
                   $slidesDeployTabChecked = array_keys($slidesDeployStatus);
               } else {
+                  $slidesDeployTabChecked = admin_deploy_picker_pending_screens($slidesDeployStatus);
                   foreach ($slidesDeployStatus as $screenKey => $dep) {
                       if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0)) {
                           $slidesDeployTabChecked[] = $screenKey;
                       }
                   }
+                  $slidesDeployTabChecked = array_values(array_unique($slidesDeployTabChecked));
               }
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
@@ -4887,10 +4921,10 @@ function collectMediaDeckRow(card, includeSchedule) {
     if (v !== null && !isNaN(v)) row.dwell = v;
   }
   if (card.querySelector('[name*="[off]"]:checked')) row.off = true;
-  if (card.querySelector('[name*="[_screens_form]"]')) {
+  const screenPicker = card.querySelector('[data-screen-picker]');
+  if (screenPicker) {
     row._screens_form = '1';
-    const screenPicker = card.querySelector('[data-screen-picker]');
-    if (screenPicker && screenPicker.dataset.locked === '1') {
+    if (screenPicker.dataset.locked === '1') {
       const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
       if (hiddenScreen && hiddenScreen.value) row.screens = [hiddenScreen.value];
       else row.screens = [];

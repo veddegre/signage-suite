@@ -1890,14 +1890,13 @@ function rotator_deploy_status(?array $deck = null): array
 {
     require_once __DIR__ . '/rotator_lib.php';
     $deck = rotator_deck($deck);
-    $stats = rotator_deck_stats($deck);
-    $expected = (int)$stats['playlist_entries'];
     $out = [];
 
     foreach (rotation_screens() as $key => $scr) {
         $own = rotation_screen_own_pages($key);
         $mirrorsMain = ($key !== 'main' && $own === []);
         $sync = rotator_rotation_sync_info($key, $deck);
+        $deckTargeted = count(rotator_rotation_pages($deck, $key));
 
         $wallPhotos = 0;
         $wallPos = null;
@@ -1928,7 +1927,8 @@ function rotator_deploy_status(?array $deck = null): array
             'on_wall' => $wallPhotos > 0,
             'sync' => $sync,
             'wall' => $wallPhotos > 0 ? ['position' => $wallPos, 'photo_count' => $wallPhotos] : null,
-            'expected' => $expected,
+            'deck_targeted' => $deckTargeted,
+            'expected' => (int)$sync['expected'],
             'dwell_mismatch' => (int)$sync['dwell_mismatch'],
         ];
     }
@@ -2172,14 +2172,13 @@ function slides_deploy_status(?array $deck = null): array
 {
     require_once __DIR__ . '/slides_lib.php';
     $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
-    $stats = slides_deck_stats($deck);
-    $expected = (int)$stats['playlist_entries'];
     $out = [];
 
     foreach (rotation_screens() as $key => $scr) {
         $own = rotation_screen_own_pages($key);
         $mirrorsMain = ($key !== 'main' && $own === []);
         $sync = slides_rotation_sync_info($key, $deck);
+        $deckTargeted = count(slides_rotation_pages($deck, $key));
 
         $wallSlides = 0;
         $wallPos = null;
@@ -2207,7 +2206,8 @@ function slides_deploy_status(?array $deck = null): array
             'entry' => slides_rotation_entry($key),
             'sync' => $sync,
             'wall' => $wallSlides > 0 ? ['position' => $wallPos, 'slide_count' => $wallSlides] : null,
-            'expected' => $expected,
+            'deck_targeted' => $deckTargeted,
+            'expected' => (int)$sync['expected'],
             'dwell_mismatch' => (int)$sync['dwell_mismatch'],
         ];
     }
