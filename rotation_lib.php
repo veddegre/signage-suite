@@ -2311,10 +2311,10 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
         $fullDeck = [];
     }
     $scopeFiles = slides_deploy_scope_files($fullDeck);
-    $repaired = slides_repair_deck_untargeted($fullDeck);
-    $deckRepaired = $repaired !== $fullDeck;
+    $repairedDeck = slides_repair_deck($fullDeck);
+    $deckRepaired = $repairedDeck !== $fullDeck;
     if ($deckRepaired) {
-        $fullDeck = $repaired;
+        $fullDeck = $repairedDeck;
     }
     $added = 0;
     $updated = 0;
@@ -2385,7 +2385,7 @@ function slides_deploy_flash_message(array $result): string
             . ' — on Deck, select slides → All displays → Save, then deploy again)';
     }
     if (!empty($result['repaired'])) {
-        $parts[] = 'restored display targeting on deck slides';
+        $parts[] = 'restored display targeting in the deck (cleared hidden-from-all assignments)';
     }
     if ($parts === []) {
         if ($skippedCount > 0) {

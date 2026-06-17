@@ -453,7 +453,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $errors[] = 'Slide deck data invalid — not saved.';
             } else {
                 $outV = slides_parse_post_rows($decoded, $existingSlides);
-                $mergedSlides = slides_repair_deck_untargeted(admin_merge_owned_list($existingSlides, $outV));
+                $mergedSlides = slides_repair_deck(admin_merge_owned_list($existingSlides, $outV));
                 if ($mergedSlides === []) {
                     unset($conf['slides.SLIDES']);
                 } else {
@@ -467,7 +467,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     . '). Reload the page and save again.';
             } else {
                 $outV = slides_parse_post_rows($postRows, $existingSlides);
-                $mergedSlides = slides_repair_deck_untargeted(admin_merge_owned_list($existingSlides, $outV));
+                $mergedSlides = slides_repair_deck(admin_merge_owned_list($existingSlides, $outV));
                 if ($mergedSlides === []) {
                     unset($conf['slides.SLIDES']);
                 } else {
@@ -3865,7 +3865,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. <strong>Share with</strong> controls who can edit a slide in admin — separate from display targeting. After editing, Save, then open the <strong>Deploy</strong> tab.</div>
+          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. Slides marked hidden on all displays are auto-fixed on Save and Deploy. Use <strong>All displays (deck)</strong> to reset targeting for every slide, then Save → Deploy.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -3891,6 +3891,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             <label class="deck-toolbar-check"><input type="checkbox" id="slideDeckCompact"<?= $slideDeckLarge ? ' checked' : '' ?>> Compact</label>
             <button type="button" class="secondary" id="slideDeckExpandAll" style="padding:6px 12px;font-size:13px">Expand all</button>
             <button type="button" class="secondary" id="slideDeckCollapseAll" style="padding:6px 12px;font-size:13px">Collapse all</button>
+            <button type="button" class="secondary" id="slideDeckAllDisplays" style="padding:6px 12px;font-size:13px" title="Every slide in the deck plays on all displays">All displays (deck)</button>
             <span class="deck-toolbar-count" id="slideDeckCount"></span>
           </div>
           <div class="deck-selection-bar" id="slideDeckSelectionBar">
@@ -4903,6 +4904,7 @@ function collectMediaDeckRow(card, includeSchedule) {
       const meta = card.dataset.slideScreens || 'all';
       if (meta === '') row.screens = [];
       else if (meta !== 'all') row.screens = meta.split(',').filter(Boolean);
+      else row._screens_all = '1';
     }
   }
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
@@ -5484,13 +5486,29 @@ function bindSlideCardSharing(card) {
 }
 
 function slideDeckBulkAssign(mode) {
-  const screen = document.getElementById('slideDeckScreenFilter')?.value || '';
-  if (!screen || screen.indexOf('__') === 0) return;
   const deck = document.getElementById('slideDeck');
   if (!deck) return;
+  let screen = '';
+  if (mode !== 'all') {
+    screen = document.getElementById('slideDeckScreenFilter')?.value || '';
+    if (!screen || screen.indexOf('__') === 0) return;
+  }
   deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
-    if (card.hidden) return;
+    if (mode !== 'all' && card.hidden) return;
     setSlideCardScreenTarget(card, mode, screen);
+  });
+}
+
+function slideDeckSetAllDisplaysOnDeck() {
+  const deck = document.getElementById('slideDeck');
+  if (!deck) return;
+  const cards = deck.querySelectorAll('[data-slide-card]');
+  if (!cards.length) return;
+  const msg = 'Set all ' + cards.length + ' slide' + (cards.length === 1 ? '' : 's')
+    + ' to play on every display? Remember to Save, then Deploy.';
+  if (!confirm(msg)) return;
+  cards.forEach(function (card) {
+    setSlideCardScreenTarget(card, 'all', '');
   });
 }
 
@@ -5647,6 +5665,7 @@ function initSlideDeckToolbar() {
   document.getElementById('slideDeckCollapseAll')?.addEventListener('click', function () {
     deck.querySelectorAll('details.slide-card-edit').forEach(function (d) { d.open = false; });
   });
+  document.getElementById('slideDeckAllDisplays')?.addEventListener('click', slideDeckSetAllDisplaysOnDeck);
   document.getElementById('slideDeckBulkOnly')?.addEventListener('click', function () { slideDeckBulkAssign('only'); });
   document.getElementById('slideDeckBulkAdd')?.addEventListener('click', function () { slideDeckBulkAssign('add'); });
   document.getElementById('slideDeckBulkAll')?.addEventListener('click', function () { slideDeckBulkAssign('all'); });

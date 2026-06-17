@@ -431,11 +431,8 @@ function slides_parse_post_rows(array $rows, array $existingSlides = []): array
             } elseif ($screens !== $allScreenKeys) {
                 $obj['screens'] = $screens;
             }
-        } elseif (!empty($row['_screens_form']) && admin_operator_screen_locked()) {
-            $opScreen = (string)admin_operator_screen_key();
-            if ($opScreen !== '') {
-                $obj['screens'] = [$opScreen];
-            }
+        } elseif (!empty($row['_screens_form']) || !empty($row['_screens_all'])) {
+            // User chose displays in admin — omitted screens / _screens_all means all displays.
         }
         if (admin_operator_screen_locked()) {
             $opScreen = (string)admin_operator_screen_key();
@@ -1638,6 +1635,37 @@ function slides_deck_untargeted_misconfig(?array $deck = null): bool
     }
 
     return $enabledOnDisk > 0 && $reachable === 0;
+}
+
+/**
+ * Remove screens: [] (hidden on all displays) so slides play everywhere again.
+ * @param list<array<string,mixed>> $deck
+ * @return list<array<string,mixed>>
+ */
+function slides_repair_deck_screen_targets(array $deck): array
+{
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        if (array_key_exists('screens', $slide) && slide_target_screens($slide) === []) {
+            unset($slide['screens']);
+        }
+        $out[] = $slide;
+    }
+
+    return $out;
+}
+
+/**
+ * Apply all deck targeting repairs (hidden slides, then whole-deck misconfig).
+ * @param list<array<string,mixed>> $deck
+ * @return list<array<string,mixed>>
+ */
+function slides_repair_deck(array $deck): array
+{
+    return slides_repair_deck_untargeted(slides_repair_deck_screen_targets($deck));
 }
 
 /**
