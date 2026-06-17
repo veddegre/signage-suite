@@ -387,6 +387,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     postToFrame(frames[1], { type: 'signage-stop' });
     idx = targetIdx;
     const p = PAGES[idx];
+    if (!p) return;
     presencePage = p;
     const myGen = ++gen;
     const back = 1 - front;

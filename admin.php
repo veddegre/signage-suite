@@ -28,7 +28,6 @@ require_once __DIR__ . '/sso_lib.php';
 require_once __DIR__ . '/audit_lib.php';
 
 slide_background_ensure_assets();
-slide_background_ensure_photos();
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json'; // legacy; migrated to users.json
 
@@ -687,15 +686,24 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     $result = slides_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
                     cfg_reload();
                     $extra = slides_deploy_flash_message($result);
+                    if (!empty($result['skipped'])) {
+                        $saveWarnFlash = 'Some displays were skipped — slides are in the deck but did not match deploy targets. Use Custom Slides → Deploy after checking display targeting.';
+                        $saveWarnFlashOk = false;
+                    }
                 }
             } elseif ($board === 'rotator') {
                 $deployScreens = admin_deploy_screens_from_post($_POST);
+                admin_deploy_screens_remember('rotator', $deployScreens);
                 if ($deployScreens !== []) {
                     $deck = cfg('rotator.PHOTOS', []);
                     $deck = is_array($deck) ? $deck : [];
                     $result = rotator_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
                     cfg_reload();
                     $extra = rotator_deploy_flash_message($result);
+                    if (!empty($result['skipped'])) {
+                        $saveWarnFlash = 'Some displays were skipped — photo sync would have removed custom slides. Re-deploy slides from Custom Slides → Deploy.';
+                        $saveWarnFlashOk = false;
+                    }
                 }
             } elseif ($board === 'rss') {
                 $screens = admin_filter_deploy_screens(admin_deploy_screens_from_post($_POST));
@@ -1400,9 +1408,14 @@ $rotationMainPages = rotation_screen_pages('main');
 if ($rotationMainPages === []) {
     $rotationMainPages = $rotationStarterPages;
 }
-$slidesDeckForUser = admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []);
-$slidesDeckStats = slides_deck_stats($slidesDeckForUser);
-$slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($slidesDeckForUser));
+$slidesDeckForUser = [];
+$slidesDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
+$slidesDeployStatus = [];
+if ($authed && in_array($board, ['slides', 'status'], true)) {
+    $slidesDeckForUser = admin_filter_owned_list(is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : []);
+    $slidesDeckStats = slides_deck_stats($slidesDeckForUser);
+    $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status($slidesDeckForUser));
+}
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesOrphanFiles = ($board === 'slides')
     ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
@@ -1419,8 +1432,12 @@ if ($board === 'rotator') {
     $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : $rawConf;
 }
 $rotatorDeckForUser = admin_filter_owned_list(is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : []);
-$rotatorDeckStats = rotator_deck_stats($rotatorDeckForUser);
-$rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser));
+$rotatorDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
+$rotatorDeployStatus = [];
+if ($authed && in_array($board, ['rotator', 'status'], true)) {
+    $rotatorDeckStats = rotator_deck_stats($rotatorDeckForUser);
+    $rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser));
+}
 $userAdminRows = admin_is_super() ? users_admin_rows() : [];
 $navGroupsFiltered = $authed ? admin_filter_nav_groups($navGroups, $schema) : $navGroups;
 $photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
@@ -3745,14 +3762,16 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 
           <div class="slides-form-footer slides-save-deploy">
             <?php
-            $rotatorDeployPickerChecked = [];
+            $rotatorDeployPickerDefault = [];
             foreach ($rotatorDeployStatus as $screenKey => $dep) {
                 if ($dep['on_playlist'] || $screenKey === 'main') {
-                    $rotatorDeployPickerChecked[] = $screenKey;
+                    $rotatorDeployPickerDefault[] = $screenKey;
                 }
             }
+            $rotatorDeployPickerChecked = admin_deploy_picker_checked('rotator', $rotatorDeployPickerDefault);
+            $rotatorDeployRemembered = admin_deploy_screens_remembered('rotator') !== null;
             ?>
-            <div class="deploy-checks">
+            <div class="deploy-checks" data-deploy-board="rotator" data-deploy-remembered="<?= $rotatorDeployRemembered ? '1' : '0' ?>">
               <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
               <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployPickerChecked); ?>
             </div>
@@ -3776,6 +3795,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </details>
 
         <?php elseif ($board === 'slides'):
+          slide_background_ensure_photos();
           $rotationScreens = admin_filter_screens(rotation_screens());
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = admin_filter_owned_list(is_array($slideVal) ? $slideVal : []);
@@ -4072,7 +4092,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             $slidesDeployPickerChecked = admin_deploy_picker_checked('slides', $slidesDeployPickerDefault);
             $slidesDeployRemembered = admin_deploy_screens_remembered('slides') !== null;
             ?>
-            <div class="deploy-checks" data-deploy-remembered="<?= $slidesDeployRemembered ? '1' : '0' ?>">
+            <div class="deploy-checks" data-deploy-board="slides" data-deploy-remembered="<?= $slidesDeployRemembered ? '1' : '0' ?>">
               <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployPickerChecked); ?>
             </div>
@@ -5534,9 +5554,10 @@ function deployScreensStorageKey(board) {
   return 'signage:deploy_screens:' + board;
 }
 
-function collectDeployScreensChecked() {
+function collectDeployScreensChecked(board) {
   const out = [];
-  document.querySelectorAll('#boardform input[name="deploy_screens[]"]').forEach(function (cb) {
+  const sel = '#boardform .deploy-checks[data-deploy-board="' + board + '"] input[name="deploy_screens[]"]';
+  document.querySelectorAll(sel).forEach(function (cb) {
     if (cb.checked) out.push(cb.value);
   });
   return out;
@@ -5562,12 +5583,12 @@ function appendDeployScreensToForm(form, screens) {
 
 function persistDeployScreensSelection(board) {
   try {
-    localStorage.setItem(deployScreensStorageKey(board), JSON.stringify(collectDeployScreensChecked()));
+    localStorage.setItem(deployScreensStorageKey(board), JSON.stringify(collectDeployScreensChecked(board)));
   } catch (e) {}
 }
 
 function initDeployScreensPersistence(board) {
-  const deployChecks = document.querySelector('#boardform .slides-save-deploy .deploy-checks');
+  const deployChecks = document.querySelector('#boardform .deploy-checks[data-deploy-board="' + board + '"]');
   if (!deployChecks) return;
   let fromStorage = null;
   try {
@@ -5575,15 +5596,16 @@ function initDeployScreensPersistence(board) {
     if (raw) fromStorage = JSON.parse(raw);
   } catch (e) {}
   const serverRemembered = deployChecks.dataset.deployRemembered === '1';
+  const selector = '#boardform .deploy-checks[data-deploy-board="' + board + '"] input[name="deploy_screens[]"]';
   if (!serverRemembered && Array.isArray(fromStorage)) {
     const set = new Set(fromStorage.map(String));
-    document.querySelectorAll('#boardform input[name="deploy_screens[]"]').forEach(function (cb) {
+    document.querySelectorAll(selector).forEach(function (cb) {
       cb.checked = set.has(cb.value);
     });
   } else {
     persistDeployScreensSelection(board);
   }
-  document.querySelectorAll('#boardform input[name="deploy_screens[]"]').forEach(function (cb) {
+  document.querySelectorAll(selector).forEach(function (cb) {
     if (cb.dataset.deployPersistBound) return;
     cb.dataset.deployPersistBound = '1';
     cb.addEventListener('change', function () {
@@ -5592,13 +5614,15 @@ function initDeployScreensPersistence(board) {
       if (picker) updateScreenPickerSummary(picker);
     });
   });
-  document.querySelectorAll('#boardform .slides-save-deploy [data-screen-picker]').forEach(updateScreenPickerSummary);
-  const uploadForm = document.querySelector('#add-slides-panel form.upload-row');
-  if (uploadForm && !uploadForm.dataset.deployBound) {
-    uploadForm.dataset.deployBound = '1';
-    uploadForm.addEventListener('submit', function () {
-      appendDeployScreensToForm(uploadForm, collectDeployScreensChecked());
-    });
+  deployChecks.querySelectorAll('[data-screen-picker]').forEach(updateScreenPickerSummary);
+  if (board === 'slides') {
+    const uploadForm = document.querySelector('#add-slides-panel form.upload-row');
+    if (uploadForm && !uploadForm.dataset.deployBound) {
+      uploadForm.dataset.deployBound = '1';
+      uploadForm.addEventListener('submit', function () {
+        appendDeployScreensToForm(uploadForm, collectDeployScreensChecked('slides'));
+      });
+    }
   }
 }
 
@@ -6172,7 +6196,12 @@ document.addEventListener('DOMContentLoaded', function () {
   initScreenPickers(document);
   initEntrySharingPopovers(document);
   initDeployPanelFilters();
-  initDeployScreensPersistence('slides');
+  if (document.getElementById('slideDeck') || document.querySelector('.deploy-checks[data-deploy-board="slides"]')) {
+    initDeployScreensPersistence('slides');
+  }
+  if (document.querySelector('.deploy-checks[data-deploy-board="rotator"]')) {
+    initDeployScreensPersistence('rotator');
+  }
   initRotationTargetFilter();
   document.querySelectorAll('#usersList .user-card').forEach(bindUserRow);
   initVideoPlaylist();
@@ -7345,7 +7374,7 @@ function testSplunkPanel(btn) {
       form.appendChild(input);
     });
     if (typeof appendDeployScreensToForm === 'function') {
-      appendDeployScreensToForm(form, extraScreens || collectDeployScreensChecked());
+      appendDeployScreensToForm(form, extraScreens || collectDeployScreensChecked('slides'));
     }
     document.body.appendChild(form);
     form.submit();

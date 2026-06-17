@@ -23,7 +23,6 @@ require_once __DIR__ . '/rotation_lib.php';
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 $blankActive = rotation_screen_blank_active($SCREEN);
 $showTicker = rotation_screen_ticker_enabled($SCREEN);
-$keyboardNav = rotation_screen_settings($SCREEN)['keyboard_nav'];
 // noticker=1 suppresses the ticker inside the iframe; player.php renders it here
 // at the viewport bottom so polling works in the top-level PWA document.
 $src = $SCREEN !== 'main'
@@ -111,7 +110,6 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
   }
   wakeLock();
 
-  <?php if ($keyboardNav): ?>
   // Forward arrow keys to board.php (iframe has pointer-events:none so it never receives focus).
   document.addEventListener('keydown', function (e) {
     if (!boardFrame || !boardFrame.contentWindow) return;
@@ -122,7 +120,6 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
     e.preventDefault();
     boardFrame.contentWindow.postMessage({ type: 'signage-nav', dir: dir }, '*');
   });
-  <?php endif; ?>
 
   // ── PWA service worker (installability + tiny offline fallback) ──
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

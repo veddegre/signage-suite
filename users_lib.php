@@ -603,7 +603,13 @@ function admin_deploy_screens_from_post(array $post): array
 /** @param list<string> $screens */
 function admin_deploy_screens_remember(string $board, array $screens): void
 {
-    $_SESSION[admin_deploy_screens_session_key($board)] = admin_filter_deploy_screens($screens);
+    $key = admin_deploy_screens_session_key($board);
+    $filtered = admin_filter_deploy_screens($screens);
+    if ($filtered === []) {
+        unset($_SESSION[$key]);
+        return;
+    }
+    $_SESSION[$key] = $filtered;
 }
 
 /** @return list<string>|null */
@@ -613,7 +619,12 @@ function admin_deploy_screens_remembered(string $board): ?array
     if (!array_key_exists($key, $_SESSION)) {
         return null;
     }
-    return admin_filter_deploy_screens((array)$_SESSION[$key]);
+    $filtered = admin_filter_deploy_screens((array)$_SESSION[$key]);
+    if ($filtered === []) {
+        unset($_SESSION[$key]);
+        return null;
+    }
+    return $filtered;
 }
 
 /** Resolve deploy targets from POST, remembered session, or defaults. @return list<string> */
