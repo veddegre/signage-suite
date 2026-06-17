@@ -1756,6 +1756,17 @@ function rotation_sync_photos(string $screen = 'main', ?array $deck = null): arr
         $expectedByUrl[$row['url']] = (int)$row['dwell'];
     }
 
+    if ($expected === []) {
+        return [
+            'pages' => $pages,
+            'added' => 0,
+            'updated' => 0,
+            'removed_legacy' => false,
+            'photo_count' => 0,
+            'screen' => $screen,
+        ];
+    }
+
     $insertAt = null;
     $filtered = [];
     $oldPhotoUrls = [];
@@ -1949,6 +1960,7 @@ function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
     $photoCount = 0;
     $skipped = [];
     $done = [];
+    $deployed = [];
     $pageWrites = [];
     foreach ($screens as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
@@ -1956,6 +1968,11 @@ function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $done[$screen] = true;
+        $expected = rotator_rotation_pages($deck, $screen);
+        if ($expected === []) {
+            $skipped[] = $screen;
+            continue;
+        }
         $before = rotation_sync_source_pages($screen);
         $slidesBefore = rotation_playlist_slide_count($before);
         $sync = rotation_sync_photos($screen, $deck);
@@ -1964,6 +1981,7 @@ function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
             $skipped[] = $screen;
             continue;
         }
+        $deployed[] = $screen;
         $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
         $updated += (int)$sync['updated'];
@@ -1977,7 +1995,7 @@ function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
     return [
         'added' => $added,
         'updated' => $updated,
-        'screens' => array_keys($done),
+        'screens' => $deployed,
         'photo_count' => $photoCount,
         'skipped' => $skipped,
     ];
@@ -2005,15 +2023,32 @@ function rotator_deploy_flash_message(array $result): string
 }
 
 /** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,screen:string} */
-function rotation_sync_slides(string $screen = 'main', ?array $deck = null): array
+function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?array $scopeFiles = null): array
 {
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     $pages = rotation_sync_source_pages($screen);
-    $expected = slides_effective_rotation_pages($deck, $screen);
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $manageAllSlides = ($scopeFiles === null);
+    $scopeSet = $manageAllSlides ? null : array_flip($scopeFiles);
+    $expected = slides_rotation_pages_for_scope($deck, $screen, $scopeFiles);
     $expectedByUrl = [];
     foreach ($expected as $row) {
         $expectedByUrl[$row['url']] = (int)$row['dwell'];
+    }
+
+    if ($expected === []) {
+        return [
+            'pages' => $pages,
+            'added' => 0,
+            'updated' => 0,
+            'removed_legacy' => false,
+            'slide_count' => 0,
+            'screen' => $screen,
+        ];
     }
 
     $insertAt = null;
@@ -2027,6 +2062,10 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null): arr
         }
         $url = trim((string)($page['url'] ?? ''));
         if (rotation_is_legacy_slides_url($url)) {
+            if (!$manageAllSlides) {
+                $filtered[] = $page;
+                continue;
+            }
             if ($insertAt === null) {
                 $insertAt = count($filtered);
             }
@@ -2034,6 +2073,11 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null): arr
             continue;
         }
         if (rotation_is_slide_url($url)) {
+            $file = slide_rotation_parse_file($url);
+            if (!$manageAllSlides && $file !== null && !isset($scopeSet[$file])) {
+                $filtered[] = $page;
+                continue;
+            }
             if ($insertAt === null) {
                 $insertAt = count($filtered);
             }
@@ -2262,22 +2306,22 @@ function rotation_remove_url(string $screen, string $url): array
 function slides_deploy_to_screens(array $screens, ?array $deck = null): array
 {
     require_once __DIR__ . '/slides_lib.php';
-    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
-    if (!is_array($deck)) {
-        $deck = [];
+    $fullDeck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($fullDeck)) {
+        $fullDeck = [];
     }
-    $repaired = slides_repair_deck_untargeted($deck);
-    $deckRepaired = $repaired !== $deck;
+    $scopeFiles = slides_deploy_scope_files($fullDeck);
+    $repaired = slides_repair_deck_untargeted($fullDeck);
+    $deckRepaired = $repaired !== $fullDeck;
     if ($deckRepaired) {
-        $deck = $repaired;
+        $fullDeck = $repaired;
     }
-    $deckStats = slides_deck_stats($deck);
-    $deckHasSlides = (int)($deckStats['on_disk'] ?? 0) > 0;
     $added = 0;
     $updated = 0;
     $slideCount = 0;
     $skipped = [];
     $done = [];
+    $deployed = [];
     $pageWrites = [];
     foreach ($screens as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
@@ -2285,28 +2329,27 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $done[$screen] = true;
-        $targeted = slides_rotation_pages($deck, $screen);
-        $expected = slides_effective_rotation_pages($deck, $screen);
-        $slidesOnPlaylist = rotation_playlist_slide_count(rotation_sync_source_pages($screen));
-        if ($targeted === [] && $expected === [] && $slidesOnPlaylist > 0 && $deckHasSlides) {
+        $expected = slides_rotation_pages_for_scope($fullDeck, $screen, $scopeFiles);
+        if ($expected === []) {
             $skipped[] = $screen;
             continue;
         }
-        $sync = rotation_sync_slides($screen, $deck);
+        $sync = rotation_sync_slides($screen, $fullDeck, $scopeFiles);
+        $deployed[] = $screen;
         $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
         $updated += (int)$sync['updated'];
         $slideCount = max($slideCount, (int)$sync['slide_count']);
     }
     if ($pageWrites !== [] || $deckRepaired) {
-        rotation_pages_write_batch($pageWrites, $deckRepaired ? $deck : null);
+        rotation_pages_write_batch($pageWrites, $deckRepaired ? $fullDeck : null);
         cfg_reload();
     }
 
     return [
         'added' => $added,
         'updated' => $updated,
-        'screens' => array_keys($done),
+        'screens' => $deployed,
         'slide_count' => $slideCount,
         'skipped' => $skipped,
         'repaired' => $deckRepaired,
@@ -2332,14 +2375,14 @@ function slides_deploy_flash_message(array $result): string
     }
     if ($skippedCount > 0) {
         $parts[] = 'skipped ' . $skippedCount . ' display' . ($skippedCount === 1 ? '' : 's')
-            . ' (slides not assigned to those screens)';
+            . ' (no slides target those displays in the deck)';
     }
     if (!empty($result['repaired'])) {
         $parts[] = 'restored display targeting on deck slides';
     }
     if ($parts === []) {
         if ($skippedCount > 0) {
-            return 'No slides are assigned to the selected display(s). On the Deck tab, assign slides to displays, click Save, then deploy again.';
+            return 'No slides in the deck target the selected display(s). Assign slides under Show on displays, Save, then deploy only the displays you need.';
         }
         return 'Slides already synced on selected displays.';
     }

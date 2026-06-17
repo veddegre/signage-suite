@@ -672,23 +672,6 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                         $extra = ' ' . implode('; ', $parts) . '.';
                     }
                 }
-            } elseif ($board === 'slides') {
-                $deployScreens = admin_deploy_screens_from_post($_POST);
-                admin_deploy_screens_remember('slides', $deployScreens);
-                if ($deployScreens === [] && isset($_POST['sync_rotation_slides'])) {
-                    $deployScreens = admin_default_deploy_screens();
-                }
-                if ($deployScreens !== []) {
-                    $deck = cfg('slides.SLIDES', []);
-                    $deck = is_array($deck) ? $deck : [];
-                    $result = slides_deploy_to_screens(admin_filter_deploy_screens($deployScreens), admin_media_deploy_deck($deck));
-                    cfg_reload();
-                    $extra = slides_deploy_flash_message($result);
-                    if (!empty($result['skipped'])) {
-                        $saveWarnFlash = 'Some displays were skipped — slides are in the deck but not assigned to those screens. On the Deck tab, select slides → Assign to display → Save, then Deploy.';
-                        $saveWarnFlashOk = false;
-                    }
-                }
             } elseif ($board === 'rotator') {
                 $deployScreens = admin_deploy_screens_from_post($_POST);
                 admin_deploy_screens_remember('rotator', $deployScreens);
@@ -731,7 +714,6 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             if (($flashOk ?? true) && (
                 $board === 'rotation'
                 || ($board === 'video' && admin_deploy_screens_from_post($_POST) !== [])
-                || ($board === 'slides' && (admin_deploy_screens_from_post($_POST) !== [] || isset($_POST['sync_rotation_slides'])))
                 || ($board === 'rotator' && admin_deploy_screens_from_post($_POST) !== [])
                 || ($board === 'rss' && admin_deploy_screens_from_post($_POST) !== [])
             )) {
@@ -905,12 +887,6 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
                         $extra['caption'] = $caption;
                     }
                     if (slide_append_to_deck($name, $extra)) {
-                        $deploy = admin_deploy_screens_for_action('slides', $_POST);
-                        if ($deploy !== []) {
-                            cfg_reload();
-                            $deck = cfg('slides.SLIDES', []);
-                            slides_deploy_to_screens($deploy, admin_media_deploy_deck(is_array($deck) ? $deck : []));
-                        }
                         cfg_reload();
                         slide_creator_finish($name);
                     } else {
@@ -931,7 +907,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         } else {
             admin_deploy_screens_remember('slides', $screens);
             $deck = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
-            $result = slides_deploy_to_screens($screens, admin_media_deploy_deck($deck));
+            $result = slides_deploy_to_screens($screens, $deck);
             cfg_reload();
             $flash = slides_deploy_flash_message($result);
             if (!empty($result['skipped'])) {
@@ -972,12 +948,6 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
                 $flash = (string)($saved['error'] ?? 'Upload failed — try again.');
                 $flashOk = false;
             } elseif (slide_append_to_deck((string)$saved['name'])) {
-                $deploy = admin_deploy_screens_for_action('slides', $_POST);
-                if ($deploy !== []) {
-                    cfg_reload();
-                    $deck = cfg('slides.SLIDES', []);
-                    slides_deploy_to_screens($deploy, admin_media_deploy_deck(is_array($deck) ? $deck : []));
-                }
                 cfg_reload();
                 header('Location: ?board=slides&tab=create&highlight=' . rawurlencode((string)$saved['name']));
                 exit;
@@ -3866,7 +3836,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores the deck. <strong>Deploy</strong> pushes slides to rotation. Use <strong>Assign to</strong> for which displays play a slide, and <strong>Share with</strong> so operators can see those slides on their display (display assignment alone is not enough). <strong>Add to display</strong> also shares with that display&rsquo;s operator. Save, then Deploy.</div>
+          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. <strong>Share with</strong> controls who can edit a slide in admin — separate from display targeting. After editing, Save, then open the <strong>Deploy</strong> tab.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -4157,17 +4127,6 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <?php endif; ?>
           </div>
 
-          <div class="slides-form-footer slides-save-deploy">
-            <?php
-            $slidesDeployPickerChecked = admin_deploy_picker_checked('slides', []);
-            $slidesDeployRemembered = admin_deploy_screens_remembered('slides') !== null;
-            ?>
-            <div class="deploy-checks" data-deploy-board="slides" data-deploy-remembered="<?= $slidesDeployRemembered ? '1' : '0' ?>">
-              <span class="help" style="margin:0;width:100%">Optional: also update rotation when you Save (use the <strong>Deploy</strong> tab to push to TVs).</span>
-              <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployPickerChecked); ?>
-            </div>
-          </div>
-
           <details class="panel panel-muted" style="margin-top:8px">
             <summary>Slide board settings</summary>
             <div class="panel-body">
@@ -4397,13 +4356,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <input type="hidden" name="board" value="rotator">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
               <?php
-              $rotatorDeployTabChecked = admin_deploy_picker_pending_screens($rotatorDeployStatus);
-              foreach ($rotatorDeployStatus as $screenKey => $dep) {
-                  if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $rotatorDeckStats['on_disk'] > 0)) {
-                      $rotatorDeployTabChecked[] = $screenKey;
-                  }
-              }
-              $rotatorDeployTabChecked = array_values(array_unique($rotatorDeployTabChecked));
+              $rotatorDeployTabChecked = admin_deploy_picker_checked('rotator', []);
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
               <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployTabChecked, ['class' => 'screen-picker-inline screen-picker-deploy-tab']); ?>
@@ -4428,22 +4381,14 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
       <?php endif; ?>
       <?php if ($board === 'slides'): ?>
       <div class="admin-tab-panel<?= $slidesTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="slides-deploy-panel">
-            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. If slides were hidden from all displays, <strong>Deploy now</strong> restores them automatically. Sync status is on <a href="?board=status">Status</a>.</p>
+            <p class="help" style="margin-bottom:12px">Push slides to rotation on selected displays. Assign targets on the <strong>Deck</strong> tab first (<strong>Show on displays</strong>), click <strong>Save</strong>, then deploy here. Sync status is on <a href="?board=status">Status</a>.</p>
             <form method="post" action="?board=slides" class="slides-deploy-form">
               <input type="hidden" name="board" value="slides">
               <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
               <?php
-              $slidesDeployTabChecked = [];
+              $slidesDeployTabChecked = admin_deploy_picker_checked('slides', []);
               if (slides_deck_untargeted_misconfig($slidesDeckForUser)) {
                   $slidesDeployTabChecked = array_keys($slidesDeployStatus);
-              } else {
-                  $slidesDeployTabChecked = admin_deploy_picker_pending_screens($slidesDeployStatus);
-                  foreach ($slidesDeployStatus as $screenKey => $dep) {
-                      if ($dep['on_playlist'] || ($screenKey === 'main' && !$dep['mirrors_main'] && !$dep['on_playlist'] && $slidesDeckStats['on_disk'] > 0)) {
-                          $slidesDeployTabChecked[] = $screenKey;
-                      }
-                  }
-                  $slidesDeployTabChecked = array_values(array_unique($slidesDeployTabChecked));
               }
               ?>
               <span class="help" style="margin:0 0 8px;display:block">Deploy to:</span>
@@ -4466,7 +4411,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <input type="file" name="slide" accept="image/jpeg,image/png,image/webp" required>
               <button class="secondary" type="submit">Upload</button>
             </form>
-            <div class="help" style="margin-top:8px">JPG, PNG, or WebP — added to the deck automatically. Then Save or Deploy.</div>
+            <div class="help" style="margin-top:8px">JPG, PNG, or WebP — added to the deck. Set schedule on <strong>Deck</strong>, Save, then deploy from the <strong>Deploy</strong> tab.</div>
           </div>
 
           <div class="creator-box" style="margin-top:22px">
@@ -5412,18 +5357,6 @@ function setSlideCardScreenTarget(card, mode, screenKey) {
   });
   updateScreenPickerSummary(picker);
   syncSlideCardScreenMeta(card);
-  if (mode === 'add' || mode === 'only') {
-    const opId = screenOperatorUserId(screenKey);
-    if (opId) setSlideCardSharedUsers(card, 'add', [opId]);
-  } else if (mode === 'all') {
-    const map = window.SCREEN_OPERATOR_MAP || {};
-    const opIds = [];
-    Object.keys(map).forEach(function (sk) {
-      const id = map[sk] && map[sk].userId;
-      if (id) opIds.push(String(id));
-    });
-    if (opIds.length) setSlideCardSharedUsers(card, 'add', opIds);
-  }
 }
 
 function screenOperatorUserId(screenKey) {
@@ -5838,15 +5771,6 @@ function initDeployScreensPersistence(board) {
     });
   });
   deployChecks.querySelectorAll('[data-screen-picker]').forEach(updateScreenPickerSummary);
-  if (board === 'slides') {
-    const uploadForm = document.querySelector('#add-slides-panel form.upload-row');
-    if (uploadForm && !uploadForm.dataset.deployBound) {
-      uploadForm.dataset.deployBound = '1';
-      uploadForm.addEventListener('submit', function () {
-        appendDeployScreensToForm(uploadForm, collectDeployScreensChecked('slides'));
-      });
-    }
-  }
 }
 
 function initRotationTargetFilter() {
@@ -6391,13 +6315,10 @@ document.addEventListener('DOMContentLoaded', function () {
       const slideDeck = document.getElementById('slideDeck');
       const slideCount = slideDeck ? slideDeck.querySelectorAll('[data-slide-card]').length : 0;
       if (slideCount > 48) {
-        const deployChecked = document.querySelectorAll('#boardform .deploy-checks[data-deploy-board="slides"] input[name="deploy_screens[]"]:checked').length;
         const saveBtn = boardForm.querySelector('button.save');
         if (saveBtn) {
           saveBtn.disabled = true;
-          saveBtn.textContent = deployChecked > 0
-            ? 'Saving deck + deploying (' + slideCount + ' slides)…'
-            : 'Saving ' + slideCount + ' slides…';
+          saveBtn.textContent = 'Saving ' + slideCount + ' slides…';
         }
       }
       const slidesTabs = document.getElementById('slidesTabs');
@@ -6435,9 +6356,6 @@ document.addEventListener('DOMContentLoaded', function () {
   initScreenPickers(document);
   initEntrySharingPopovers(document);
   initDeployPanelFilters();
-  if (document.getElementById('slideDeck') || document.querySelector('.deploy-checks[data-deploy-board="slides"]')) {
-    initDeployScreensPersistence('slides');
-  }
   if (document.querySelector('.deploy-checks[data-deploy-board="rotator"]')) {
     initDeployScreensPersistence('rotator');
   }

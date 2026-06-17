@@ -341,9 +341,13 @@ function slide_delete_file(string $file): array
     }
 
     require_once __DIR__ . '/rotation_lib.php';
-    $syncDeck = admin_media_deploy_deck($deck);
+    $fullDeck = cfg('slides.SLIDES', []);
+    if (!is_array($fullDeck)) {
+        $fullDeck = [];
+    }
+    $scopeFiles = [$safe];
     foreach (admin_media_rotation_sync_screens() as $screen) {
-        $sync = rotation_sync_slides($screen, $syncDeck);
+        $sync = rotation_sync_slides($screen, $fullDeck, $scopeFiles);
         rotation_pages_write($sync['screen'], $sync['pages']);
     }
     cfg_reload();
@@ -1656,6 +1660,68 @@ function slides_repair_deck_untargeted(?array $deck = null): array
         }
         $out[] = $slide;
     }
+
+    return $out;
+}
+
+/** Files the current user may push to rotation. null = super admin (manage entire slide block). */
+function slides_deploy_scope_files(?array $deck = null): ?array
+{
+    require_once __DIR__ . '/users_lib.php';
+    if (admin_is_super()) {
+        return null;
+    }
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        return [];
+    }
+    $files = [];
+    foreach (admin_filter_owned_list($deck) as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file !== null) {
+            $files[] = $file;
+        }
+    }
+
+    return $files;
+}
+
+/**
+ * Rotation rows for one display, optionally limited to slides the current user may deploy.
+ * @param list<string>|null $scopeFiles from slides_deploy_scope_files(); null = all slides in deck
+ * @return list<array{url:string,dwell:int,file:string}>
+ */
+function slides_rotation_pages_for_scope(?array $deck, ?string $screen, ?array $scopeFiles): array
+{
+    $pages = slides_effective_rotation_pages($deck, $screen);
+    if ($scopeFiles === null) {
+        return $pages;
+    }
+    $scopeSet = array_flip($scopeFiles);
+
+    return array_values(array_filter($pages, static function ($row) use ($scopeSet) {
+        return isset($scopeSet[(string)($row['file'] ?? '')]);
+    }));
+}
+
+/** Display keys that have at least one enabled slide in the deck targeting them. @return list<string> */
+function slides_screens_in_deck(?array $deck = null): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        return [];
+    }
+    $out = [];
+    foreach (array_keys(rotation_screens()) as $key) {
+        if (slides_rotation_pages($deck, (string)$key) !== []) {
+            $out[] = (string)$key;
+        }
+    }
+    sort($out);
 
     return $out;
 }
