@@ -553,6 +553,18 @@ verify_protection() {
   esac
 }
 
+verify_opcache_web() {
+  local script="$WEBROOT/scripts/check-opcache.sh"
+  if [[ -x "$script" ]]; then
+    log "Verifying OPcache via web request"
+    if URL_BASE="$(guess_url_base)" bash "$script" --webroot "$WEBROOT"; then
+      :
+    else
+      warn "OPcache web probe failed — see scripts/check-opcache.sh"
+    fi
+  fi
+}
+
 print_summary() {
   local base board admin player
   base="$(guess_url_base)"
@@ -620,6 +632,7 @@ main() {
   post_install_php
   setup_video_cron
   verify_protection
+  verify_opcache_web
   print_summary
 }
 
