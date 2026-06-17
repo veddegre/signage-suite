@@ -18,7 +18,7 @@ function signage_json_lock_path(string $path): string
 
 /**
  * @param callable(array): (array|false|null) $mutator
- * @param array{default?:array,pretty?:bool,lock_wait_sec?:float,ensure_dir?:bool,sort_keys?:bool|callable} $options
+ * @param array{default?:array,pretty?:bool|callable,lock_wait_sec?:float,ensure_dir?:bool,sort_keys?:bool|callable} $options
  * @return array{ok:bool,data?:array,error?:string}
  */
 function signage_json_file_update(string $path, callable $mutator, array $options = []): array
@@ -27,7 +27,7 @@ function signage_json_file_update(string $path, callable $mutator, array $option
 
     $default = $options['default'] ?? [];
     $waitSec = (float)($options['lock_wait_sec'] ?? 10.0);
-    $pretty = (bool)($options['pretty'] ?? false);
+    $pretty = $options['pretty'] ?? false;
     $ensureDir = (bool)($options['ensure_dir'] ?? true);
 
     if ($ensureDir) {
@@ -97,8 +97,9 @@ function signage_json_file_update(string $path, callable $mutator, array $option
             }
         }
 
+        $usePretty = is_callable($pretty) ? (bool)$pretty($result) : (bool)$pretty;
         $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
-        if ($pretty) {
+        if ($usePretty) {
             $flags |= JSON_PRETTY_PRINT;
         }
         $json = json_encode($result, $flags);

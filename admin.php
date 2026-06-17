@@ -3833,6 +3833,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php endif; ?>
           <?php
           $slideDeckLarge = count($slideRows) > 24;
+          $slideFilesOnDisk = array_flip(slides_list_files());
           $slideScreenOptions = admin_screen_options($rotationScreens);
           ?>
           <div class="deck-toolbar" id="slideDeckToolbar">
@@ -3886,7 +3887,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               $sched = strtolower((string)($row['schedule'] ?? 'always'));
               if ($sched === '') $sched = 'always';
               $fileLabel = (string)($row['file'] ?? 'New slide');
-              $fileOk = slide_safe_filename($fileLabel) !== null && is_file(slides_dir() . '/' . slide_safe_filename($fileLabel));
+              $safeFile = slide_safe_filename($fileLabel);
+              $fileOk = $safeFile !== null && isset($slideFilesOnDisk[$safeFile]);
               $activeNow = empty($row['off']) && $fileOk && slide_schedule_active($row, $slideNow);
               $schedSummary = slide_schedule_summary($row);
               $highlightCard = $slideHighlight !== null
@@ -4103,7 +4105,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             $slidesDeployRemembered = admin_deploy_screens_remembered('slides') !== null;
             ?>
             <div class="deploy-checks" data-deploy-board="slides" data-deploy-remembered="<?= $slidesDeployRemembered ? '1' : '0' ?>">
-              <span class="help" style="margin:0;width:100%">On Save, update rotation on:</span>
+              <span class="help" style="margin:0;width:100%">On Save, update rotation on:<?= $slideDeckLarge ? ' <em>(uncheck all for a faster deck-only save — use Deploy tab after)</em>' : '' ?></span>
               <?php admin_deploy_picker_from_status($slidesDeployStatus, $slidesDeployPickerChecked); ?>
             </div>
           </div>
@@ -4821,6 +4823,7 @@ function collectMediaDeckRow(card, includeSchedule) {
     const v = text('[' + k + ']');
     if (v) row[k] = v;
   });
+  if (!row.file && card.dataset.slideFile) row.file = card.dataset.slideFile;
   if (includeSchedule) {
     ['schedule', 'date_start', 'date_end', 'month_day', 'month_day_end', 'weekdays'].forEach(function (k) {
       const v = text('[' + k + ']');
@@ -4836,17 +4839,18 @@ function collectMediaDeckRow(card, includeSchedule) {
     if (v !== null && !isNaN(v)) row.dwell = v;
   }
   if (card.querySelector('[name*="[off]"]:checked')) row.off = true;
-  const screens = [];
-  const screenPicker = card.querySelector('[data-screen-picker]');
-  if (screenPicker && screenPicker.dataset.locked === '1') {
-    const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
-    if (hiddenScreen && hiddenScreen.value) screens.push(hiddenScreen.value);
-  } else {
-    card.querySelectorAll('[name*="[screens]"]:checked').forEach(function (cb) { screens.push(cb.value); });
-  }
   if (card.querySelector('[name*="[_screens_form]"]')) {
     row._screens_form = '1';
-    row.screens = screens;
+    const screenPicker = card.querySelector('[data-screen-picker]');
+    if (screenPicker && screenPicker.dataset.locked === '1') {
+      const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
+      if (hiddenScreen && hiddenScreen.value) row.screens = [hiddenScreen.value];
+      else row.screens = [];
+    } else {
+      const meta = card.dataset.slideScreens || 'all';
+      if (meta === '') row.screens = [];
+      else if (meta !== 'all') row.screens = meta.split(',').filter(Boolean);
+    }
   }
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
   const ownerSelect = card.querySelector('select[name*="[owner]"]');
@@ -4859,10 +4863,19 @@ function collectMediaDeckRow(card, includeSchedule) {
   return row;
 }
 
+function stripSlideDeckFormNames(deck) {
+  deck.querySelectorAll('[name^="SLIDES["]').forEach(function (el) {
+    el.removeAttribute('name');
+  });
+}
+
 function serializeSlideDeckForSave() {
   const form = document.getElementById('boardform');
   const deck = document.getElementById('slideDeck');
   if (!form || !deck) return;
+  deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    syncSlideCardScreenMeta(card, true);
+  });
   const rows = [];
   deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
     const row = collectMediaDeckRow(card, true);
@@ -4878,7 +4891,7 @@ function serializeSlideDeckForSave() {
     form.appendChild(inp);
   }
   inp.value = JSON.stringify(rows);
-  deck.querySelectorAll('[name^="SLIDES["]').forEach(function (el) { el.disabled = true; });
+  stripSlideDeckFormNames(deck);
 }
 
 function serializePhotoDeckForSave() {
@@ -4900,7 +4913,7 @@ function serializePhotoDeckForSave() {
     form.appendChild(inp);
   }
   inp.value = JSON.stringify(rows);
-  deck.querySelectorAll('[name^="PHOTOS["]').forEach(function (el) { el.disabled = true; });
+  deck.querySelectorAll('[name^="PHOTOS["]').forEach(function (el) { el.removeAttribute('name'); });
 }
 
 function bindSlideCard(card) {
@@ -6180,9 +6193,21 @@ document.addEventListener('DOMContentLoaded', function () {
   initPhotosSectionNav();
   const boardForm = document.getElementById('boardform');
   if (boardForm) {
-    boardForm.addEventListener('submit', function () {
+    boardForm.addEventListener('submit', function (e) {
       const action = boardForm.querySelector('input[name="action"]');
       if (!action || action.value !== 'save') return;
+      const slideDeck = document.getElementById('slideDeck');
+      const slideCount = slideDeck ? slideDeck.querySelectorAll('[data-slide-card]').length : 0;
+      if (slideCount > 48) {
+        const deployChecked = document.querySelectorAll('#boardform .deploy-checks[data-deploy-board="slides"] input[name="deploy_screens[]"]:checked').length;
+        const saveBtn = boardForm.querySelector('button.save');
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = deployChecked > 0
+            ? 'Saving deck + deploying (' + slideCount + ' slides)…'
+            : 'Saving ' + slideCount + ' slides…';
+        }
+      }
       const slidesTabs = document.getElementById('slidesTabs');
       if (slidesTabs) {
         const active = slidesTabs.querySelector('.admin-tab.active');

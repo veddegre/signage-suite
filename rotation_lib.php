@@ -1210,6 +1210,34 @@ function rotation_pages_write(string $screen, array $pages): bool
 }
 
 /**
+ * Write several display playlists (and optionally the slide deck) in one settings pass.
+ * @param array<string,list<array<string,mixed>>> $screenPages screen key => playlist rows
+ * @param list<array<string,mixed>>|null $slideDeck when set, replaces slides.SLIDES
+ */
+function rotation_pages_write_batch(array $screenPages, ?array $slideDeck = null): bool
+{
+    if ($screenPages === [] && $slideDeck === null) {
+        return true;
+    }
+
+    return cfg_update(function (array $conf) use ($screenPages, $slideDeck): array {
+        if ($slideDeck !== null) {
+            if ($slideDeck === []) {
+                unset($conf['slides.SLIDES']);
+            } else {
+                $conf['slides.SLIDES'] = $slideDeck;
+            }
+        }
+        foreach ($screenPages as $screen => $pages) {
+            $key = 'rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', (string)$screen);
+            $conf[$key] = $pages;
+        }
+
+        return $conf;
+    });
+}
+
+/**
  * @return array{pages:list<array<string,mixed>>,added:bool,updated:bool,screen:string}
  */
 function rotation_upsert_url(string $screen, string $url, int $dwell): array
@@ -1728,6 +1756,7 @@ function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
     $photoCount = 0;
     $skipped = [];
     $done = [];
+    $pageWrites = [];
     foreach ($screens as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
         if ($screen === '' || isset($done[$screen])) {
@@ -1742,10 +1771,14 @@ function rotator_deploy_to_screens(array $screens, ?array $deck = null): array
             $skipped[] = $screen;
             continue;
         }
-        rotation_pages_write($sync['screen'], $sync['pages']);
+        $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
         $updated += (int)$sync['updated'];
         $photoCount = max($photoCount, (int)$sync['photo_count']);
+    }
+    if ($pageWrites !== []) {
+        rotation_pages_write_batch($pageWrites);
+        cfg_reload();
     }
 
     return [
@@ -2043,8 +2076,6 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     $repaired = slides_repair_deck_untargeted($deck);
     $deckRepaired = $repaired !== $deck;
     if ($deckRepaired) {
-        slides_persist_deck($repaired);
-        cfg_reload();
         $deck = $repaired;
     }
     $deckStats = slides_deck_stats($deck);
@@ -2054,6 +2085,7 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     $slideCount = 0;
     $skipped = [];
     $done = [];
+    $pageWrites = [];
     foreach ($screens as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
         if ($screen === '' || isset($done[$screen])) {
@@ -2068,10 +2100,14 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $sync = rotation_sync_slides($screen, $deck);
-        rotation_pages_write($sync['screen'], $sync['pages']);
+        $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
         $updated += (int)$sync['updated'];
         $slideCount = max($slideCount, (int)$sync['slide_count']);
+    }
+    if ($pageWrites !== [] || $deckRepaired) {
+        rotation_pages_write_batch($pageWrites, $deckRepaired ? $deck : null);
+        cfg_reload();
     }
 
     return [

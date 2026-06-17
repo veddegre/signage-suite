@@ -45,11 +45,20 @@ function cfg_path(): string
  *
  * @param callable(array): (array|false|null) $mutator
  */
+/** Compact JSON for large decks — pretty-printing huge settings.json is very slow. */
+function cfg_use_pretty_json(array $conf): bool
+{
+    $slides = is_array($conf['slides.SLIDES'] ?? null) ? count($conf['slides.SLIDES']) : 0;
+    $photos = is_array($conf['rotator.PHOTOS'] ?? null) ? count($conf['rotator.PHOTOS']) : 0;
+
+    return ($slides + $photos) <= 48;
+}
+
 function cfg_update(callable $mutator): bool
 {
     $result = signage_json_file_update(cfg_path(), $mutator, [
         'default' => [],
-        'pretty' => true,
+        'pretty' => static fn(array $conf): bool => cfg_use_pretty_json($conf),
         'sort_keys' => true,
         'ensure_dir' => true,
     ]);
