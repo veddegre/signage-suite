@@ -66,7 +66,7 @@ echo "==> HDMI-CEC:   $([[ $WITH_CEC -eq 1 ]] && echo enabled || echo skipped)"
 
 echo "==> Installing packages"
 apt-get update -q
-apt-get install -y -q cage seatd curl python3
+apt-get install -y -q cage seatd curl python3 ydotool
 # Chromium packaging differs by distro: Pi OS has a real deb named
 # chromium-browser; Ubuntu's chromium-browser/chromium packages are snap
 # shims. Try them in order, then fall back to installing the snap directly.
@@ -92,6 +92,13 @@ else
   echo "==> Warning: scripts/install-signage-blank-cursor.sh not found — cursor may remain visible." >&2
 fi
 
+if [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
+  echo "==> Installing pointer off-screen helper (cage compositor cursor)"
+  install -m 755 "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" /usr/local/bin/signage-hide-cursor
+else
+  echo "==> Warning: scripts/signage-hide-cursor.sh not found — compositor cursor may remain visible." >&2
+fi
+
 echo "==> Writing /etc/signage/kiosk.conf"
 mkdir -p /etc/signage
 cat > /etc/signage/kiosk.conf <<EOF
@@ -108,6 +115,14 @@ cat > /usr/local/bin/signage-kiosk <<EOF
 # Launched by signage.service — cage runs Chromium as the sole fullscreen app.
 export XCURSOR_THEME=signage-blank
 export XCURSOR_SIZE=24
+
+# Cage always draws a compositor cursor when a pointer device is present.
+# Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
+if command -v signage-hide-cursor >/dev/null; then
+  pkill -u "\$(id -u)" -f '^/usr/local/bin/signage-hide-cursor' 2>/dev/null || true
+  signage-hide-cursor &
+fi
+
 exec cage -- "$CHROMIUM" \\
   --kiosk "\$1" \\
   --force-device-scale-factor=$SCALE \\
@@ -237,7 +252,10 @@ server through admin.php. The Pi only needs OS updates:
   sudo apt update && sudo apt full-upgrade
 
 CURSOR (if the mouse pointer is still visible after a server update):
+  sudo apt install -y ydotool
   sudo bash $SCRIPT_DIR/scripts/install-signage-blank-cursor.sh
+  sudo install -m 755 $SCRIPT_DIR/scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
+  # Ensure /usr/local/bin/signage-kiosk starts signage-hide-cursor in the background
   sudo systemctl restart signage
 ============================================================
 NOTES
