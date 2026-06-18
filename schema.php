@@ -24,7 +24,8 @@ function rotation_page_fields(): array
              ['key' => 'dwell', 'label' => 'Dwell (s)', 'cast' => 'int'],
              ['key' => 'from', 'label' => 'From hr', 'cast' => 'int'],
              ['key' => 'to', 'label' => 'To hr', 'cast' => 'int'],
-             ['key' => 'weight', 'label' => 'Weight', 'cast' => 'int'],
+             ['key' => 'weight', 'label' => 'Weight', 'cast' => 'int',
+              'help' => 'Per-page show frequency when Weighted is on (1–20, default 1)'],
              ['key' => 'off', 'label' => 'Skip', 'type' => 'check']];
     $out = [];
     foreach ($screens as $key => $scr) {
@@ -88,7 +89,8 @@ function admin_schema(): array
                            ['key' => 'fade_ms', 'label' => 'Crossfade (ms)'],
                            ['key' => 'settle_ms', 'label' => 'Settle (ms)'],
                            ['key' => 'hang_ms', 'label' => 'Hang (ms)'],
-                           ['key' => 'weighted', 'label' => 'Weighted', 'type' => 'check'],
+                           ['key' => 'weighted', 'label' => 'Weighted', 'type' => 'check',
+                            'help' => 'Random next page by entry weight; overrides Shuffle'],
                            ['key' => 'shuffle', 'label' => 'Shuffle', 'type' => 'check'],
                            ['key' => 'schedule_enabled', 'label' => 'Blank', 'type' => 'check'],
                            ['key' => 'cec_off', 'label' => 'Off hr'],

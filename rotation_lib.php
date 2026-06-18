@@ -983,6 +983,22 @@ function rotation_page_dwell(array $page): int
     return $dwell > 0 ? $dwell : 60;
 }
 
+/** Admin tooltip: per-page Weight field (1–20). */
+function rotation_weight_tooltip(): string
+{
+    return 'How often this page is picked when Weighted is on for the display. '
+        . 'Blank or 1 = normal. 2–20 = more often (weight 3 is ~3× as likely as weight 1). '
+        . 'Ignored when Weighted is off. Hour windows and Skip still apply.';
+}
+
+/** Admin tooltip: display-level Weighted rotation mode. */
+function rotation_weighted_mode_tooltip(): string
+{
+    return 'Pick the next page at random using each entry\'s Weight (1–20, default 1). '
+        . 'Unlike Shuffle, a page can repeat before every page has played. '
+        . 'Weighted overrides Shuffle when both are checked.';
+}
+
 function rotation_page_label(string $url): string
 {
     $url = trim($url);

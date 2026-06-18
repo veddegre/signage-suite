@@ -3005,11 +3005,11 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <details class="panel rotation-display-settings-panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body rotation-display-settings-body" style="padding-top:8px">
-          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, active weekdays, and rotation mode. Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
+          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, active weekdays, and rotation mode. <strong>Weighted</strong> picks the next page at random using each entry's <strong>Weight</strong> (see playlist cards). Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th>Weighted</th><th>Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th></th>
+                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</th><th title="Randomize play order once per full pass; every page appears once per cycle">Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow):
@@ -3032,9 +3032,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][settle_ms]" value="<?= h((string)($srow['settle_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_settle_ms() ?>"></td>
                   <td><input type="text" class="screen-ms" name="SCREENS[<?= (int)$sri ?>][hang_ms]" value="<?= h((string)($srow['hang_ms'] ?? '')) ?>" placeholder="<?= (int)rotation_global_hang_ms() ?>"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
-                         name="SCREENS[<?= (int)$sri ?>][weighted]" value="1" <?= !empty($srow['weighted']) ? 'checked' : '' ?>></td>
+                         name="SCREENS[<?= (int)$sri ?>][weighted]" value="1" <?= !empty($srow['weighted']) ? 'checked' : '' ?> title="<?= h(rotation_weighted_mode_tooltip()) ?>"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
-                         name="SCREENS[<?= (int)$sri ?>][shuffle]" value="1" <?= !empty($srow['shuffle']) ? 'checked' : '' ?>></td>
+                         name="SCREENS[<?= (int)$sri ?>][shuffle]" value="1" <?= !empty($srow['shuffle']) ? 'checked' : '' ?> title="Randomize play order once per full pass; every page appears once per cycle"></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][schedule_enabled]" value="1" <?= !empty($srow['schedule_enabled']) ? 'checked' : '' ?>></td>
                   <td><input type="text" name="SCREENS[<?= (int)$sri ?>][cec_off]" value="<?= h((string)($srow['cec_off'] ?? '23')) ?>" placeholder="23" style="width:52px"></td>
@@ -3152,7 +3152,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <code><?= h($screenKey) ?></code>
               <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
               <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
-              <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok">Weighted</span><?php endif; ?>
+              <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok" title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</span><?php endif; ?>
               <?php if ($screenSettings['show_debug']): ?><span class="pill">Debug</span><?php endif; ?>
               <?php if (!empty($screenSettings['keyboard_nav'])): ?><span class="pill">Keys</span><?php endif; ?>
               <?php if (!$screenSettings['show_ticker']): ?><span class="pill warn">No ticker</span><?php endif; ?>
@@ -3164,7 +3164,10 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               </span>
             </summary>
             <div class="panel-body">
-          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Expand a card for URL, dwell, and hour windows. Save — kiosks pick up changes within ~30s.</div>
+          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Expand a card for URL, dwell, hour windows, and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
+          <?php if (!empty($screenSettings['weighted'])): ?>
+          <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) controls how often it is picked next. Higher = more airtime.</div>
+          <?php endif; ?>
 
           <div class="rotation-screen-tools">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
@@ -3321,8 +3324,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
                 </div>
                 <div>
-                  <label class="mini">Weight</label>
-                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="Used when Weighted is on for this display (1–20)">
+                  <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>">
                 </div>
               </div>
               <div class="rotation-card-meta">
@@ -3475,8 +3478,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
                 </div>
                 <div>
-                  <label class="mini">Weight</label>
-                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="Used when Weighted is on for this display (1–20)">
+                  <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
+                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>">
                 </div>
               </div>
               </details>
@@ -4708,6 +4711,10 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
 </div>
 
 <script>
+<?php if ($authed && $board === 'rotation'): ?>
+window.ROTATION_WEIGHT_TOOLTIP = <?= json_encode(rotation_weight_tooltip()) ?>;
+window.ROTATION_WEIGHTED_MODE_TOOLTIP = <?= json_encode(rotation_weighted_mode_tooltip()) ?>;
+<?php endif; ?>
 <?php if ($authed && admin_is_super()): ?>
 window.SHARING_USER_OPTIONS = <?= json_encode(admin_sharing_user_options(), JSON_UNESCAPED_UNICODE) ?>;
 window.SCREEN_OPERATOR_MAP = <?= json_encode(admin_screen_operator_map(), JSON_UNESCAPED_UNICODE) ?>;
@@ -6897,7 +6904,8 @@ function addRotationPage(deckId, url, dwell, scroll) {
       '<div><label class="mini">Dwell (s)</label><input type="text" name="' + field + '[' + idx + '][dwell]" value="' + dwell.replace(/"/g, '&quot;') + '" placeholder="60"></div>' +
       '<div><label class="mini">From hr</label><input type="text" name="' + field + '[' + idx + '][from]" placeholder="0-23"></div>' +
       '<div><label class="mini">To hr</label><input type="text" name="' + field + '[' + idx + '][to]" placeholder="0-23"></div>' +
-      '<div><label class="mini">Weight</label><input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="Used when Weighted is on for this display (1–20)"></div>' +
+      '<div><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight</label>' +
+      '<input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '"></div>' +
     '</div></details>';
   deck.appendChild(card);
   bindRotationCard(card, deck);
