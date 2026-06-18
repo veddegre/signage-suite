@@ -791,12 +791,14 @@ function admin_stamp_owner(array $entry, ?array $prev = null): array
         return $entry;
     }
     $prevOwner = admin_entry_owner($prev);
-    if ($prev === null || $prevOwner === null) {
+    if ($prev === null) {
         $entry['owner'] = $uid;
     } elseif ($prevOwner === $uid) {
         $entry['owner'] = $uid;
-    } elseif (!array_key_exists('owner', $entry)) {
-        $entry['owner'] = $prevOwner;
+    } elseif ($prevOwner !== null) {
+        if (!array_key_exists('owner', $entry)) {
+            $entry['owner'] = $prevOwner;
+        }
     }
     return $entry;
 }

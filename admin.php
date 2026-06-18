@@ -935,6 +935,66 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         }
     }
 
+    if (($_POST['action'] ?? '') === 'slides_reclaim_selected' && admin_is_super()) {
+        require_once __DIR__ . '/slides_lib.php';
+        $files = array_values(array_filter(array_map(
+            static fn($f) => (string)$f,
+            (array)($_POST['reclaim_files'] ?? [])
+        )));
+        if ($files === []) {
+            $flash = 'Select one or more slides to reclaim for super admin.'; $flashOk = false;
+        } else {
+            $deck = cfg('slides.SLIDES', []);
+            if (!is_array($deck)) {
+                $deck = [];
+            }
+            $before = 0;
+            foreach ($deck as $slide) {
+                if (!is_array($slide)) {
+                    continue;
+                }
+                $file = slide_safe_filename((string)($slide['file'] ?? ''));
+                if ($file !== null && in_array($file, $files, true) && admin_entry_owner($slide) !== null) {
+                    $before++;
+                }
+            }
+            $newDeck = slides_reclaim_files_for_super($deck, $files);
+            if (!slides_persist_deck($newDeck)) {
+                $flash = 'Could not update slide ownership.'; $flashOk = false;
+            } else {
+                cfg_reload();
+                $flash = 'Reclaimed ' . $before . ' slide' . ($before === 1 ? '' : 's')
+                    . ' for super admin (former owners kept on Share with). Save is not required.';
+            }
+        }
+    }
+
+    if (($_POST['action'] ?? '') === 'slides_reclaim_from_user' && admin_is_super()) {
+        require_once __DIR__ . '/slides_lib.php';
+        $userId = trim((string)($_POST['reclaim_user_id'] ?? ''));
+        if ($userId === '') {
+            $flash = 'Choose a user to reclaim slides from.'; $flashOk = false;
+        } else {
+            $deck = cfg('slides.SLIDES', []);
+            if (!is_array($deck)) {
+                $deck = [];
+            }
+            $result = slides_reclaim_user_ownership_in_deck($deck, $userId);
+            if ((int)$result['reclaimed'] === 0) {
+                $flash = 'No slides were owned by ' . admin_username_for_id($userId) . '.';
+                $flashOk = false;
+            } elseif (!slides_persist_deck($result['deck'])) {
+                $flash = 'Could not update slide ownership.'; $flashOk = false;
+            } else {
+                cfg_reload();
+                $flash = 'Reclaimed ' . (int)$result['reclaimed'] . ' slide'
+                    . ((int)$result['reclaimed'] === 1 ? '' : 's')
+                    . ' from ' . admin_username_for_id($userId)
+                    . ' to super admin (they remain on Share with).';
+            }
+        }
+    }
+
     if (($_POST['action'] ?? '') === 'remove_slides_rotation') {
         $screen = rotation_normalize_screen_key((string)($_POST['remove_screen'] ?? $_POST['screen'] ?? ''));
         if ($screen === '' || !admin_can_screen($screen)) {
@@ -2903,6 +2963,14 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
         <input type="hidden" name="file" id="slideReplaceFile" value="">
         <input type="file" name="slide" id="slideReplaceUpload" accept="image/jpeg,image/png,image/webp">
       </form>
+      <?php if (admin_is_super()): ?>
+      <form id="slideReclaimForm" method="post" action="?board=slides" hidden>
+        <input type="hidden" name="action" id="slideReclaimAction" value="slides_reclaim_selected">
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="reclaim_user_id" id="slideReclaimUserId" value="">
+      </form>
+      <?php endif; ?>
       <?php endif; ?>
 
       <form method="post" id="boardform" action="?board=<?= h($board) ?>">
@@ -3896,7 +3964,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. Slides marked hidden on all displays are auto-fixed on Save and Deploy. Use <strong>All displays (deck)</strong> to reset targeting for every slide, then Save → Deploy.</div>
+          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. <strong>Owner</strong> (Access) is who owns the slide; <strong>Share with</strong> lets operators edit without owning. Slides marked hidden on all displays are auto-fixed on Save and Deploy.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -3957,6 +4025,17 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             <button type="button" class="secondary deck-bulk-remove" id="slideDeckShareRemove" style="padding:6px 12px;font-size:13px">Remove share</button>
             <button type="button" class="secondary" id="slideDeckShareDisplayOwner" style="padding:6px 12px;font-size:13px" title="Share with the operator assigned to the display chosen in Assign to">Display owner</button>
             <button type="button" class="secondary" id="slideDeckShareAllUsers" style="padding:6px 12px;font-size:13px" title="Add share for every user in the list">All users</button>
+            <span class="deck-selection-sep" aria-hidden="true">|</span>
+            <button type="button" class="secondary" id="slideDeckReclaimSelected" style="padding:6px 12px;font-size:13px" title="Super admin owns selected slides; current owner moves to Share with">Reclaim selected</button>
+            <label class="deck-selection-assign">Reclaim all from
+              <select id="slideDeckReclaimUser" class="deck-toolbar-select" aria-label="User to reclaim slide ownership from">
+                <option value="">Choose user…</option>
+                <?php foreach ($sharingUserOptions as $u): ?>
+                <option value="<?= h($u['id']) ?>"><?= h($u['username']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </label>
+            <button type="button" class="secondary" id="slideDeckReclaimFromUser" style="padding:6px 12px;font-size:13px">Reclaim all</button>
             <?php endif; ?>
           </div>
           <div class="deck-bulk-bar" id="slideDeckBulkBar" hidden>
@@ -4977,12 +5056,15 @@ function collectMediaDeckRow(card, includeSchedule) {
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
   const ownerSelect = card.querySelector('select[name*="[owner]"]');
   const owner = ownerChecked ? ownerChecked.value : (ownerSelect ? ownerSelect.value : '');
-  if (owner) row.owner = owner;
   const shared = [];
   card.querySelectorAll('[name*="[shared]"]:checked').forEach(function (cb) { shared.push(cb.value); });
-  if (card.querySelector('[name*="[_sharing_form]"]')) {
+  const sharingRoot = slideCardSharingRoot(card);
+  if (sharingRoot) {
     row._sharing_form = '1';
+    row.owner = owner || '';
     row.shared = shared;
+  } else if (owner) {
+    row.owner = owner;
   } else if (shared.length) {
     row.shared = shared;
   }
@@ -5540,6 +5622,69 @@ function slideDeckShareAllUsers() {
   slideDeckShareSelected('add', ids);
 }
 
+function slideDeckReclaimSubmit(action, fields) {
+  const form = document.getElementById('slideReclaimForm');
+  if (!form) return;
+  const actionEl = document.getElementById('slideReclaimAction');
+  if (actionEl) actionEl.value = action;
+  form.querySelectorAll('input[name="reclaim_files[]"]').forEach(function (el) { el.remove(); });
+  const userEl = document.getElementById('slideReclaimUserId');
+  if (userEl) userEl.value = '';
+  Object.keys(fields || {}).forEach(function (key) {
+    const val = fields[key];
+    if (key === 'reclaim_user_id' && userEl) {
+      userEl.value = String(val || '');
+      return;
+    }
+    if (key === 'reclaim_files' && Array.isArray(val)) {
+      val.forEach(function (file) {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'reclaim_files[]';
+        inp.value = String(file || '');
+        form.appendChild(inp);
+      });
+    }
+  });
+  form.submit();
+}
+
+function slideDeckReclaimSelected() {
+  const selected = slideDeckSelectedCards();
+  if (!selected.length) {
+    alert('Select one or more slides using the checkboxes on the left.');
+    return;
+  }
+  const files = selected.map(function (card) {
+    return card.dataset.slideFile || card.querySelector('[name*="[file]"]')?.value || '';
+  }).filter(Boolean);
+  if (!files.length) {
+    alert('Could not determine filenames for the selected slides.');
+    return;
+  }
+  const msg = 'Reclaim ' + files.length + ' selected slide' + (files.length === 1 ? '' : 's')
+    + ' for super admin?\n\nCurrent owners will be moved to Share with so they can still edit.';
+  if (!confirm(msg)) return;
+  slideDeckReclaimSubmit('slides_reclaim_selected', { reclaim_files: files });
+}
+
+function slideDeckReclaimFromUser() {
+  const userId = document.getElementById('slideDeckReclaimUser')?.value || '';
+  if (!userId) {
+    alert('Choose a user in Reclaim all from first.');
+    return;
+  }
+  const users = window.SHARING_USER_OPTIONS || [];
+  let username = userId;
+  users.forEach(function (u) {
+    if (u.id === userId) username = u.username || userId;
+  });
+  const msg = 'Reclaim every slide owned by ' + username
+    + ' for super admin?\n\nThey will be added to Share with on those slides.';
+  if (!confirm(msg)) return;
+  slideDeckReclaimSubmit('slides_reclaim_from_user', { reclaim_user_id: userId });
+}
+
 function bindSlideCardSharing(card) {
   const root = slideCardSharingRoot(card);
   if (!root || root.dataset.slideSharingBound) return;
@@ -5757,6 +5902,8 @@ function initSlideDeckToolbar() {
   });
   document.getElementById('slideDeckShareDisplayOwner')?.addEventListener('click', slideDeckShareDisplayOwner);
   document.getElementById('slideDeckShareAllUsers')?.addEventListener('click', slideDeckShareAllUsers);
+  document.getElementById('slideDeckReclaimSelected')?.addEventListener('click', slideDeckReclaimSelected);
+  document.getElementById('slideDeckReclaimFromUser')?.addEventListener('click', slideDeckReclaimFromUser);
   updateSlideDeckSelectionUI();
   applySlideDeckFilters();
 }

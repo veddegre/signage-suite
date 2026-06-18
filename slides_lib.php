@@ -355,6 +355,86 @@ function slide_delete_file(string $file): array
     return ['ok' => true, 'file' => $safe];
 }
 
+/** @param array<string,mixed> $entry */
+function slides_reclaim_entry_for_super(array $entry): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    $owner = admin_entry_owner($entry);
+    if ($owner === null) {
+        return $entry;
+    }
+    unset($entry['owner']);
+    $shared = admin_entry_shared_users($entry);
+    if (!in_array($owner, $shared, true)) {
+        $shared[] = $owner;
+        sort($shared);
+        $entry['shared'] = $shared;
+    }
+
+    return $entry;
+}
+
+/**
+ * Super admin: clear owner on selected slides; former owner moves to shared-with.
+ * @param list<array<string,mixed>> $deck
+ * @param list<string> $files slide filenames
+ * @return list<array<string,mixed>>
+ */
+function slides_reclaim_files_for_super(array $deck, array $files): array
+{
+    $want = [];
+    foreach ($files as $file) {
+        $safe = slide_safe_filename((string)$file);
+        if ($safe !== null) {
+            $want[$safe] = true;
+        }
+    }
+    if ($want === []) {
+        return $deck;
+    }
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file !== null && isset($want[$file])) {
+            $slide = slides_reclaim_entry_for_super($slide);
+        }
+        $out[] = $slide;
+    }
+
+    return $out;
+}
+
+/**
+ * Super admin: reclaim every slide currently owned by one user (keeps them on shared-with).
+ * @param list<array<string,mixed>> $deck
+ * @return array{deck:list<array<string,mixed>>,reclaimed:int}
+ */
+function slides_reclaim_user_ownership_in_deck(array $deck, string $userId): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    $userId = trim($userId);
+    if ($userId === '') {
+        return ['deck' => $deck, 'reclaimed' => 0];
+    }
+    $reclaimed = 0;
+    $out = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        if (admin_entry_owner($slide) === $userId) {
+            $slide = slides_reclaim_entry_for_super($slide);
+            $reclaimed++;
+        }
+        $out[] = $slide;
+    }
+
+    return ['deck' => $out, 'reclaimed' => $reclaimed];
+}
+
 /** Append a new slide entry to config deck (used by upload + creator). */
 function slide_append_to_deck(string $filename, array $extra = []): bool
 {
@@ -1895,7 +1975,51 @@ function slides_playlist_slide_count(string $screen): int
 }
 
 /**
- * Drop slide entries from rotation playlists when the deck no longer targets that display.
+ * Remove slide playlist entries that the deck no longer assigns to this display.
+ * @param list<array<string,mixed>> $deck
+ * @return int entries removed
+ */
+function slides_purge_orphan_slide_entries_for_screen(array $deck, string $screen): int
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $expected = slides_rotation_pages($deck, $screen);
+    if ($expected === []) {
+        $rm = rotation_remove_all_slides($screen);
+        return $rm['removed'] ? (int)$rm['removed_count'] : 0;
+    }
+    $expectedUrls = [];
+    foreach ($expected as $row) {
+        $expectedUrls[$row['url']] = true;
+    }
+    $pages = rotation_screen_own_pages($screen);
+    $filtered = [];
+    $removed = 0;
+    foreach ($pages as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if (rotation_is_legacy_slides_url($url)) {
+            $removed++;
+            continue;
+        }
+        if (rotation_is_slide_url($url) && !isset($expectedUrls[$url])) {
+            $removed++;
+            continue;
+        }
+        $filtered[] = $page;
+    }
+    if ($removed === 0) {
+        return 0;
+    }
+    rotation_pages_write($screen, $filtered);
+
+    return $removed;
+}
+
+/**
+ * Align rotation playlists with deck display targeting (full clear or partial orphan removal).
  * @param list<array<string,mixed>>|null $deck
  * @return array<string,int> screen key => removed entry count
  */
@@ -1907,24 +2031,17 @@ function slides_purge_stale_slide_playlists(?array $deck = null): array
         $deck = [];
     }
     $purged = [];
-    $pageWrites = [];
     foreach (array_keys(rotation_screens()) as $screen) {
         $screen = rotation_normalize_screen_key((string)$screen);
         if ($screen === '' || slides_playlist_slide_count($screen) === 0) {
             continue;
         }
-        if (slides_rotation_pages($deck, $screen) !== []) {
-            continue;
+        $removed = slides_purge_orphan_slide_entries_for_screen($deck, $screen);
+        if ($removed > 0) {
+            $purged[$screen] = $removed;
         }
-        $rm = rotation_remove_all_slides($screen);
-        if (!$rm['removed']) {
-            continue;
-        }
-        $pageWrites[$rm['screen']] = $rm['pages'];
-        $purged[$screen] = (int)$rm['removed_count'];
     }
-    if ($pageWrites !== []) {
-        rotation_pages_write_batch($pageWrites);
+    if ($purged !== []) {
         cfg_reload();
     }
 

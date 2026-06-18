@@ -2253,7 +2253,8 @@ function slides_deploy_status(?array $deck = null): array
             'wall' => $wallSlides > 0 ? ['position' => $wallPos, 'slide_count' => $wallSlides] : null,
             'deck_targeted' => $deckTargeted,
             'playlist_slides' => $playlistSlides,
-            'stale_on_playlist' => $playlistSlides > 0 && $deckTargeted === 0 && empty($sync['on_playlist']),
+            'stale_on_playlist' => $playlistSlides > (int)$sync['expected']
+                && ($playlistSlides > $deckTargeted || ($deckTargeted === 0 && $playlistSlides > 0)),
             'expected' => (int)$sync['expected'],
             'dwell_mismatch' => (int)$sync['dwell_mismatch'],
         ];
