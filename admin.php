@@ -2103,6 +2103,9 @@ function admin_field(array $f, $val, string $board): void
   .rotation-card-edit > summary::-webkit-details-marker { display:none; }
   .rotation-card-edit[open] > summary { color:var(--beacon); }
   .rotation-card-head .rotation-card-head-meta { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin-left:auto; }
+  .rotation-inline-dwell { display:inline-flex; align-items:center; gap:6px; margin:0; font-size:13px; color:var(--mist); }
+  .rotation-inline-dwell input { width:56px; min-width:56px; padding:4px 8px; font-size:13px; }
+  .rotation-inline-dwell .mini { margin:0; font-size:11px; }
   #slide-deck-panel, #slide-library-panel, #add-slides-panel, #slides-deploy-panel { scroll-margin-top:12px; }
   .status-section { margin-bottom:28px; padding-bottom:22px; border-bottom:1px solid var(--line); }
   .status-section:last-child { border-bottom:0; margin-bottom:0; padding-bottom:0; }
@@ -3164,7 +3167,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               </span>
             </summary>
             <div class="panel-body">
-          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Expand a card for URL, dwell, hour windows, and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
+          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Boards (weather, RSS, …): set <strong>Dwell</strong> on each card header. Deployed slides: edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy. Expand a card for hour windows and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
           <?php if (!empty($screenSettings['weighted'])): ?>
           <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) controls how often it is picked next. Higher = more airtime.</div>
           <?php endif; ?>
@@ -3187,8 +3190,17 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             $schedOpt = $screenSettings['schedule'];
           ?>
           <div class="rotation-display-options">
+            <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
             <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone. Unchecked weekdays stay dark all day.</div>
             <div class="field-grid">
+              <div class="field">
+                <label class="check" title="<?= h(rotation_weighted_mode_tooltip()) ?>"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][weighted]" value="1"
+                  <?= !empty($screenSettings['weighted']) ? 'checked' : '' ?>> Weighted rotation</label>
+              </div>
+              <div class="field">
+                <label class="check" title="Randomize play order once per full pass; every page appears once per cycle"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][shuffle]" value="1"
+                  <?= !empty($screenSettings['shuffle']) ? 'checked' : '' ?>> Shuffle playlist</label>
+              </div>
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
                   <?= $screenSettings['show_ticker'] ? 'checked' : '' ?>> Weather alert ticker</label>
@@ -3312,10 +3324,6 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                       <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>" data-rotation-url readonly>
                     </div>
                     <div>
-                      <label class="mini">Dwell (s)</label>
-                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="12" readonly>
-                    </div>
-                    <div>
                       <label class="mini">From hr</label>
                       <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
                     </div>
@@ -3326,6 +3334,14 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                 <div>
                   <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>">
+                </div>
+                <?php
+                $slideDwellShow = trim((string)($prow['dwell'] ?? ''));
+                $slideDwellLabel = $slideDwellShow !== '' ? (int)$slideDwellShow : (int)slides_default_dwell();
+                ?>
+                <div style="grid-column:1 / -1">
+                  <span class="help" style="margin:0"><strong><?= (int)$slideDwellLabel ?>s</strong> per slide — edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy.</span>
+                  <input type="hidden" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>">
                 </div>
               </div>
               <div class="rotation-card-meta">
@@ -3435,6 +3451,10 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                 </div>
                 <div class="rotation-card-head-meta">
                   <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip</label>
+                  <label class="rotation-inline-dwell" title="Seconds on screen before advancing">
+                    <span class="mini">Dwell</span>
+                    <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="60" aria-label="Dwell seconds">
+                  </label>
                   <?php
                   $pageProof = signage_presence_page_proof_label($screenPresence, $purl);
                   if ($pageProof !== ''): ?>
@@ -3449,12 +3469,15 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <?php
               $dwellShow = trim((string)($prow['dwell'] ?? ''));
               $weightShow = trim((string)($prow['weight'] ?? ''));
-              $editSummary = 'Dwell ' . ($dwellShow !== '' ? $dwellShow : '60') . 's';
+              $editSummary = 'Hours & weight';
               if ($weightShow !== '' && (int)$weightShow > 1) {
-                  $editSummary .= ' · weight ' . (int)$weightShow;
+                  $editSummary = 'Weight ' . (int)$weightShow;
               }
               if (!empty($prow['from']) || !empty($prow['to'])) {
-                  $editSummary .= ' · hrs';
+                  $editSummary .= ($editSummary !== 'Hours & weight' ? ' · ' : '') . 'hrs';
+              }
+              if ($editSummary === 'Hours & weight' && empty($prow['from']) && empty($prow['to']) && ($weightShow === '' || (int)$weightShow <= 1)) {
+                  $editSummary = 'More options';
               }
               ?>
               <details class="rotation-card-edit">
@@ -3464,10 +3487,6 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   <label class="mini">URL</label>
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
                          placeholder="index.php or rss.php?feed=ars" data-rotation-url required>
-                </div>
-                <div>
-                  <label class="mini">Dwell (s)</label>
-                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="60">
                 </div>
                 <div>
                   <label class="mini">From hr</label>
@@ -4113,8 +4132,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               </div>
               <div class="slide-card-quick">
                 <div>
-                  <label class="mini">Sec</label>
-                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][dwell]" value="<?= h((string)($row['dwell'] ?? '')) ?>" placeholder="12">
+                  <label class="mini" title="Seconds on wall when this slide is deployed to rotation">Sec</label>
+                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][dwell]" value="<?= h((string)($row['dwell'] ?? '')) ?>" placeholder="12" title="Seconds on wall when deployed — edit here, then Save and Deploy from Custom Slides">
                 </div>
               </div>
               <details class="slide-card-edit">
@@ -6894,14 +6913,17 @@ function addRotationPage(deckId, url, dwell, scroll) {
       '<code data-rotation-url-display>' + (url || 'board URL') + '</code></div>' +
       '<div class="rotation-card-head-meta">' +
         '<label class="check" style="margin:0"><input type="checkbox" name="' + field + '[' + idx + '][off]"> Skip</label>' +
+        '<label class="rotation-inline-dwell" title="Seconds on screen before advancing">' +
+          '<span class="mini">Dwell</span>' +
+          '<input type="text" name="' + field + '[' + idx + '][dwell]" value="' + dwell.replace(/"/g, '&quot;') + '" placeholder="60" aria-label="Dwell seconds">' +
+        '</label>' +
         '<button type="button" class="rowdel" onclick="removeRotationCard(this, \'' + deck.id + '\')" title="Remove">×</button>' +
       '</div>' +
     '</div>' +
-    '<details class="rotation-card-edit"><summary>Dwell ' + dwell.replace(/"/g, '') + 's</summary>' +
+    '<details class="rotation-card-edit"><summary>More options</summary>' +
     '<div class="rotation-card-grid">' +
       '<div style="grid-column:1 / -1"><label class="mini">URL</label>' +
       '<input type="text" name="' + field + '[' + idx + '][url]" value="' + url.replace(/"/g, '&quot;') + '" placeholder="slides.php" data-rotation-url required></div>' +
-      '<div><label class="mini">Dwell (s)</label><input type="text" name="' + field + '[' + idx + '][dwell]" value="' + dwell.replace(/"/g, '&quot;') + '" placeholder="60"></div>' +
       '<div><label class="mini">From hr</label><input type="text" name="' + field + '[' + idx + '][from]" placeholder="0-23"></div>' +
       '<div><label class="mini">To hr</label><input type="text" name="' + field + '[' + idx + '][to]" placeholder="0-23"></div>' +
       '<div><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight</label>' +

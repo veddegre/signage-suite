@@ -438,6 +438,14 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         if ($name !== '') {
             $entry['name'] = $name;
         }
+        if (isset($row['keyboard_nav'])) {
+            $entry['keyboard_nav'] = true;
+        } else {
+            unset($entry['keyboard_nav']);
+        }
+        $entry['show_clock'] = isset($row['show_clock']);
+    }
+    if ($includeIdentity || !empty($row['_screen_opts_form'])) {
         if (isset($row['shuffle'])) {
             $entry['shuffle'] = true;
         } else {
@@ -448,12 +456,6 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         } else {
             unset($entry['weighted']);
         }
-        if (isset($row['keyboard_nav'])) {
-            $entry['keyboard_nav'] = true;
-        } else {
-            unset($entry['keyboard_nav']);
-        }
-        $entry['show_clock'] = isset($row['show_clock']);
     }
 
     $entry['show_ticker'] = isset($row['show_ticker']);
@@ -496,7 +498,7 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         unset($entry['cec']);
     }
 
-    unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on']);
+    unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on'], $entry['_screen_opts_form']);
 
     return $entry;
 }
