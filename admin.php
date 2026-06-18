@@ -5132,29 +5132,10 @@ function collectMediaDeckRow(card, includeSchedule) {
   if (screenPicker) {
     row._screens_form = '1';
     const allKeys = (window.SLIDE_SCREEN_OPTIONS || []).map(function (o) { return o.key; }).filter(Boolean);
-    let meta = card.dataset.slideScreens;
-    if (screenPicker.dataset.locked === '1') {
-      if (meta === '') row.screens = [];
-      else if (meta && meta !== 'all') row.screens = meta.split(',').filter(Boolean);
-      else {
-        const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
-        if (hiddenScreen && hiddenScreen.value) row.screens = [hiddenScreen.value];
-        else row.screens = allKeys.length ? allKeys : [];
-      }
-    } else {
-      if (meta === undefined || meta === null || meta === '') {
-        const boxes = screenPicker.querySelectorAll('.screen-picker-list input[type=checkbox]');
-        const checked = [];
-        boxes.forEach(function (cb) { if (cb.checked) checked.push(cb.value); });
-        if (checked.length === 0) row.screens = [];
-        else if (allKeys.length && checked.length === allKeys.length) row.screens = allKeys;
-        else row.screens = checked;
-      } else if (meta === 'all') {
-        row.screens = allKeys.length ? allKeys : [];
-      } else {
-        row.screens = meta.split(',').filter(Boolean);
-      }
-    }
+    const meta = slideCardScreenMeta(card);
+    if (meta === '') row.screens = [];
+    else if (meta === 'all') row.screens = allKeys.length ? allKeys : [];
+    else row.screens = meta.split(',').filter(Boolean);
   }
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
   const ownerSelect = card.querySelector('select[name*="[owner]"]');
@@ -5537,18 +5518,13 @@ function syncSlideCardScreenMeta(card, skipFilter) {
       card.dataset.slideScreens = window.ADMIN_OPERATOR_SCREEN || 'all';
     }
   } else {
-    const boxes = picker.querySelectorAll('.screen-picker-list input[type=checkbox]');
-    const total = boxes.length;
-    const checked = [];
-    boxes.forEach(function (cb) { if (cb.checked) checked.push(cb.value); });
-    if (checked.length === total) card.dataset.slideScreens = 'all';
-    else if (checked.length === 0) card.dataset.slideScreens = '';
-    else card.dataset.slideScreens = checked.join(',');
+    const meta = slideCardScreenMeta(card);
+    card.dataset.slideScreens = meta;
   }
   const pill = card.querySelector('[data-slide-screen-pill]');
   if (pill) {
     if (picker.dataset.locked === '1') {
-      const scr = card.dataset.slideScreens ?? 'all';
+      const scr = slideCardScreenMeta(card);
       pill.textContent = scr === '' ? 'Hidden on all displays' : 'Your display';
     } else {
       pill.textContent = screenPickerSummaryText(picker);
@@ -5578,8 +5554,35 @@ function slideDeckScreenFilterLabel(value) {
   return opt ? opt.textContent : value;
 }
 
+function slideCardScreenMeta(card) {
+  const picker = card.querySelector('[data-screen-picker]');
+  if (picker) {
+    if (picker.dataset.locked === '1') {
+      if (card.hasAttribute('data-slide-screens')) {
+        const v = card.getAttribute('data-slide-screens');
+        if (v === '') return '';
+        if (v && v !== 'all') return v;
+      }
+      return window.ADMIN_OPERATOR_SCREEN || 'all';
+    }
+    const boxes = picker.querySelectorAll('.screen-picker-list input[type=checkbox]');
+    const total = boxes.length;
+    if (total > 0) {
+      const checked = [];
+      boxes.forEach(function (cb) { if (cb.checked) checked.push(cb.value); });
+      if (checked.length === 0) return '';
+      if (checked.length === total) return 'all';
+      return checked.join(',');
+    }
+  }
+  if (!card.hasAttribute('data-slide-screens')) return 'all';
+  const attr = card.getAttribute('data-slide-screens');
+  if (attr === '') return '';
+  return attr;
+}
+
 function slideCardOnScreen(card, screenKey) {
-  const scr = card.dataset.slideScreens || 'all';
+  const scr = slideCardScreenMeta(card);
   if (scr === 'all') return true;
   if (scr === '') return false;
   return (',' + scr + ',').indexOf(',' + screenKey + ',') >= 0;
@@ -5607,7 +5610,7 @@ function applySlideDeckFilters() {
     if (q && (card.dataset.slideSearch || '').indexOf(q) === -1) ok = false;
     if (ok && screen) {
       if (screen === '__disabled__') ok = card.classList.contains('is-off');
-      else if (screen === '__none__') ok = card.dataset.slideScreens === '';
+      else if (screen === '__none__') ok = slideCardScreenMeta(card) === '';
       else {
         const onScreen = slideCardOnScreen(card, screen);
         ok = exclude ? !onScreen : onScreen;
