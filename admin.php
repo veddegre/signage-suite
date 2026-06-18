@@ -453,7 +453,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $errors[] = 'Slide deck data invalid — not saved.';
             } else {
                 $outV = slides_parse_post_rows($decoded, $existingSlides);
-                $mergedSlides = slides_repair_deck(admin_merge_owned_list($existingSlides, $outV));
+                $mergedSlides = slides_repair_deck(admin_merge_owned_list($existingSlides, $outV), false);
                 if ($mergedSlides === []) {
                     unset($conf['slides.SLIDES']);
                 } else {
@@ -467,7 +467,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     . '). Reload the page and save again.';
             } else {
                 $outV = slides_parse_post_rows($postRows, $existingSlides);
-                $mergedSlides = slides_repair_deck(admin_merge_owned_list($existingSlides, $outV));
+                $mergedSlides = slides_repair_deck(admin_merge_owned_list($existingSlides, $outV), false);
                 if ($mergedSlides === []) {
                     unset($conf['slides.SLIDES']);
                 } else {
@@ -1018,6 +1018,47 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
                 $flash = $parts !== []
                     ? 'Custom slides ' . implode('; ', $parts) . '.'
                     : 'Custom slides removed from ' . $name . '.';
+                $flash .= ' Wall displays refresh within 30 seconds.';
+            }
+        }
+    }
+
+    if (($_POST['action'] ?? '') === 'remove_selected_slides_rotation') {
+        $screen = rotation_normalize_screen_key((string)($_POST['remove_screen'] ?? ''));
+        $filesRaw = trim((string)($_POST['remove_files'] ?? ''));
+        $files = [];
+        if ($filesRaw !== '') {
+            $decoded = json_decode($filesRaw, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $file) {
+                    $files[] = (string)$file;
+                }
+            }
+        }
+        if ($screen === '' || !admin_can_screen($screen)) {
+            $flash = 'Invalid display.'; $flashOk = false;
+        } elseif ($files === []) {
+            $flash = 'Select one or more slides to remove from that display.'; $flashOk = false;
+        } else {
+            require_once __DIR__ . '/slides_lib.php';
+            $result = slides_remove_files_from_display($screen, $files);
+            if (empty($result['ok'])) {
+                $flash = (string)($result['error'] ?? 'Could not remove those slides from that display.');
+                $flashOk = false;
+            } else {
+                $name = rotation_screen_display_name($screen, rotation_screens());
+                $n = (int)$result['slide_count'];
+                $parts = [];
+                if ($n > 0) {
+                    $parts[] = 'updated ' . $n . ' slide' . ($n === 1 ? '' : 's') . ' so they no longer target ' . $name;
+                }
+                if ((int)$result['removed_count'] > 0) {
+                    $parts[] = 'removed ' . (int)$result['removed_count'] . ' rotation entr'
+                        . ((int)$result['removed_count'] === 1 ? 'y' : 'ies') . ' on ' . $name;
+                }
+                $flash = $parts !== []
+                    ? ucfirst(implode('; ', $parts)) . '.'
+                    : 'Slides removed from ' . $name . '.';
                 $flash .= ' Wall displays refresh within 30 seconds.';
             }
         }
@@ -4523,6 +4564,16 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php endif; ?>
         </div>
       </form>
+      <?php if ($board === 'slides'): ?>
+      <form id="slidesSelectedRemoveForm" method="post" action="?board=slides&amp;tab=deck" hidden>
+        <input type="hidden" name="board" value="slides">
+        <input type="hidden" name="tab" value="deck">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="remove_selected_slides_rotation">
+        <input type="hidden" name="remove_screen" id="slidesSelectedRemoveScreen" value="">
+        <input type="hidden" name="remove_files" id="slidesSelectedRemoveFiles" value="">
+      </form>
+      <?php endif; ?>
       <?php if ($board === 'rotator'): ?>
       <div class="admin-tab-panel<?= $rotatorTab === 'deploy' ? ' active' : '' ?>" data-tab-panel="deploy" id="photos-deploy-panel">
             <p class="help" style="margin-bottom:12px">Push the current deck to rotation on selected displays. Sync status is on <a href="?board=status">Status</a>. You can also check displays in the Save bar on the Deck tab and click <strong>Save</strong>.</p>
@@ -5080,18 +5131,30 @@ function collectMediaDeckRow(card, includeSchedule) {
   const screenPicker = card.querySelector('[data-screen-picker]');
   if (screenPicker) {
     row._screens_form = '1';
-    const meta = card.dataset.slideScreens;
+    const allKeys = (window.SLIDE_SCREEN_OPTIONS || []).map(function (o) { return o.key; }).filter(Boolean);
+    let meta = card.dataset.slideScreens;
     if (screenPicker.dataset.locked === '1') {
       if (meta === '') row.screens = [];
       else if (meta && meta !== 'all') row.screens = meta.split(',').filter(Boolean);
       else {
         const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
         if (hiddenScreen && hiddenScreen.value) row.screens = [hiddenScreen.value];
-        else row._screens_all = '1';
+        else row.screens = allKeys.length ? allKeys : [];
       }
-    } else if (meta === '') row.screens = [];
-    else if (meta !== 'all') row.screens = meta.split(',').filter(Boolean);
-    else row._screens_all = '1';
+    } else {
+      if (meta === undefined || meta === null || meta === '') {
+        const boxes = screenPicker.querySelectorAll('.screen-picker-list input[type=checkbox]');
+        const checked = [];
+        boxes.forEach(function (cb) { if (cb.checked) checked.push(cb.value); });
+        if (checked.length === 0) row.screens = [];
+        else if (allKeys.length && checked.length === allKeys.length) row.screens = allKeys;
+        else row.screens = checked;
+      } else if (meta === 'all') {
+        row.screens = allKeys.length ? allKeys : [];
+      } else {
+        row.screens = meta.split(',').filter(Boolean);
+      }
+    }
   }
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
   const ownerSelect = card.querySelector('select[name*="[owner]"]');
@@ -5799,8 +5862,10 @@ function slideDeckBulkRemove() {
   }
   const label = slideDeckScreenFilterLabel(screen);
   const msg = 'Remove ' + label + ' from ' + affected.length + ' slide' + (affected.length === 1 ? '' : 's') + '?'
-    + '\n\nSlides set to all displays will be restricted to the remaining displays. Remember to Save when done.';
+    + '\n\nSlides set to all displays will be restricted to the remaining displays. This updates the deck and rotation immediately.';
   if (!confirm(msg)) return;
+  const files = slideDeckCardFiles(affected);
+  if (slideDeckPostSelectedRemove(screen, files)) return;
   affected.forEach(function (card) {
     setSlideCardScreenTarget(card, 'remove', screen);
   });
@@ -5852,6 +5917,21 @@ function slideDeckClearSelection() {
   updateSlideDeckSelectionUI();
 }
 
+function slideDeckCardFiles(cards) {
+  return cards.map(function (card) {
+    return card.dataset.slideFile || card.querySelector('input[name*="[file]"]')?.value || '';
+  }).filter(Boolean);
+}
+
+function slideDeckPostSelectedRemove(screen, files) {
+  const form = document.getElementById('slidesSelectedRemoveForm');
+  if (!form || !screen || !files.length) return false;
+  document.getElementById('slidesSelectedRemoveScreen').value = screen;
+  document.getElementById('slidesSelectedRemoveFiles').value = JSON.stringify(files);
+  form.submit();
+  return true;
+}
+
 function slideDeckAssignSelected(mode) {
   const screen = document.getElementById('slideDeckAssignScreen')?.value || '';
   if (mode !== 'all' && !screen) {
@@ -5866,8 +5946,10 @@ function slideDeckAssignSelected(mode) {
   if (mode === 'remove') {
     const label = slideDeckAssignScreenLabel(screen);
     const msg = 'Remove ' + label + ' from ' + selected.length + ' selected slide' + (selected.length === 1 ? '' : 's') + '?'
-      + '\n\nRemember to Save when done.';
+      + '\n\nThis updates the deck and rotation immediately.';
     if (!confirm(msg)) return;
+    const files = slideDeckCardFiles(selected);
+    if (slideDeckPostSelectedRemove(screen, files)) return;
   }
   selected.forEach(function (card) {
     setSlideCardScreenTarget(card, mode, screen);

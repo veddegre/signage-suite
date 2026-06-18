@@ -511,8 +511,8 @@ function slides_parse_post_rows(array $rows, array $existingSlides = []): array
             } elseif ($screens !== $allScreenKeys) {
                 $obj['screens'] = $screens;
             }
-        } elseif (!empty($row['_screens_form']) || !empty($row['_screens_all'])) {
-            // User chose displays in admin — omitted screens / _screens_all means all displays.
+        } elseif (!empty($row['_screens_form']) && !isset($row['screens'])) {
+            // Legacy form posts without per-row screens (should not happen with SLIDES_JSON).
         }
         if (admin_operator_screen_locked()) {
             $opScreen = (string)admin_operator_screen_key();
@@ -1799,11 +1799,14 @@ function slides_deck_targets_no_configured_screens(array $deck): bool
  * @param list<array<string,mixed>> $deck
  * @return list<array<string,mixed>>
  */
-function slides_repair_deck(array $deck): array
+function slides_repair_deck(array $deck, bool $allowUntargetedRecovery = false): array
 {
     $deck = slides_repair_deck_stale_screen_keys($deck);
+    if ($allowUntargetedRecovery) {
+        return slides_repair_deck_untargeted($deck);
+    }
 
-    return slides_repair_deck_untargeted($deck);
+    return $deck;
 }
 
 /**
@@ -1825,7 +1828,7 @@ function slides_deploy_expected_pages(?array $deck, ?string $screen, ?array $sco
         return [];
     }
 
-    return slides_rotation_pages_for_scope($deck, null, $scopeFiles);
+    return slides_rotation_pages_for_scope($deck, null, $scopeFiles, true);
 }
 
 /**
@@ -1959,13 +1962,184 @@ function slides_remove_from_display(string $screen): array
     ];
 }
 
+/**
+ * Remove selected slides from one display (deck targeting + editable playlist rows).
+ * @param list<string> $files slide filenames from the deck
+ * @return array{ok:bool,screen:string,slide_count:int,removed_count:int,deck_updated:bool,error?:string}
+ */
+function slides_remove_files_from_display(string $screen, array $files): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    require_once __DIR__ . '/users_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $want = [];
+    foreach ($files as $file) {
+        $safe = slide_safe_filename((string)$file);
+        if ($safe !== null) {
+            $want[$safe] = true;
+        }
+    }
+    $wantFiles = array_keys($want);
+    if ($screen === '' || $wantFiles === []) {
+        return [
+            'ok' => false,
+            'screen' => $screen,
+            'slide_count' => 0,
+            'removed_count' => 0,
+            'deck_updated' => false,
+            'error' => 'Invalid display or slide list.',
+        ];
+    }
+
+    $deck = cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $allKeys = array_keys(rotation_screens());
+    $deckUpdated = false;
+    $slideCount = 0;
+    $newDeck = [];
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        if ($file !== null && isset($want[$file])) {
+            if (!admin_is_super() && !admin_entry_visible($slide)) {
+                $newDeck[] = $slide;
+                continue;
+            }
+            if (!slide_on_screen($slide, $screen)) {
+                $newDeck[] = $slide;
+                continue;
+            }
+            $slide = slides_untarget_screen_in_slide($slide, $screen, $allKeys);
+            $deckUpdated = true;
+            $slideCount++;
+        }
+        $newDeck[] = $slide;
+    }
+
+    $removedUrls = 0;
+    $pages = slides_editable_playlist_pages($screen);
+    $filtered = $pages;
+    if ($pages !== []) {
+        $filtered = [];
+        foreach ($pages as $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+            $url = trim((string)($page['url'] ?? ''));
+            if (rotation_is_slide_url($url)) {
+                $file = slide_rotation_parse_file($url);
+                if ($file !== null && isset($want[$file])) {
+                    $removedUrls++;
+                    continue;
+                }
+            }
+            $filtered[] = $page;
+        }
+    }
+
+    if (!$deckUpdated && $removedUrls === 0) {
+        return [
+            'ok' => false,
+            'screen' => $screen,
+            'slide_count' => 0,
+            'removed_count' => 0,
+            'deck_updated' => false,
+            'error' => 'Those slides were not assigned to that display.',
+        ];
+    }
+
+    if ($deckUpdated) {
+        if (!slides_persist_deck($newDeck)) {
+            return [
+                'ok' => false,
+                'screen' => $screen,
+                'slide_count' => $slideCount,
+                'removed_count' => $removedUrls,
+                'deck_updated' => false,
+                'error' => 'Could not update slide deck.',
+            ];
+        }
+    }
+    if ($removedUrls > 0 && !slides_write_editable_playlist_pages($screen, $filtered)) {
+        return [
+            'ok' => false,
+            'screen' => $screen,
+            'slide_count' => $slideCount,
+            'removed_count' => 0,
+            'deck_updated' => $deckUpdated,
+            'error' => 'Deck updated but could not update rotation playlist.',
+        ];
+    }
+    cfg_reload();
+    slides_purge_stale_slide_playlists($newDeck);
+
+    return [
+        'ok' => true,
+        'screen' => $screen,
+        'slide_count' => $slideCount,
+        'removed_count' => $removedUrls,
+        'deck_updated' => $deckUpdated,
+    ];
+}
+
 /** Slide entries saved on one display's own playlist (not inherited from main). */
 function slides_playlist_slide_count(string $screen): int
 {
     require_once __DIR__ . '/rotation_lib.php';
     $screen = rotation_normalize_screen_key($screen);
 
-    return rotation_playlist_slide_count(rotation_screen_own_pages($screen));
+    return rotation_playlist_slide_count(slides_editable_playlist_pages($screen));
+}
+
+/**
+ * Rotation playlist rows this install can edit for one display (own playlist, or legacy main).
+ * @return list<array<string,mixed>>
+ */
+function slides_editable_playlist_pages(string $screen): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $own = rotation_screen_own_pages($screen);
+    if ($own !== []) {
+        return $own;
+    }
+    if ($screen === 'main') {
+        $legacy = cfg('rotation.PAGES', []);
+        if (is_array($legacy) && $legacy !== []) {
+            return $legacy;
+        }
+    }
+
+    return [];
+}
+
+/** @param list<array<string,mixed>> $pages */
+function slides_write_editable_playlist_pages(string $screen, array $pages): bool
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $own = rotation_screen_own_pages($screen);
+    if ($own !== [] || $screen !== 'main') {
+        return rotation_pages_write($screen, $pages);
+    }
+    $legacy = cfg('rotation.PAGES', []);
+    if (is_array($legacy) && $legacy !== []) {
+        return cfg_update(function (array $conf) use ($pages): array {
+            if ($pages === []) {
+                unset($conf['rotation.PAGES']);
+            } else {
+                $conf['rotation.PAGES'] = $pages;
+            }
+
+            return $conf;
+        });
+    }
+
+    return rotation_pages_write($screen, $pages);
 }
 
 /**
@@ -1978,15 +2152,23 @@ function slides_purge_orphan_slide_entries_for_screen(array $deck, string $scree
     require_once __DIR__ . '/rotation_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     $expected = slides_rotation_pages($deck, $screen);
+    $pages = slides_editable_playlist_pages($screen);
+    if ($pages === []) {
+        return 0;
+    }
     if ($expected === []) {
-        $rm = rotation_remove_all_slides($screen);
-        return $rm['removed'] ? (int)$rm['removed_count'] : 0;
+        $stripped = rotation_strip_slide_pages($pages);
+        if (count($stripped) === count($pages)) {
+            return 0;
+        }
+        slides_write_editable_playlist_pages($screen, $stripped);
+
+        return count($pages) - count($stripped);
     }
     $expectedUrls = [];
     foreach ($expected as $row) {
         $expectedUrls[$row['url']] = true;
     }
-    $pages = rotation_screen_own_pages($screen);
     $filtered = [];
     $removed = 0;
     foreach ($pages as $page) {
@@ -2007,7 +2189,7 @@ function slides_purge_orphan_slide_entries_for_screen(array $deck, string $scree
     if ($removed === 0) {
         return 0;
     }
-    rotation_pages_write($screen, $filtered);
+    slides_write_editable_playlist_pages($screen, $filtered);
 
     return $removed;
 }
@@ -2113,9 +2295,11 @@ function slides_deploy_scope_files(?array $deck = null): ?array
  * @param list<string>|null $scopeFiles from slides_deploy_scope_files(); null = all slides in deck
  * @return list<array{url:string,dwell:int,file:string}>
  */
-function slides_rotation_pages_for_scope(?array $deck, ?string $screen, ?array $scopeFiles): array
+function slides_rotation_pages_for_scope(?array $deck, ?string $screen, ?array $scopeFiles, bool $allowRecovery = false): array
 {
-    $pages = slides_effective_rotation_pages($deck, $screen);
+    $pages = $allowRecovery
+        ? slides_effective_rotation_pages($deck, $screen)
+        : slides_rotation_pages($deck, $screen);
     if ($scopeFiles === null) {
         return $pages;
     }

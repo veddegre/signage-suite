@@ -836,6 +836,9 @@ function rotation_screen_active_pages(string $screen = 'main'): array
     $activeSlides = slides_active_entries($slideDeck);
     $activeFiles = [];
     foreach ($activeSlides as $slide) {
+        if (!slide_on_screen($slide, $screen)) {
+            continue;
+        }
         $activeFiles[(string)$slide['file']] = true;
     }
 
@@ -2091,7 +2094,7 @@ function rotator_deploy_flash_message(array $result): string
 }
 
 /** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,screen:string} */
-function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?array $scopeFiles = null): array
+function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?array $scopeFiles = null, bool $allowRecovery = false): array
 {
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
@@ -2102,7 +2105,7 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?arr
     }
     $manageAllSlides = ($scopeFiles === null);
     $scopeSet = $manageAllSlides ? null : array_flip($scopeFiles);
-    $expected = slides_rotation_pages_for_scope($deck, $screen, $scopeFiles);
+    $expected = slides_rotation_pages_for_scope($deck, $screen, $scopeFiles, $allowRecovery);
     $expectedByUrl = [];
     foreach ($expected as $row) {
         $expectedByUrl[$row['url']] = (int)$row['dwell'];
@@ -2211,7 +2214,7 @@ function slides_rotation_sync_info(string $screen = 'main', ?array $deck = null)
 {
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    $expected = slides_effective_rotation_pages($deck, $screen);
+    $expected = slides_rotation_pages($deck, $screen);
     $own = rotation_screen_own_pages($screen);
     $byUrl = [];
     foreach ($own as $i => $page) {
@@ -2388,12 +2391,13 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
         $fullDeck = [];
     }
     $scopeFiles = slides_deploy_scope_files($fullDeck);
-    $repairedDeck = slides_repair_deck($fullDeck);
+    $recoveryDeploy = slides_deck_targets_no_configured_screens($fullDeck)
+        || slides_deck_untargeted_misconfig($fullDeck);
+    $repairedDeck = slides_repair_deck($fullDeck, $recoveryDeploy);
     $deckRepaired = $repairedDeck !== $fullDeck;
     if ($deckRepaired) {
         $fullDeck = $repairedDeck;
     }
-    $recoveryDeploy = slides_deck_targets_no_configured_screens($fullDeck);
     $onDisk = count(slides_rotation_pages($fullDeck, null));
     $added = 0;
     $updated = 0;
@@ -2434,7 +2438,7 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $syncScope = ($recoveryDeploy && $scopeFiles === null) ? null : $scopeFiles;
-        $sync = rotation_sync_slides($screen, $fullDeck, $syncScope);
+        $sync = rotation_sync_slides($screen, $fullDeck, $syncScope, $recoveryDeploy);
         $deployed[] = $screen;
         $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
