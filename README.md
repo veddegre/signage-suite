@@ -160,7 +160,7 @@ Live beach view full-screen on the wall — embeds the EarthCam stream used by [
 ## photo.php — Photo Conditions
 - **Data:** PHP sun math (golden/blue hour), synodic moon-phase calc with drawn SVG moon, OpenWeatherMap cloud cover at sunset (tonight + next 3 evenings), NOAA SWPC Kp index + 24h forecast.
 - **Setup:** set `OWM_API_KEY` (same key as the weather board). SWPC needs no key.
-- Verdict heuristic: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY. Aurora callout appears at Kp ≥ 6.
+- Verdict heuristic: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY. Aurora panel (Kp index) highlights when Kp ≥ 6.
 
 ## air.php — Air & Pollen
 US air quality and pollen on one board — AQI, PM2.5/PM10, ozone, NO₂, pollen bars, and a three-day outlook.

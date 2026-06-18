@@ -139,7 +139,7 @@ $padY = $compact ? 24 : 28;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $compact ? 20 : 24 ?>px;
            grid-template-columns: 1.2fr 1fr; grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowFoot ?>px auto;
-           grid-template-areas: "head head" "verdict moon" "windows windows" "meta meta"; }
+           grid-template-areas: "head head" "verdict sky" "windows windows" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
   .head h1 span { color:var(--beacon); }
@@ -159,20 +159,29 @@ $padY = $compact ? 24 : 28;
   .night { flex:1; min-width:0; }
   .night .d { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px; letter-spacing:1px; text-transform:uppercase; }
   .night .c { font-size:<?= $compact ? 21 : 24 ?>px; color:var(--mist); text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .aurora { margin-top:<?= $compact ? 12 : 18 ?>px; font-size:<?= $compact ? 24 : 28 ?>px; font-weight:600; color:#7ee787; }
 
-  .moon { grid-area:moon; background:var(--harbor); border:1px solid var(--hairline);
+  .sky { grid-area:sky; display:flex; flex-direction:column; gap:<?= $compact ? 18 : 24 ?>px; min-height:0; }
+  .moon { flex:1; background:var(--harbor); border:1px solid var(--hairline);
           border-radius:14px; padding:<?= $compact ? '28px 32px' : '36px 40px' ?>; display:flex;
-          flex-direction:column; align-items:center; min-height:0; overflow:hidden; }
+          flex-direction:column; align-items:center; justify-content:center; min-height:0; overflow:hidden; }
   .moon .k { align-self:flex-start; font-size:22px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
   .moon svg { width:<?= $compact ? 240 : 280 ?>px; height:<?= $compact ? 240 : 280 ?>px; margin:<?= $compact ? '12px 0 6px' : '18px 0 8px' ?>; }
   .moon .name { font-family:'Big Shoulders Display'; font-weight:700; font-size:54px; }
   .moon .pct { font-size:28px; color:var(--mist); margin-top:4px; }
-  .kp { margin-top:auto; align-self:stretch; display:flex; justify-content:space-between;
-        border-top:1px solid var(--hairline); padding-top:22px; }
-  .kp div { text-align:center; }
-  .kp .kk { font-size:20px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
-  .kp .kv { font-family:'Big Shoulders Display'; font-weight:700; font-size:58px; }
+
+  .aurora-panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+                  padding:<?= $compact ? '22px 28px' : '28px 32px' ?>; }
+  .aurora-panel.watch { border-color:#3d7a52; }
+  .aurora-panel .k { font-size:22px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .aurora-panel .note { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); margin-top:8px; }
+  .aurora-panel.watch .note { color:#7ee787; font-weight:600; }
+  .aurora-stats { margin-top:<?= $compact ? 16 : 20 ?>px; display:flex; justify-content:space-between; gap:16px;
+                  border-top:1px solid var(--hairline); padding-top:<?= $compact ? 16 : 20 ?>px; }
+  .aurora-stats div { flex:1; text-align:center; min-width:0; }
+  .aurora-stats .kk { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
+  .aurora-stats .kv { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 48 : 54 ?>px;
+                       margin-top:4px; font-variant-numeric:tabular-nums; }
+  .aurora-stats .kv.hot { color:#7ee787; }
 
   .windows { grid-area:windows; display:grid; grid-template-columns:repeat(4,1fr); gap:24px; }
   .win { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px; padding:<?= $compact ? '20px 24px' : '26px 30px' ?>; }
@@ -203,9 +212,6 @@ $padY = $compact ? 24 : 28;
         <div class="track"><div class="fill" style="width:<?= $evenings[0]['clouds'] ?>%"></div></div>
       </div>
     <?php endif; ?>
-    <?php if ($aurora): ?>
-      <div class="aurora">&#9650; Aurora watch — Kp <?= number_format(max($kpMax ?? 0, $kpNow ?? 0), 1) ?> forecast. North horizon after dark.</div>
-    <?php endif; ?>
     <div class="nights">
       <?php foreach (array_slice($evenings, 1) as $e): ?>
         <div class="night">
@@ -218,6 +224,7 @@ $padY = $compact ? 24 : 28;
     </div>
   </section>
 
+  <div class="sky">
   <section class="moon">
     <div class="k">Moon</div>
     <svg viewBox="0 0 100 100">
@@ -237,12 +244,29 @@ $padY = $compact ? 24 : 28;
     </svg>
     <div class="name"><?= h($phaseName) ?></div>
     <div class="pct"><?= (int)round($illum * 100) ?>% illuminated</div>
-    <div class="kp">
-      <div><div class="kk">Kp now</div><div class="kv"><?= $kpNow !== null ? number_format($kpNow,1) : '—' ?></div></div>
-      <div><div class="kk">Kp next 24h</div><div class="kv" style="<?= $aurora ? 'color:#7ee787' : '' ?>"><?= $kpMax !== null ? number_format($kpMax,1) : '—' ?></div></div>
-      <div><div class="kk">MI visible at</div><div class="kv">Kp 6+</div></div>
+  </section>
+
+  <section class="aurora-panel<?= $aurora ? ' watch' : '' ?>">
+    <div class="k">Aurora</div>
+    <div class="note"><?= $aurora
+        ? 'Watch — Kp ' . number_format(max($kpMax ?? 0, $kpNow ?? 0), 1) . '. Northern lights possible on the north horizon after dark.'
+        : 'Geomagnetic activity (planetary K-index). Michigan may see aurora at Kp 6+.' ?></div>
+    <div class="aurora-stats">
+      <div>
+        <div class="kk">Kp now</div>
+        <div class="kv<?= $aurora && $kpNow !== null && $kpNow >= 6 ? ' hot' : '' ?>"><?= $kpNow !== null ? number_format($kpNow, 1) : '—' ?></div>
+      </div>
+      <div>
+        <div class="kk">Kp next 24h</div>
+        <div class="kv<?= $aurora ? ' hot' : '' ?>"><?= $kpMax !== null ? number_format($kpMax, 1) : '—' ?></div>
+      </div>
+      <div>
+        <div class="kk">MI threshold</div>
+        <div class="kv">6+</div>
+      </div>
     </div>
   </section>
+  </div>
 
   <section class="windows">
     <div class="win"><div class="k">Blue Hour AM</div><div class="v"><?= tspan($blueAm) ?></div>
