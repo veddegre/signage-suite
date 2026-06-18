@@ -109,3 +109,12 @@ if ($counts[0] / $trials < 0.75) {
     exit(1);
 }
 echo "Weighted checks: OK\n";
+
+// ── Deploy sync must preserve weight/from/to/off ──────────────────────────────
+$prev = ['url' => 'slides.php?slide=a.png', 'dwell' => 30, 'weight' => 20, 'from' => 8, 'to' => 18, 'off' => true];
+$merged = rotation_merge_page_meta(['url' => 'slides.php?slide=a.png', 'dwell' => 45], $prev);
+if (($merged['weight'] ?? 0) !== 20 || ($merged['from'] ?? null) !== 8 || ($merged['to'] ?? null) !== 18 || empty($merged['off'])) {
+    fwrite(STDERR, "FAIL: rotation_merge_page_meta dropped playlist metadata\n");
+    exit(1);
+}
+echo "Sync metadata preservation: OK\n";

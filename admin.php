@@ -3419,6 +3419,18 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                       <label class="mini">Dwell (s)</label>
                       <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][dwell]" value="<?= h((string)($prow['dwell'] ?? '')) ?>" placeholder="18" readonly>
                     </div>
+                    <div>
+                      <label class="mini">From hr</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
+                    </div>
+                    <div>
+                      <label class="mini">To hr</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                    </div>
+                    <div>
+                      <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>">
+                    </div>
                   </div>
                   <div class="rotation-card-meta">
                     <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip this photo</label>

@@ -1003,6 +1003,33 @@ function rotation_page_dwell(array $page): int
     return $dwell > 0 ? $dwell : 60;
 }
 
+/**
+ * Carry playlist metadata when slide/photo deploy sync rebuilds rows.
+ * @param array<string,mixed> $page
+ * @param array<string,mixed> $prev
+ * @return array<string,mixed>
+ */
+function rotation_merge_page_meta(array $page, array $prev): array
+{
+    foreach (['from', 'to'] as $col) {
+        if (array_key_exists($col, $prev) && $prev[$col] !== '' && $prev[$col] !== null) {
+            $page[$col] = (int)$prev[$col];
+        }
+    }
+    if (!empty($prev['off'])) {
+        $page['off'] = true;
+    }
+    $wRaw = trim((string)($prev['weight'] ?? ''));
+    if ($wRaw !== '') {
+        $w = max(1, min(20, (int)$wRaw));
+        if ($w > 1) {
+            $page['weight'] = $w;
+        }
+    }
+
+    return $page;
+}
+
 /** Admin tooltip: per-page Weight field (1–20). */
 function rotation_weight_tooltip(): string
 {
@@ -1820,7 +1847,7 @@ function rotation_sync_photos(string $screen = 'main', ?array $deck = null): arr
             if (rotation_is_legacy_rotator_url($url)) {
                 $removedLegacy = true;
             }
-            $oldPhotoUrls[$url] = (int)($page['dwell'] ?? 0);
+            $oldPhotoUrls[$url] = $page;
             continue;
         }
         $filtered[] = $page;
@@ -1833,12 +1860,17 @@ function rotation_sync_photos(string $screen = 'main', ?array $deck = null): arr
     $added = 0;
     $updated = 0;
     foreach ($expectedByUrl as $url => $dwell) {
-        if (!array_key_exists($url, $oldPhotoUrls)) {
+        $prev = $oldPhotoUrls[$url] ?? null;
+        if (!is_array($prev)) {
             $added++;
-        } elseif ($oldPhotoUrls[$url] !== $dwell) {
+        } elseif ((int)($prev['dwell'] ?? 0) !== $dwell) {
             $updated++;
         }
-        $photoPages[] = ['url' => $url, 'dwell' => $dwell];
+        $row = ['url' => $url, 'dwell' => $dwell];
+        if (is_array($prev)) {
+            $row = rotation_merge_page_meta($row, $prev);
+        }
+        $photoPages[] = $row;
     }
     foreach (array_keys($oldPhotoUrls) as $oldUrl) {
         if (!array_key_exists($oldUrl, $expectedByUrl)) {
@@ -2117,7 +2149,7 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?arr
             if ($insertAt === null) {
                 $insertAt = count($filtered);
             }
-            $oldSlideUrls[$url] = (int)($page['dwell'] ?? 0);
+            $oldSlideUrls[$url] = $page;
             continue;
         }
         $filtered[] = $page;
@@ -2130,12 +2162,17 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?arr
     $added = 0;
     $updated = 0;
     foreach ($expectedByUrl as $url => $dwell) {
-        if (!array_key_exists($url, $oldSlideUrls)) {
+        $prev = $oldSlideUrls[$url] ?? null;
+        if (!is_array($prev)) {
             $added++;
-        } elseif ($oldSlideUrls[$url] !== $dwell) {
+        } elseif ((int)($prev['dwell'] ?? 0) !== $dwell) {
             $updated++;
         }
-        $slidePages[] = ['url' => $url, 'dwell' => $dwell];
+        $row = ['url' => $url, 'dwell' => $dwell];
+        if (is_array($prev)) {
+            $row = rotation_merge_page_meta($row, $prev);
+        }
+        $slidePages[] = $row;
     }
     foreach (array_keys($oldSlideUrls) as $oldUrl) {
         if (!array_key_exists($oldUrl, $expectedByUrl)) {
