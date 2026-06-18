@@ -103,7 +103,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   <p>Add boards in admin.php → Rotation, or check hour windows and Skip flags.</p>
 </div>
 <div id="blank"<?= $blankActive ? ' style="display:block"' : '' ?>></div>
-<?php if ($showDebug): ?><div id="rotate-debug" aria-live="polite"></div><?php endif; ?>
+<div id="rotate-debug" aria-live="polite"<?= $showDebug ? '' : ' style="display:none"' ?>></div>
 <iframe id="fA" allow="autoplay; fullscreen"></iframe>
 <iframe id="fB" allow="autoplay; fullscreen"></iframe>
 <?php signage_kiosk_pointer_shield_html(); ?>
@@ -122,6 +122,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
+  let showDebug = SHOW_DEBUG;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
   const KIOSK_CURSOR_CSS = <?= json_encode(signage_kiosk_cursor_css()) ?>;
   let front = 0, idx = -1, gen = 0, rotateTimer = null;
@@ -180,21 +181,21 @@ if (($_GET['api'] ?? '') === 'presence') {
   }
 
   function updateRotateDebug(status, page, pageIdx, fullSrc) {
-    if (!SHOW_DEBUG) return;
+    if (!showDebug) return;
     const el = document.getElementById('rotate-debug');
     if (!el || !page) return;
     const inWin = pagesInWindow().length;
     const pos = (pageIdx + 1) + ' / ' + PAGES.length;
     const label = page.label || page.url || '—';
-    const wt = WEIGHTED ? pageWeight(page) : 0;
+    const wt = pageWeight(page);
     const mode = WEIGHTED ? 'weighted' : (SHUFFLE ? 'shuffle' : 'sequential');
     el.className = status === 'loading' ? 'rd-wait' : '';
     el.style.display = 'block';
     el.innerHTML =
       '<div class="rd-pos">' + debugEsc(pos)
       + ' · ' + inWin + ' in window'
-      + (WEIGHTED ? '' : ' · ' + mode)
-      + (wt > 1 ? ' · weight ' + wt : '') + '</div>'
+      + ' · weight ' + wt
+      + (WEIGHTED ? ' · weighted' : (' · ' + mode)) + '</div>'
       + '<div class="rd-label">' + debugEsc(label) + '</div>'
       + '<div class="rd-url">' + debugEsc(page.url || '') + '</div>'
       + (fullSrc ? '<div class="rd-src">' + debugEsc(fullSrc) + '</div>' : '')
@@ -525,6 +526,10 @@ if (($_GET['api'] ?? '') === 'presence') {
       .then(function (data) {
         if (!data) return;
         if (data.revision && data.revision !== REVISION) {
+          location.reload();
+          return;
+        }
+        if (!!data.show_debug !== !!showDebug) {
           location.reload();
           return;
         }
