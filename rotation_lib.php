@@ -2223,6 +2223,7 @@ function slides_deploy_status(?array $deck = null): array
         $mirrorsMain = ($key !== 'main' && $own === []);
         $sync = slides_rotation_sync_info($key, $deck);
         $deckTargeted = count(slides_rotation_pages($deck, $key));
+        $playlistSlides = rotation_playlist_slide_count($own);
 
         $wallSlides = 0;
         $wallPos = null;
@@ -2251,6 +2252,8 @@ function slides_deploy_status(?array $deck = null): array
             'sync' => $sync,
             'wall' => $wallSlides > 0 ? ['position' => $wallPos, 'slide_count' => $wallSlides] : null,
             'deck_targeted' => $deckTargeted,
+            'playlist_slides' => $playlistSlides,
+            'stale_on_playlist' => $playlistSlides > 0 && $deckTargeted === 0 && empty($sync['on_playlist']),
             'expected' => (int)$sync['expected'],
             'dwell_mismatch' => (int)$sync['dwell_mismatch'],
         ];

@@ -1885,6 +1885,69 @@ function slides_remove_from_display(string $screen): array
     ];
 }
 
+/** Slide entries saved on one display's own playlist (not inherited from main). */
+function slides_playlist_slide_count(string $screen): int
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+
+    return rotation_playlist_slide_count(rotation_screen_own_pages($screen));
+}
+
+/**
+ * Drop slide entries from rotation playlists when the deck no longer targets that display.
+ * @param list<array<string,mixed>>|null $deck
+ * @return array<string,int> screen key => removed entry count
+ */
+function slides_purge_stale_slide_playlists(?array $deck = null): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $purged = [];
+    $pageWrites = [];
+    foreach (array_keys(rotation_screens()) as $screen) {
+        $screen = rotation_normalize_screen_key((string)$screen);
+        if ($screen === '' || slides_playlist_slide_count($screen) === 0) {
+            continue;
+        }
+        if (slides_rotation_pages($deck, $screen) !== []) {
+            continue;
+        }
+        $rm = rotation_remove_all_slides($screen);
+        if (!$rm['removed']) {
+            continue;
+        }
+        $pageWrites[$rm['screen']] = $rm['pages'];
+        $purged[$screen] = (int)$rm['removed_count'];
+    }
+    if ($pageWrites !== []) {
+        rotation_pages_write_batch($pageWrites);
+        cfg_reload();
+    }
+
+    return $purged;
+}
+
+/** @return string */
+function slides_purge_stale_flash_message(array $purged): string
+{
+    if ($purged === []) {
+        return '';
+    }
+    require_once __DIR__ . '/rotation_lib.php';
+    $screenMap = rotation_screens();
+    $parts = [];
+    foreach ($purged as $screen => $count) {
+        $parts[] = rotation_screen_display_name((string)$screen, $screenMap)
+            . ' (' . (int)$count . ' entr' . ((int)$count === 1 ? 'y' : 'ies') . ')';
+    }
+
+    return ' Cleared stale slide entries from rotation on ' . implode(', ', $parts) . '.';
+}
+
 /**
  * Clear accidental screens: [] so slides play on all displays again.
  * @return list<array<string,mixed>>

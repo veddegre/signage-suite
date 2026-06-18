@@ -672,6 +672,15 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                         $extra = ' ' . implode('; ', $parts) . '.';
                     }
                 }
+            } elseif ($board === 'slides') {
+                cfg_reload();
+                require_once __DIR__ . '/slides_lib.php';
+                $deck = cfg('slides.SLIDES', []);
+                $purged = slides_purge_stale_slide_playlists(is_array($deck) ? $deck : []);
+                $purgeMsg = slides_purge_stale_flash_message($purged);
+                if ($purgeMsg !== '') {
+                    $extra = ($extra !== '' ? $extra : '') . $purgeMsg;
+                }
             } elseif ($board === 'rotator') {
                 $deployScreens = admin_deploy_screens_from_post($_POST);
                 admin_deploy_screens_remember('rotator', $deployScreens);
@@ -1652,6 +1661,11 @@ function admin_deploy_picker_from_screens(array $screens, array $checked, array 
 /** Render sync / deploy pills for one display row on Status or Deploy tabs. */
 function admin_deploy_status_pills(array $dep): void
 {
+    if (!empty($dep['stale_on_playlist'])) {
+        echo '<span class="pill warn">' . (int)($dep['playlist_slides'] ?? 0) . ' on playlist</span> ';
+        echo '<span class="pill warn">Stale — remove</span>';
+        return;
+    }
     if (!empty($dep['on_playlist'])) {
         echo '<span class="pill ok">Synced</span> ' . (int)($dep['sync']['synced'] ?? 0) . '/' . (int)($dep['expected'] ?? 0);
         return;
@@ -1773,7 +1787,7 @@ function admin_slides_sync_panel(array $deployStatus, array $deckStats, ?string 
           <div class="deploy-actions">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
                href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
-            <?php if ($removeFormId !== null && ($dep['on_playlist'] || ($dep['partial'] ?? false) || (int)($dep['deck_targeted'] ?? 0) > 0) && !$dep['mirrors_main']): ?>
+            <?php if ($removeFormId !== null && !$dep['mirrors_main'] && ((int)($dep['playlist_slides'] ?? 0) > 0 || !empty($dep['on_playlist']) || !empty($dep['partial']) || (int)($dep['deck_targeted'] ?? 0) > 0)): ?>
             <button type="submit" class="secondary deck-bulk-remove" style="padding:6px 12px;font-size:13px"
                     form="<?= h($removeFormId) ?>" name="action" value="remove_slides_rotation"
                     onclick="document.getElementById('<?= h($removeFormId) ?>Screen').value='<?= h($screenKey) ?>'; return confirm('Remove all custom slides from <?= h($dep['name']) ?>?\n\nThis clears them from rotation and stops them targeting this display in the deck.');">Remove</button>
@@ -3055,6 +3069,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                 $summaryNote = $pageCount . ' page' . ($pageCount === 1 ? '' : 's');
                 if ($slideEntryCount > 0) {
                     $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
+                }
+                if ($slideEntryCount > 0 && $deckTargetedForScreen === 0) {
+                    $summaryNote .= ' · stale (deck does not target this display)';
                 }
             }
             $playlistOpen = admin_operator_screen_locked()
@@ -4451,7 +4468,12 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                   if (!admin_can_screen((string)$screenKey) || !empty($dep['mirrors_main'])) {
                       continue;
                   }
-                  $canRemove = !empty($dep['on_playlist']) || !empty($dep['partial']) || (int)($dep['deck_targeted'] ?? 0) > 0;
+                  $canRemove = !$dep['mirrors_main'] && (
+                      (int)($dep['playlist_slides'] ?? 0) > 0
+                      || !empty($dep['on_playlist'])
+                      || !empty($dep['partial'])
+                      || (int)($dep['deck_targeted'] ?? 0) > 0
+                  );
                 ?>
                 <div class="slides-deploy-row" data-deploy-screen="<?= h($screenKey) ?>">
                   <div class="deploy-row-title"><strong><?= h($dep['name']) ?></strong><code><?= h($screenKey) ?></code></div>
