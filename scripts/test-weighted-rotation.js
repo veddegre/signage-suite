@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 /**
- * Monte Carlo check for board.php weighted page selection.
+ * Sanity checks for board.php rotation logic (weighted pick + hour windows).
  * Run: node scripts/test-weighted-rotation.js
  */
 
 function pageWeight(p) {
   const w = parseInt(p.weight, 10);
   return (!isNaN(w) && w > 0) ? Math.min(20, w) : 1;
+}
+
+function inWindowAt(p, hour) {
+  if (p.from == null || p.to == null || p.from === '' || p.to === '') return true;
+  const a = +p.from;
+  const b = +p.to;
+  return a <= b ? (hour >= a && hour < b) : (hour >= a || hour < b);
 }
 
 function pickWeightedPage(pages, excludeIdx, inWindow) {
@@ -30,6 +37,30 @@ function pickWeightedPage(pages, excludeIdx, inWindow) {
   return pool[pool.length - 1].i;
 }
 
+// ── Hour window parity (matches rotation_lib.php rotation_page_in_window) ─────
+const windowPages = [
+  { url: 'day', from: 7, to: 22 },
+  { url: 'night', from: 22, to: 7 },
+  { url: 'always' },
+];
+const windowExpect = {
+  6: ['night', 'always'],
+  7: ['day', 'always'],
+  12: ['day', 'always'],
+  22: ['night', 'always'],
+  23: ['night', 'always'],
+};
+for (const [hour, expect] of Object.entries(windowExpect)) {
+  const got = windowPages.filter((p) => inWindowAt(p, +hour)).map((p) => p.url);
+  const ok = got.length === expect.length && got.every((u, i) => u === expect[i]);
+  if (!ok) {
+    console.error('FAIL hour window at h=' + hour + ': got ' + got.join(',') + ' expected ' + expect.join(','));
+    process.exit(1);
+  }
+}
+console.log('Hour window checks: OK');
+
+// ── Weighted distribution ─────────────────────────────────────────────────────
 const pages = [
   { url: 'heavy', weight: 10 },
   { url: 'light-a' },
@@ -55,4 +86,4 @@ if (counts[0] / trials < 0.75) {
   console.error('FAIL: heavy page under-represented');
   process.exit(1);
 }
-console.log('OK');
+console.log('Weighted checks: OK');
