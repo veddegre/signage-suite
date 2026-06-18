@@ -123,6 +123,9 @@ if (($_GET['api'] ?? '') === 'presence') {
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
   let showDebug = SHOW_DEBUG;
+  let lastAdvanceAt = Date.now();
+  let pollFails = 0;
+  let watchdogTrips = 0;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
   const KIOSK_CURSOR_CSS = <?= json_encode(signage_kiosk_cursor_css()) ?>;
   let front = 0, idx = -1, gen = 0, rotateTimer = null;
@@ -455,6 +458,8 @@ if (($_GET['api'] ?? '') === 'presence') {
       postToFrame(f, { type: 'signage-show' });
       updateRotateDebug('on screen', p, idx, fullSrc);
       sendPresence('on screen');
+      lastAdvanceAt = Date.now();
+      watchdogTrips = 0;
       const dwellMs = (+p.dwell) * 1000;
       const safetyMs = isRssUrl(p.url) ? Math.max(dwellMs + 15000, 60000) : dwellMs;
       scheduleRotate(safetyMs);
@@ -524,7 +529,12 @@ if (($_GET['api'] ?? '') === 'presence') {
     fetch(q, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data) return;
+        if (!data) {
+          pollFails++;
+          if (pollFails >= 3) location.reload();
+          return;
+        }
+        pollFails = 0;
         if (data.revision && data.revision !== REVISION) {
           location.reload();
           return;
@@ -536,15 +546,34 @@ if (($_GET['api'] ?? '') === 'presence') {
         if (typeof data.blank === 'boolean') setBlank(data.blank);
         sendPresence();
       })
-      .catch(function () {});
+      .catch(function () {
+        pollFails++;
+        if (pollFails >= 3) location.reload();
+      });
   }
   setInterval(pollRotationConfig, blankActive ? BLANK_POLL_MS : POLL_MS);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') pollRotationConfig();
   });
 
-  // Nightly reload of the shell itself to keep long kiosk sessions fresh
-  setTimeout(() => location.reload(), 24 * 60 * 60 * 1000);
+  // If rotation stalls (lost timer, hung iframe, throttled background tab), recover.
+  setInterval(function () {
+    if (blankActive || PAGES.length === 0) return;
+    const p = PAGES[idx];
+    const dwellMs = p ? Math.max(1000, (+p.dwell || 60) * 1000) : 60000;
+    const staleMs = Math.max(dwellMs + 120000, 600000);
+    if (Date.now() - lastAdvanceAt < staleMs) return;
+    watchdogTrips++;
+    if (watchdogTrips >= 2) {
+      location.reload();
+      return;
+    }
+    clearRotateTimer();
+    rotateForward();
+  }, 30000);
+
+  // Periodic shell reload flushes Chromium memory and stuck renderer state.
+  setTimeout(function () { location.reload(); }, 12 * 60 * 60 * 1000);
 </script>
 <?php signage_kiosk_hide_pointer_script(); ?>
 <?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>

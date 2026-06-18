@@ -215,12 +215,41 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-watchdog.sh" ]]; then
+  echo "==> Installing kiosk health watchdog (every 5 min)"
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-watchdog.sh" /usr/local/bin/signage-kiosk-watchdog
+  cat > /etc/systemd/system/signage-watchdog.service <<'EOF'
+[Unit]
+Description=Signage kiosk health check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/signage-kiosk-watchdog
+EOF
+  cat > /etc/systemd/system/signage-watchdog.timer <<'EOF'
+[Unit]
+Description=Poll signage kiosk health every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+fi
+
 echo "==> Disabling console getty on tty1 (kiosk owns the display)"
 systemctl disable --now getty@tty1.service || true
 
 systemctl daemon-reload
 systemctl enable signage.service signage-restart.timer
 systemctl start signage-restart.timer
+if [[ -x /usr/local/bin/signage-kiosk-watchdog ]]; then
+  systemctl enable signage-watchdog.timer
+  systemctl start signage-watchdog.timer
+fi
 if [[ $WITH_CEC -eq 1 ]] && [[ -x /usr/local/bin/signage-cec-sync ]]; then
   systemctl enable signage-cec.timer
   systemctl start signage-cec.timer
@@ -257,5 +286,9 @@ CURSOR (if the mouse pointer is still visible after a server update):
   sudo install -m 755 $SCRIPT_DIR/scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
   # Ensure /usr/local/bin/signage-kiosk starts signage-hide-cursor in the background
   sudo systemctl restart signage
+
+WATCHDOG (auto-restart if the browser stops serving board.php):
+  systemctl status signage-watchdog.timer
+  journalctl -u signage-watchdog -f
 ============================================================
 NOTES
