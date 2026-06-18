@@ -114,6 +114,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const HANG    = <?= (int)$runtime['hang_ms'] ?>;
   const SHUFFLE = <?= json_encode((bool)$runtime['shuffle']) ?>;
   const WEIGHTED = <?= json_encode((bool)$runtime['weighted']) ?>;
+  const ROTATION_TZ = <?= json_encode($runtime['timezone']) ?>;
   const SHOW_CLOCK = <?= json_encode((bool)$runtime['show_clock']) ?>;
   const BLANK_INIT = <?= json_encode($blankActive) ?>;
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
@@ -182,13 +183,18 @@ if (($_GET['api'] ?? '') === 'presence') {
     if (!SHOW_DEBUG) return;
     const el = document.getElementById('rotate-debug');
     if (!el || !page) return;
+    const inWin = pagesInWindow().length;
     const pos = (pageIdx + 1) + ' / ' + PAGES.length;
     const label = page.label || page.url || '—';
     const wt = WEIGHTED ? pageWeight(page) : 0;
+    const mode = WEIGHTED ? 'weighted' : (SHUFFLE ? 'shuffle' : 'sequential');
     el.className = status === 'loading' ? 'rd-wait' : '';
     el.style.display = 'block';
     el.innerHTML =
-      '<div class="rd-pos">' + debugEsc(pos) + (wt > 1 ? ' · weight ' + wt : '') + '</div>'
+      '<div class="rd-pos">' + debugEsc(pos)
+      + ' · ' + inWin + ' in window'
+      + (WEIGHTED ? '' : ' · ' + mode)
+      + (wt > 1 ? ' · weight ' + wt : '') + '</div>'
       + '<div class="rd-label">' + debugEsc(label) + '</div>'
       + '<div class="rd-url">' + debugEsc(page.url || '') + '</div>'
       + (fullSrc ? '<div class="rd-src">' + debugEsc(fullSrc) + '</div>' : '')
@@ -255,10 +261,34 @@ if (($_GET['api'] ?? '') === 'presence') {
     rotateForward();
   });
 
+  function rotationHour() {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: ROTATION_TZ,
+        hour: 'numeric',
+        hourCycle: 'h23',
+      }).formatToParts(new Date());
+      const hit = parts.find(function (p) { return p.type === 'hour'; });
+      if (hit) {
+        const h = parseInt(hit.value, 10);
+        if (!isNaN(h)) return h % 24;
+      }
+    } catch (e) {}
+    return new Date().getHours();
+  }
+
   function inWindow(p) {
     if (p.from == null || p.to == null || p.from === '' || p.to === '') return true;
-    const h = new Date().getHours(), a = +p.from, b = +p.to;
+    const h = rotationHour(), a = +p.from, b = +p.to;
     return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // overnight supported
+  }
+
+  function pagesInWindow() {
+    const out = [];
+    for (let i = 0; i < PAGES.length; i++) {
+      if (inWindow(PAGES[i])) out.push(i);
+    }
+    return out;
   }
 
   function pageWeight(p) {
@@ -267,25 +297,22 @@ if (($_GET['api'] ?? '') === 'presence') {
   }
 
   function pickWeightedPage(excludeIdx) {
+    const eligible = pagesInWindow();
+    if (eligible.length === 0) {
+      return excludeIdx >= 0 ? excludeIdx : 0;
+    }
     let total = 0;
     const pool = [];
-    for (let i = 0; i < PAGES.length; i++) {
-      if (!inWindow(PAGES[i])) continue;
-      if (i === excludeIdx && PAGES.length > 1) continue;
+    for (let k = 0; k < eligible.length; k++) {
+      const i = eligible[k];
       const w = pageWeight(PAGES[i]);
       pool.push({ i: i, w: w });
       total += w;
     }
-    if (pool.length === 0) {
-      for (let j = 0; j < PAGES.length; j++) {
-        if (inWindow(PAGES[j])) return j;
-      }
-      return excludeIdx >= 0 ? excludeIdx : 0;
-    }
     let r = Math.random() * total;
-    for (let k = 0; k < pool.length; k++) {
-      r -= pool[k].w;
-      if (r <= 0) return pool[k].i;
+    for (let n = 0; n < pool.length; n++) {
+      r -= pool[n].w;
+      if (r <= 0) return pool[n].i;
     }
     return pool[pool.length - 1].i;
   }

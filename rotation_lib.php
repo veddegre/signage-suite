@@ -549,6 +549,24 @@ function rotation_current_hour(): int
     }
 }
 
+/** Whether a playlist row is inside its optional from/to hour window (matches board.php). */
+function rotation_page_in_window(array $page, ?int $hour = null): bool
+{
+    $from = $page['from'] ?? null;
+    $to = $page['to'] ?? null;
+    if ($from === null || $to === null || $from === '' || $to === '') {
+        return true;
+    }
+    $hour = $hour ?? rotation_current_hour();
+    $from = (int)$from;
+    $to = (int)$to;
+    if ($from <= $to) {
+        return $hour >= $from && $hour < $to;
+    }
+
+    return $hour >= $from || $hour < $to;
+}
+
 /** Inside the configured off window (supports overnight, e.g. off 23 / on 6). */
 function rotation_in_off_window(int $offHour, int $onHour, ?int $hour = null): bool
 {
