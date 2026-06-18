@@ -516,7 +516,10 @@ function slides_parse_post_rows(array $rows, array $existingSlides = []): array
         }
         if (admin_operator_screen_locked()) {
             $opScreen = (string)admin_operator_screen_key();
-            if ($opScreen !== '' && (!isset($obj['screens']) || $obj['screens'] === [])) {
+            $explicitScreens = !empty($row['_screens_form'])
+                && array_key_exists('screens', $row)
+                && is_array($row['screens']);
+            if ($opScreen !== '' && !$explicitScreens && !isset($obj['screens'])) {
                 $obj['screens'] = [$opScreen];
             }
         }
@@ -1718,24 +1721,14 @@ function slides_deck_untargeted_misconfig(?array $deck = null): bool
 }
 
 /**
- * Remove screens: [] (hidden on all displays) so slides play everywhere again.
+ * @deprecated Per-slide screens: [] is intentional (hidden on all displays). Whole-deck repair
+ *             is handled by slides_repair_deck_untargeted() only.
  * @param list<array<string,mixed>> $deck
  * @return list<array<string,mixed>>
  */
 function slides_repair_deck_screen_targets(array $deck): array
 {
-    $out = [];
-    foreach ($deck as $slide) {
-        if (!is_array($slide)) {
-            continue;
-        }
-        if (array_key_exists('screens', $slide) && slide_target_screens($slide) === []) {
-            unset($slide['screens']);
-        }
-        $out[] = $slide;
-    }
-
-    return $out;
+    return $deck;
 }
 
 /**
@@ -1769,8 +1762,10 @@ function slides_repair_deck_stale_screen_keys(array $deck): array
         }
         $targets = array_keys($targets);
         sort($targets);
-        if ($targets === [] || $targets === $allKeys) {
+        if ($targets === $allKeys) {
             unset($slide['screens']);
+        } elseif ($targets === []) {
+            $slide['screens'] = [];
         } else {
             $slide['screens'] = $targets;
         }
@@ -1806,7 +1801,6 @@ function slides_deck_targets_no_configured_screens(array $deck): bool
  */
 function slides_repair_deck(array $deck): array
 {
-    $deck = slides_repair_deck_screen_targets($deck);
     $deck = slides_repair_deck_stale_screen_keys($deck);
 
     return slides_repair_deck_untargeted($deck);

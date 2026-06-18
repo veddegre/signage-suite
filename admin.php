@@ -5080,16 +5080,18 @@ function collectMediaDeckRow(card, includeSchedule) {
   const screenPicker = card.querySelector('[data-screen-picker]');
   if (screenPicker) {
     row._screens_form = '1';
+    const meta = card.dataset.slideScreens;
     if (screenPicker.dataset.locked === '1') {
-      const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
-      if (hiddenScreen && hiddenScreen.value) row.screens = [hiddenScreen.value];
-      else row.screens = [];
-    } else {
-      const meta = card.dataset.slideScreens || 'all';
       if (meta === '') row.screens = [];
-      else if (meta !== 'all') row.screens = meta.split(',').filter(Boolean);
-      else row._screens_all = '1';
-    }
+      else if (meta && meta !== 'all') row.screens = meta.split(',').filter(Boolean);
+      else {
+        const hiddenScreen = screenPicker.querySelector('input[name*="[screens]"]');
+        if (hiddenScreen && hiddenScreen.value) row.screens = [hiddenScreen.value];
+        else row._screens_all = '1';
+      }
+    } else if (meta === '') row.screens = [];
+    else if (meta !== 'all') row.screens = meta.split(',').filter(Boolean);
+    else row._screens_all = '1';
   }
   const ownerChecked = card.querySelector('[name*="[owner]"]:checked');
   const ownerSelect = card.querySelector('select[name*="[owner]"]');
@@ -5466,7 +5468,11 @@ function syncSlideCardScreenMeta(card, skipFilter) {
   const picker = card.querySelector('[data-screen-picker]');
   if (!picker) return;
   if (picker.dataset.locked === '1') {
-    card.dataset.slideScreens = window.ADMIN_OPERATOR_SCREEN || 'all';
+    if (card.dataset.slideScreens === '') {
+      // explicit removal from operator display
+    } else if (!card.dataset.slideScreens || card.dataset.slideScreens === 'all') {
+      card.dataset.slideScreens = window.ADMIN_OPERATOR_SCREEN || 'all';
+    }
   } else {
     const boxes = picker.querySelectorAll('.screen-picker-list input[type=checkbox]');
     const total = boxes.length;
@@ -5477,7 +5483,14 @@ function syncSlideCardScreenMeta(card, skipFilter) {
     else card.dataset.slideScreens = checked.join(',');
   }
   const pill = card.querySelector('[data-slide-screen-pill]');
-  if (pill) pill.textContent = screenPickerSummaryText(picker);
+  if (pill) {
+    if (picker.dataset.locked === '1') {
+      const scr = card.dataset.slideScreens ?? 'all';
+      pill.textContent = scr === '' ? 'Hidden on all displays' : 'Your display';
+    } else {
+      pill.textContent = screenPickerSummaryText(picker);
+    }
+  }
   if (!skipFilter) applySlideDeckFilters();
 }
 
@@ -5563,7 +5576,18 @@ function applySlideDeckFilters() {
 
 function setSlideCardScreenTarget(card, mode, screenKey) {
   const picker = card.querySelector('[data-screen-picker]');
-  if (!picker || picker.dataset.locked === '1') return;
+  if (!picker) return;
+  if (picker.dataset.locked === '1') {
+    if (mode === 'remove') {
+      card.dataset.slideScreens = '';
+    } else if (mode === 'only' || mode === 'add') {
+      card.dataset.slideScreens = screenKey;
+    } else if (mode === 'all') {
+      card.dataset.slideScreens = window.ADMIN_OPERATOR_SCREEN || 'all';
+    }
+    syncSlideCardScreenMeta(card);
+    return;
+  }
   picker.querySelectorAll('.screen-picker-list input[type=checkbox]').forEach(function (cb) {
     if (mode === 'all') cb.checked = true;
     else if (mode === 'only') cb.checked = (cb.value === screenKey);
