@@ -2,13 +2,15 @@
 
 Seventeen self-contained PHP pages, all 1920×1080, all sharing the same dark-navy/amber design language. Drop them in one web directory with PHP 8+ and php-curl. Each page caches API responses in `./cache/` (created automatically — make sure the web user can write there) and falls back to stale cache on API failure, so a flaky API never blanks the wall.
 
-## Quick start (Ubuntu / Debian / Raspberry Pi OS)
+**Platform:** the **server** runs on any machine with **Ubuntu, Debian, or Raspberry Pi OS** (VM, NUC, old PC, Pi, VPS — no Pi required). Each **display** is just a browser pointed at `board.php`; for a dedicated wall TV, use `setup-kiosk.sh` on **Ubuntu Server or Raspberry Pi OS** (x86 mini PC or Pi 4/5), or open the URL in any browser / `player.php` on a laptop or tablet.
 
-**Server** — run once on the box that hosts the boards:
+## Quick start (Ubuntu / Debian)
+
+**Server** — run once on the box that hosts the boards (any Ubuntu/Debian host, including Raspberry Pi OS if you want the server on a Pi):
 
     sudo bash setup-server.sh --with-video-cron
 
-**Display** — run once on each Pi or kiosk PC (after the server is up):
+**Display (optional)** — for a dedicated fullscreen wall display, run once on each **Linux kiosk box** (Ubuntu Server 24.04+ or Raspberry Pi OS on a mini PC or Pi). Or skip this and point any browser at the rotation URL:
 
     sudo bash setup-kiosk.sh "http://your-server/boards/board.php" [scale]
 
@@ -249,7 +251,7 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 - **Requires** the `php-xml` (SimpleXML) and `php-mbstring` extensions — present on most installs, `apt install php-xml php-mbstring` if not.
 
 ## video.php — Video Board (local YouTube playback)
-Videos are **downloaded locally with yt-dlp** and played fullscreen from disk — no live YouTube embed, so no ads, buffering, or embed-blocked failures on the Pi.
+Videos are **downloaded locally with yt-dlp** and played fullscreen from disk — no live YouTube embed, so no ads, buffering, or embed-blocked failures on a headless server.
 
 - **Registry:** define entries in `VIDEOS` — either `'youtube' => URL` or `'file' => 'name.mp4'` for videos you copy in yourself. Each playlist entry is `video.php?v=drone`, `video.php?v=ambient`, etc.
 - **Sound:** muted by default for wall displays. **Admin → Video Board** — uncheck **Mute all videos** and save. Kiosks set up with `setup-kiosk.sh` already allow unmuted autoplay.
@@ -277,7 +279,7 @@ Videos are **downloaded locally with yt-dlp** and played fullscreen from disk �
   4. **Fallback:** download the video on your Mac (`yt-dlp … -o lantern.mp4`), `scp` to `videos/` on the server, and set the video row to **local file** `lantern.mp4` instead of a YouTube URL — no cookies needed on the server.
 - The player loops, so an asset duration slightly longer than the video wraps to the start instead of going black.
 - **Requires:** `yt-dlp` in PATH or `bin/yt-dlp`, **deno** (or node) for YouTube, optional `config/cookies/youtube.txt`, plus `ffmpeg`/`ffprobe` for merged downloads and duration readouts.
-- Videos live inside the webroot (`./videos/`) so Apache/nginx serves them directly with range support — easy on a Pi.
+- Videos live inside the webroot (`./videos/`) so Apache/nginx serves them directly with range support.
 
 ## grafana.php — Grafana Board (kiosk iframe wrapper)
 Wraps any Grafana dashboard in kiosk mode so it joins the rotation and gets the alert ticker.
@@ -330,7 +332,7 @@ Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's bo
 Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `webcam.php`, `air.php`, `sports.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
 
 ### setup-server.sh — the web host
-Onboards a fresh Ubuntu / Debian / Raspberry Pi OS machine as the signage **server** (Apache, PHP, permissions, hardening):
+Onboards a fresh **Ubuntu / Debian / Raspberry Pi OS** machine as the signage **server** — Apache or nginx, PHP, permissions, hardening. Runs on a VM, mini PC, Pi, or any host with those distros:
 
     sudo bash setup-server.sh
     sudo bash setup-server.sh --webroot /var/www/html/boards --with-video-cron
@@ -357,21 +359,21 @@ If the webroot **is** the git checkout (installed with `--clone`), updates are j
 
     cd /var/www/html/boards && sudo git pull
 
-### setup-kiosk.sh — the display device
-Turns a fresh Raspberry Pi OS Lite (Bookworm) install into the kiosk:
+### setup-kiosk.sh — dedicated display (optional)
+For a TV or monitor that should boot straight into the rotation, `setup-kiosk.sh` turns a **Ubuntu Server (24.04+)** or **Raspberry Pi OS Lite (Bookworm)** box into a fullscreen Chromium kiosk. x86 mini PCs and Pi 4/5 are both supported; the script handles each distro's Chromium packaging. You can also skip the script entirely and open `board.php` in any browser (or use `player.php` for scaled preview).
 
     sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage" [scale]
 
 (Quote the URL when it contains `?screen=`. The optional scale argument — e.g. `2` — fills a 4K display, since boards are designed at 1920×1080.)
 
-It installs cage (minimal Wayland compositor) + Chromium, creates a systemd service that boots into the rotation and restarts on crash, schedules a nightly 04:00 browser restart to flush memory, and (by default) installs **HDMI-CEC power sync** — a timer on the player box that polls the server every minute and sends standby/on based on the schedule you set in **Admin → Rotation → Display settings** (CEC checkbox, Off hr, On hr). Use `--no-cec` to skip CEC on boxes without a CEC-capable TV. Set **Rotation → Timezone** on the server so off/on hours match local wall time. Chromium runs with `--autoplay-policy=no-user-gesture-required`, so un-muted video works if you ever want sound. Any small x86 box works the same way — reuse the unit file.
+It installs cage (minimal Wayland compositor) + Chromium, creates a systemd service that boots into the rotation and restarts on crash, schedules a nightly 04:00 browser restart to flush memory, and (by default) installs **HDMI-CEC power sync** — a timer on the display box that polls the server every minute and sends standby/on based on the schedule you set in **Admin → Rotation → Display settings** (CEC checkbox, Off hr, On hr). Use `--no-cec` to skip CEC on boxes without a CEC-capable TV. Set **Rotation → Timezone** on the server so off/on hours match local wall time. Chromium runs with `--autoplay-policy=no-user-gesture-required`, so un-muted video works if you ever want sound.
 
 Re-run after pulling updates to refresh the CEC sync script:
 
     cd ~/signage-suite && git pull
     sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage" [scale]
 
-After setup the Pi never needs touching for content: everything is managed on the server through admin.php. The Pi only needs occasional `apt full-upgrade`.
+After setup the display box never needs touching for content: everything is managed on the server through admin.php. Occasional `apt full-upgrade` on the kiosk host is enough for OS updates.
 
 ### player.php — PWA player (phones, tablets, testing)
 `board.php` is fixed at 1920×1080 by design; `player.php` wraps it in a stage that scales and letterboxes to fit **any** viewport, so you can test rotations on a laptop window, tablet, or phone. Same screen selection: `player.php?screen=garage`. The alert ticker is rendered in the outer document (not inside the scaled iframe), with live polling so alerts appear without reloading the rotation.
