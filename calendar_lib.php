@@ -1,10 +1,10 @@
 <?php
 /**
- * Family board — shared calendar feed palette and helpers.
+ * Calendar board — shared feed palette and settings migration from legacy family.* keys.
  */
 
 /** Theme-complementary palette for calendar feeds on the dark navy wall. */
-function family_calendar_palette(): array
+function calendar_palette(): array
 {
     return [
         ['key' => 'beacon',  'label' => 'Amber',   'hex' => '#ffb347'],
@@ -18,7 +18,7 @@ function family_calendar_palette(): array
     ];
 }
 
-function family_calendar_color_hex(string $stored): string
+function calendar_color_hex(string $stored): string
 {
     $stored = trim($stored);
     if ($stored === '') {
@@ -27,7 +27,7 @@ function family_calendar_color_hex(string $stored): string
     if ($stored[0] === '#') {
         return $stored;
     }
-    foreach (family_calendar_palette() as $p) {
+    foreach (calendar_palette() as $p) {
         if ($p['key'] === $stored) {
             return $p['hex'];
         }
@@ -36,27 +36,27 @@ function family_calendar_color_hex(string $stored): string
 }
 
 /** @param array<string,mixed> $feed */
-function family_feed_meta(array $feed, int $index = 0): array
+function calendar_feed_meta(array $feed, int $index = 0): array
 {
-    $palette = family_calendar_palette();
+    $palette = calendar_palette();
     $key = trim((string)($feed['key'] ?? $feed['name'] ?? ''));
     if ($key === '') {
         $key = 'Cal ' . ($index + 1);
     }
     $colorKey = trim((string)($feed['color'] ?? ''));
-    if ($colorKey === '' || ($colorKey[0] !== '#' && !family_palette_has_key($colorKey))) {
+    if ($colorKey === '' || ($colorKey[0] !== '#' && !calendar_palette_has_key($colorKey))) {
         $colorKey = $palette[$index % count($palette)]['key'];
     }
     return [
         'key' => $key,
         'color' => $colorKey,
-        'hex' => family_calendar_color_hex($colorKey),
+        'hex' => calendar_color_hex($colorKey),
     ];
 }
 
-function family_palette_has_key(string $key): bool
+function calendar_palette_has_key(string $key): bool
 {
-    foreach (family_calendar_palette() as $p) {
+    foreach (calendar_palette() as $p) {
         if ($p['key'] === $key) {
             return true;
         }
@@ -65,7 +65,7 @@ function family_palette_has_key(string $key): bool
 }
 
 /** @return list<array{key:string,hex:string}> */
-function family_calendar_legend(array $feeds): array
+function calendar_legend(array $feeds): array
 {
     $out = [];
     $seen = [];
@@ -74,7 +74,7 @@ function family_calendar_legend(array $feeds): array
         if (!is_array($feed)) {
             continue;
         }
-        $meta = family_feed_meta($feed, $i++);
+        $meta = calendar_feed_meta($feed, $i++);
         $id = strtolower($meta['key']);
         if (isset($seen[$id])) {
             continue;
@@ -83,4 +83,44 @@ function family_calendar_legend(array $feeds): array
         $out[] = ['key' => $meta['key'], 'hex' => $meta['hex']];
     }
     return $out;
+}
+
+/**
+ * Migrate family.php board + family.* settings to calendar.php / calendar.*.
+ * @return array{conf:array<string,mixed>,changed:bool}
+ */
+function calendar_migrate_from_family(array $conf): array
+{
+    $changed = false;
+    foreach ($conf as $key => $val) {
+        if (!is_string($key) || !str_starts_with($key, 'family.')) {
+            continue;
+        }
+        $newKey = 'calendar.' . substr($key, 7);
+        if (!array_key_exists($newKey, $conf)) {
+            $conf[$newKey] = $val;
+            $changed = true;
+        }
+        unset($conf[$key]);
+        $changed = true;
+    }
+    foreach ($conf as $key => $val) {
+        if (!is_string($key) || !str_starts_with($key, 'rotation.PAGES')) {
+            continue;
+        }
+        if (!is_array($val)) {
+            continue;
+        }
+        foreach ($val as $i => $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+            $url = trim((string)($page['url'] ?? ''));
+            if ($url === 'family.php' || str_starts_with($url, 'family.php?')) {
+                $conf[$key][$i]['url'] = preg_replace('/^family\.php/', 'calendar.php', $url) ?? 'calendar.php';
+                $changed = true;
+            }
+        }
+    }
+    return ['conf' => $conf, 'changed' => $changed];
 }

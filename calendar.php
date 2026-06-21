@@ -1,6 +1,6 @@
 <?php
 /**
- * FAMILY BOARD — 1920×1080 signage
+ * CALENDAR BOARD — 1920×1080 signage
  * Today + the week ahead from one or more ICS calendar feeds, trash/recycle
  * day, and countdowns to dates that matter.
  *
@@ -19,24 +19,24 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
-require_once __DIR__ . '/family_lib.php';
+require_once __DIR__ . '/calendar_lib.php';
 require_once __DIR__ . '/users_lib.php';
 
-$icsFeeds = cfg('family.ICS_FEEDS', []);
+$icsFeeds = cfg('calendar.ICS_FEEDS', []);
 if (!is_array($icsFeeds)) {
     $icsFeeds = [];
 }
 define('ICS_FEEDS', admin_filter_list_for_display($icsFeeds));
-define('TRASH_WEEKDAY', cfg('family.TRASH_WEEKDAY', ''));
-define('RECYCLE_ANCHOR', cfg('family.RECYCLE_ANCHOR', ''));
-$countdowns = cfg('family.COUNTDOWNS', []);
+define('TRASH_WEEKDAY', cfg('calendar.TRASH_WEEKDAY', ''));
+define('RECYCLE_ANCHOR', cfg('calendar.RECYCLE_ANCHOR', ''));
+$countdowns = cfg('calendar.COUNTDOWNS', []);
 if (!is_array($countdowns)) {
     $countdowns = [];
 }
 define('COUNTDOWNS', admin_filter_scalar_map_for_display($countdowns));
-define('TIMEZONE', cfg('family.TIMEZONE', 'America/Detroit'));
+define('TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit'));
 const CACHE_DIR = __DIR__ . '/cache';
-define('CACHE_TTL', cfg('family.CACHE_TTL', 600));
+define('CACHE_TTL', cfg('calendar.CACHE_TTL', 600));
 
 date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
@@ -67,14 +67,14 @@ function cached_get(string $url, string $key, ?array $auth = null): ?string
     return is_file($f) ? (string)file_get_contents($f) : null;
 }
 
-function family_feed_cache_key(int $i, array $feed, int $winStart): string
+function calendar_feed_cache_key(int $i, array $feed, int $winStart): string
 {
     $blob = ($feed['url'] ?? '') . '|' . ($feed['user'] ?? '') . '|' . ($feed['source'] ?? 'ical')
           . '|' . date('Ymd', $winStart);
     return 'ics_' . $i . '_' . substr(sha1($blob), 0, 12);
 }
 
-function family_feed_auth(array $feed): ?array
+function calendar_feed_auth(array $feed): ?array
 {
     $user = trim((string)($feed['user'] ?? ''));
     if ($user === '') {
@@ -238,8 +238,8 @@ function fetch_calendar_feed(array $feed, int $i, int $winStart, int $winEnd): ?
     if ($source !== 'webdav') {
         $source = 'ical';
     }
-    $auth = family_feed_auth($feed);
-    $key = family_feed_cache_key($i, $feed, $winStart);
+    $auth = calendar_feed_auth($feed);
+    $key = calendar_feed_cache_key($i, $feed, $winStart);
 
     if ($source === 'webdav' && !preg_match('/\.ics(\?|$)/i', $url)) {
         return caldav_fetch(caldav_normalize_url($url), $auth, $winStart, $winEnd, $key);
@@ -642,7 +642,7 @@ foreach (ICS_FEEDS as $i => $feed) {
     if ($raw === null) {
         continue;
     }
-    $meta = family_feed_meta($feed, $i);
+    $meta = calendar_feed_meta($feed, $i);
     $vevents = parse_ics_vevents($raw, $meta);
     $overrides = [];
     $masters = [];
@@ -720,7 +720,7 @@ foreach (COUNTDOWNS as $label => $date) {
 }
 usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
 
-$calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
+$calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -806,8 +806,8 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
         (Nextcloud, Radicale, …) with user/password when required.</div>
     <?php elseif ($days[$todayKey]): foreach (array_slice($days[$todayKey], 0, 7) as $e): ?>
       <div class="tev">
-        <span class="who" style="color:<?= h($e['hex'] ?? family_calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($e['hex'] ?? family_calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
+        <span class="who" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= h($e['cal']) ?></span>
+        <span class="t" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
     <?php endforeach; else: ?>
@@ -822,7 +822,7 @@ $calLegend = family_calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
         <div class="n"><?= date('D', $ts) ?></div>
         <div class="d"><?= date('M j', $ts) ?></div>
         <?php foreach (array_slice($list, 0, 4) as $e):
-          $hex = $e['hex'] ?? family_calendar_color_hex((string)($e['color'] ?? ''));
+          $hex = $e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''));
         ?>
           <div class="ev" style="border-color:<?= h($hex) ?>">
             <span class="ewho" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>

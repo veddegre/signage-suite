@@ -235,7 +235,9 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 - Tiles load in the browser; the key is visible to the kiosk — fine on a LAN wall.
 - **Flow style** `relative0-dark` matches the dark basemap best. Map reloads on a configurable interval (default 5 min).
 
-## family.php — Calendar
+## calendar.php — Calendar
+- **Admin:** **Calendar** board (`?board=calendar`). Settings keys in `settings.json` use the `calendar.*` prefix (migrated automatically from legacy `family.*`).
+- **Legacy URL:** `family.php` redirects to `calendar.php` (301) so old rotation entries keep working until migration runs.
 - **Setup:**
   - `ICS_FEEDS`: one row per calendar — **Key** (legend label, e.g. Dad), **Color** (theme palette), then source/URL. Keys and colors appear on the calendar board legend and beside each event.
   - `TRASH_WEEKDAY` and `RECYCLE_ANCHOR` (any past date recycling was collected; drives the every-other-week cadence). Leave trash day as **(default)** to hide the chip entirely — useful for apartments.

@@ -14,7 +14,7 @@ const LEGACY_ADMIN_FILE = __DIR__ . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
-    'grafana', 'splunk', 'splunkdash', 'family', 'account',
+    'grafana', 'splunk', 'splunkdash', 'calendar', 'account',
 ];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
@@ -1097,7 +1097,7 @@ function admin_merge_owned_map(array $existing, array $posted): array
 }
 
 /**
- * Keyed scalar rows (homelab services, family countdowns) stored as string or {value, owner}.
+ * Keyed scalar rows (homelab services, calendar countdowns) stored as string or {value, owner}.
  * @param array<string,mixed> $existing
  * @param array<string,mixed> $posted
  */
@@ -1170,7 +1170,7 @@ function admin_find_owned_list_entry(array $existing, array $row): ?array
     return null;
 }
 
-/** Resolve homelab service URL or family countdown date from stored value. */
+/** Resolve homelab service URL or calendar countdown date from stored value. */
 function admin_owned_scalar_value(mixed $stored): string
 {
     if (is_array($stored)) {

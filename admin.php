@@ -14,7 +14,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
 require_once __DIR__ . '/schema.php';
-require_once __DIR__ . '/family_lib.php';
+require_once __DIR__ . '/calendar_lib.php';
 require_once __DIR__ . '/slides_lib.php';
 require_once __DIR__ . '/rotator_lib.php';
 require_once __DIR__ . '/video_lib.php';
@@ -1490,7 +1490,7 @@ if ($authed && $board === 'video') {
 
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
-    'Weather & home'  => ['index', 'lake', 'webcam', 'photo', 'air', 'sports', 'family', 'traffic'],
+    'Weather & home'  => ['index', 'lake', 'webcam', 'photo', 'air', 'sports', 'calendar', 'traffic'],
     'Monitoring'      => ['homelab', 'signaltrace'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
@@ -2783,7 +2783,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'web'): ?>
           Each site is <code>web.php?d=<em>key</em></code> in rotation — preview per row below.
-        <?php elseif (in_array($board, ['rss', 'video', 'family', 'slides', 'rotator'], true)): ?>
+        <?php elseif (in_array($board, ['rss', 'video', 'calendar', 'slides', 'rotator'], true)): ?>
           Preview per row or card below — pick a specific entry to preview.
         <?php elseif (!empty($b['file'])): ?>
           <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
@@ -4444,16 +4444,16 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                           <?php elseif (($c['type'] ?? '') === 'palette'): ?>
                             <?php
                               $palVal = (string)($row[$c['key']] ?? '');
-                              if ($palVal === '' || ($palVal[0] !== '#' && !family_palette_has_key($palVal))) {
-                                  $palVal = family_calendar_palette()[$ri % count(family_calendar_palette())]['key'];
+                              if ($palVal === '' || ($palVal[0] !== '#' && !calendar_palette_has_key($palVal))) {
+                                  $palVal = calendar_palette()[$ri % count(calendar_palette())]['key'];
                               }
-                              $palHex = family_calendar_color_hex($palVal);
+                              $palHex = calendar_color_hex($palVal);
                             ?>
                             <div class="cal-palette-cell">
                               <span class="cal-swatch" data-swatch style="background:<?= h($palHex) ?>"></span>
                               <select name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]" class="cal-palette-select"
                                       onchange="syncCalSwatch(this)">
-                                <?php foreach (family_calendar_palette() as $p): ?>
+                                <?php foreach (calendar_palette() as $p): ?>
                                 <option value="<?= h($p['key']) ?>" data-hex="<?= h($p['hex']) ?>"
                                   <?= $palVal === $p['key'] || $palVal === $p['hex'] ? 'selected' : '' ?>><?= h($p['label']) ?></option>
                                 <?php endforeach; ?>
@@ -4526,7 +4526,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               </table>
               </div>
               <button type="button" class="addrow" onclick="addRow(this)">+ Add row</button>
-              <?php if ($board === 'family' && $f['key'] === 'ICS_FEEDS'): ?>
+              <?php if ($board === 'calendar' && $f['key'] === 'ICS_FEEDS'): ?>
               <div class="cal-legend-preview" id="calLegendPreview" aria-label="Wall legend preview"></div>
               <?php endif; ?>
               <?php if (!empty($f['help'])): ?><div class="help"><?= h($f['help']) ?></div><?php endif; ?>
@@ -4919,7 +4919,7 @@ function addRow(btn) {
         'select' => ($c['type'] ?? '') === 'select',
         'password' => ($c['type'] ?? '') === 'password',
         'palette' => ($c['type'] ?? '') === 'palette',
-        'paletteOptions' => ($c['type'] ?? '') === 'palette' ? family_calendar_palette() : [],
+        'paletteOptions' => ($c['type'] ?? '') === 'palette' ? calendar_palette() : [],
         'options' => $c['options'] ?? []], $ff['columns']);
     echo json_encode($colMap);
   ?>;
@@ -5021,7 +5021,7 @@ function updateCalLegendPreview() {
   if (!box) return;
   const table = document.querySelector('table.rows[data-field="ICS_FEEDS"]');
   if (!table) return;
-  const palette = <?= json_encode(family_calendar_palette()) ?>;
+  const palette = <?= json_encode(calendar_palette()) ?>;
   const hexFor = function (key) {
     const hit = palette.find(function (x) { return x.key === key; });
     return hit ? hit.hex : '#ffb347';
@@ -6888,7 +6888,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'photo.php': 'Photo conditions',
-    'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
+    'calendar.php': 'Calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
     'web.php': 'Website'

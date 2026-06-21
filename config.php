@@ -16,12 +16,31 @@ function cfg(string $key, $default = null)
         $conf = [];
         if (is_file($f)) {
             $j = json_decode((string)file_get_contents($f), true);
-            if (is_array($j)) $conf = $j;
+            if (is_array($j)) {
+                $conf = $j;
+            }
+        }
+        require_once __DIR__ . '/calendar_lib.php';
+        $migrated = calendar_migrate_from_family($conf);
+        if ($migrated['changed']) {
+            ksort($migrated['conf']);
+            cfg_write($migrated['conf']);
+            $conf = $migrated['conf'];
+        } else {
+            $conf = $migrated['conf'];
         }
         $GLOBALS['__cfg_cache'] = $conf;
     }
     $conf = $GLOBALS['__cfg_cache'];
-    if (!array_key_exists($key, $conf)) return $default;
+    if (!array_key_exists($key, $conf) && str_starts_with($key, 'calendar.')) {
+        $legacyKey = 'family.' . substr($key, 9);
+        if (array_key_exists($legacyKey, $conf)) {
+            $key = $legacyKey;
+        }
+    }
+    if (!array_key_exists($key, $conf)) {
+        return $default;
+    }
     $v = $conf[$key];
     if ($v === '' || $v === null) return $default;       // empty field = use default
     if (is_array($v) && $v === []) return $default;
