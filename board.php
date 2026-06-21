@@ -1,9 +1,8 @@
 <?php
 /**
  * BOARD ROTATION SHELL — point the kiosk browser at this one page.
- * This replaces Anthias's scheduling: it cycles the boards with crossfades,
- * per-page dwell times, and optional hour windows, all editable in admin.php
- * under "Rotation".
+ * Cycles boards with crossfades, per-page dwell times, and optional hour
+ * windows, all editable in admin.php under "Rotation".
  *
  * Each page entry: url (relative, e.g. "rss.php?feed=krebs"), dwell (seconds),
  * and optional from/to hours (0–23). Pages outside their window are skipped;

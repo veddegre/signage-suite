@@ -1,9 +1,8 @@
 <?php
 /**
  * VIDEO BOARD — 1920×1080 signage
- * Plays locally stored videos fullscreen — the same approach Anthias uses for
- * its native video assets, done by hand so it works as a web asset alongside
- * the other boards (and gets the alert ticker).
+ * Plays locally stored videos fullscreen — downloaded with yt-dlp and served
+ * from disk so the kiosk never hits a live YouTube embed (no ads, no bot checks).
  *
  * One file is both the player and the downloader:
  *
@@ -11,7 +10,7 @@
  *   FETCHER  php video.php fetch    → run from the CLI; downloads/updates every
  *                                     YouTube entry in VIDEOS via yt-dlp and
  *                                     prints each video's duration so you can
- *                                     set the matching Anthias asset length
+ *                                     set the matching playlist dwell time
  *
  * Admin can also download/update from Video Board in admin.php.
  *
@@ -20,9 +19,9 @@
  * Videos land in ./videos/ next to this file so the web server itself serves
  * the media with proper range support — easy on a Pi's CPU.
  *
- * Anthias setup: add  video.php?v=drone  as a web asset and set its duration
- * to the length printed by the fetcher. The video loops as a safety net, so a
- * slightly long asset duration just wraps to the start rather than going black.
+ * Playlist setup: add video.php?v=drone to a rotation entry and set dwell to
+ * the length printed by the fetcher. The video loops as a safety net, so a
+ * slightly long dwell just wraps to the start rather than going black.
  *
  * Keep videos muted for signage (MUTED=true). Chromium's autoplay policy
  * blocks un-muted autoplay unless the kiosk is launched with

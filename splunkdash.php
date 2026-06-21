@@ -20,14 +20,14 @@
  *
  *      and restart Splunk. (LAN-appropriate; it removes clickjacking
  *      protection for Splunk Web, so don't do this on an internet-exposed
- *      instance. If you'd rather not change it, put the published URL
- *      directly into Anthias as the web asset — you just lose the ticker.)
+ *      instance. If you'd rather not change it, load the published URL
+ *      directly in your rotator — you just lose the ticker overlay.)
  *
  * Notes:
  *   - Published dashboards refresh on their *scheduled search* cadence;
  *     searches don't run on demand. Set the publish refresh schedule to match
  *     how live you want the wall to be.
- *   - Anthias usage: each asset is  splunkdash.php?d=<key>  (no ?d= = first).
+ *   - Playlist usage: each entry is splunkdash.php?d=<key> (no ?d= = first).
  *   - 'reload' (seconds, optional) hard-reloads the iframe as a backstop in
  *     case the published page's own auto-refresh ever stalls in a long
  *     kiosk session. Default 300, 0 disables.

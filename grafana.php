@@ -4,8 +4,8 @@
  * Wraps a Grafana dashboard in kiosk mode so it slots into the rotation and
  * gets the weather-alert ticker overlay like every other board.
  *
- * One file, many dashboards: define them in DASHBOARDS, then each Anthias
- * web asset is  grafana.php?d=<key>  (no ?d= = first entry).
+ * One file, many dashboards: define them in DASHBOARDS, then add each as a
+ * playlist entry at grafana.php?d=<key> (no ?d= = first entry).
  *
  * Grafana-side setup (one time, grafana.ini):
  *   [security]        allow_embedding = true

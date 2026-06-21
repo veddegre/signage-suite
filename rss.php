@@ -4,8 +4,8 @@
  * Full-bleed story photo with headline + synopsis, cycling through the latest
  * items from an RSS or Atom feed.
  *
- * One file serves many feeds: define them in FEEDS below, then point each
- * Anthias web asset at  rss.php?feed=<name>  (e.g. rss.php?feed=krebs).
+ * One file serves many feeds: define them in FEEDS below, then add each feed
+ * as a playlist entry at rss.php?feed=<name> (e.g. rss.php?feed=krebs).
  * With no ?feed= parameter the first feed in the list is used.
  *
  * Per feed you can set how many stories to cycle ('stories') and seconds per
@@ -415,7 +415,7 @@ $payload = array_map(fn($i) => [
     tick(); setInterval(tick, 1000);
     <?php endif; ?>
 
-    // Refetch the feed periodically (Anthias also reloads per cycle)
+    // Refetch the feed periodically (rotation shell also reloads per cycle)
     setTimeout(() => location.reload(), 15 * 60 * 1000);
   </script>
 <?php endif; ?>

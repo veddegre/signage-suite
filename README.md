@@ -241,7 +241,7 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 - RRULE support: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), YEARLY, with INTERVAL/UNTIL/EXDATE. Exotic rules show only on their original date.
 
 ## rss.php — RSS Story Board
-- **One file, many feeds.** Define feeds in the `FEEDS` registry, then each Anthias web asset is just `rss.php?feed=krebs`, `rss.php?feed=ars`, `rss.php?feed=petapixel`, and so on. No `?feed=` falls back to the first entry.
+- **One file, many feeds.** Define feeds in the `FEEDS` registry, then add each feed as a playlist entry — `rss.php?feed=krebs`, `rss.php?feed=ars`, `rss.php?feed=petapixel`, and so on. No `?feed=` falls back to the first entry.
 - Per feed, `'stories'` sets how many items to cycle and `'dwell'` sets seconds per story; omit either to use `DEFAULT_STORIES` (8) and `DEFAULT_DWELL` (12).
 - Handles RSS 2.0 and Atom. Story images come from `media:content`/`media:thumbnail` (largest wins), `enclosure`, `itunes:image`, or the first `<img>` in the article body; stories with no image render as a clean typographic card.
 - Synopses are tag-stripped, whitespace-collapsed, trimmed to ~280 chars at a word boundary, and common feed cruft ("The post X appeared first on…") is removed.
@@ -249,9 +249,9 @@ Live TomTom Traffic Flow tiles on a dark Carto basemap (Leaflet), with optional 
 - **Requires** the `php-xml` (SimpleXML) and `php-mbstring` extensions — present on most installs, `apt install php-xml php-mbstring` if not.
 
 ## video.php — Video Board (local YouTube playback)
-Mimics Anthias's native video handling for web assets: videos are **downloaded locally with yt-dlp** and played fullscreen from disk — no live YouTube embed, so no ads, buffering, or embed-blocked failures on the Pi.
+Videos are **downloaded locally with yt-dlp** and played fullscreen from disk — no live YouTube embed, so no ads, buffering, or embed-blocked failures on the Pi.
 
-- **Registry:** define entries in `VIDEOS` — either `'youtube' => URL` or `'file' => 'name.mp4'` for videos you copy in yourself. Each Anthias asset is `video.php?v=drone`, `video.php?v=ambient`, etc.
+- **Registry:** define entries in `VIDEOS` — either `'youtube' => URL` or `'file' => 'name.mp4'` for videos you copy in yourself. Each playlist entry is `video.php?v=drone`, `video.php?v=ambient`, etc.
 - **Sound:** muted by default for wall displays. **Admin → Video Board** — uncheck **Mute all videos** and save. Kiosks set up with `setup-kiosk.sh` already allow unmuted autoplay.
 - **Fetching:** use **Admin → Video Board → Download / refresh YouTube videos**, or run `php video.php fetch` on the server. Downloads land in `./videos/` (capped at 1080p mp4); admin shows each video's duration for rotation dwell. Re-fetch after URL changes; optional weekly cron if sources update:
   `0 4 * * 1 cd /var/www/boards && php video.php fetch >> /var/log/video-fetch.log 2>&1`
@@ -282,7 +282,7 @@ Mimics Anthias's native video handling for web assets: videos are **downloaded l
 ## grafana.php — Grafana Board (kiosk iframe wrapper)
 Wraps any Grafana dashboard in kiosk mode so it joins the rotation and gets the alert ticker.
 
-- **Registry:** `DASHBOARDS` maps keys to dashboard URLs; each Anthias asset is `grafana.php?d=signaltrace`, etc. Kiosk mode, dark theme, and the per-dashboard `refresh` interval are appended automatically; `'params'` adds anything else (template vars, time range).
+- **Registry:** `DASHBOARDS` maps keys to dashboard URLs; each playlist entry is `grafana.php?d=signaltrace`, etc. Kiosk mode, dark theme, and the per-dashboard `refresh` interval are appended automatically; `'params'` adds anything else (template vars, time range).
 - **Grafana config (one time, then restart):** `[security] allow_embedding = true`, and for a login-free kiosk either `[auth.anonymous] enabled = true` with `org_role = Viewer` (fine on a LAN) **or** use a "Public dashboards" share link as the URL, which needs neither setting.
 - The SignalTrace repo ships Grafana dashboards (`grafana/`) — point an entry at one of those for a richer threat view than the native threat wall.
 
@@ -291,20 +291,20 @@ Splunk Web in an iframe means a login wall on the kiosk, so this board skips it:
 
 - **Splunk setup:** create a low-privilege signage user, mint a token under Settings → Tokens, set `SPLUNK_BASE` (management port **8089**, not Splunk Web) and `SPLUNK_TOKEN`. `SPLUNK_VERIFY_TLS = false` matches 8089's default self-signed cert.
 - **Panels:** the `PANELS` array defines the grid — `'single'` (big number from a stats result), `'list'` (label + bar + count, e.g. `stats count by country`), `'trend'` (area chart from a `timechart`). Optional `'earliest'`/`'latest'` Splunk time modifiers per panel, `'unit'`, and `'wide' => true` to span two of the three columns.
-- Results cache for `CACHE_TTL` (120s) per unique search, so Anthias cycling doesn't re-run searches; sizing guide: six normal panels, or four plus one wide trend, fills 1080p.
+- Results cache for `CACHE_TTL` (120s) per unique search, so playlist cycling does not re-run searches on every dwell; sizing guide: six normal panels, or four plus one wide trend, fills 1080p.
 
 ## splunkdash.php — Splunk Published Dashboard Board (10.x)
 The "whole dashboard, pixel for pixel" companion to splunk.php: wraps Splunk's **published Dashboard Studio dashboards** (Splunk Enterprise 10.x / Cloud 9.3.2411+), which are viewable without login — ideal kiosk material.
 
-- **Publish in Splunk:** open the Studio dashboard → Actions → Publish dashboard, choose a data refresh schedule (and optionally a link expiration), copy the published URL into `DASHBOARDS`. Each Anthias asset is `splunkdash.php?d=soc`, etc.
-- **One web.conf change:** published pages are served by Splunk Web, which by default refuses cross-origin framing. Set `x_frame_options_sameorigin = false` under `[settings]` in `$SPLUNK_HOME/etc/system/local/web.conf` and restart. Reasonable on a LAN instance; don't do it on an internet-exposed one — in that case put the published URL straight into Anthias instead (you just lose the ticker overlay).
+- **Publish in Splunk:** open the Studio dashboard → Actions → Publish dashboard, choose a data refresh schedule (and optionally a link expiration), copy the published URL into `DASHBOARDS`. Each playlist entry is `splunkdash.php?d=soc`, etc.
+- **One web.conf change:** published pages are served by Splunk Web, which by default refuses cross-origin framing. Set `x_frame_options_sameorigin = false` under `[settings]` in `$SPLUNK_HOME/etc/system/local/web.conf` and restart. Reasonable on a LAN instance; don't do it on an internet-exposed one — in that case load the published URL directly in your rotator instead (you just lose the ticker overlay).
 - **Know the refresh model:** published dashboards update on their *scheduled search* cadence — searches never run on demand. Set the publish refresh schedule to match how live you want the wall. The wrapper also hard-reloads the iframe every `reload` seconds (default 300, 0 to disable) as a backstop for long kiosk sessions.
 - Network rules still apply: the published link is hosted on the Splunk instance, so firewalls/VPN/IP allowlists gate who can reach it.
 
 ## ticker.php — Weather Alert Ticker (shared include)
 Every board includes this just before `</body>`. It renders **nothing** when there are no active NWS alerts; when alerts exist, a ticker overlays the bottom 72px of whichever board is on screen — amber for advisories, red with a blinking dot when anything Severe/Extreme is active.
 
-- **In the rotation shell (board.php)** the ticker renders once in the shell itself and is genuinely persistent across page transitions; framed boards are passed `?noticker=1` and use a 72px safe-bottom inset so content isn't clipped. Opened directly, each board still shows its own ticker — and because the scroll position is computed from the wall clock rather than page-load time, it stays seamless even under an external rotator like Anthias.
+- **In the rotation shell (board.php)** the ticker renders once in the shell itself and is genuinely persistent across page transitions; framed boards are passed `?noticker=1` and use a 72px safe-bottom inset so content isn't clipped. Opened directly, each board still shows its own ticker — and because the scroll position is computed from the wall clock rather than page-load time, it stays seamless even under an external URL rotator.
 - **In player.php** the ticker runs in the outer PWA document (the iframe loads `board.php?noticker=1`); it polls a lightweight JSON endpoint so alerts appear and disappear without a full page reload.
 - **Setup:** set `TICKER_LAT`/`TICKER_LON` and put a contact email in `TICKER_UA`. One shared cache file means the NWS API is polled at most once per `TICKER_TTL` (5 min) no matter how many boards rotate.
 - `TICKER_MODE`: `'scroll'` (marquee) or `'static'` (one alert at a time, 9s each, also clock-phased).
@@ -312,7 +312,7 @@ Every board includes this just before `</body>`. It renders **nothing** when the
 - `TICKER_DEMO = true` renders sample alerts so you can check the layout, then set it back to `false`.
 - To add it to future boards: `<?php include __DIR__ . '/ticker.php'; ?>` before `</body>`.
 
-## Rotation & deployment (self-hosted — no Anthias needed)
+## Rotation & deployment
 
 ### board.php — the rotation shell (multi-screen)
 Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's boards with crossfades. Screens, page lists, dwell times, and optional hour windows (0–23, overnight like 22→6 supported) are all edited in **admin.php → Rotation** — no file edits. Two stacked iframes preload each board before revealing it, a configurable hang timeout skips any page that fails to load, and the alert ticker lives in the shell so it persists across transitions.
@@ -389,8 +389,11 @@ Capture tools like **chrome-capture-for-channels** load a webpage in headless Ch
 
 URL-encode the source URL, and use `...board.php%3Fscreen%3Dgarage` for a specific screen — each screen can be its own channel. If your capture app records at a non-1080p resolution, point it at `player.php` instead and it'll scale to fit. Boards are silent by design; the video board is the only source that could contribute audio.
 
-### Still want Anthias instead?
-Every board works unchanged as an Anthias web asset (`lake.php`, `air.php`, `sports.php`, `rss.php?feed=ars`, ...) — set per-asset durations there and skip board.php. The per-board ticker includes handle slide cuts seamlessly either way.
+### Using boards outside board.php
+
+Every board is a plain web page at a URL. The intended setup is **board.php** on each kiosk plus **admin.php** for playlists, but you can also point any URL rotator, capture tool, or full-screen browser at individual boards — `lake.php`, `air.php`, `sports.php`, `rss.php?feed=ars`, and so on. Set per-entry dwell times in that tool and skip `board.php` if you prefer.
+
+When a board runs inside `board.php`, the shell owns the weather ticker (`?noticker=1` on framed pages). Opened directly or through another rotator, each board renders its own ticker. The scroll position is clock-phased, so ticker timing stays seamless across page transitions either way.
 
 ## General notes
 - Keep all files in one folder so they share `config/` and `cache/`.
