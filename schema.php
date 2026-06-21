@@ -329,6 +329,16 @@ function admin_schema(): array
             ['key' => 'BOARD_SUB', 'label' => 'Default page subtitle', 'type' => 'text'],
             $tz, $ttl(),
         ]],
+        'zabbix' => ['title' => 'Zabbix Monitoring', 'file' => 'zabbix.php', 'fields' => [
+            ['key' => 'ZABBIX_URL', 'label' => 'Zabbix URL', 'type' => 'text',
+             'help' => 'Base URL, e.g. https://zabbix.example.com — api_jsonrpc.php is appended automatically'],
+            ['key' => 'ZABBIX_TOKEN', 'label' => 'API token', 'type' => 'password',
+             'help' => 'Users → API tokens in Zabbix 7.x; read-only role is enough'],
+            ['key' => 'ZABBIX_VERIFY_TLS', 'label' => 'Verify TLS', 'type' => 'bool', 'default' => false],
+            ['key' => 'BOARD_TITLE', 'label' => 'Default page title', 'type' => 'text', 'help' => 'Used for the main page when no per-page title is set'],
+            ['key' => 'BOARD_SUB', 'label' => 'Default page subtitle', 'type' => 'text'],
+            $tz, $ttl('How long problem/host queries are cached'),
+        ]],
         'splunkdash' => ['title' => 'Splunk Published', 'file' => 'splunkdash.php', 'fields' => [
             ['key' => 'DASHBOARDS', 'label' => 'Published dashboards', 'type' => 'rows', 'keyed' => true,
              'columns' => [

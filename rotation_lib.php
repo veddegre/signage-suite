@@ -1091,6 +1091,13 @@ function rotation_page_label(string $url): string
         return 'Splunk — ' . splunk_page_label($key);
     }
 
+    if (preg_match('/^zabbix\.php(?:\?d=([^&]+))?/', $url, $m)) {
+        require_once __DIR__ . '/zabbix_lib.php';
+        $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(zabbix_pages_config()) ?: 'main');
+
+        return 'Zabbix — ' . zabbix_page_label($key);
+    }
+
     if (preg_match('/^web\.php(?:\?d=([^&]+))?/', $url, $m)) {
         require_once __DIR__ . '/web_lib.php';
         $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(web_sites_config()) ?: 'main');
@@ -1139,6 +1146,7 @@ function rotation_page_label(string $url): string
         'video.php' => 'Video board',
         'splunk.php' => 'Splunk panels',
         'splunkdash.php' => 'Splunk dashboard',
+        'zabbix.php' => 'Zabbix monitoring',
         'web.php' => 'Website',
     ];
 
@@ -1413,6 +1421,26 @@ function rotation_quick_add_items(): array
             'url' => splunk_page_url((string)$key),
             'dwell' => 60,
             'group' => 'Dashboards',
+        ];
+    }
+
+    require_once __DIR__ . '/zabbix_lib.php';
+    foreach (zabbix_pages_config() as $key => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        if (!rotation_quick_add_entry_allowed($page)) {
+            continue;
+        }
+        if (!empty($page['off'])) {
+            continue;
+        }
+        $title = trim((string)($page['title'] ?? $key));
+        $items[] = [
+            'label' => 'Zabbix — ' . $title,
+            'url' => zabbix_page_url((string)$key),
+            'dwell' => 60,
+            'group' => 'Monitoring',
         ];
     }
 

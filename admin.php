@@ -22,6 +22,7 @@ require_once __DIR__ . '/rotation_lib.php';
 require_once __DIR__ . '/presence_lib.php';
 require_once __DIR__ . '/traffic_lib.php';
 require_once __DIR__ . '/splunk_lib.php';
+require_once __DIR__ . '/zabbix_lib.php';
 require_once __DIR__ . '/web_lib.php';
 require_once __DIR__ . '/users_lib.php';
 require_once __DIR__ . '/sso_lib.php';
@@ -546,6 +547,42 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             } else {
                 $conf['splunk.PAGES'] = $mergedPages;
                 unset($conf['splunk.PANELS']);
+            }
+        }
+    }
+    if ($board === 'zabbix') {
+        if (!admin_is_super() && !empty($_POST['zabbix_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['zabbix_use_json'])) {
+            $parsed = zabbix_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Pages JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['zabbix.PAGES']);
+            } else {
+                $conf['zabbix.PAGES'] = $parsed;
+            }
+        } else {
+            $existingPages = is_array($conf['zabbix.PAGES'] ?? null) ? $conf['zabbix.PAGES'] : [];
+            $outV = zabbix_pages_from_post($_POST['PAGES'] ?? []);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = zabbix_normalize_page_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
+            if ($mergedPages === []) {
+                unset($conf['zabbix.PAGES']);
+            } else {
+                $conf['zabbix.PAGES'] = $mergedPages;
             }
         }
     }
@@ -1491,13 +1528,14 @@ if ($authed && $board === 'video') {
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
     'Weather & home'  => ['index', 'lake', 'webcam', 'photo', 'air', 'sports', 'calendar', 'traffic'],
-    'Monitoring'      => ['homelab', 'signaltrace'],
+    'Monitoring'      => ['homelab', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
+$zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
@@ -1563,6 +1601,15 @@ if ($board === 'splunk') {
     $splunkActivePage = splunk_normalize_page_key((string)($_GET['page'] ?? ''));
     if (!isset($splunkPages[$splunkActivePage])) {
         $splunkActivePage = (string)(array_key_first($splunkPages) ?: 'main');
+    }
+}
+$zabbixPages = [];
+$zabbixActivePage = 'main';
+if ($board === 'zabbix') {
+    $zabbixPages = admin_filter_owned_map(zabbix_admin_pages($rawConf));
+    $zabbixActivePage = zabbix_normalize_page_key((string)($_GET['page'] ?? ''));
+    if (!isset($zabbixPages[$zabbixActivePage])) {
+        $zabbixActivePage = (string)(array_key_first($zabbixPages) ?: 'main');
     }
 }
 
@@ -2777,6 +2824,8 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php endif; ?>
         <?php elseif ($board === 'splunk'): ?>
           Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
+        <?php elseif ($board === 'zabbix'): ?>
+          Each page is <code>zabbix.php?d=<em>key</em></code> in rotation — filter by Zabbix host group per tab below.
         <?php elseif ($board === 'grafana'): ?>
           Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'splunkdash'): ?>
@@ -3796,6 +3845,110 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
                   if (!in_array($f['key'], $splunkBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'zabbix'): ?>
+          <div class="section-title">Zabbix monitoring pages</div>
+          <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
+            <code>zabbix.php?d=<em>key</em></code>. Filter by one or more Zabbix host group names (comma-separated).</div>
+
+          <div class="splunk-pages-bar" id="zabbixPagesBar">
+            <?php foreach ($zabbixPages as $pk => $pg): ?>
+            <button type="button" class="splunk-page-tab<?= $pk === $zabbixActivePage ? ' active' : '' ?>"
+                    data-zabbix-page-tab="<?= h($pk) ?>">
+              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="addrow" onclick="addZabbixPage()">+ Add page</button>
+          </div>
+
+          <?php foreach ($zabbixPages as $pk => $pg):
+            $minSev = max(0, min(5, (int)($pg['min_severity'] ?? 2)));
+          ?>
+          <div class="splunk-page-editor" data-zabbix-page-editor="<?= h($pk) ?>"
+               style="<?= $pk === $zabbixActivePage ? '' : 'display:none' ?>">
+            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-zabbix-page-key>
+            <div class="splunk-page-head">
+              <div>
+                <label class="mini">Page title</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="Network NOC" data-zabbix-page-title>
+              </div>
+              <div>
+                <label class="mini">Subtitle</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Production hosts" data-zabbix-page-sub>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
+                   href="<?= h(zabbix_preview_url($pk)) ?>" target="_blank" rel="noopener" data-zabbix-page-preview>Preview ↗</a>
+                <?php if (count($zabbixPages) > 1): ?>
+                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
+                        onclick="removeZabbixPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(zabbix_page_url($pk)) ?></code></div>
+
+            <div class="field-grid" style="margin-bottom:12px">
+              <div class="field span-2">
+                <label class="mini">Host groups</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][host_groups]"
+                       value="<?= h(zabbix_host_groups_string($pg['host_groups'] ?? '')) ?>"
+                       placeholder="Linux servers, Network gear">
+                <div class="help">Exact Zabbix host group names, comma-separated. Only problems and hosts in these groups appear.</div>
+              </div>
+              <div class="field">
+                <label class="mini">Minimum severity</label>
+                <select name="PAGES[<?= h($pk) ?>][min_severity]">
+                  <?php foreach (zabbix_severity_options() as $sev): ?>
+                  <option value="<?= $sev ?>" <?= $minSev === $sev ? 'selected' : '' ?>><?= h(zabbix_severity_label($sev)) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="field">
+                <label class="mini">Max problems</label>
+                <input type="number" name="PAGES[<?= h($pk) ?>][max_problems]" min="1" max="50"
+                       value="<?= (int)($pg['max_problems'] ?? 12) ?>">
+              </div>
+              <div class="field">
+                <label class="mini">Max hosts</label>
+                <input type="number" name="PAGES[<?= h($pk) ?>][max_hosts]" min="1" max="100"
+                       value="<?= (int)($pg['max_hosts'] ?? 24) ?>">
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][hide_acknowledged]"
+                  <?= !empty($pg['hide_acknowledged']) ? 'checked' : '' ?>> Hide acknowledged</label>
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
+                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+              </div>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="zabbix_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Keyed object: <code>{"network":{"title":"…","host_groups":"Linux servers"}}</code>.</div>
+              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($zabbixPages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('zabbix') ? '' : ' hidden' ?>>
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $zabbixBoardKeys, true)) continue;
                   $val = current_val($rawConf, $board, $f['key']); ?>
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
@@ -6769,6 +6922,7 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('#usersList .user-card').forEach(bindUserRow);
   initVideoPlaylist();
   initSplunkPanels();
+  initZabbixPages();
   initPresencePanel();
   initRssFeedPreviews();
   initWebSitePreviews();
@@ -6880,6 +7034,10 @@ function rotationLabelFromUrl(url) {
     const m = url.match(/[?&]d=([^&]+)/);
     return 'Splunk — ' + decodeURIComponent((m && m[1]) || 'main');
   }
+  if (/^zabbix\.php/.test(url)) {
+    const m = url.match(/[?&]d=([^&]+)/);
+    return 'Zabbix — ' + decodeURIComponent((m && m[1]) || 'main');
+  }
   if (/^web\.php/.test(url)) {
     const m = url.match(/[?&]d=([^&]+)/);
     return 'Web — ' + decodeURIComponent((m && m[1]) || 'main');
@@ -6891,7 +7049,7 @@ function rotationLabelFromUrl(url) {
     'calendar.php': 'Calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
-    'web.php': 'Website'
+    'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'
   };
   const base = url.split('?')[0];
   return boards[base] || base;
@@ -7241,7 +7399,7 @@ function bindSplunkPageTabs() {
 
 function splunkNormalizePageKey(raw) {
   raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');
-  return raw || 'page';
+  return raw || 'main';
 }
 
 function splunkPreviewHref(pageKey) {
@@ -7425,6 +7583,147 @@ function removeSplunkPage(pageKey) {
   if (tab) tab.remove();
   const remaining = document.querySelector('[data-splunk-page-tab]');
   if (remaining) showSplunkPage(remaining.getAttribute('data-splunk-page-tab'));
+}
+
+function zabbixNormalizePageKey(raw) {
+  raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+  return raw || 'main';
+}
+
+function zabbixPreviewHref(pageKey) {
+  return 'zabbix.php?d=' + encodeURIComponent(pageKey) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function showZabbixPage(pageKey) {
+  document.querySelectorAll('[data-zabbix-page-editor]').forEach(function (el) {
+    el.style.display = el.getAttribute('data-zabbix-page-editor') === pageKey ? '' : 'none';
+  });
+  document.querySelectorAll('[data-zabbix-page-tab]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-zabbix-page-tab') === pageKey);
+  });
+}
+
+function syncZabbixPageTabLabel(titleInp) {
+  const editor = titleInp.closest('[data-zabbix-page-editor]');
+  if (!editor) return;
+  const pageKey = editor.getAttribute('data-zabbix-page-editor');
+  const tab = document.querySelector('[data-zabbix-page-tab="' + pageKey + '"]');
+  if (!tab) return;
+  const title = titleInp.value.trim() || pageKey;
+  const code = tab.querySelector('code');
+  tab.textContent = '';
+  tab.appendChild(document.createTextNode(title + ' '));
+  const codeEl = code || document.createElement('code');
+  codeEl.textContent = pageKey;
+  tab.appendChild(codeEl);
+}
+
+function bindZabbixPageTab(btn) {
+  if (btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', function () {
+    showZabbixPage(btn.getAttribute('data-zabbix-page-tab'));
+  });
+}
+
+function bindZabbixPageTabs() {
+  document.querySelectorAll('[data-zabbix-page-tab]').forEach(bindZabbixPageTab);
+}
+
+function zabbixSeverityOptionsHtml(selected) {
+  const opts = [
+    [0, 'Not classified'], [1, 'Information'], [2, 'Warning'], [3, 'Average'], [4, 'High'], [5, 'Disaster']
+  ];
+  return opts.map(function (pair) {
+    const val = pair[0];
+    const label = pair[1];
+    return '<option value="' + val + '"' + (String(selected) === String(val) ? ' selected' : '') + '>' + label + '</option>';
+  }).join('');
+}
+
+function initZabbixPages() {
+  bindZabbixPageTabs();
+  document.querySelectorAll('[data-zabbix-page-title]').forEach(function (inp) {
+    inp.addEventListener('input', function () { syncZabbixPageTabLabel(inp); });
+  });
+}
+
+function addZabbixPage() {
+  const key = prompt('Page key (letters, numbers, underscore — used in zabbix.php?d=KEY):', 'page2');
+  if (key === null) return;
+  const pageKey = zabbixNormalizePageKey(key);
+  if (document.querySelector('[data-zabbix-page-editor="' + pageKey + '"]')) {
+    alert('A page with key "' + pageKey + '" already exists.');
+    showZabbixPage(pageKey);
+    return;
+  }
+  const bar = document.getElementById('zabbixPagesBar');
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'splunk-page-tab';
+  tab.setAttribute('data-zabbix-page-tab', pageKey);
+  tab.appendChild(document.createTextNode('New page '));
+  const tabCode = document.createElement('code');
+  tabCode.textContent = pageKey;
+  tab.appendChild(tabCode);
+  if (bar) {
+    const addBtn = bar.querySelector('.addrow');
+    if (addBtn) bar.insertBefore(tab, addBtn);
+    else bar.appendChild(tab);
+  }
+  bindZabbixPageTab(tab);
+
+  const editor = document.createElement('div');
+  editor.className = 'splunk-page-editor';
+  editor.setAttribute('data-zabbix-page-editor', pageKey);
+  editor.style.display = 'none';
+  editor.innerHTML =
+    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-zabbix-page-key>' +
+    '<div class="splunk-page-head">' +
+      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="Network NOC" data-zabbix-page-title></div>' +
+      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Production hosts" data-zabbix-page-sub></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
+        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + zabbixPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-zabbix-page-preview>Preview ↗</a>' +
+        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeZabbixPage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>zabbix.php?d=' + pageKey + '</code></div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', []) +
+    '<div class="field-grid" style="margin-bottom:12px">' +
+      '<div class="field span-2"><label class="mini">Host groups</label>' +
+        '<input type="text" name="PAGES[' + pageKey + '][host_groups]" placeholder="Linux servers, Network gear">' +
+        '<div class="help">Exact Zabbix host group names, comma-separated.</div></div>' +
+      '<div class="field"><label class="mini">Minimum severity</label>' +
+        '<select name="PAGES[' + pageKey + '][min_severity]">' + zabbixSeverityOptionsHtml(2) + '</select></div>' +
+      '<div class="field"><label class="mini">Max problems</label>' +
+        '<input type="number" name="PAGES[' + pageKey + '][max_problems]" min="1" max="50" value="12"></div>' +
+      '<div class="field"><label class="mini">Max hosts</label>' +
+        '<input type="number" name="PAGES[' + pageKey + '][max_hosts]" min="1" max="100" value="24"></div>' +
+      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][hide_acknowledged]"> Hide acknowledged</label>' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
+      '</div>' +
+    '</div>';
+
+  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
+  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
+  if (jsonDetails && jsonDetails.closest('details')) {
+    jsonDetails.closest('details').before(editor);
+  } else if (form) {
+    form.appendChild(editor);
+  }
+  editor.querySelector('[data-zabbix-page-title]').addEventListener('input', function () { syncZabbixPageTabLabel(this); });
+  showZabbixPage(pageKey);
+}
+
+function removeZabbixPage(pageKey) {
+  if (!confirm('Remove page "' + pageKey + '"?')) return;
+  const editor = document.querySelector('[data-zabbix-page-editor="' + pageKey + '"]');
+  const tab = document.querySelector('[data-zabbix-page-tab="' + pageKey + '"]');
+  if (editor) editor.remove();
+  if (tab) tab.remove();
+  const remaining = document.querySelector('[data-zabbix-page-tab]');
+  if (remaining) showZabbixPage(remaining.getAttribute('data-zabbix-page-tab'));
 }
 
 function addSplunkPanelCard(pageKey) {

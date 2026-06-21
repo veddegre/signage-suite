@@ -14,7 +14,7 @@ const LEGACY_ADMIN_FILE = __DIR__ . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
-    'grafana', 'splunk', 'splunkdash', 'calendar', 'account',
+    'grafana', 'splunk', 'splunkdash', 'zabbix', 'calendar', 'account',
 ];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */

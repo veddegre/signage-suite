@@ -423,7 +423,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   }
 
   function boardNeedsScope(url) {
-    return /(?:^|[?&/])(calendar|family|rss|video|grafana|splunkdash|splunk|web|slides|rotator)\.php(?:[?&#]|$)/i.test(String(url));
+    return /(?:^|[?&/])(calendar|family|rss|video|grafana|splunkdash|splunk|zabbix|web|slides|rotator)\.php(?:[?&#]|$)/i.test(String(url));
   }
 
   function rotateToIndex(targetIdx) {

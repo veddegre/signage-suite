@@ -47,7 +47,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Calendar**, and **Rotation** for their assigned display only; **Account** and **Status** |
+| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **Calendar**, and **Rotation** for their assigned display only; **Account** and **Status** |
 
 **Navigation:** sidebar groups boards (Setup, Weather & home, Monitoring, Media, Dashboards). **Users** and **Tools** are super-admin only. **Status**, **Account**, and logout are in the sidebar footer.
 
@@ -61,7 +61,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 
 ### Content ownership & sharing
 
-Playlist rows on operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Calendar**, etc.) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). Weather, monitoring, and setup boards stay super-admin only. Operators only see and edit entries they own or that are shared with them; new entries they create are owned by them automatically. Board-level API secrets (Splunk token, TomTom key, etc.) remain super-admin only.
+Playlist rows on operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Calendar**, etc.) can have an **owner** and **shared with** list (super admins see an **Access** control on each row). Homelab, SignalTrace, weather, and setup boards stay super-admin only. Operators only see and edit entries they own or that are shared with them; new entries they create are owned by them automatically. Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
 
 ### Concurrent saves & JSON storage
 
@@ -296,6 +296,14 @@ Splunk Web in an iframe means a login wall on the kiosk, so this board skips it:
 - **Splunk setup:** create a low-privilege signage user, mint a token under Settings → Tokens, set `SPLUNK_BASE` (management port **8089**, not Splunk Web) and `SPLUNK_TOKEN`. `SPLUNK_VERIFY_TLS = false` matches 8089's default self-signed cert.
 - **Panels:** the `PANELS` array defines the grid — `'single'` (big number from a stats result), `'list'` (label + bar + count, e.g. `stats count by country`), `'trend'` (area chart from a `timechart`). Optional `'earliest'`/`'latest'` Splunk time modifiers per panel, `'unit'`, and `'wide' => true` to span two of the three columns.
 - Results cache for `CACHE_TTL` (120s) per unique search, so playlist cycling does not re-run searches on every dwell; sizing guide: six normal panels, or four plus one wide trend, fills 1080p.
+- **Multiple pages:** admin → **Splunk Panels** — each tab is `splunk.php?d=<key>` with its own panel deck, title, and ownership/sharing (same model as Grafana).
+
+## zabbix.php — Zabbix Monitoring Board (JSON-RPC, 7.x)
+No iframe and no Zabbix Web login on the kiosk: active problems and host status are fetched **server-side via Zabbix 7.x JSON-RPC** (`api_jsonrpc.php`) with an API token. The token never reaches the display browser.
+
+- **Zabbix setup:** create a read-only user, mint an API token under Users → API tokens, set `ZABBIX_URL` (base URL, e.g. `https://zabbix.example.com`) and `ZABBIX_TOKEN` in admin → **Zabbix Monitoring**. `ZABBIX_VERIFY_TLS = false` matches typical LAN self-signed certs.
+- **Multiple pages:** each tab in admin is its own wall — `zabbix.php?d=<key>`. Filter by **host group name(s)** (comma-separated, exact match), minimum severity, max problems/hosts, and optional hide-acknowledged. Operators can own pages and share them with teammates (like Splunk/Grafana rows).
+- **Wall layout:** severity summary pills, active problem list, and a host grid (green = OK in scope, red = has an active problem). Results cache for `CACHE_TTL` (default 60s).
 
 ## splunkdash.php — Splunk Published Dashboard Board (10.x)
 The "whole dashboard, pixel for pixel" companion to splunk.php: wraps Splunk's **published Dashboard Studio dashboards** (Splunk Enterprise 10.x / Cloud 9.3.2411+), which are viewable without login — ideal kiosk material.
