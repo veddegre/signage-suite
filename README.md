@@ -49,7 +49,7 @@ Accounts live in `config/users.json` (not in the web-readable tree — blocked l
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
 | **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **Calendar**, and **Rotation** for their assigned display only; **Account** and **Status** |
 
-**Navigation:** sidebar groups boards (Setup, Weather & home, Monitoring, Media, Dashboards). **Users** and **Tools** are super-admin only. **Status**, **Account**, and logout are in the sidebar footer.
+**Navigation:** sidebar groups boards (Setup, Weather & home, Monitoring — homelab, SignalTrace, **Zabbix** — Media, Dashboards). **Users** and **Tools** are super-admin only. **Status**, **Account**, and logout are in the sidebar footer.
 
 - **Account** — change your local password (hidden for SSO-linked accounts).
 - **Users** — create local or SSO users, assign roles, assign exactly **one display** per operator (radio picker). Displays assigned to an operator cannot be deleted from **Rotation** until unassigned here.
@@ -299,11 +299,17 @@ Splunk Web in an iframe means a login wall on the kiosk, so this board skips it:
 - **Multiple pages:** admin → **Splunk Panels** — each tab is `splunk.php?d=<key>` with its own panel deck, title, and ownership/sharing (same model as Grafana).
 
 ## zabbix.php — Zabbix Monitoring Board (JSON-RPC, 7.x)
-No iframe and no Zabbix Web login on the kiosk: active problems and host status are fetched **server-side via Zabbix 7.x JSON-RPC** (`api_jsonrpc.php`) with an API token. The token never reaches the display browser.
+Zabbix Web in an iframe means a login wall on the kiosk, so this board skips it: **active problems and host status are fetched server-side** via Zabbix **7.x** JSON-RPC (`api_jsonrpc.php`) with an API token. The token never reaches the display browser.
 
-- **Zabbix setup:** create a read-only user, mint an API token under Users → API tokens, set `ZABBIX_URL` (base URL, e.g. `https://zabbix.example.com`) and `ZABBIX_TOKEN` in admin → **Zabbix Monitoring**. `ZABBIX_VERIFY_TLS = false` matches typical LAN self-signed certs.
-- **Multiple pages:** each tab in admin is its own wall — `zabbix.php?d=<key>`. Filter by **host group name(s)** (comma-separated, exact match), minimum severity, max problems/hosts, and optional hide-acknowledged. Operators can own pages and share them with teammates (like Splunk/Grafana rows).
-- **Wall layout:** severity summary pills, active problem list, and a host grid (green = OK in scope, red = has an active problem). Results cache for `CACHE_TTL` (default 60s).
+- **Zabbix setup (one time):**
+  1. Create a read-only Zabbix user (or use an existing one with at least **Problem read** and **Host read** on the host groups you care about).
+  2. **Users → API tokens** — create a token for that user.
+  3. In admin → **Monitoring → Zabbix Monitoring → Board settings** (super admin), set **`ZABBIX_URL`** (base URL only, e.g. `https://zabbix.example.com` — `api_jsonrpc.php` is appended automatically) and **`ZABBIX_TOKEN`**. Leave **`ZABBIX_VERIFY_TLS`** off for typical LAN self-signed certs.
+  4. If Zabbix is on a private IP, enable **Allow private URL fetches** under **Security** (same as RSS/homelab boards).
+- **Multiple pages:** each tab in admin is its own 1080p wall — `zabbix.php?d=<key>` in rotation (default page key is `main`). Use separate pages when different teams or displays need different **host group** scopes — e.g. `network` for core routing, `signage` for display hosts — without sharing one global view.
+- **Per-page filters** (each tab): **Host groups** (comma-separated **exact** Zabbix host group names), **Minimum severity** (Not classified → Disaster), **Max problems** / **Max hosts**, **Hide acknowledged**, and **Off wall** (keep the page in admin but skip it on the kiosk). **Access** controls let operators **own** pages and **share** them with teammates (same model as Splunk/Grafana rows); board-level API secrets stay super-admin only.
+- **Wall layout:** severity summary pills, an active-problem list (host, age, acknowledged badge), and a host grid in scope (green = no active problem, red = problem, grey = disabled host). Results cache for **`CACHE_TTL`** (default 60s) per page filter set, so rotation cycling does not hammer Zabbix on every dwell.
+- **Rotation quick-add:** configured pages appear under **Monitoring** on the Rotation editor's quick-add list when you save them.
 
 ## splunkdash.php — Splunk Published Dashboard Board (10.x)
 The "whole dashboard, pixel for pixel" companion to splunk.php: wraps Splunk's **published Dashboard Studio dashboards** (Splunk Enterprise 10.x / Cloud 9.3.2411+), which are viewable without login — ideal kiosk material.
@@ -339,7 +345,7 @@ Point each kiosk browser at `board.php?screen=<key>`; it cycles that screen's bo
 
 **Status:** **admin.php → Status** shows which kiosks are online, what they are playing, and whether photo/slide decks are synced to each display's rotation — without cluttering the Rotation editor.
 
-Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `webcam.php`, `air.php`, `sports.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
+Entries are relative URLs, so parameterized boards work naturally: `rss.php?feed=krebs`, `grafana.php?d=homelab`, `zabbix.php?d=network`, `splunk.php?d=soc`, `video.php?v=drone`, `slides.php?slide=birthday.png`, `webcam.php`, `air.php`, `sports.php`, `traffic.php` (set the dwell to the duration `php video.php fetch` reports for video entries).
 
 ### setup-server.sh — the web host
 Onboards a fresh **Ubuntu / Debian / Raspberry Pi OS** machine as the signage **server** — Apache or nginx, PHP, permissions, hardening. Runs on a VM, mini PC, Pi, or any host with those distros:
