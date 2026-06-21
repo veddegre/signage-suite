@@ -2,6 +2,7 @@
 /**
  * LAKE MICHIGAN CONDITIONS — 1920×1080 signage
  * NDBC buoy observations + NWS active alerts + sun times for the Grand Haven shoreline.
+ * Default buoy 45029 (Holland nearshore) — reports wave height; Muskegon 45161 often lacks WVHT.
  * No API keys required.
  *
  * Note: nearshore buoys are seasonal (roughly Apr–Oct). When the buoy is out of
@@ -10,8 +11,8 @@
 
 require_once __DIR__ . '/config.php';
 
-define('NDBC_STATION', cfg('lake.NDBC_STATION', '45161'));
-define('STATION_NAME', cfg('lake.STATION_NAME', 'Muskegon Buoy 45161'));
+define('NDBC_STATION', cfg('lake.NDBC_STATION', '45029'));
+define('STATION_NAME', cfg('lake.STATION_NAME', 'Holland Buoy 45029'));
 define('BEACH_NAME', cfg('lake.BEACH_NAME', 'Grand Haven'));
 define('LAT', cfg('lake.LAT', 43.0631));
 define('LON', cfg('lake.LON', -86.2470));

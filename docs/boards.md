@@ -38,9 +38,9 @@ Allendale weather, RainViewer animated radar, sunrise arc.
 
 ### lake.php — Lake Michigan Conditions
 
-**Data:** NDBC buoy 45161 (Muskegon nearshore) + NWS active alerts + computed sun times. No API keys.
+**Data:** NDBC buoy **45029** (Holland nearshore — wave height, closer to Grand Haven) + NWS active alerts + computed sun times. No API keys.
 
-**Setup:** change `NWS_UA` to a real contact email (NWS requires this). Optionally change `NDBC_STATION`.
+**Setup:** change `NWS_UA` to a real contact email (NWS requires this). Optionally change `NDBC_STATION` (Muskegon **45161** often reports met data without `WVHT`).
 
 Nearshore buoys run in winter (~Nov–Apr); the board notes when they are offline and keeps NWS alerts live. Swim risk uses a wave-height heuristic, escalated to HIGH when a Beach Hazards Statement or Rip Current alert is active.
 

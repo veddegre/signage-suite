@@ -122,7 +122,7 @@ function admin_schema(): array
             $tz, $ttl(),
         ]],
         'lake' => ['title' => 'Lake Michigan', 'file' => 'lake.php', 'fields' => [
-            ['key' => 'NDBC_STATION', 'label' => 'NDBC station ID', 'type' => 'text', 'help' => 'e.g. 45161 (Muskegon nearshore)'],
+            ['key' => 'NDBC_STATION', 'label' => 'NDBC station ID', 'type' => 'text', 'help' => 'e.g. 45029 (Holland nearshore — wave height); 45161 Muskegon often lacks WVHT'],
             ['key' => 'STATION_NAME', 'label' => 'Station display name', 'type' => 'text'],
             ['key' => 'BEACH_NAME', 'label' => 'Beach name', 'type' => 'text'],
             ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
