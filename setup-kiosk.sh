@@ -79,6 +79,10 @@ if [[ ! -x "$CHROMIUM" ]]; then
   exit 1
 fi
 echo "==> Using browser: $CHROMIUM"
+echo "==> Purging CUPS (no printing on a kiosk)"
+apt-get purge -y -q cups cups-daemon cups-browsed cups-common 2>/dev/null || true
+apt-get autoremove -y -q --purge 2>/dev/null || true
+systemctl disable --now cups.service cups.socket cups-browsed.service 2>/dev/null || true
 usermod -aG video,render,input "$KIOSK_USER"
 
 if [[ $WITH_CEC -eq 1 ]]; then
