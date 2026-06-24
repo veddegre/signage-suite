@@ -85,9 +85,8 @@ function air_pollen_band(?float $grains): array
 }
 
 /** Google Universal Pollen Index (1–5) → label and color. */
-function air_upi_band(?int $upi, bool $inSeason = true): array
+function air_upi_band(?int $upi): array
 {
-    if (!$inSeason) return ['Off season', 'var(--mist)'];
     if ($upi === null) return ['—', 'var(--mist)'];
     return match (max(1, min(5, $upi))) {
         1       => ['Very low', '#39c46d'],
@@ -96,6 +95,52 @@ function air_upi_band(?int $upi, bool $inSeason = true): array
         4       => ['High', '#ff9d4d'],
         default => ['Very high', '#ff5d5d'],
     };
+}
+
+/** @return array{0:?int,1:string,2:bool} UPI value, category label, whether index data is present */
+function air_google_pollen_index(?array $indexInfo): array
+{
+    $upi = null;
+    if (isset($indexInfo['value']) && $indexInfo['value'] !== null && $indexInfo['value'] !== '') {
+        $upi = (int)$indexInfo['value'];
+    }
+    $category = trim((string)($indexInfo['category'] ?? ''));
+    $hasIndex = $upi !== null
+        || ($category !== '' && !preg_match('/off\s*season/i', $category));
+    return [$upi, $category, $hasIndex];
+}
+
+function air_google_pollen_row_label(?int $upi, string $category): array
+{
+    [$label, $color] = air_upi_band($upi);
+    if ($category !== '' && !preg_match('/off\s*season/i', $category)) {
+        $label = $category;
+    }
+    return [$label, $color];
+}
+
+function air_pollen_rows_sort(array $rows): array
+{
+    usort($rows, function ($a, $b) {
+        $av = $a['val'];
+        $bv = $b['val'];
+        if ($av === null && $bv === null) return 0;
+        if ($av === null) return 1;
+        if ($bv === null) return -1;
+        return $bv <=> $av;
+    });
+    return $rows;
+}
+
+/** Highest active pollen row for forecast summaries (skips off-season nulls). */
+function air_pollen_top_row(array $rows): array
+{
+    foreach ($rows as $row) {
+        if ($row['val'] !== null) {
+            return $row;
+        }
+    }
+    return $rows[0] ?? ['name' => '—', 'label' => '—'];
 }
 
 function air_openmeteo_has_pollen(array $hourly): bool
@@ -151,8 +196,7 @@ function air_pollen_rows_openmeteo(array $hourly, string $dayKey): array
         ['name' => 'Ragweed', 'val' => air_day_max($hourly, 'ragweed_pollen', $dayKey), 'unit' => 'grains'],
         ['name' => 'Tree', 'val' => $tree > 0 ? $tree : null, 'unit' => 'grains'],
     ];
-    usort($types, fn($a, $b) => ($b['val'] ?? 0) <=> ($a['val'] ?? 0));
-    return $types;
+    return air_pollen_rows_sort($types);
 }
 
 /** @return list<array{name:string,val:?float,unit:string,label:string,color:string}> */
@@ -167,11 +211,18 @@ function air_pollen_rows_google(?array $data, int $dayIndex): array
         $code = (string)($pt['code'] ?? '');
         if (!isset($labels[$code])) continue;
         $inSeason = (bool)($pt['inSeason'] ?? false);
-        $upi = isset($pt['indexInfo']['value']) ? (int)$pt['indexInfo']['value'] : null;
-        [$label, $color] = air_upi_band($upi, $inSeason);
-        if (isset($pt['indexInfo']['category']) && $inSeason) {
-            $label = (string)$pt['indexInfo']['category'];
+        [$upi, $category, $hasIndex] = air_google_pollen_index($pt['indexInfo'] ?? null);
+        if (!$inSeason && !$hasIndex) {
+            $rows[] = [
+                'name' => $labels[$code],
+                'val' => null,
+                'unit' => 'upi',
+                'label' => 'Off season',
+                'color' => 'var(--mist)',
+            ];
+            continue;
         }
+        [$label, $color] = air_google_pollen_row_label($upi, $category);
         $rows[] = [
             'name' => $labels[$code],
             'val' => $upi !== null ? (float)$upi : null,
@@ -180,8 +231,7 @@ function air_pollen_rows_google(?array $data, int $dayIndex): array
             'color' => $color,
         ];
     }
-    usort($rows, fn($a, $b) => ($b['val'] ?? 0) <=> ($a['val'] ?? 0));
-    return $rows;
+    return air_pollen_rows_sort($rows);
 }
 
 function air_fetch_google_pollen(): ?array
@@ -307,8 +357,9 @@ foreach ($forecastDays as $i => $dayKey) {
     $dayAqi = air_day_max($hourly, 'us_aqi', $dayKey);
     $dayPm = air_day_max($hourly, 'pm2_5', $dayKey);
     $dayPollen = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, $i, $dayKey);
-    $topPollen = $dayPollen[0]['name'] ?? '—';
-    $topLabel = $dayPollen[0]['label'] ?? '—';
+    $topRow = air_pollen_top_row($dayPollen);
+    $topPollen = $topRow['name'] ?? '—';
+    $topLabel = $topRow['label'] ?? '—';
     $label = $dayKey === $todayKey ? 'Today'
         : ($dayKey === date('Y-m-d', strtotime('+1 day')) ? 'Tomorrow' : date('D', strtotime($dayKey . ' 12:00:00')));
     $forecast[] = [

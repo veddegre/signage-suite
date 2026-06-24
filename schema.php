@@ -159,6 +159,15 @@ function admin_schema(): array
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
             $tz, $ttl('Open-Meteo + Google Pollen responses — default 900s (15 min)'),
         ]],
+        'uv' => ['title' => 'UV Index', 'file' => 'uv.php', 'fields' => [
+            ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
+            ['key' => 'PLACE', 'label' => 'Place name', 'type' => 'text'],
+            ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
+            ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
+            ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
+             'help' => 'Direct view only — rotation iframe reloads with the shell'],
+            $tz, $ttl('Open-Meteo forecast responses — default 900s (15 min)'),
+        ]],
         'sports' => ['title' => 'Detroit Sports', 'file' => 'sports.php', 'fields' => [
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text',

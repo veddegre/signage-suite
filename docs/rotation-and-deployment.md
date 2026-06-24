@@ -72,6 +72,7 @@ video.php?v=drone
 slides.php?slide=birthday.png
 webcam.php
 air.php
+uv.php
 sports.php
 traffic.php
 ```

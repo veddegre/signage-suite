@@ -11,6 +11,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Webcam | `webcam.php` | `webcam.php` | — |
 | | Photo conditions | `photo.php` | `photo.php` | OpenWeatherMap |
 | | Air & pollen | `air.php` | `air.php` | Google Pollen (optional) |
+| | UV index | `uv.php` | `uv.php` | — |
 | | Detroit sports | `sports.php` | `sports.php` | — |
 | | Calendar | `calendar.php` | `calendar.php` | — |
 | | Traffic map | `traffic.php` | `traffic.php` | TomTom |
@@ -69,6 +70,14 @@ US AQI, PM2.5/PM10, ozone, NO₂, pollen bars, three-day outlook.
 **Setup:** admin → **Air & Pollen** — place name, lat/lon, timezone. For US pollen: enable Pollen API in Google Cloud, paste key (5,000 calls/month free tier; 15-minute cache keeps usage low).
 
 Without Google key, air quality works; pollen shows a setup note. Default cache TTL 900s.
+
+### uv.php — UV Index
+
+Current UV, today's hourly curve (sunrise–sunset), peak/clear-sky stats, and 5-day daily maximum.
+
+**Data:** [Open-Meteo Forecast API](https://open-meteo.com/en/docs) — free, no key.
+
+**Setup:** admin → **UV Index** — place name, lat/lon, timezone. Uses WHO UV bands (Low through Extreme) with sun-protection advice. Default cache TTL 900s.
 
 ### sports.php — Detroit Sports
 
