@@ -120,6 +120,40 @@ Quote URLs with `?screen=`. Optional **scale** (e.g. `2`) fills 4K displays.
 
 After setup, manage content only through admin.php on the server.
 
+### Kiosk freezes or stops rotating
+
+**Built-in recovery (no reboot needed):**
+
+| Layer | What it does |
+|-------|----------------|
+| **board.php** | Unloads the hidden iframe after each crossfade (stops memory creep from Grafana, webcam, video, etc.) |
+| **board.php watchdog** | If a page stalls ~2× dwell (+ 90s), forces the next board; full shell reload on the second trip |
+| **board.php** | Automatic shell reload every 8 hours |
+| **signage-restart.timer** | Nightly `systemctl restart signage` at 04:00 |
+| **signage-watchdog.timer** | Every 5 min — restarts `signage.service` if `board.php` stops responding |
+
+**On the kiosk (SSH):**
+
+```bash
+systemctl status signage.service signage-watchdog.timer signage-restart.timer
+journalctl -u signage -n 80 --no-pager
+```
+
+**Quick checks:**
+
+1. **Enable Debug** on the display row in admin → Rotation — overlay shows loading vs on-screen and the current URL.
+2. **Heavy boards** — Grafana, Splunk published, webcam embeds, and long video dwells use the most GPU/RAM. Ensure `webcam.php` / `grafana.php` have sensible `RELOAD_SEC` (hourly is fine).
+3. **Hang timeout** — admin → Rotation → display **Hang (ms)** (default 20s). If a board never fires `onload`, rotation still advances after this.
+4. **Re-run kiosk setup** after pulling updates so `/usr/local/bin/signage-kiosk` picks up new Chromium flags (`--disable-dev-shm-usage` helps on Pi).
+
+**Manual recovery without reboot:**
+
+```bash
+sudo systemctl restart signage.service
+```
+
+Or from the wall: unplug USB mouse if one is attached (some devices wake the compositor cursor stack).
+
 ---
 
 ## player.php — PWA player

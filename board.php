@@ -111,6 +111,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const REVISION = <?= json_encode($runtime['revision']) ?>;
   const SETTLE  = <?= (int)$runtime['settle_ms'] ?>;
   const HANG    = <?= (int)$runtime['hang_ms'] ?>;
+  const FADE    = <?= (int)$runtime['fade_ms'] ?>;
   const SHUFFLE = <?= json_encode((bool)$runtime['shuffle']) ?>;
   const WEIGHTED = <?= json_encode((bool)$runtime['weighted']) ?>;
   const ROTATION_TZ = <?= json_encode($runtime['timezone']) ?>;
@@ -168,10 +169,11 @@ if (($_GET['api'] ?? '') === 'presence') {
 
   function scheduleRotate(ms) {
     clearRotateTimer();
+    const wait = Math.max(5000, ms | 0);
     rotateTimer = setTimeout(function () {
       rotateTimer = null;
       rotate();
-    }, ms);
+    }, wait);
   }
 
   function isRssUrl(url) {
@@ -422,6 +424,17 @@ if (($_GET['api'] ?? '') === 'presence') {
     } catch (e) {}
   }
 
+  /** Tear down a hidden iframe so Chromium releases GPU/JS from the previous board. */
+  function unloadFrame(frame) {
+    if (!frame) return;
+    stopFrame(frame);
+    frame.onload = null;
+    frame.classList.remove('show');
+    try {
+      frame.removeAttribute('src');
+    } catch (e) {}
+  }
+
   function boardNeedsScope(url) {
     return /(?:^|[?&/])(calendar|family|rss|video|grafana|splunkdash|splunk|zabbix|web|slides|rotator)\.php(?:[?&#]|$)/i.test(String(url));
   }
@@ -450,7 +463,8 @@ if (($_GET['api'] ?? '') === 'presence') {
     const reveal = () => {
       if (revealed || myGen !== gen) return;
       revealed = true;
-      stopFrame(frames[front]);
+      const hidden = frames[front];
+      stopFrame(hidden);
       f.classList.add('show');
       frames[front].classList.remove('show');
       front = back;
@@ -462,9 +476,14 @@ if (($_GET['api'] ?? '') === 'presence') {
       const dwellMs = (+p.dwell) * 1000;
       const safetyMs = isRssUrl(p.url) ? Math.max(dwellMs + 15000, 60000) : dwellMs;
       scheduleRotate(safetyMs);
+      const unloadGen = myGen;
+      setTimeout(function () {
+        if (unloadGen !== gen) return;
+        unloadFrame(hidden);
+      }, FADE + 80);
     };
 
-    stopFrame(f);
+    unloadFrame(f);
     f.onload = () => setTimeout(function () {
       hideKioskCursor(f);
       if (myGen !== gen) return;
@@ -560,7 +579,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     if (blankActive || PAGES.length === 0) return;
     const p = PAGES[idx];
     const dwellMs = p ? Math.max(1000, (+p.dwell || 60) * 1000) : 60000;
-    const staleMs = Math.max(dwellMs + 120000, 600000);
+    const staleMs = Math.max(dwellMs + 90000, dwellMs * 2, 120000);
     if (Date.now() - lastAdvanceAt < staleMs) return;
     watchdogTrips++;
     if (watchdogTrips >= 2) {
@@ -568,11 +587,12 @@ if (($_GET['api'] ?? '') === 'presence') {
       return;
     }
     clearRotateTimer();
+    frames.forEach(unloadFrame);
     rotateForward();
   }, 30000);
 
   // Periodic shell reload flushes Chromium memory and stuck renderer state.
-  setTimeout(function () { location.reload(); }, 12 * 60 * 60 * 1000);
+  setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
 </script>
 <?php signage_kiosk_hide_pointer_script(); ?>
 <?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>

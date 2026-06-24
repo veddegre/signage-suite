@@ -115,7 +115,7 @@ Expect **200** and `Content-Type: image/png`. Errors logged to `cache/traffic_ti
 - **Trash/recycle:** `TRASH_WEEKDAY`, `RECYCLE_ANCHOR` (any past recycle date). Leave trash day as default to hide the chip
 - **Countdowns:** label → `YYYY-MM-DD`
 
-RRULE support: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), YEARLY, with INTERVAL/UNTIL/EXDATE.
+RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEARLY, with UNTIL/EXDATE.
 
 ---
 

@@ -64,6 +64,29 @@ function calendar_palette_has_key(string $key): bool
     return false;
 }
 
+/** ISO weekday 1=Mon … 7=Sun for an RRULE WKST token (RFC 5545 default: MO). */
+function ics_wkst_to_iso(string $wkst): int
+{
+    static $map = ['MO' => 1, 'TU' => 2, 'WE' => 3, 'TH' => 4, 'FR' => 5, 'SA' => 6, 'SU' => 7];
+    return $map[strtoupper(trim($wkst))] ?? 1;
+}
+
+/** Local-midnight timestamp for the WKST-aligned week that contains $dayMidnight. */
+function ics_week_period_start(int $dayMidnight, int $wkstIso): int
+{
+    $dow = (int)date('N', $dayMidnight);
+    $back = ($dow - $wkstIso + 7) % 7;
+    return strtotime("-{$back} days", $dayMidnight);
+}
+
+/** Whole weeks from the anchor week (contains DTSTART) to the week that contains $dayMidnight. */
+function ics_weeks_since_start(int $dayMidnight, int $startMidnight, int $wkstIso): int
+{
+    $anchor = ics_week_period_start($startMidnight, $wkstIso);
+    $here = ics_week_period_start($dayMidnight, $wkstIso);
+    return (int)(($here - $anchor) / 86400 / 7);
+}
+
 /** @return list<array{key:string,hex:string}> */
 function calendar_legend(array $feeds): array
 {

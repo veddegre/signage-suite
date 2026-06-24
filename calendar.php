@@ -12,9 +12,9 @@
  *     any date recycling was collected, for every-other-week cadence ('' to disable).
  *   COUNTDOWNS — [label => YYYY-MM-DD].
  *
- * Recurring events: DAILY, WEEKLY (BYDAY), MONTHLY (BYMONTHDAY), and YEARLY
- * rules are expanded, with INTERVAL/UNTIL/EXDATE honored. Exotic RRULEs beyond
- * that are shown only on their original date.
+ * Recurring events: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), and YEARLY
+ * rules are expanded, with INTERVAL/UNTIL/EXDATE honored. Outlook biweekly patterns use
+ * INTERVAL=2 with WKST=SU; weekly+EXDATE skips are matched by local calendar day.
  */
 
 require_once __DIR__ . '/config.php';
@@ -310,7 +310,14 @@ function parse_rrule(string $r): array
     $out = [];
     foreach (explode(';', $r) as $part) {
         $kv = explode('=', $part, 2);
-        if (count($kv) === 2) $out[strtoupper($kv[0])] = strtoupper($kv[1]);
+        if (count($kv) !== 2) {
+            continue;
+        }
+        $key = strtoupper(trim($kv[0]));
+        $val = trim($kv[1]);
+        // BYDAY/WKST are day tokens; INTERVAL/COUNT stay numeric.
+        $out[$key] = in_array($key, ['BYDAY', 'BYMONTHDAY', 'BYMONTH', 'BYSETPOS', 'BYWEEKNO'], true)
+            ? strtoupper($val) : $val;
     }
     return $out;
 }
@@ -373,12 +380,17 @@ function ics_months_between(int $day, int $start): int
 
 function ics_is_excluded(int $ts, array $ev): bool
 {
+    $dayKey = date('Ymd', $ts);
     foreach ($ev['exdate_ts'] ?? [] as $ex) {
         if ($ex === $ts) {
             return true;
         }
+        // Outlook EXDATE often differs by TZ/UTC from expanded instances — match local day.
+        if (date('Ymd', $ex) === $dayKey) {
+            return true;
+        }
     }
-    return in_array(date('Ymd', $ts), $ev['exdates'], true);
+    return in_array($dayKey, $ev['exdates'] ?? [], true);
 }
 
 /** Each local-midnight timestamp for an all-day span (end is iCal-exclusive). */
@@ -487,10 +499,11 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
                 $match = ((int)floor(($day - strtotime('today', $start)) / 86400)) % $interval === 0;
                 break;
             case 'WEEKLY':
-                $weeks = (int)floor(($day - strtotime('monday this week', $start)) / 604800);
+                $wkstIso = ics_wkst_to_iso($r['WKST'] ?? 'MO');
+                $weeks = ics_weeks_since_start($day, strtotime('today', $start), $wkstIso);
                 $dow = (int)date('N', $day);
                 $days = $weeklyDays !== [] ? $weeklyDays : [(int)date('N', $start)];
-                $match = $weeks % $interval === 0 && in_array($dow, $days, true);
+                $match = $weeks >= 0 && $weeks % $interval === 0 && in_array($dow, $days, true);
                 break;
             case 'MONTHLY':
                 $months = ics_months_between($day, $start);
@@ -627,6 +640,10 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
         }
     }
     return $vevents;
+}
+
+if (defined('SIGNAGE_CALENDAR_LIB_ONLY') && SIGNAGE_CALENDAR_LIB_ONLY) {
+    return;
 }
 
 // ── Gather events for today + 6 days ────────────────────────────────────────
