@@ -24,6 +24,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
 | | Internet attacks | `attacks.php` | `attacks.php` | — |
+| | DShield heatmap | `dshieldmap.php` | `dshieldmap.php` | — |
 | | Cloudflare Radar | `radar.php` | `radar.php` | Radar API token |
 | | Attack map | `attackmap.php` | `attackmap.php` | Radar API token (shared) |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
@@ -222,6 +223,16 @@ Scanning and brute-force visibility from the SANS ISC DShield sensor network: **
 **Setup:** admin → **Internet Attacks** — country/port/IP counts, optional US highlight. Works out of the box.
 
 **Rotation:** 60s dwell; feeds refresh on cache TTL (default 300s).
+
+### dshieldmap.php — DShield Heatmap
+
+Full-screen **world heatmap** of SANS ISC DShield **attack targets by country** — glowing blobs sized and colored by how many distinct hosts in each country are being targeted. Sidebar lists the hottest countries; Infocon level in the header.
+
+**Data:** `GET /country` on [SANS ISC DShield API](https://isc.sans.edu/api/) — same free feed as `attacks.php` (no API key).
+
+**Setup:** admin → **DShield Heatmap** — minimum target threshold, sidebar count. Shares cache with **Internet Attacks**.
+
+**Rotation:** 60s dwell; page reload refreshes from cache TTL (default 300s).
 
 ### radar.php — Cloudflare Radar (DDoS geography)
 
