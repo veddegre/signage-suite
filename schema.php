@@ -244,6 +244,8 @@ function admin_schema(): array
             ['key' => 'ENABLE_CLOUDFLARE', 'label' => 'Show Cloudflare', 'type' => 'bool', 'default' => true],
             ['key' => 'ENABLE_O365', 'label' => 'Show Microsoft 365', 'type' => 'bool', 'default' => true],
             ['key' => 'ENABLE_GOOGLE', 'label' => 'Show Google Workspace', 'type' => 'bool', 'default' => true],
+            ['key' => 'US_ONLY', 'label' => 'US incidents only', 'type' => 'bool', 'default' => true,
+             'help' => 'Filter AWS, Azure, Cloudflare POPs, and Google Workspace to US-affected incidents. GitHub has no regional feed — shows global status.'],
             ['key' => 'MAX_ISSUES', 'label' => 'Issues per provider', 'type' => 'number',
              'help' => 'How many incidents to list on each card (1–5, default 3)'],
             ['key' => 'MS_GRAPH_TENANT_ID', 'label' => 'M365 tenant ID', 'type' => 'text',

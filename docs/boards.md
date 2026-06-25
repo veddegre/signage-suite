@@ -182,7 +182,9 @@ Six-card grid for public cloud/SaaS status: **AWS**, **Azure**, **GitHub**, **Cl
 | Google Workspace | [Google Workspace Status Dashboard](https://www.google.com/appsstatus/dashboard/) JSON |
 | Microsoft 365 | Microsoft Graph `serviceAnnouncement` (requires Entra app) |
 
-**Setup:** admin → **Cloud Outages** — toggle providers, cache TTL (default 120s). For **Microsoft 365**, register an Entra application with **ServiceHealth.Read.All** (application permission), then paste tenant ID, client ID, and client secret. Other providers work out of the box.
+**Setup:** admin → **Cloud Outages** — toggle providers, **US incidents only** (default on), cache TTL (default 120s). For **Microsoft 365**, register an Entra application with **ServiceHealth.Read.All** (application permission), then paste tenant ID, client ID, and client secret. Other providers work out of the box.
+
+**US filtering:** When enabled, AWS events are limited to `us-*` regions, Cloudflare to US POPs, Google Workspace to US-affected locations, and Azure RSS posts mentioning US regions. GitHub publishes global service status only — that card stays global and is labeled accordingly.
 
 **Rotation:** 60s dwell is enough; the board auto-refreshes feeds on its own cache schedule.
 

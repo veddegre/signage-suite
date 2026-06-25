@@ -113,6 +113,9 @@ function outages_status_class(string $status): string
       Overall <strong><?= h(outages_status_label($overall)) ?></strong></div>
     <div class="pill">Providers <strong><?= count($providers) ?></strong></div>
     <div class="pill">Active issues <strong><?= (int)$activeCount ?></strong></div>
+    <?php if (outages_us_only()): ?>
+    <div class="pill">Scope <strong>United States</strong></div>
+    <?php endif; ?>
   </div>
 
   <section class="grid">
