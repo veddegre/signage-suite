@@ -691,6 +691,135 @@ function rotation_screen_own_pages(string $screen = 'main'): array
     return $conf[$key];
 }
 
+/** URLs managed by slide/photo deploy sync (not standalone board pages). */
+function rotation_is_managed_media_url(string $url): bool
+{
+    $url = trim($url);
+
+    return $url !== ''
+        && (rotation_is_legacy_slides_url($url)
+            || rotation_is_slide_url($url)
+            || rotation_is_any_rotator_url($url));
+}
+
+/** @param list<array<string,mixed>> $pages */
+function rotation_playlist_has_board_pages(array $pages): bool
+{
+    foreach ($pages as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+        if (!rotation_is_managed_media_url($url)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Baseline playlist before per-display overrides (legacy rotation.PAGES or starter set).
+ *
+ * @return list<array<string,mixed>>
+ */
+function rotation_inherited_playlist_pages(string $screen = 'main'): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen !== 'main') {
+        return rotation_inherited_playlist_pages('main');
+    }
+    $legacy = cfg('rotation.PAGES', []);
+    if (is_array($legacy) && $legacy !== []) {
+        return $legacy;
+    }
+
+    return rotation_starter_pages();
+}
+
+/** @param list<array<string,mixed>> $pages @return list<array<string,mixed>> */
+function rotation_playlist_media_pages(array $pages): array
+{
+    return array_values(array_filter($pages, static function ($page) {
+        if (!is_array($page)) {
+            return false;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+
+        return rotation_is_managed_media_url($url);
+    }));
+}
+
+/**
+ * When a display's saved playlist is slide/photo-only, merge in board pages from the
+ * inherited baseline so deploy does not replace the whole rotation with media entries.
+ *
+ * @param list<array<string,mixed>> $own
+ * @return list<array<string,mixed>>
+ */
+function rotation_combine_inherited_boards_with_own_media(string $screen, array $own): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $template = rotation_inherited_playlist_pages($screen);
+    $ownMedia = rotation_playlist_media_pages($own);
+    if ($ownMedia === []) {
+        return rotation_playlist_has_board_pages($own) ? $own : $template;
+    }
+
+    $out = [];
+    $mediaInserted = false;
+    foreach ($template as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if (rotation_is_managed_media_url($url)) {
+            if (!$mediaInserted) {
+                foreach ($ownMedia as $mediaPage) {
+                    $out[] = $mediaPage;
+                }
+                $mediaInserted = true;
+            }
+            continue;
+        }
+        $out[] = $page;
+    }
+    if (!$mediaInserted) {
+        foreach ($ownMedia as $mediaPage) {
+            $out[] = $mediaPage;
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * Playlist that actually plays on a display — resolves mirrors, legacy PAGES, starter pages,
+ * and media-only saved playlists that would otherwise hide inherited boards.
+ *
+ * @return list<array<string,mixed>>
+ */
+function rotation_resolved_playlist_pages(string $screen = 'main'): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $own = rotation_screen_own_pages($screen);
+    if ($own === []) {
+        if ($screen !== 'main') {
+            return rotation_resolved_playlist_pages('main');
+        }
+
+        return rotation_inherited_playlist_pages('main');
+    }
+    if (!rotation_playlist_has_board_pages($own)) {
+        return rotation_combine_inherited_boards_with_own_media($screen, $own);
+    }
+
+    return $own;
+}
+
 /**
  * Playlist rows to use when syncing photos or slides onto a display.
  * When a screen has no saved playlist yet (mirrors main or uses starter pages),
@@ -700,13 +829,7 @@ function rotation_screen_own_pages(string $screen = 'main'): array
  */
 function rotation_sync_source_pages(string $screen = 'main'): array
 {
-    $screen = rotation_normalize_screen_key($screen);
-    $own = rotation_screen_own_pages($screen);
-    if ($own !== []) {
-        return $own;
-    }
-
-    return rotation_screen_effective_pages($screen);
+    return rotation_resolved_playlist_pages($screen);
 }
 
 /**
@@ -771,19 +894,7 @@ function rotation_merge_pages_from_post(array $conf, string $screen, array $rawR
 /** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
 function rotation_screen_effective_pages(string $screen = 'main'): array
 {
-    $screen = rotation_normalize_screen_key($screen);
-    $own = rotation_screen_own_pages($screen);
-    if ($own !== []) {
-        return $own;
-    }
-    if ($screen !== 'main') {
-        return rotation_screen_effective_pages('main');
-    }
-    $legacy = cfg('rotation.PAGES', []);
-    if (is_array($legacy) && $legacy !== []) {
-        return $legacy;
-    }
-    return rotation_starter_pages();
+    return rotation_resolved_playlist_pages($screen);
 }
 
 /** @return list<array<string,mixed>> */

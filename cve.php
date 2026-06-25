@@ -229,7 +229,8 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
   .panel .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:12px; }
 
   .hero { grid-area:hero; display:grid; grid-template-columns: auto 1fr; gap:<?= $boardH < 1080 ? 18 : 24 ?>px;
-          align-items:start; min-height:0; }
+          align-items:stretch; min-height:0; }
+  .hero-body { display:flex; flex-direction:column; min-height:0; min-width:0; }
   .hero-id { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 34 : 40 ?>px; font-weight:500;
              color:var(--beacon); writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:1px; }
   .hero-title { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 42 : 48 ?>px;
@@ -244,7 +245,7 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
   .pill.med strong { color:var(--med); }
   .pill.low strong { color:var(--low); }
   .hero-desc { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 24 : 28 ?>px; line-height:1.42;
-               max-height:<?= $boardH < 1080 ? 220 : 280 ?>px; overflow:hidden; }
+               flex:1; min-height:0; overflow:hidden; }
 
   .side { grid-area:side; display:flex; flex-direction:column; min-height:0; }
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
@@ -278,7 +279,7 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
   <?php if ($hasData): ?>
   <section class="panel hero">
     <div class="hero-id"><?= h($hero['id']) ?></div>
-    <div>
+    <div class="hero-body">
       <div class="k">Latest published</div>
       <div class="hero-meta">
         <?php if ($hero['score'] !== null): ?>
