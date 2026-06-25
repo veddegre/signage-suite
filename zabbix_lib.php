@@ -529,6 +529,25 @@ function zabbix_attach_problem_hosts(array $problems, ?string &$error = null): a
     return $out;
 }
 
+/** @param list<array<string,mixed>> $problems */
+function zabbix_sort_problems(array $problems): array
+{
+    usort($problems, static function (array $a, array $b): int {
+        $sev = (int)($b['severity'] ?? 0) <=> (int)($a['severity'] ?? 0);
+        if ($sev !== 0) {
+            return $sev;
+        }
+        $clock = (int)($b['clock'] ?? 0) <=> (int)($a['clock'] ?? 0);
+        if ($clock !== 0) {
+            return $clock;
+        }
+
+        return (int)($b['eventid'] ?? 0) <=> (int)($a['eventid'] ?? 0);
+    });
+
+    return $problems;
+}
+
 /**
  * Fetch problems + hosts for one page config (cached).
  *
@@ -607,8 +626,6 @@ function zabbix_fetch_wall_data(array $page): array
         'groupids' => $groupIds,
         'severities' => zabbix_severities_from_min($minSeverity),
         'recent' => true,
-        'sortfield' => ['severity', 'clock'],
-        'sortorder' => 'DESC',
         'limit' => $maxProblems,
         'suppressed' => false,
     ];
@@ -625,6 +642,7 @@ function zabbix_fetch_wall_data(array $page): array
         return $empty;
     }
     $problems = zabbix_attach_problem_hosts($problems, $error);
+    $problems = zabbix_sort_problems($problems);
 
     $hosts = zabbix_api_call('host.get', [
         'output' => ['hostid', 'name', 'status'],
