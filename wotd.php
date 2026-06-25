@@ -310,10 +310,6 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .phonetic { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 26 : 32 ?>px; color:var(--mist); font-style:italic; }
   .pos { padding:6px 14px; border-radius:999px; background:var(--harbor); border:1px solid var(--hairline);
          font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--beacon); font-weight:600; }
-  .hero-accent { width:<?= $boardH < 1080 ? 120 : 140 ?>px; height:<?= $boardH < 1080 ? 120 : 140 ?>px;
-                 border-radius:50%; flex-shrink:0; align-self:center;
-                 background:radial-gradient(circle at 35% 35%, rgba(110,231,200,.35), rgba(196,168,255,.12) 55%, transparent 70%);
-                 border:1px solid rgba(110,231,200,.25); }
 
   .body { grid-area:body; display:grid; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0;
           grid-template-columns: <?= ($hasEtymology || $hasExtras) ? '1.15fr 0.85fr' : '1fr' ?>;
@@ -366,7 +362,6 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
         <?php if ($pos !== ''): ?><span class="pos"><?= h($pos) ?></span><?php endif; ?>
       </div>
     </div>
-    <div class="hero-accent" aria-hidden="true"></div>
   </header>
 
   <div class="body">

@@ -22,6 +22,24 @@ $GLOBALS['diag'] = [];
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
+/** @return array{setup:string,punchline:string,split:bool} */
+function joke_split(string $text): array
+{
+    $text = trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
+    if ($text === '') {
+        return ['setup' => '', 'punchline' => '', 'split' => false];
+    }
+    // "Why did the chicken...? To get to the other side."
+    if (preg_match('/^(.+\?)\s+(.+)$/u', $text, $m)) {
+        return ['setup' => trim($m[1]), 'punchline' => trim($m[2]), 'split' => true];
+    }
+    // "Setup sentence. Punchline sentence."
+    if (preg_match('/^(.+\.)\s+([A-Z0-9"\'].+)$/u', $text, $m)) {
+        return ['setup' => trim($m[1]), 'punchline' => trim($m[2]), 'split' => true];
+    }
+    return ['setup' => '', 'punchline' => $text, 'split' => false];
+}
+
 /** @return array{id:string,joke:string}|null */
 function joke_fetch_random(): ?array
 {
@@ -76,6 +94,7 @@ function joke_fetch_random(): ?array
 }
 
 $joke = joke_fetch_random();
+$parts = $joke ? joke_split($joke['joke']) : ['setup' => '', 'punchline' => '', 'split' => false];
 $hasData = $joke !== null;
 $permalink = ($joke && $joke['id'] !== '')
     ? 'https://icanhazdadjoke.com/j/' . rawurlencode($joke['id'])
@@ -119,8 +138,18 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
                   font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 120 : 148 ?>px; line-height:1;
                   color:rgba(255,179,71,.18); pointer-events:none; }
   .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:24px; }
-  .joke { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; line-height:1.45;
-          color:var(--snow); max-width:1520px; }
+  .joke { max-width:1520px; }
+  .joke-setup { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 40 : 48 ?>px; line-height:1.45;
+                color:var(--mist); font-weight:400; }
+  .joke-break { display:flex; align-items:center; gap:20px; margin:<?= $boardH < 1080 ? 28 : 36 ?>px 0;
+                max-width:520px; }
+  .joke-break .dots { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 36 : 44 ?>px;
+                      color:var(--beacon); letter-spacing:8px; flex-shrink:0; }
+  .joke-break .line { flex:1; height:2px; background:linear-gradient(90deg, var(--beacon), transparent); opacity:.55; }
+  .joke-punch { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 52 : 64 ?>px; line-height:1.35;
+                color:var(--snow); font-weight:500; }
+  .joke-single { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; line-height:1.45;
+                 color:var(--snow); }
   .badge { display:inline-block; margin-top:28px; padding:10px 18px; border-radius:999px;
            background:var(--lake-night); border:1px solid var(--hairline);
            font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); }
@@ -141,7 +170,15 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   <section class="main">
     <div class="card">
       <div class="k">Fresh from the API</div>
-      <div class="joke"><?= h($joke['joke']) ?></div>
+      <div class="joke">
+      <?php if ($parts['split']): ?>
+        <div class="joke-setup"><?= h($parts['setup']) ?></div>
+        <div class="joke-break" aria-hidden="true"><span class="dots">···</span><span class="line"></span></div>
+        <div class="joke-punch"><?= h($parts['punchline']) ?></div>
+      <?php else: ?>
+        <div class="joke-single"><?= h($parts['punchline']) ?></div>
+      <?php endif; ?>
+      </div>
       <div class="badge">Dad joke</div>
     </div>
   </section>
