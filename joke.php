@@ -141,11 +141,8 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .joke { max-width:1520px; }
   .joke-setup { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 40 : 48 ?>px; line-height:1.45;
                 color:var(--mist); font-weight:400; }
-  .joke-break { display:flex; align-items:center; gap:20px; margin:<?= $boardH < 1080 ? 28 : 36 ?>px 0;
-                max-width:520px; }
-  .joke-break .dots { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 36 : 44 ?>px;
-                      color:var(--beacon); letter-spacing:8px; flex-shrink:0; }
-  .joke-break .line { flex:1; height:2px; background:linear-gradient(90deg, var(--beacon), transparent); opacity:.55; }
+  .joke-break { height:<?= $boardH < 1080 ? 28 : 36 ?>px; max-width:480px;
+                border-bottom:2px solid rgba(255,179,71,.35); margin-bottom:<?= $boardH < 1080 ? 28 : 36 ?>px; }
   .joke-punch { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 52 : 64 ?>px; line-height:1.35;
                 color:var(--snow); font-weight:500; }
   .joke-single { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; line-height:1.45;
@@ -173,7 +170,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
       <div class="joke">
       <?php if ($parts['split']): ?>
         <div class="joke-setup"><?= h($parts['setup']) ?></div>
-        <div class="joke-break" aria-hidden="true"><span class="dots">···</span><span class="line"></span></div>
+        <div class="joke-break" aria-hidden="true"></div>
         <div class="joke-punch"><?= h($parts['punchline']) ?></div>
       <?php else: ?>
         <div class="joke-single"><?= h($parts['punchline']) ?></div>
