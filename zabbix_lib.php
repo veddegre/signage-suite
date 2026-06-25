@@ -473,6 +473,63 @@ function zabbix_api_call(string $method, array $params, ?string &$error = null):
 }
 
 /**
+ * Attach host names to problem rows (Zabbix 7.0+ removed selectHosts from problem.get).
+ *
+ * @param list<array<string,mixed>> $problems
+ * @return list<array<string,mixed>>
+ */
+function zabbix_attach_problem_hosts(array $problems, ?string &$error = null): array
+{
+    $eventIds = [];
+    foreach ($problems as $problem) {
+        if (!is_array($problem)) {
+            continue;
+        }
+        $eid = trim((string)($problem['eventid'] ?? ''));
+        if ($eid !== '') {
+            $eventIds[$eid] = true;
+        }
+    }
+    if ($eventIds === []) {
+        return $problems;
+    }
+
+    $events = zabbix_api_call('event.get', [
+        'output' => ['eventid'],
+        'eventids' => array_keys($eventIds),
+        'selectHosts' => ['name'],
+    ], $error);
+    if (!is_array($events)) {
+        return $problems;
+    }
+
+    $hostsByEvent = [];
+    foreach ($events as $event) {
+        if (!is_array($event)) {
+            continue;
+        }
+        $eid = (string)($event['eventid'] ?? '');
+        if ($eid === '') {
+            continue;
+        }
+        $hostsByEvent[$eid] = is_array($event['hosts'] ?? null) ? $event['hosts'] : [];
+    }
+
+    $out = [];
+    foreach ($problems as $problem) {
+        if (!is_array($problem)) {
+            continue;
+        }
+        $eid = (string)($problem['eventid'] ?? '');
+        $problem['hosts'] = $hostsByEvent[$eid] ?? [];
+
+        $out[] = $problem;
+    }
+
+    return $out;
+}
+
+/**
  * Fetch problems + hosts for one page config (cached).
  *
  * @param array<string,mixed> $page
@@ -547,7 +604,6 @@ function zabbix_fetch_wall_data(array $page): array
 
     $problemParams = [
         'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata'],
-        'selectHosts' => ['name'],
         'groupids' => $groupIds,
         'severities' => zabbix_severities_from_min($minSeverity),
         'recent' => true,
@@ -568,6 +624,7 @@ function zabbix_fetch_wall_data(array $page): array
 
         return $empty;
     }
+    $problems = zabbix_attach_problem_hosts($problems, $error);
 
     $hosts = zabbix_api_call('host.get', [
         'output' => ['hostid', 'name', 'status'],
