@@ -647,21 +647,50 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
 
-        foreach ($_POST as $name => $rows) {
-            if (!is_string($name) || !preg_match('/^PAGES_[a-z0-9_-]+$/i', $name)) {
-                continue;
+        $rotationPagesFromJson = false;
+        $jsonRaw = trim((string)($_POST['ROTATION_PAGES_JSON'] ?? ''));
+        if ($jsonRaw !== '') {
+            $parsedByScreen = rotation_pages_from_json_string($jsonRaw);
+            if ($parsedByScreen === null) {
+                $errors[] = 'Rotation playlist data invalid — not saved.';
+            } else {
+                $rotationPagesFromJson = true;
+                foreach ($parsedByScreen as $screenKey => $rows) {
+                    $screenKey = rotation_normalize_screen_key((string)$screenKey);
+                    if ($screenKey === '') {
+                        continue;
+                    }
+                    if (!admin_is_super() && !admin_can_screen($screenKey)) {
+                        continue;
+                    }
+                    if (!is_array($rows)) {
+                        continue;
+                    }
+                    $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
+                }
             }
-            if (!is_array($rows)) {
-                continue;
+        }
+        if (!$rotationPagesFromJson) {
+            if (admin_post_input_vars_saturated()) {
+                $errors[] = 'Rotation save may have been truncated (PHP max_input_vars=' . (int)ini_get('max_input_vars')
+                    . '). Reload the page and save again.';
             }
-            $screenKey = rotation_normalize_screen_key(substr($name, 6));
-            if ($screenKey === '') {
-                continue;
+            foreach ($_POST as $name => $rows) {
+                if (!is_string($name) || !preg_match('/^PAGES_[a-z0-9_-]+$/i', $name)) {
+                    continue;
+                }
+                if (!is_array($rows)) {
+                    continue;
+                }
+                $screenKey = rotation_normalize_screen_key(substr($name, 6));
+                if ($screenKey === '') {
+                    continue;
+                }
+                if (!admin_is_super() && !admin_can_screen($screenKey)) {
+                    continue;
+                }
+                $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
             }
-            if (!admin_is_super() && !admin_can_screen($screenKey)) {
-                continue;
-            }
-            $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
         }
     }
         if ($errors !== []) {
@@ -3209,11 +3238,15 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php foreach ($rotationScreens as $screenKey => $screenMeta):
             $fieldKey = 'PAGES_' . $screenKey;
             $pagesVal = current_val($rawConf, $board, $fieldKey);
-            $pageRows = is_array($pagesVal) ? $pagesVal : [];
+            $storedRows = is_array($pagesVal) ? $pagesVal : [];
+            $pageRows = $storedRows;
+            if ($storedRows !== [] && !rotation_playlist_has_board_pages($storedRows)) {
+                $pageRows = rotation_resolved_playlist_pages($screenKey);
+            }
             $screenName = rotation_screen_display_name($screenKey, $rotationScreens);
             $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
             $effectivePages = rotation_screen_effective_pages($screenKey);
-            $mirrorsMain = $pageRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
+            $mirrorsMain = $storedRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
             $screenSettings = rotation_screen_settings($screenKey);
             $screenPresence = is_array($presenceAll[$screenKey] ?? null) ? $presenceAll[$screenKey] : null;
             $pageCount = rotation_playlist_counts($pageRows)['total'];
@@ -3359,7 +3392,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
           <?php endif; ?>
 
           <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
-            <?php if ($pageRows === []): ?>
+            <?php if ($storedRows === [] && $pageRows === []): ?>
             <div class="rotation-playlist-empty" data-rotation-empty>No pages yet — quick-add a board above, load the starter playlist, or add a blank page.</div>
             <?php endif; ?>
             <?php $pri = 0;
@@ -5343,6 +5376,59 @@ function serializeSlideDeckForSave() {
   stripSlideDeckFormNames(deck);
 }
 
+function collectRotationCardRow(card) {
+  const row = {};
+  const urlInp = card.querySelector('[data-rotation-url], input[name*="[url]"]');
+  const dwellInp = card.querySelector('input[name*="[dwell]"]');
+  const fromInp = card.querySelector('input[name*="[from]"]');
+  const toInp = card.querySelector('input[name*="[to]"]');
+  const weightInp = card.querySelector('input[name*="[weight]"]');
+  const offInp = card.querySelector('input[name*="[off]"]');
+  if (urlInp) row.url = urlInp.value.trim();
+  if (dwellInp) row.dwell = dwellInp.value.trim();
+  if (fromInp && fromInp.value.trim() !== '') row.from = fromInp.value.trim();
+  if (toInp && toInp.value.trim() !== '') row.to = toInp.value.trim();
+  if (weightInp && weightInp.value.trim() !== '') row.weight = weightInp.value.trim();
+  if (offInp && offInp.checked) row.off = '1';
+  return row;
+}
+
+function stripRotationPlaylistFormNames(deck) {
+  if (!deck || !deck.dataset.field) return;
+  const field = deck.dataset.field;
+  const esc = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  deck.querySelectorAll('[name^="' + field + '["]').forEach(function (el) {
+    el.removeAttribute('name');
+  });
+}
+
+function serializeRotationPlaylistsForSave() {
+  const form = document.getElementById('boardform');
+  if (!form) return;
+  const payloads = {};
+  document.querySelectorAll('.rotation-playlist[data-field]').forEach(function (deck) {
+    const field = deck.dataset.field || '';
+    if (!/^PAGES_/i.test(field)) return;
+    const screenKey = field.replace(/^PAGES_/i, '');
+    reindexRotationDeck(deck);
+    const rows = [];
+    deck.querySelectorAll('[data-rotation-card]').forEach(function (card) {
+      const row = collectRotationCardRow(card);
+      if ((row.url || '') !== '') rows.push(row);
+    });
+    payloads[screenKey] = rows;
+    stripRotationPlaylistFormNames(deck);
+  });
+  let inp = form.querySelector('input[name="ROTATION_PAGES_JSON"]');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'ROTATION_PAGES_JSON';
+    form.appendChild(inp);
+  }
+  inp.value = JSON.stringify(payloads);
+}
+
 function serializePhotoDeckForSave() {
   const form = document.getElementById('boardform');
   const deck = document.getElementById('photoDeck');
@@ -6914,6 +7000,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
+      if (document.querySelector('.rotation-playlist[data-field]')) serializeRotationPlaylistsForSave();
     });
   }
   initScreenPickers(document);

@@ -1072,6 +1072,33 @@ function rotation_starter_pages(): array
     ];
 }
 
+/**
+ * Parse rotation playlist JSON from admin save (avoids PHP max_input_vars truncation).
+ *
+ * @return array<string,list<array<string,mixed>>>|null screen key => raw rows, or null if invalid
+ */
+function rotation_pages_from_json_string(string $raw): ?array
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return null;
+    }
+    $out = [];
+    foreach ($decoded as $screen => $rows) {
+        $screen = rotation_normalize_screen_key((string)$screen);
+        if ($screen === '' || !is_array($rows)) {
+            continue;
+        }
+        $out[$screen] = $rows;
+    }
+
+    return $out;
+}
+
 /** Parse posted rotation page rows from admin forms. @return list<array<string,mixed>> */
 function rotation_parse_pages_rows(array $rows): array
 {
