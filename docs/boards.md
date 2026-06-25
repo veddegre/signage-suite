@@ -25,6 +25,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
 | | Internet attacks | `attacks.php` | `attacks.php` | — |
 | | Cloudflare Radar | `radar.php` | `radar.php` | Radar API token |
+| | Attack map | `attackmap.php` | `attackmap.php` | Radar API token (shared) |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
@@ -231,6 +232,16 @@ Separate board for **L3 DDoS targets**, **L3 attack origins**, and **L7 attack t
 **Setup:** admin → **Cloudflare Radar** — paste API token, pick time window (default 24h), toggle L3/L7 panels.
 
 **Rotation:** 60s dwell; add as its own playlist row alongside **Internet Attacks** for a separate screen.
+
+### attackmap.php — Attack Map (pew-pew)
+
+Full-screen **animated world map** of Cloudflare Radar **L7 attack flows** — curved arcs from origin country to target country, with pulsing endpoints and a live flow list.
+
+**Data:** `GET /radar/attacks/layer7/top/attacks` — same Cloudflare Radar token as `radar.php`.
+
+**Setup:** admin → **Attack Map** — optional token (inherits from **Cloudflare Radar** if blank), arc count (default 18), travel speed, time window.
+
+**Rotation:** 75s dwell recommended so arcs have time to play; page reload refreshes pair data from cache TTL (default 300s).
 
 ### hibp.php — Data Breaches (Have I Been Pwned)
 

@@ -119,7 +119,7 @@ video.php?v=drone           slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), Cloudflare Radar (DDoS), HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; `dig` for DNS roots |
+| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), Cloudflare Radar (DDoS), attack map (pew-pew), HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides, RSS feeds, local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
@@ -137,6 +137,8 @@ video.php?v=drone           slides.php?slide=birthday.png
 3. Use the **“Read all Radar data”** template, or a custom token with **Account → Radar** permission.
 4. Admin → **Cloudflare Radar** → paste into **Cloudflare API token**.
 5. Choose a window (default **Last 24 hours**). Add `radar.php` to your rotation playlist as its own row.
+
+**Attack map** (`attackmap.php`) — full-screen animated **pew-pew** map of L7 attack flows (origin → target arcs). Uses the same Radar token; add as its own rotation row (75s dwell works well).
 
 If you previously saved a token under **Internet Attacks**, it is still read until you move it to **Cloudflare Radar**.
 
