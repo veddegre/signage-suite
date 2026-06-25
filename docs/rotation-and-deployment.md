@@ -73,6 +73,9 @@ slides.php?slide=birthday.png
 webcam.php
 air.php
 uv.php
+wotd.php
+history.php
+joke.php
 sports.php
 traffic.php
 ```

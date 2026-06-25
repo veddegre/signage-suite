@@ -15,6 +15,9 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Detroit sports | `sports.php` | `sports.php` | — |
 | | Calendar | `calendar.php` | `calendar.php` | — |
 | | Traffic map | `traffic.php` | `traffic.php` | TomTom |
+| **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
+| | This day in history | `history.php` | `history.php` | — |
+| | Dad jokes | `joke.php` | `joke.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
@@ -78,6 +81,30 @@ Current UV, today's hourly curve (sunrise–sunset), peak/clear-sky stats, and 5
 **Data:** [Open-Meteo Forecast API](https://open-meteo.com/en/docs) — free, no key.
 
 **Setup:** admin → **UV Index** — place name, lat/lon, timezone. Uses WHO UV bands (Low through Extreme) with sun-protection advice. Default cache TTL 900s.
+
+### wotd.php — Word of the Day
+
+Large word, pronunciation, part of speech, and up to four dictionary definitions.
+
+**Data:** [Wordsmith.org A.Word.A.Day](https://wordsmith.org/) RSS + [Free Dictionary API](https://dictionaryapi.dev/) — no keys.
+
+**Setup:** admin → **Word of the Day** — title/subtitle, timezone. Cache TTL defaults to 24 hours (one word per calendar day).
+
+### history.php — This Day in History
+
+Featured event with year, thumbnail when available, more highlights, plus born/died snippets.
+
+**Data:** [Wikipedia REST API](https://en.wikipedia.org/api/rest_v1/) on-this-day feed — no key.
+
+**Setup:** admin → **This Day in History** — title, highlight count (4–12), timezone. Cache TTL defaults to 24 hours.
+
+### joke.php — Dad Jokes
+
+One random dad joke per visit, large type for the wall.
+
+**Data:** [icanhazdadjoke.com API](https://icanhazdadjoke.com/api) — free, no key (set a descriptive User-Agent in admin).
+
+**Setup:** admin → **Dad Jokes** — title, User-Agent, cache TTL (default 90s so rotation gets fresh jokes). Default reload 0 — the rotation shell fetches a new joke each time the slide appears.
 
 ### sports.php — Detroit Sports
 
