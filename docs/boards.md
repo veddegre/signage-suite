@@ -25,8 +25,12 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
 | | Internet attacks | `attacks.php` | `attacks.php` | — |
 | | DShield heatmap | `dshieldmap.php` | `dshieldmap.php` | — |
+| | Attack origins | `dshieldsrc.php` | `dshieldsrc.php` | — |
+| | Top attack ports | `attackports.php` | `attackports.php` | — |
+| | Outage map | `iodamap.php` | `iodamap.php` | — |
 | | Cloudflare Radar | `radar.php` | `radar.php` | Radar API token |
-| | Attack map | `attackmap.php` | `attackmap.php` | Radar API token (shared) |
+| | Attack map (L7) | `attackmap.php` | `attackmap.php` | Radar API token (shared) |
+| | L3 attack map | `l3map.php` | `l3map.php` | Radar API token (shared) |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
@@ -233,6 +237,38 @@ Full-screen **world heatmap** of SANS ISC DShield **attack targets by country** 
 **Setup:** admin → **DShield Heatmap** — minimum target threshold, sidebar count. Shares cache with **Internet Attacks**.
 
 **Rotation:** 60s dwell; page reload refreshes from cache TTL (default 300s).
+
+### dshieldsrc.php — Attack Origins (DShield)
+
+Full-screen **world heatmap** of DShield **attack sources by country** — where scanning traffic appears to originate. Cyan palette (inverse of the targets heatmap).
+
+**Data:** Same `GET /country` feed as `attacks.php` — uses the `sources` field (no API key).
+
+**Setup:** admin → **Attack Origins** — minimum source threshold, sidebar count.
+
+### attackports.php — Top Attack Ports
+
+Full-screen **treemap** of DShield **top targeted ports** — block size by record volume; colors by service (SSH, RDP, HTTP, etc.).
+
+**Data:** `GET /topports/records` on isc.sans.edu (no API key).
+
+**Setup:** admin → **Top Attack Ports** — port count in treemap.
+
+### iodamap.php — Outage Map (IODA)
+
+Full-screen **world map** of **country-level internet outages** from Georgia Tech IODA — severity blobs with live pulse for ongoing disruptions.
+
+**Data:** IODA API v2 `/outages/events` and `/outages/alerts` (no API key).
+
+**Setup:** admin → **Outage Map** — lookback days, minimum score threshold.
+
+### l3map.php — L3 Attack Map (pew-pew)
+
+Same animated arc map as `attackmap.php` but for **Cloudflare Radar L3 volumetric DDoS** origin→target pairs. Purple/cyan arc styling.
+
+**Data:** `GET /radar/attacks/layer3/top/attacks` — same Radar token as `radar.php`.
+
+**Setup:** admin → **L3 Attack Map** — arc count, travel speed, time window.
 
 ### radar.php — Cloudflare Radar (DDoS geography)
 

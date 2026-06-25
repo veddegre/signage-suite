@@ -63,25 +63,57 @@ function dshieldmap_max_sidebar(): int
     return max(4, min(12, (int)cfg('dshieldmap.MAX_SIDEBAR', 8)));
 }
 
-/** @return list<array<string,mixed>> */
-function dshieldmap_fetch_heatmap(): array
+/** @return 'targets'|'sources' */
+function dshield_heatmap_field(string $board): string
 {
-    if (!dshieldmap_enabled()) {
+    return $board === 'dshieldsrc' ? 'sources' : 'targets';
+}
+
+function dshield_heatmap_min_value(string $board): int
+{
+    if ($board === 'dshieldsrc') {
+        return max(0, (int)cfg('dshieldsrc.MIN_SOURCES', 100));
+    }
+    return dshieldmap_min_targets();
+}
+
+function dshield_heatmap_max_sidebar(string $board): int
+{
+    if ($board === 'dshieldsrc') {
+        return max(4, min(12, (int)cfg('dshieldsrc.MAX_SIDEBAR', 8)));
+    }
+    return dshieldmap_max_sidebar();
+}
+
+function dshield_heatmap_enabled(string $board): bool
+{
+    $key = $board . '.ENABLE_DSHIELD';
+    if (cfg($key, null) !== null) {
+        return (bool)cfg($key, true);
+    }
+    return attacks_dshield_enabled();
+}
+
+/** @return list<array<string,mixed>> */
+function dshield_heatmap_fetch(string $board = 'dshieldmap'): array
+{
+    if (!dshield_heatmap_enabled($board)) {
         return [];
     }
 
+    $field = dshield_heatmap_field($board);
     $countries = attacks_fetch_countries();
     if ($countries === []) {
         return [];
     }
 
-    $minTargets = dshieldmap_min_targets();
-    $maxTargets = 0;
+    $minValue = dshield_heatmap_min_value($board);
+    $maxValue = 0;
     $rows = [];
 
     foreach ($countries as $row) {
-        $targets = (int)($row['targets'] ?? 0);
-        if ($targets < $minTargets) {
+        $value = (int)($row[$field] ?? 0);
+        if ($value < $minValue) {
             continue;
         }
         $code = (string)($row['code'] ?? '');
@@ -89,11 +121,12 @@ function dshieldmap_fetch_heatmap(): array
         if ($point === null) {
             continue;
         }
-        $maxTargets = max($maxTargets, $targets);
+        $maxValue = max($maxValue, $value);
         $rows[] = [
             'code' => $code,
             'name' => (string)($row['name'] ?? attacks_country_name($code)),
-            'targets' => $targets,
+            'value' => $value,
+            'targets' => (int)($row['targets'] ?? 0),
             'reports' => (int)($row['reports'] ?? 0),
             'sources' => (int)($row['sources'] ?? 0),
             'lat' => $point['lat'],
@@ -105,12 +138,18 @@ function dshieldmap_fetch_heatmap(): array
         return [];
     }
 
-    $logMax = log10($maxTargets + 1);
+    $logMax = log10($maxValue + 1);
     foreach ($rows as &$row) {
-        $row['intensity'] = $logMax > 0 ? log10($row['targets'] + 1) / $logMax : 0;
+        $row['intensity'] = $logMax > 0 ? log10($row['value'] + 1) / $logMax : 0;
     }
     unset($row);
 
-    usort($rows, static fn($a, $b) => $b['targets'] <=> $a['targets']);
+    usort($rows, static fn($a, $b) => $b['value'] <=> $a['value']);
     return $rows;
+}
+
+/** @return list<array<string,mixed>> */
+function dshieldmap_fetch_heatmap(): array
+{
+    return dshield_heatmap_fetch('dshieldmap');
 }

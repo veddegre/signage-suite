@@ -136,14 +136,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <div class="name">
         <span class="code"><?= h((string)$c['code']) ?></span> <?= h((string)$c['name']) ?>
       </div>
-      <div class="val"><?= h(attacks_format_count((int)$c['targets'])) ?> targets</div>
+      <div class="val"><?= h(attacks_format_count((int)($c['value'] ?? $c['targets']))) ?> targets</div>
       <div class="meta"><?= h(attacks_format_count((int)$c['reports'])) ?> reports · <?= h(attacks_format_count((int)$c['sources'])) ?> sources</div>
     </div>
     <?php endforeach; ?>
   </div>
 
   <div class="map-tag">
-    <b><?= h(attacks_format_count((int)($hero['targets'] ?? 0))) ?></b> peak · <?= h((string)($hero['name'] ?? '')) ?>
+    <b><?= h(attacks_format_count((int)($hero['value'] ?? $hero['targets'] ?? 0))) ?></b> peak · <?= h((string)($hero['name'] ?? '')) ?>
     <div class="legend-bar">
       <span>low</span><div class="grad"></div><span>high</span>
     </div>
@@ -158,7 +158,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   <div class="stamp"><?= h(implode(' · ', array_filter([
     'isc.sans.edu',
     count($countries) . ' countries mapped',
-    $hero ? attacks_format_count((int)$hero['targets']) . ' peak targets' : '',
+    $hero ? attacks_format_count((int)($hero['value'] ?? $hero['targets'] ?? 0)) . ' peak targets' : '',
     $GLOBALS['diag']['attacks_countries'] ?? '',
   ]))) ?></div>
 

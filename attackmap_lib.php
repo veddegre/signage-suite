@@ -141,16 +141,62 @@ function attackmap_country_point(string $code): ?array
     return $centroids[$code];
 }
 
-/** @return list<array<string,mixed>>|null */
-function attackmap_fetch_raw_pairs(): ?array
+function radarmap_board_cf_token(string $board): string
 {
-    if (!attackmap_configured()) {
+    $token = trim((string)cfg($board . '.CF_API_TOKEN', ''));
+    if ($token !== '') {
+        return $token;
+    }
+    if ($board !== 'attackmap') {
+        $token = trim((string)cfg('attackmap.CF_API_TOKEN', ''));
+        if ($token !== '') {
+            return $token;
+        }
+    }
+    return radar_cf_token();
+}
+
+function radarmap_board_date_range(string $board): string
+{
+    $range = trim((string)cfg($board . '.DATE_RANGE', ''));
+    if ($range === '') {
+        return $board === 'attackmap' ? attackmap_date_range() : radar_date_range();
+    }
+    return in_array($range, ['1d', '7d', '14d', '28d'], true) ? $range : '1d';
+}
+
+function radarmap_board_max_flows(string $board): int
+{
+    $default = $board === 'l3map' ? 18 : attackmap_max_flows();
+    return max(6, min(30, (int)cfg($board . '.MAX_FLOWS', $default)));
+}
+
+function radarmap_board_cache_ttl(string $board): int
+{
+    return max(60, (int)cfg($board . '.CACHE_TTL', attackmap_cache_ttl()));
+}
+
+function radarmap_board_user_agent(string $board): string
+{
+    $ua = trim((string)cfg($board . '.USER_AGENT', ''));
+    return $ua !== '' ? $ua : attackmap_user_agent();
+}
+
+/** @return list<array<string,mixed>>|null */
+function radarmap_fetch_raw_pairs(string $layer, string $board): ?array
+{
+    $token = radarmap_board_cf_token($board);
+    if ($token === '') {
         return null;
     }
 
-    $cacheKey = 'attackmap_l7_pairs_' . attackmap_date_range() . '_' . attackmap_max_flows();
+    $dateRange = radarmap_board_date_range($board);
+    $maxFlows = radarmap_board_max_flows($board);
+    $cacheKey = $board . '_' . $layer . '_pairs_' . $dateRange . '_' . $maxFlows;
     $cacheFile = RADAR_CACHE_DIR . '/' . $cacheKey . '.json';
-    if (attackmap_cache_ttl() > 0 && is_file($cacheFile) && (time() - filemtime($cacheFile)) < attackmap_cache_ttl()) {
+    $cacheTtl = radarmap_board_cache_ttl($board);
+
+    if ($cacheTtl > 0 && is_file($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
         if (is_array($cached)) {
             return $cached;
@@ -158,14 +204,14 @@ function attackmap_fetch_raw_pairs(): ?array
     }
 
     $params = http_build_query([
-        'limit' => attackmap_max_flows(),
-        'dateRange' => attackmap_date_range(),
+        'limit' => $maxFlows,
+        'dateRange' => $dateRange,
         'format' => 'json',
     ]);
-    $url = RADAR_CF_BASE . '/radar/attacks/layer7/top/attacks?' . $params;
+    $url = RADAR_CF_BASE . '/radar/attacks/' . $layer . '/top/attacks?' . $params;
     $res = radar_http_get($url, [
-        'Authorization: Bearer ' . attackmap_cf_token(),
-        'User-Agent: ' . attackmap_user_agent(),
+        'Authorization: Bearer ' . $token,
+        'User-Agent: ' . radarmap_board_user_agent($board),
     ], 25);
 
     if ($res['body'] !== false && $res['code'] === 200) {
@@ -176,7 +222,7 @@ function attackmap_fetch_raw_pairs(): ?array
             return $top;
         }
     }
-    $GLOBALS['diag']['attackmap'] = $res['err'] !== '' ? 'curl: ' . $res['err'] : 'HTTP ' . $res['code'];
+    $GLOBALS['diag'][$board] = $res['err'] !== '' ? 'curl: ' . $res['err'] : 'HTTP ' . $res['code'];
 
     if (is_file($cacheFile)) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
@@ -185,10 +231,9 @@ function attackmap_fetch_raw_pairs(): ?array
     return null;
 }
 
-/** @return list<array<string,mixed>> */
-function attackmap_fetch_flows(): array
+/** @param list<array<string,mixed>>|null $raw @return list<array<string,mixed>> */
+function radarmap_parse_flows(?array $raw): array
 {
-    $raw = attackmap_fetch_raw_pairs();
     if (!is_array($raw)) {
         return [];
     }
@@ -224,4 +269,19 @@ function attackmap_fetch_flows(): array
         ];
     }
     return $out;
+}
+
+/** @return list<array<string,mixed>>|null */
+function attackmap_fetch_raw_pairs(): ?array
+{
+    if (!attackmap_configured()) {
+        return null;
+    }
+    return radarmap_fetch_raw_pairs('layer7', 'attackmap');
+}
+
+/** @return list<array<string,mixed>> */
+function attackmap_fetch_flows(): array
+{
+    return radarmap_parse_flows(attackmap_fetch_raw_pairs());
 }
