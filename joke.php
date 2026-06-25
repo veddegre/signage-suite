@@ -139,14 +139,12 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
                   color:rgba(255,179,71,.18); pointer-events:none; }
   .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:24px; }
   .joke { max-width:1520px; }
-  .joke-setup { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 40 : 48 ?>px; line-height:1.45;
-                color:var(--mist); font-weight:400; }
+  .joke-setup,
+  .joke-punch,
+  .joke-single { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 52 : 64 ?>px; line-height:1.35;
+                 color:var(--snow); font-weight:500; }
   .joke-break { height:<?= $boardH < 1080 ? 28 : 36 ?>px; max-width:480px;
                 border-bottom:2px solid rgba(255,179,71,.35); margin-bottom:<?= $boardH < 1080 ? 28 : 36 ?>px; }
-  .joke-punch { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 52 : 64 ?>px; line-height:1.35;
-                color:var(--snow); font-weight:500; }
-  .joke-single { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; line-height:1.45;
-                 color:var(--snow); }
   .badge { display:inline-block; margin-top:28px; padding:10px 18px; border-radius:999px;
            background:var(--lake-night); border:1px solid var(--hairline);
            font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); }
