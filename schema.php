@@ -209,6 +209,15 @@ function admin_schema(): array
              'help' => '0 in rotation (default) — shell reloads each visit; set 60+ for direct/kiosk view'],
             $tz, $ttl('Random joke — default 90s; lower = new joke more often in rotation'),
         ]],
+        'xkcd' => ['title' => 'XKCD Comic', 'file' => 'xkcd.php', 'fields' => [
+            ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
+            ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text'],
+            ['key' => 'SHOW_ALT', 'label' => 'Show hover text', 'type' => 'bool', 'default' => true,
+             'help' => 'The alt line under the comic — often the best part'],
+            ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
+             'help' => 'Direct view only — rotation iframe reloads with the shell'],
+            $tz, $ttl('Latest comic from xkcd.com — default 86400s (24 h)'),
+        ]],
         'sports' => ['title' => 'Detroit Sports', 'file' => 'sports.php', 'fields' => [
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text',

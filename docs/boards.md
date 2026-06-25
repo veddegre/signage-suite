@@ -19,6 +19,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
 | | This day in history | `history.php` | `history.php` | — |
 | | Dad jokes | `joke.php` | `joke.php` | — |
+| | XKCD comic | `xkcd.php` | `xkcd.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
@@ -114,6 +115,14 @@ One random dad joke per visit, large type for the wall.
 **Data:** [icanhazdadjoke.com API](https://icanhazdadjoke.com/api) — free, no key (set a descriptive User-Agent in admin).
 
 **Setup:** admin → **Dad Jokes** — title, User-Agent, cache TTL (default 90s so rotation gets fresh jokes). Default reload 0 — the rotation shell fetches a new joke each time the slide appears.
+
+### xkcd.php — XKCD Comic of the Day
+
+Latest comic from [xkcd.com](https://xkcd.com/) — title, image, and hover text (alt).
+
+**Data:** Official JSON API at `https://xkcd.com/info.0.json` — free, no key.
+
+**Setup:** admin → **XKCD Comic** — title/subtitle, show hover text, timezone. Cache TTL defaults to 24 hours (new comic when Randall publishes, usually Mon/Wed/Fri).
 
 ### sports.php — Detroit Sports
 

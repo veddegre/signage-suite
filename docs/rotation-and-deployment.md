@@ -77,6 +77,7 @@ uv.php
 wotd.php
 history.php
 joke.php
+xkcd.php
 sports.php
 traffic.php
 ```
