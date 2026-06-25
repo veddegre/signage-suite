@@ -26,7 +26,7 @@ $hasData = $configured && $flows !== [];
 $embedded = isset($_GET['noticker']);
 $heightCss = signage_viewport_height();
 $boardH = signage_frame_height();
-$rowHead = max(72, (int)round(88 * $boardH / 1080));
+$topBar = max(96, (int)round(104 * $boardH / 1080));
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -48,8 +48,20 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:<?= $heightCss ?>; position:relative; min-height:0; overflow:hidden; }
-  .mapwrap { position:absolute; inset:0; background:#080e18; }
+  .board { width:1920px; height:<?= $heightCss ?>; display:flex; flex-direction:column;
+           min-height:0; overflow:hidden; background:var(--lake-night); }
+  .topbar { flex-shrink:0; height:<?= $topBar ?>px; display:flex; align-items:center;
+            justify-content:space-between; gap:24px; padding:0 <?= $boardH < 1080 ? 28 : 32 ?>px;
+            background:var(--harbor); border-bottom:1px solid var(--hairline); z-index:700; }
+  .topbar .title-block { min-width:0; }
+  .topbar h1 { font-family:'Big Shoulders Display'; font-weight:700;
+               font-size:<?= $boardH < 1080 ? 48 : 54 ?>px; line-height:1; white-space:nowrap; }
+  .topbar .sub { display:block; font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; color:var(--beacon);
+                 margin-top:6px; white-space:nowrap; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
+           color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .map-area { flex:1; min-height:0; position:relative; background:#080e18; }
+  .mapwrap { position:absolute; inset:0; }
   #attackMap { width:100%; height:100%; }
   #attackMap.leaflet-container,
   #attackMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
@@ -57,21 +69,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   #attackMap .leaflet-control-attribution a { color:var(--mist); }
   .attack-canvas { pointer-events:none; z-index:450; }
 
-  .overlay-head { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 28 : 32 ?>px;
-                    right:<?= $boardH < 1080 ? 28 : 32 ?>px; z-index:600; display:flex;
-                    align-items:flex-start; justify-content:space-between; gap:24px; pointer-events:none; }
-  .overlay-head .title-block { min-width:0; }
-  .overlay-head h1 { font-family:'Big Shoulders Display'; font-weight:700;
-                     font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; line-height:1;
-                     text-shadow:0 2px 18px rgba(0,0,0,.65); white-space:nowrap; }
-  .overlay-head .sub { display:block; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--beacon);
-                       margin-top:8px; text-shadow:0 2px 18px rgba(0,0,0,.65); white-space:nowrap; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
-           color:var(--mist); font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65);
-           flex-shrink:0; }
-
-  .side { position:absolute; top:<?= $rowHead + ($boardH < 1080 ? 36 : 44) ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
-          width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $rowHead + ($boardH < 1080 ? 120 : 140) ?>px);
+  .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
+          width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $boardH < 1080 ? 88 : 96 ?>px);
           z-index:600; display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; }
   .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist);
              background:rgba(12,20,34,.72); padding:8px 12px; border-radius:8px; border:1px solid var(--hairline); }
@@ -82,7 +81,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .flow .pct { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px;
                color:var(--snow); margin-top:4px; }
 
-  .map-tag { position:absolute; left:<?= $boardH < 1080 ? 28 : 32 ?>px; bottom:<?= $embedded ? 20 : 72 ?>px; z-index:600;
+  .map-tag { position:absolute; left:<?= $boardH < 1080 ? 28 : 32 ?>px; bottom:<?= $boardH < 1080 ? 16 : 20 ?>px; z-index:600;
              pointer-events:none; font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; letter-spacing:1.5px;
              text-transform:uppercase; color:var(--mist); background:rgba(12,20,34,.78); padding:10px 16px;
              border-radius:8px; border:1px solid var(--hairline); }
@@ -99,22 +98,23 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .setup p, .setup ol { font-size:22px; color:var(--mist); line-height:1.55; max-width:920px; text-align:left; }
   .setup ol { margin-top:8px; padding-left:24px; }
   <?= signage_stamp_css() ?>
-  .stamp { position:absolute; left:<?= $boardH < 1080 ? 28 : 32 ?>px; right:<?= $boardH < 1080 ? 28 : 32 ?>px;
-           bottom:<?= $embedded ? 8 : 52 ?>px; z-index:600; pointer-events:none; }
+  .stamp { position:absolute; right:<?= $boardH < 1080 ? 20 : 28 ?>px; bottom:<?= $boardH < 1080 ? 10 : 12 ?>px;
+           left:auto; z-index:600; pointer-events:none; }
 </style>
 </head>
 <body>
 <div class="board">
-  <?php if ($configured): ?>
-  <div class="mapwrap"><div id="attackMap"></div></div>
-
-  <div class="overlay-head">
+  <header class="topbar">
     <div class="title-block">
       <h1><?= h(TITLE) ?></h1>
       <div class="sub"><?= h(SUBTITLE) ?> · <?= h($range) ?></div>
     </div>
     <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
-  </div>
+  </header>
+
+  <?php if ($configured): ?>
+  <div class="map-area">
+  <div class="mapwrap"><div id="attackMap"></div></div>
 
   <?php if ($hasData): ?>
   <div class="side">
@@ -145,8 +145,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     count($flows) . ' arcs',
     $GLOBALS['diag']['attackmap'] ?? '',
   ]))) ?></div>
+  </div>
 
   <?php else: ?>
+  <div class="map-area">
   <div class="setup">
     <h2>Attack map needs a Cloudflare token</h2>
     <p>Paste your Radar API token in admin — it can be shared with the <strong>Cloudflare Radar</strong> board.</p>
@@ -156,6 +158,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <li>Use <strong>Read all Radar data</strong> or <strong>Account → Radar</strong> permission</li>
       <li>Admin → <strong>Attack Map</strong> or <strong>Cloudflare Radar</strong> → paste token</li>
     </ol>
+  </div>
   </div>
   <?php endif; ?>
 </div>
