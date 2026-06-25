@@ -98,7 +98,9 @@ function splunk_normalize_page(array $page, string $key): ?array
         $out['sub'] = splunk_default_page_sub();
     }
 
-    return $out;
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_merge_entry_access_meta($out, $page);
 }
 
 /**

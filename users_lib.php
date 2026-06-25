@@ -712,6 +712,27 @@ function admin_entry_shared_users(?array $entry): array
     return admin_normalize_shared($entry['shared'] ?? []);
 }
 
+/**
+ * Preserve owner/shared when normalizing a registry row for admin or wall load.
+ *
+ * @param array<string,mixed> $out
+ * @param array<string,mixed> $source
+ * @return array<string,mixed>
+ */
+function admin_merge_entry_access_meta(array $out, array $source): array
+{
+    $owner = admin_entry_owner($source);
+    if ($owner !== null) {
+        $out['owner'] = $owner;
+    }
+    $shared = admin_entry_shared_users($source);
+    if ($shared !== []) {
+        $out['shared'] = $shared;
+    }
+
+    return $out;
+}
+
 /** Legacy entries without owner are super-admin only unless shared. */
 function admin_entry_visible(?array $entry): bool
 {
