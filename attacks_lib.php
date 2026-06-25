@@ -1,13 +1,12 @@
 <?php
 /**
- * Internet attack visibility — SANS DShield + Cloudflare Radar.
+ * Internet attack visibility — SANS DShield.
  */
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/security_lib.php';
 
 const ATTACKS_CACHE_DIR = __DIR__ . '/cache';
-const ATTACKS_CF_BASE = 'https://api.cloudflare.com/client/v4';
 const ATTACKS_DSHIELD_BASE = 'https://isc.sans.edu/api';
 
 function attacks_cache_ttl(): int
@@ -23,11 +22,6 @@ function attacks_user_agent(): string
 function attacks_dshield_enabled(): bool
 {
     return (bool)cfg('attacks.ENABLE_DSHIELD', true);
-}
-
-function attacks_cloudflare_enabled(): bool
-{
-    return (bool)cfg('attacks.ENABLE_CLOUDFLARE', true);
 }
 
 function attacks_highlight_us(): bool
@@ -48,22 +42,6 @@ function attacks_max_ips(): int
 function attacks_max_ports(): int
 {
     return max(4, min(12, (int)cfg('attacks.MAX_PORTS', 8)));
-}
-
-function attacks_cf_date_range(): string
-{
-    $range = trim((string)cfg('attacks.CF_DATE_RANGE', '1d'));
-    return in_array($range, ['1d', '7d', '14d', '28d'], true) ? $range : '1d';
-}
-
-function attacks_cf_token(): string
-{
-    return trim((string)cfg('attacks.CF_API_TOKEN', ''));
-}
-
-function attacks_cf_configured(): bool
-{
-    return attacks_cloudflare_enabled() && attacks_cf_token() !== '';
 }
 
 function attacks_format_count(int $n): string
@@ -362,71 +340,7 @@ function attacks_port_label(int $port): string
     };
 }
 
-/** @return list<array{code:string,name:string,percent:float,rank:int}> */
-function attacks_cf_parse_locations(?array $response, string $codeKey, string $nameKey): array
-{
-    if (!is_array($response) || empty($response['success'])) {
-        return [];
-    }
-    $result = $response['result'] ?? null;
-    if (!is_array($result)) {
-        return [];
-    }
-    $top = $result['top_0'] ?? [];
-    if (!is_array($top)) {
-        return [];
-    }
-    $out = [];
-    foreach ($top as $row) {
-        if (!is_array($row)) {
-            continue;
-        }
-        $code = strtoupper(trim((string)($row[$codeKey] ?? '')));
-        if ($code === '') {
-            continue;
-        }
-        $out[] = [
-            'code' => $code,
-            'name' => trim((string)($row[$nameKey] ?? '')) ?: attacks_country_name($code),
-            'percent' => (float)($row['value'] ?? 0),
-            'rank' => (int)($row['rank'] ?? count($out) + 1),
-        ];
-    }
-    return $out;
-}
-
-/** @return list<array{code:string,name:string,percent:float,rank:int}> */
-function attacks_cf_fetch_locations(string $layer, string $direction): array
-{
-    if (!attacks_cf_configured()) {
-        return [];
-    }
-    $path = match ($layer . ':' . $direction) {
-        'l3:target' => '/radar/attacks/layer3/top/locations/target',
-        'l3:origin' => '/radar/attacks/layer3/top/locations/origin',
-        'l7:target' => '/radar/attacks/layer7/top/locations/target',
-        default => '',
-    };
-    if ($path === '') {
-        return [];
-    }
-    $params = http_build_query([
-        'limit' => attacks_max_countries(),
-        'dateRange' => attacks_cf_date_range(),
-        'format' => 'json',
-    ]);
-    $cacheKey = 'attacks_cf_' . $layer . '_' . $direction . '_' . attacks_cf_date_range();
-    $url = ATTACKS_CF_BASE . $path . '?' . $params;
-    $raw = attacks_fetch_json($cacheKey, $url, ['Authorization: Bearer ' . attacks_cf_token()]);
-    if (!is_array($raw)) {
-        return [];
-    }
-    $codeKey = $direction === 'origin' ? 'originCountryAlpha2' : 'targetCountryAlpha2';
-    $nameKey = $direction === 'origin' ? 'originCountryName' : 'targetCountryName';
-    return attacks_cf_parse_locations($raw, $codeKey, $nameKey);
-}
-
-/** @return array{dshield:array<string,mixed>,cloudflare:array<string,mixed>} */
+/** @return array{dshield:array<string,mixed>} */
 function attacks_fetch_all(): array
 {
     $countries = attacks_fetch_countries();
@@ -440,11 +354,6 @@ function attacks_fetch_all(): array
             'hero' => $hero,
             'top_ips' => attacks_fetch_top_ips(),
             'top_ports' => attacks_fetch_top_ports(),
-        ],
-        'cloudflare' => [
-            'configured' => attacks_cf_configured(),
-            'l3_targets' => attacks_cf_fetch_locations('l3', 'target'),
-            'l7_targets' => attacks_cf_fetch_locations('l7', 'target'),
         ],
     ];
 }

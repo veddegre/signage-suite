@@ -3,13 +3,12 @@
  * INTERNET ATTACKS — 1920×1080 signage
  *
  * DShield (SANS ISC) — free, no API key.
- * Cloudflare Radar — optional API token for L3/L7 DDoS geography.
  */
 
 require_once __DIR__ . '/attacks_lib.php';
 
 define('TITLE', cfg('attacks.TITLE', 'Internet Attacks'));
-define('SUBTITLE', cfg('attacks.SUBTITLE', 'DShield · Cloudflare Radar'));
+define('SUBTITLE', cfg('attacks.SUBTITLE', 'SANS DShield'));
 define('TIMEZONE', cfg('attacks.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('attacks.RELOAD_SEC', 0));
 
@@ -19,7 +18,6 @@ $GLOBALS['diag'] = [];
 
 $data = attacks_fetch_all();
 $dshield = $data['dshield'];
-$cf = $data['cloudflare'];
 
 $infocon = $dshield['infocon'] ?? null;
 $hero = $dshield['hero'] ?? null;
@@ -27,21 +25,14 @@ $countries = $dshield['countries'] ?? [];
 $countryList = $hero ? array_slice($countries, 1) : $countries;
 $topPorts = $dshield['top_ports'] ?? [];
 $topIps = $dshield['top_ips'] ?? [];
-$cfL3 = $cf['l3_targets'] ?? [];
-$cfL7 = $cf['l7_targets'] ?? [];
 
 $showDshield = attacks_dshield_enabled();
-$showCf = attacks_cloudflare_enabled();
-$cfReady = !empty($cf['configured']);
-$rightQuad = ($showDshield && $showCf && $cfReady);
-$hasData = ($showDshield && ($hero !== null || $topPorts !== [] || $topIps !== []))
-    || ($showCf && $cfReady && ($cfL3 !== [] || $cfL7 !== []));
+$hasData = $showDshield && ($hero !== null || $topPorts !== [] || $topIps !== []);
 
 $embedded = isset($_GET['noticker']);
 $heightCss = signage_viewport_height();
 $boardH = signage_frame_height();
 $rowHead = max(72, (int)round(88 * $boardH / 1080));
-$cfRange = attacks_cf_date_range();
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -81,7 +72,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .pill.crit .dot { background:var(--crit); }
 
   .main { grid-area:main; min-height:0; display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
-          grid-template-columns: <?= $showDshield ? '1.15fr 0.85fr' : '1fr' ?>; min-width:0; }
+          grid-template-columns: 1.15fr 0.85fr; min-width:0; }
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
            padding:<?= $boardH < 1080 ? '18px 20px' : '22px 24px' ?>; min-height:0; overflow:hidden;
            display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 14 ?>px; }
@@ -115,10 +106,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .row .side span { font-size:<?= $boardH < 1080 ? 14 : 15 ?>px; color:var(--mist); }
 
   .right { min-height:0; display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
-           grid-template-columns: <?= $rightQuad ? '1fr 1fr' : '1fr' ?>;
-           grid-template-rows: <?= $rightQuad ? '1fr 1fr' : 'repeat(2, minmax(0, 1fr))' ?>; }
-  .right.placeholder-only { grid-template-rows: 1fr; }
-  .mini { min-height:0; }
+           grid-template-rows: repeat(2, minmax(0, 1fr)); }
   .bar { height:6px; border-radius:999px; background:var(--hairline); margin-top:8px; overflow:hidden; }
   .bar > i { display:block; height:100%; background:var(--beacon); border-radius:999px; }
 
@@ -135,7 +123,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
-  <?php if ($hasData || $showDshield || $showCf): ?>
+  <?php if ($hasData): ?>
   <div class="summary">
     <?php if ($infocon): ?>
     <div class="pill <?= h((string)$infocon['class']) ?>">
@@ -149,18 +137,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       Top target <strong><?= h((string)$hero['name']) ?></strong>
     </div>
     <?php endif; ?>
-    <?php if ($showCf): ?>
-    <div class="pill <?= h($cfReady && ($cfL3 !== [] || $cfL7 !== []) ? 'warn' : 'ok') ?>">
-      <span class="dot"></span>
-      Cloudflare Radar <strong><?= $cfReady ? h($cfRange) . ' window' : 'token needed' ?></strong>
-    </div>
-    <?php endif; ?>
   </div>
 
   <div class="main">
-    <?php if ($showDshield): ?>
     <section class="panel">
-      <h2>Areas under attack <span style="font-size:0.55em;color:var(--mist);font-weight:500">DShield targets</span></h2>
+      <h2>Areas under attack</h2>
       <?php if ($hero): ?>
       <div class="hero <?= ($hero['code'] ?? '') === 'US' ? 'us' : '' ?>">
         <div class="tag"><?= h((string)$hero['code']) ?></div>
@@ -199,11 +180,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <div class="empty">DShield country feed unavailable.</div>
       <?php endif; ?>
     </section>
-    <?php endif; ?>
 
-    <div class="right<?= ($showCf && !$cfReady && !$showDshield) ? ' placeholder-only' : '' ?>">
-      <?php if ($showDshield): ?>
-      <section class="panel mini">
+    <div class="right">
+      <section class="panel">
         <h2>Top targeted ports</h2>
         <div class="list">
           <?php if ($topPorts === []): ?>
@@ -225,7 +204,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         </div>
       </section>
 
-      <section class="panel mini">
+      <section class="panel">
         <h2>Top attacking IPs</h2>
         <div class="list">
           <?php if ($topIps === []): ?>
@@ -244,63 +223,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           <?php endforeach; endif; ?>
         </div>
       </section>
-      <?php endif; ?>
-
-      <?php if ($showCf && $cfReady): ?>
-      <section class="panel mini">
-        <h2>L3 DDoS targets <span style="font-size:0.55em;color:var(--mist);font-weight:500">Cloudflare</span></h2>
-        <div class="list">
-          <?php if ($cfL3 === []): ?>
-          <div class="empty">No L3 target data for <?= h($cfRange) ?>.</div>
-          <?php else: foreach ($cfL3 as $c): ?>
-          <div class="row <?= ($c['code'] ?? '') === 'US' ? 'us' : '' ?>">
-            <div>
-              <div class="title"><span class="code"><?= h((string)$c['code']) ?></span><?= h((string)$c['name']) ?></div>
-              <div class="bar"><i style="width:<?= min(100, (float)$c['percent']) ?>%"></i></div>
-            </div>
-            <div class="side">
-              <strong><?= h(number_format((float)$c['percent'], 1)) ?>%</strong>
-              <span>of L3 attacks</span>
-            </div>
-          </div>
-          <?php endforeach; endif; ?>
-        </div>
-      </section>
-
-      <section class="panel mini">
-        <h2>L7 attack targets <span style="font-size:0.55em;color:var(--mist);font-weight:500">Cloudflare</span></h2>
-        <div class="list">
-          <?php if ($cfL7 === []): ?>
-          <div class="empty">No L7 target data for <?= h($cfRange) ?>.</div>
-          <?php else: foreach ($cfL7 as $c): ?>
-          <div class="row <?= ($c['code'] ?? '') === 'US' ? 'us' : '' ?>">
-            <div>
-              <div class="title"><span class="code"><?= h((string)$c['code']) ?></span><?= h((string)$c['name']) ?></div>
-              <div class="bar"><i style="width:<?= min(100, (float)$c['percent']) ?>%"></i></div>
-            </div>
-            <div class="side">
-              <strong><?= h(number_format((float)$c['percent'], 1)) ?>%</strong>
-              <span>of L7 attacks</span>
-            </div>
-          </div>
-          <?php endforeach; endif; ?>
-        </div>
-      </section>
-      <?php elseif ($showCf && !$cfReady): ?>
-      <section class="panel mini" style="grid-row: span 2">
-        <h2>Cloudflare Radar</h2>
-        <div class="empty">Add a Cloudflare API token with <strong>Account → Radar</strong> permission in admin to show L3/L7 DDoS geography.</div>
-      </section>
-      <?php endif; ?>
     </div>
   </div>
   <?php else: ?>
-  <div class="notcfg">Attack feeds unavailable<?= $GLOBALS['diag'] ? ' — ' . h(implode('; ', $GLOBALS['diag'])) : '' ?>.</div>
+  <div class="notcfg">DShield feed unavailable<?= $GLOBALS['diag'] ? ' — ' . h(implode('; ', $GLOBALS['diag'])) : '' ?>.</div>
   <?php endif; ?>
 
   <div class="stamp"><?= h(implode(' · ', array_filter([
     'isc.sans.edu',
-    $cfReady ? 'Cloudflare Radar' : '',
     count($countries) . ' countries',
     count($topPorts) . ' ports',
     count($topIps) . ' IPs',

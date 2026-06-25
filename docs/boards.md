@@ -23,7 +23,8 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
-| | Internet attacks | `attacks.php` | `attacks.php` | Cloudflare Radar token |
+| | Internet attacks | `attacks.php` | `attacks.php` | — |
+| | Cloudflare Radar | `radar.php` | `radar.php` | Radar API token |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
@@ -211,25 +212,25 @@ IODA combines BGP prefix visibility, active probing, and other signals. The boar
 
 **Rotation:** 60s dwell; IODA and DNS probes refresh on their own cache schedules.
 
-### attacks.php — Internet Attacks (DShield & Cloudflare Radar)
+### attacks.php — Internet Attacks (DShield)
 
-Attack visibility board: **areas under attack** (DShield country targets), **top ports and IPs**, plus optional **Cloudflare Radar** L3/L7 DDoS geography.
+Scanning and brute-force visibility from the SANS ISC DShield sensor network: **areas under attack** (country targets), **top ports**, **top attacking IPs**, and the global **Infocon** threat level.
 
-**Data:**
+**Data:** [SANS ISC DShield API](https://isc.sans.edu/api/) — free, no API key (`country`, `topips`, `topports`, `infocon`).
 
-| Panel | Source |
-|-------|--------|
-| Countries under attack | [SANS ISC DShield](https://isc.sans.edu/api/country?json) — free, no key |
-| Infocon threat level | `isc.sans.edu/api/infocon?json` |
-| Top ports / top IPs | DShield daily summaries |
-| L3 DDoS targets | [Cloudflare Radar API](https://developers.cloudflare.com/radar/) — token required |
-| L7 attack targets | Cloudflare Radar — token required |
-
-DShield reflects scanning and brute-force noise seen by the ISC sensor network. Cloudflare Radar shows DDoS attack share by target country across Cloudflare's network — closer to large-scale volumetric attacks.
-
-**Setup:** admin → **Internet Attacks** — DShield works out of the box. For Cloudflare panels, create a free account token with **Account → Radar** permission and paste it as **Cloudflare API token**. Toggle **Highlight United States** to pin US at the top of country lists.
+**Setup:** admin → **Internet Attacks** — country/port/IP counts, optional US highlight. Works out of the box.
 
 **Rotation:** 60s dwell; feeds refresh on cache TTL (default 300s).
+
+### radar.php — Cloudflare Radar (DDoS geography)
+
+Separate board for **L3 DDoS targets**, **L3 attack origins**, and **L7 attack targets** — share of attacks by country across Cloudflare's network.
+
+**Data:** [Cloudflare Radar API](https://developers.cloudflare.com/radar/) — free account, API token with **Account → Radar** permission.
+
+**Setup:** admin → **Cloudflare Radar** — paste API token, pick time window (default 24h), toggle L3/L7 panels.
+
+**Rotation:** 60s dwell; add as its own playlist row alongside **Internet Attacks** for a separate screen.
 
 ### hibp.php — Data Breaches (Have I Been Pwned)
 

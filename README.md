@@ -119,7 +119,7 @@ video.php?v=drone           slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield/Radar), HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Cloudflare Radar for attacks; NVD key optional; `dig` for DNS roots |
+| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), Cloudflare Radar (DDoS), HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides, RSS feeds, local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
@@ -128,13 +128,17 @@ video.php?v=drone           slides.php?slide=birthday.png
 
 **Splunk panels** — oneshot searches server-side (port 8089), multi-page like Grafana.
 
-**Internet attacks** (`attacks.php`) — DShield (SANS ISC) works with no API key: countries under attack, top ports, top IPs, and the global Infocon level. For L3/L7 DDoS geography, add a **Cloudflare Radar** token:
+**Internet attacks** (`attacks.php`) — DShield (SANS ISC) works with no API key: countries under attack, top ports, top IPs, and the global Infocon level.
+
+**Cloudflare Radar** (`radar.php`) — separate rotation screen for L3/L7 DDoS geography. Add a **Cloudflare Radar** API token:
 
 1. Sign in at [dash.cloudflare.com](https://dash.cloudflare.com) (free account is fine).
 2. **My Profile → API Tokens → Create Token**.
 3. Use the **“Read all Radar data”** template, or a custom token with **Account → Radar** permission.
-4. Admin → **Internet Attacks** → paste the token into **Cloudflare API token**.
-5. Choose a window (default **Last 24 hours**). Panels refresh on the board cache TTL (default 300s).
+4. Admin → **Cloudflare Radar** → paste into **Cloudflare API token**.
+5. Choose a window (default **Last 24 hours**). Add `radar.php` to your rotation playlist as its own row.
+
+If you previously saved a token under **Internet Attacks**, it is still read until you move it to **Cloudflare Radar**.
 
 **Internet infrastructure** (`internet.php`) — BGP/ASN outages via IODA (no key) and DNS root probes via `dig` (`dnsutils` package; installed by `setup-server.sh`).
 
