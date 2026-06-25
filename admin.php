@@ -1527,7 +1527,7 @@ if ($authed && $board === 'video') {
 
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
-    'Weather & home'  => ['index', 'lake', 'webcam', 'photo', 'air', 'uv', 'sports', 'calendar', 'traffic'],
+    'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'traffic'],
     'Daily'           => ['wotd', 'history', 'joke'],
     'Monitoring'      => ['homelab', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
@@ -7046,7 +7046,7 @@ function rotationLabelFromUrl(url) {
   const slideMatch = url.match(/(?:^|\?|&)slide=([^&]+)/);
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
-    'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'photo.php': 'Photo conditions',
+    'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
     'calendar.php': 'Calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'sports.php': 'Detroit sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',

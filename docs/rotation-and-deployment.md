@@ -71,6 +71,7 @@ splunk.php?d=soc
 video.php?v=drone
 slides.php?slide=birthday.png
 webcam.php
+bridgecam.php
 air.php
 uv.php
 wotd.php

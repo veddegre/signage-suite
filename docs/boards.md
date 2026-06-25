@@ -9,6 +9,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | Weather & home | Weather | `index.php` | `index.php` | OpenWeatherMap |
 | | Lake Michigan | `lake.php` | `lake.php` | — |
 | | Webcam | `webcam.php` | `webcam.php` | — |
+| | Mackinac Bridge cam | `bridgecam.php` | `bridgecam.php` | — |
 | | Photo conditions | `photo.php` | `photo.php` | OpenWeatherMap |
 | | Air & pollen | `air.php` | `air.php` | Google Pollen (optional) |
 | | UV index | `uv.php` | `uv.php` | — |
@@ -55,6 +56,14 @@ Full-screen EarthCam embed from [Surf Grand Haven](https://surfgrandhaven.com) (
 **Setup:** admin → **Webcam** — paste iframe `src` if the default breaks. Optional title + clock overlay.
 
 **Rotation:** long dwell (120s+). Default hourly iframe reload (`RELOAD_SEC`) clears memory on long kiosk sessions — set `0` to disable.
+
+### bridgecam.php — Mackinac Bridge Cam
+
+Full-screen live stills from the [Mackinac Bridge Authority bridge cams](https://www.mackinacbridge.org/fares-traffic/bridge-cam/). Four views: Mackinaw City (north), St. Ignace dock, Bridge View Park, and administration building. Source images update about every 60 seconds.
+
+**Setup:** admin → **Mackinac Bridge Cam** — pick one camera or rotate through all four. Default is the Mackinaw City north view. No API key.
+
+**Rotation:** 90s+ dwell works well; the board refreshes the image every 60s on its own.
 
 ### photo.php — Photo Conditions
 
