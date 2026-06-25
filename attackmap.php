@@ -46,25 +46,29 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --origin:#ff6b6b; --target:#39c46d; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
-              <?= signage_viewport_css() ?> }
-  .board { width:1920px; height:100%; position:relative; min-height:0; }
+  html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
+  .board { width:1920px; height:<?= $heightCss ?>; position:relative; min-height:0; overflow:hidden; }
   .mapwrap { position:absolute; inset:0; background:#080e18; }
   #attackMap { width:100%; height:100%; }
+  #attackMap.leaflet-container,
+  #attackMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #attackMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.85); color:var(--mist); }
   #attackMap .leaflet-control-attribution a { color:var(--mist); }
   .attack-canvas { pointer-events:none; z-index:450; }
 
   .overlay-head { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 28 : 32 ?>px;
                     right:<?= $boardH < 1080 ? 28 : 32 ?>px; z-index:600; display:flex;
-                    align-items:baseline; justify-content:space-between; gap:24px; pointer-events:none; }
+                    align-items:flex-start; justify-content:space-between; gap:24px; pointer-events:none; }
+  .overlay-head .title-block { min-width:0; }
   .overlay-head h1 { font-family:'Big Shoulders Display'; font-weight:700;
-                     font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; text-shadow:0 2px 18px rgba(0,0,0,.65); }
-  .overlay-head h1 span { color:var(--beacon); }
-  .overlay-head .sub { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); margin-left:16px; }
+                     font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; line-height:1;
+                     text-shadow:0 2px 18px rgba(0,0,0,.65); white-space:nowrap; }
+  .overlay-head .sub { display:block; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--beacon);
+                       margin-top:8px; text-shadow:0 2px 18px rgba(0,0,0,.65); white-space:nowrap; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
-           color:var(--mist); font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
+           color:var(--mist); font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65);
+           flex-shrink:0; }
 
   .side { position:absolute; top:<?= $rowHead + ($boardH < 1080 ? 36 : 44) ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $rowHead + ($boardH < 1080 ? 120 : 140) ?>px);
@@ -105,7 +109,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   <div class="mapwrap"><div id="attackMap"></div></div>
 
   <div class="overlay-head">
-    <h1><?= h(TITLE) ?><span class="sub"><?= h(SUBTITLE) ?> · <?= h($range) ?></span></h1>
+    <div class="title-block">
+      <h1><?= h(TITLE) ?></h1>
+      <div class="sub"><?= h(SUBTITLE) ?> · <?= h($range) ?></div>
+    </div>
     <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
@@ -163,13 +170,18 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   const map = L.map('attackMap', {
     zoomControl: false, dragging: false, scrollWheelZoom: false,
     doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false,
-    attributionControl: true, worldCopyJump: true,
-  }).setView([24, 10], 2);
+    attributionControl: true, worldCopyJump: false, maxBoundsViscosity: 1.0,
+  });
+
+  const worldBounds = L.latLngBounds(L.latLng(-58, -180), L.latLng(78, 180));
+  map.setMaxBounds(worldBounds);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 6, minZoom: 2,
+    subdomains: 'abcd', maxZoom: 4, minZoom: 2, noWrap: true,
     attribution: '&copy; OpenStreetMap &copy; CARTO &middot; attacks &copy; Cloudflare Radar'
   }).addTo(map);
+
+  map.fitBounds(worldBounds, { padding: [12, 12], animate: false });
 
   if (FLOWS.length) {
   FLOWS.forEach((f, i) => { f.phase = i * 0.41; });
@@ -202,8 +214,12 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       this._dpr = dpr;
     },
     _arcPoints(o, t, steps) {
+      let tLng = t.lng;
+      const dLng = tLng - o.lng;
+      if (dLng > 180) tLng -= 360;
+      else if (dLng < -180) tLng += 360;
       const p0 = this._map.latLngToContainerPoint([o.lat, o.lng]);
-      const p1 = this._map.latLngToContainerPoint([t.lat, t.lng]);
+      const p1 = this._map.latLngToContainerPoint([t.lat, tLng]);
       const mx = (p0.x + p1.x) / 2;
       const my = (p0.y + p1.y) / 2;
       const dx = p1.x - p0.x;
@@ -291,7 +307,12 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   map.addLayer(new AttackCanvas());
   }
 
-  setTimeout(() => map.invalidateSize(), 200);
+  setTimeout(() => map.invalidateSize(), 50);
+  setTimeout(() => {
+    map.fitBounds(worldBounds, { padding: [12, 12], animate: false });
+    map.invalidateSize();
+  }, 250);
+  window.addEventListener('load', () => map.invalidateSize());
   if (RELOAD > 0) setTimeout(() => location.reload(), RELOAD);
 })();
 </script>
