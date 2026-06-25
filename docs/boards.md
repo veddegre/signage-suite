@@ -22,6 +22,9 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | XKCD comic | `xkcd.php` | `xkcd.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
+| | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
+| | Data breaches | `hibp.php` | `hibp.php` | — |
+| | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
 | Media | Photo rotator | `rotator.php` | `rotator.php` | — |
@@ -187,6 +190,41 @@ Six-card grid for public cloud/SaaS status: **AWS**, **Azure**, **GitHub**, **Cl
 **US filtering:** When enabled, AWS events are limited to `us-*` regions, Cloudflare to US POPs, Google Workspace to US-affected locations, and Azure RSS posts mentioning US regions. GitHub publishes global service status only — that card stays global and is labeled accordingly. M365 public feed is global; Graph uses your tenant view.
 
 **Rotation:** 60s dwell is enough; the board auto-refreshes feeds on its own cache schedule.
+
+### internet.php — Internet Infrastructure (BGP & DNS roots)
+
+Two-panel board for core Internet plumbing: **routing/ASN outages** from IODA and a live **DNS root server** reachability grid (letters A–M).
+
+**Data:**
+
+| Panel | Source |
+|-------|--------|
+| BGP / ASN outages | [IODA API v2](https://api.ioda.inetintel.cc.gatech.edu/v2/) — free, no API key |
+| DNS root servers | CHAOS TXT probe (`hostname.bind`) to each `*.root-servers.net` via `dig` |
+
+IODA combines BGP prefix visibility, active probing, and other signals. The board prioritizes BGP alerts and ASN-level correlated events; when BGP-specific alerts are sparse it still shows recent ASN outage events with the signal source labeled (BGP, active probe, etc.).
+
+**DNS roots:** Each root letter is probed from your signage server. A failed probe highlights that letter in red — useful for spotting reachability issues from your network’s perspective (same idea as RIPE Atlas root monitoring, but local). Requires the `dig` command (`dnsutils` on Debian/Ubuntu).
+
+**Setup:** admin → **Internet Infrastructure** — toggle BGP and DNS panels, IODA lookback (default 7 days), optional **US scope** for IODA, cache TTLs (IODA default 300s, DNS probes default 180s).
+
+**Rotation:** 60s dwell; IODA and DNS probes refresh on their own cache schedules.
+
+### hibp.php — Data Breaches (Have I Been Pwned)
+
+Latest breach hero plus a list of recently added breaches — title, domain, account count, exposed data types, and description.
+
+**Data:** [Have I Been Pwned API v3](https://haveibeenpwned.com/API/v3) `GET /breaches` — free, no API key (User-Agent required).
+
+**Setup:** admin → **Data Breaches** — title, User-Agent, breach count (default 8), cache TTL (default 1 hour).
+
+### cve.php — New CVEs (NIST NVD)
+
+Latest published CVE hero plus a list of recent vulnerabilities — ID, CVSS score, severity, and description.
+
+**Data:** [NIST NVD API 2.0](https://nvd.nist.gov/developers/vulnerabilities) — free without a key (5 requests / 30s); optional API key for higher limits.
+
+**Setup:** admin → **New CVEs** — lookback window (default 7 days), CVE count (default 8), cache TTL (default 1 hour).
 
 ### signaltrace.php — Threat Wall
 

@@ -79,6 +79,8 @@ history.php
 joke.php
 xkcd.php
 outages.php
+hibp.php
+cve.php
 sports.php
 traffic.php
 ```
@@ -99,7 +101,7 @@ sudo bash setup-server.sh --domain signage.lan
 sudo bash setup-server.sh --nginx
 ```
 
-**Installs:** Apache or nginx, PHP 8.x + opcache, ffmpeg, yt-dlp (pipx), writable dirs, deny rules for secrets, 1-hour timeouts for YouTube downloads, slide backgrounds.
+**Installs:** Apache or nginx, PHP 8.x + opcache, ffmpeg, dnsutils (`dig`), yt-dlp (pipx), writable dirs, deny rules for secrets, 1-hour timeouts for YouTube downloads, slide backgrounds.
 
 **Re-run after updates:**
 

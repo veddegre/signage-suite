@@ -10,7 +10,7 @@
 #     sudo bash setup-server.sh --clone https://github.com/you/signage-suite.git
 #
 # What it does:
-#   * Installs Apache + PHP 8.x (curl, xml, mbstring, gd, zip), ffmpeg, and yt-dlp (pipx)
+#   * Installs Apache + PHP 8.x (curl, xml, mbstring, gd, zip), ffmpeg, dnsutils (dig), and yt-dlp (pipx)
 #   * Optionally skips yt-dlp (--no-ytdlp) or adds weekly video fetch cron (--with-video-cron)
 #   * Deploys board files to the web root
 #   * Creates config/, cache/, videos/, slides/, photos/ with correct ownership
@@ -115,11 +115,12 @@ install_packages() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
 
-  log "Installing Apache, PHP, and ffmpeg"
+  log "Installing Apache, PHP, ffmpeg, and dnsutils (dig)"
   apt-get install -y -q \
     apache2 libapache2-mod-php \
     php-cli php-curl php-xml php-mbstring php-gd php-zip php-opcache \
     ffmpeg \
+    dnsutils \
     rsync git curl
 
   if [[ "$WEBSERVER" == "nginx" ]]; then
