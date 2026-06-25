@@ -1145,6 +1145,7 @@ function rotation_page_label(string $url): string
         'family.php' => 'Calendar',
         'traffic.php' => 'Traffic map',
         'homelab.php' => 'Homelab status',
+        'outages.php' => 'Cloud outages',
         'signaltrace.php' => 'SignalTrace',
         'rotator.php' => 'Photo rotator',
         'slides.php' => 'Custom slides',
@@ -1337,6 +1338,7 @@ function rotation_quick_add_items(): array
         ['label' => 'Calendar', 'url' => 'calendar.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Traffic map', 'url' => 'traffic.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Homelab', 'url' => 'homelab.php', 'dwell' => 45, 'group' => 'Boards'],
+        ['label' => 'Cloud outages', 'url' => 'outages.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'SignalTrace', 'url' => 'signaltrace.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Photo rotator', 'url' => 'rotator.php', 'dwell' => 300, 'group' => 'Media'],
     ];

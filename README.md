@@ -119,7 +119,7 @@ video.php?v=drone           slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens |
+| **Monitoring** | SignalTrace, cloud outages, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365 |
 | **Daily** | Word of the day, This day in history, Dad jokes, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides, RSS feeds, local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |

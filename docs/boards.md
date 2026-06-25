@@ -21,6 +21,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Dad jokes | `joke.php` | `joke.php` | — |
 | | XKCD comic | `xkcd.php` | `xkcd.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
+| | Cloud outages | `outages.php` | `outages.php` | Graph (M365 only) |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
 | Media | Photo rotator | `rotator.php` | `rotator.php` | — |
@@ -165,6 +166,25 @@ RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEAR
 ---
 
 ## Monitoring
+
+### outages.php — Cloud Outages
+
+Six-card grid for public cloud/SaaS status: **AWS**, **Azure**, **GitHub**, **Cloudflare**, **Microsoft 365**, and **Google Workspace**. Each card shows overall health, a summary line, and up to three active incidents.
+
+**Data:** Public status APIs — no keys except Microsoft 365:
+
+| Provider | Source |
+|----------|--------|
+| AWS | `status.aws.amazon.com/data.json` |
+| Azure | Azure Status RSS |
+| GitHub | [githubstatus.com](https://www.githubstatus.com) Statuspage API |
+| Cloudflare | [cloudflarestatus.com](https://www.cloudflarestatus.com) Statuspage API |
+| Google Workspace | [Google Workspace Status Dashboard](https://www.google.com/appsstatus/dashboard/) JSON |
+| Microsoft 365 | Microsoft Graph `serviceAnnouncement` (requires Entra app) |
+
+**Setup:** admin → **Cloud Outages** — toggle providers, cache TTL (default 120s). For **Microsoft 365**, register an Entra application with **ServiceHealth.Read.All** (application permission), then paste tenant ID, client ID, and client secret. Other providers work out of the box.
+
+**Rotation:** 60s dwell is enough; the board auto-refreshes feeds on its own cache schedule.
 
 ### signaltrace.php — Threat Wall
 

@@ -78,6 +78,7 @@ wotd.php
 history.php
 joke.php
 xkcd.php
+outages.php
 sports.php
 traffic.php
 ```
