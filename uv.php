@@ -277,11 +277,14 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   .forecast .days { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; }
   .fday { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
           padding:<?= $boardH < 1080 ? '12px 14px' : '14px 16px' ?>; display:grid;
-          grid-template-columns:72px 1fr auto; gap:12px; align-items:center; }
-  .fday .d { font-size:15px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
+          grid-template-columns:minmax(<?= $boardH < 1080 ? 96 : 108 ?>px, max-content) minmax(0, 1fr) auto;
+          gap:<?= $boardH < 1080 ? 10 : 12 ?>px 14px; align-items:center; }
+  .fday .d { font-size:<?= $boardH < 1080 ? 14 : 15 ?>px; letter-spacing:<?= $boardH < 1080 ? 1.5 : 2 ?>px;
+             text-transform:uppercase; color:var(--mist); white-space:nowrap; }
   .fday .max { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 34 : 40 ?>px; line-height:1; }
-  .fday .line { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; color:var(--mist); margin-top:4px; }
-  .fday .band { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; font-weight:600; text-transform:uppercase; letter-spacing:1px; text-align:right; }
+  .fday .line { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; color:var(--mist); margin-top:4px; white-space:nowrap; }
+  .fday .band { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; font-weight:600; text-transform:uppercase; letter-spacing:1px;
+                text-align:right; white-space:nowrap; padding-left:8px; }
 
   .verdict { grid-area:verdict; border-radius:14px; border:1px solid var(--hairline);
              padding:<?= $boardH < 1080 ? '18px 24px' : '22px 32px' ?>; display:flex;

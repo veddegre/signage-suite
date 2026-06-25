@@ -416,17 +416,22 @@ function zabbix_api_call(string $method, array $params, ?string &$error = null):
 
     static $reqId = 0;
     $reqId++;
+    $token = trim((string)cfg('zabbix.ZABBIX_TOKEN', ''));
     $payload = json_encode([
         'jsonrpc' => '2.0',
         'method' => $method,
         'params' => $params,
-        'auth' => trim((string)cfg('zabbix.ZABBIX_TOKEN', '')),
         'id' => $reqId,
     ], JSON_UNESCAPED_SLASHES);
     if ($payload === false) {
         $error = 'failed to encode request';
 
         return null;
+    }
+
+    $headers = ['Content-Type: application/json-rpc', 'Accept: application/json'];
+    if ($token !== '' && !in_array($method, ['apiinfo.version', 'user.login'], true)) {
+        $headers[] = 'Authorization: Bearer ' . $token;
     }
 
     $ch = curl_init(zabbix_api_url());
@@ -436,7 +441,7 @@ function zabbix_api_call(string $method, array $params, ?string &$error = null):
         CURLOPT_TIMEOUT => 20,
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json-rpc', 'Accept: application/json'],
+        CURLOPT_HTTPHEADER => $headers,
         CURLOPT_SSL_VERIFYPEER => zabbix_verify_tls(),
         CURLOPT_SSL_VERIFYHOST => zabbix_verify_tls() ? 2 : 0,
     ]);
