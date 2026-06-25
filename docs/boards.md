@@ -84,9 +84,9 @@ Current UV, today's hourly curve (sunrise–sunset), peak/clear-sky stats, and 5
 
 ### wotd.php — Word of the Day
 
-Large word, pronunciation, part of speech, and up to four dictionary definitions.
+Large word, pronunciation, part of speech, definition, etymology, and a real-world usage quote from Wordsmith.
 
-**Data:** [Wordsmith.org A.Word.A.Day](https://wordsmith.org/) RSS + [Free Dictionary API](https://dictionaryapi.dev/) — no keys.
+**Data:** [Wordsmith.org A.Word.A.Day](https://wordsmith.org/) RSS + word page + [Free Dictionary API](https://dictionaryapi.dev/) for phonetic/alternate senses only — no keys.
 
 **Setup:** admin → **Word of the Day** — title/subtitle, timezone. Cache TTL defaults to 24 hours (one word per calendar day).
 

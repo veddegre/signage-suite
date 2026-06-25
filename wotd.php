@@ -2,9 +2,8 @@
 /**
  * WORD OF THE DAY — 1920×1080 signage
  *
- * Data: Wordsmith.org A.Word.A.Day RSS + Free Dictionary API (no keys).
+ * Data: Wordsmith.org A.Word.A.Day (RSS + word page) + Free Dictionary API fallback.
  * https://wordsmith.org/awad/rss1.xml
- * https://dictionaryapi.dev/
  */
 
 require_once __DIR__ . '/config.php';
@@ -34,7 +33,7 @@ function wotd_cached(string $url, string $key, string $diagKey): ?string
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 15,
-        CURLOPT_USERAGENT => 'HomeSignage/WOTD/1.0',
+        CURLOPT_USERAGENT => 'HomeSignage/WOTD/1.0 (signage-suite)',
         CURLOPT_FOLLOWLOCATION => true,
     ]);
     $body = curl_exec($ch);
@@ -49,7 +48,30 @@ function wotd_cached(string $url, string $key, string $diagKey): ?string
     return is_file($f) ? (string)file_get_contents($f) : null;
 }
 
-/** @return array{word:string,pos:string,blurb:string,link:string}|null */
+function wotd_plain(string $html): string
+{
+    $t = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    return trim(preg_replace('/\s+/u', ' ', $t) ?? $t);
+}
+
+function wotd_similar(string $a, string $b): bool
+{
+    $a = strtolower(preg_replace('/[^a-z0-9\s]/', '', $a) ?? $a);
+    $b = strtolower(preg_replace('/[^a-z0-9\s]/', '', $b) ?? $b);
+    if ($a === '' || $b === '') {
+        return false;
+    }
+    if ($a === $b) {
+        return true;
+    }
+    if (str_contains($a, $b) || str_contains($b, $a)) {
+        return true;
+    }
+    similar_text($a, $b, $pct);
+    return $pct >= 82;
+}
+
+/** @return array{word:string,link:string}|null */
 function wotd_parse_rss(string $raw): ?array
 {
     libxml_use_internal_errors(true);
@@ -59,22 +81,62 @@ function wotd_parse_rss(string $raw): ?array
     }
     $item = $xml->channel->item[0];
     $word = trim((string)$item->title);
-    $desc = trim(strip_tags((string)$item->description));
     $link = trim((string)$item->link);
     if ($word === '') {
         return null;
     }
-    $pos = '';
-    $blurb = $desc;
-    if (preg_match('/^([a-z]+(?:\s+[a-z]+)?):\s*(.+)$/i', $desc, $m)) {
-        $pos = trim($m[1]);
-        $blurb = trim($m[2]);
+    return ['word' => $word, 'link' => $link];
+}
+
+/** @return array<string,string> */
+function wotd_parse_word_page(string $html): array
+{
+    $out = [
+        'pronunciation' => '',
+        'meaning' => '',
+        'pos' => '',
+        'definition' => '',
+        'etymology' => '',
+        'usage' => '',
+        'thought' => '',
+    ];
+    $parts = preg_split(
+        '/<div style="font-family:Verdana; color:#555555; font-size:13px;">([A-Z][^<]+):<\/div>/',
+        $html,
+        -1,
+        PREG_SPLIT_DELIM_CAPTURE
+    );
+    if (!is_array($parts)) {
+        return $out;
     }
-    return ['word' => $word, 'pos' => $pos, 'blurb' => $blurb, 'link' => $link];
+    $map = [
+        'PRONUNCIATION' => 'pronunciation',
+        'MEANING' => 'meaning',
+        'ETYMOLOGY' => 'etymology',
+        'USAGE' => 'usage',
+        'A THOUGHT FOR TODAY' => 'thought',
+    ];
+    for ($i = 1; $i + 1 < count($parts); $i += 2) {
+        $label = trim($parts[$i]);
+        $key = $map[$label] ?? null;
+        if ($key === null) {
+            continue;
+        }
+        if (preg_match('/<div[^>]*>(.*?)<\/div>/s', $parts[$i + 1], $m)) {
+            $out[$key] = wotd_plain($m[1]);
+        }
+    }
+    if ($out['meaning'] !== '' && preg_match('/^([a-z]+(?:\s+[a-z]+)?)\s*:\s*(.+)$/i', $out['meaning'], $m)) {
+        $out['pos'] = trim($m[1]);
+        $out['definition'] = trim($m[2]);
+    } elseif ($out['meaning'] !== '') {
+        $out['definition'] = $out['meaning'];
+    }
+    return $out;
 }
 
 /** @return list<array{pos:string,def:string,example:?string}> */
-function wotd_parse_dictionary(string $raw): array
+function wotd_dictionary_defs(string $raw, int $limit = 3): array
 {
     $data = json_decode($raw, true);
     if (!is_array($data) || !isset($data[0]['meanings'])) {
@@ -96,7 +158,7 @@ function wotd_parse_dictionary(string $raw): array
                 'def' => $text,
                 'example' => isset($def['example']) ? trim((string)$def['example']) : null,
             ];
-            if (count($out) >= 4) {
+            if (count($out) >= $limit) {
                 return $out;
             }
         }
@@ -104,34 +166,104 @@ function wotd_parse_dictionary(string $raw): array
     return $out;
 }
 
+function wotd_dictionary_phonetic(string $raw): ?string
+{
+    $data = json_decode($raw, true);
+    if (!is_array($data) || !isset($data[0])) {
+        return null;
+    }
+    if (!empty($data[0]['phonetic'])) {
+        return (string)$data[0]['phonetic'];
+    }
+    foreach ($data[0]['phonetics'] ?? [] as $p) {
+        if (!empty($p['text'])) {
+            return (string)$p['text'];
+        }
+    }
+    return null;
+}
+
+/** Split usage into quote + citation when possible. @return array{0:string,1:string} */
+function wotd_split_usage(string $usage): array
+{
+    $usage = trim($usage);
+    if ($usage === '') {
+        return ['', ''];
+    }
+    if (preg_match('/^[\x{201C}\x{201D}"\x{0022}](.+?)[\x{201C}\x{201D}"\x{0022}]\s*(.+)$/u', $usage, $m)) {
+        return [trim($m[1]), trim($m[2])];
+    }
+    return [$usage, ''];
+}
+
 $dayKey = date('Y-m-d');
 $rssRaw = wotd_cached('https://wordsmith.org/awad/rss1.xml', 'wotd_rss_' . $dayKey, 'wordsmith');
-$wotd = $rssRaw ? wotd_parse_rss($rssRaw) : null;
+$rss = $rssRaw ? wotd_parse_rss($rssRaw) : null;
 
+$page = [];
 $phonetic = null;
-$definitions = [];
-if ($wotd) {
+$extraExample = null;
+$extraDefs = [];
+
+if ($rss) {
+    if ($rss['link'] !== '') {
+        $pageRaw = wotd_cached($rss['link'], 'wotd_page_' . $dayKey . '_' . md5($rss['link']), 'wordsmith_page');
+        if ($pageRaw) {
+            $page = wotd_parse_word_page($pageRaw);
+        }
+    }
+
     $dictRaw = wotd_cached(
-        'https://api.dictionaryapi.dev/api/v2/entries/en/' . rawurlencode(strtolower($wotd['word'])),
-        'wotd_dict_' . $dayKey . '_' . md5(strtolower($wotd['word'])),
+        'https://api.dictionaryapi.dev/api/v2/entries/en/' . rawurlencode(strtolower($rss['word'])),
+        'wotd_dict_' . $dayKey . '_' . md5(strtolower($rss['word'])),
         'dictionary'
     );
     if ($dictRaw) {
-        $definitions = wotd_parse_dictionary($dictRaw);
-        $decoded = json_decode($dictRaw, true);
-        if (is_array($decoded) && isset($decoded[0]['phonetic']) && $decoded[0]['phonetic'] !== '') {
-            $phonetic = (string)$decoded[0]['phonetic'];
-        } elseif (is_array($decoded) && !empty($decoded[0]['phonetics'][0]['text'])) {
-            $phonetic = (string)$decoded[0]['phonetics'][0]['text'];
+        if ($page['pronunciation'] === '') {
+            $phonetic = wotd_dictionary_phonetic($dictRaw);
+        }
+        $primaryDef = $page['definition'] ?? '';
+        foreach (wotd_dictionary_defs($dictRaw, 4) as $d) {
+            if ($primaryDef !== '' && wotd_similar($d['def'], $primaryDef)) {
+                if ($extraExample === null && !empty($d['example']) && ($page['usage'] ?? '') === '') {
+                    $extraExample = $d['example'];
+                }
+                continue;
+            }
+            $extraDefs[] = $d;
+            if (count($extraDefs) >= 2) {
+                break;
+            }
+        }
+        if ($extraExample === null && ($page['usage'] ?? '') === '') {
+            foreach (wotd_dictionary_defs($dictRaw, 1) as $d) {
+                if (!empty($d['example'])) {
+                    $extraExample = $d['example'];
+                    break;
+                }
+            }
         }
     }
 }
 
-$hasData = $wotd !== null;
-$primaryPos = $wotd['pos'] ?? '';
-if ($primaryPos === '' && $definitions !== []) {
-    $primaryPos = $definitions[0]['pos'];
+$word = $rss['word'] ?? '';
+$pos = $page['pos'] ?? '';
+$definition = $page['definition'] ?? '';
+$pronunciation = $page['pronunciation'] ?: ($phonetic ?? '');
+$etymology = $page['etymology'] ?? '';
+[$usageQuote, $usageCite] = wotd_split_usage($page['usage'] ?? '');
+$thought = $page['thought'] ?? '';
+if ($usageQuote === '' && $extraExample !== null) {
+    $usageQuote = $extraExample;
+    $usageCite = 'Dictionary example';
 }
+
+$hasData = $rss !== null && $word !== '';
+$hasMeaning = $definition !== '';
+$hasEtymology = $etymology !== '';
+$hasUsage = $usageQuote !== '';
+$hasThought = $thought !== '';
+$hasExtras = $extraDefs !== [];
 
 $embedded = isset($_GET['noticker']);
 $heightCss = signage_viewport_height();
@@ -148,43 +280,70 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 <style>
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --seafoam:#6ee7c8; }
+          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --seafoam:#6ee7c8; --lilac:#c4a8ff; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
-           display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
-           grid-template-rows: <?= $rowHead ?>px 1fr auto;
-           grid-template-areas: "head" "main" "meta"; min-height:0; }
+           display:grid; gap:<?= $boardH < 1080 ? 14 : 18 ?>px;
+           grid-template-rows: <?= $rowHead ?>px auto 1fr auto;
+           grid-template-areas:
+             "head"
+             "hero"
+             "body"
+             "meta";
+           min-height:0; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 50 : 58 ?>px; }
   .head h1 span { color:var(--beacon); }
-  .head .sub { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); margin-left:16px; }
+  .head .date { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-left:14px; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; }
 
-  .main { grid-area:main; display:grid; grid-template-columns: 1.05fr 0.95fr; gap:<?= $boardH < 1080 ? 16 : 20 ?>px; min-height:0; }
+  .hero { grid-area:hero; display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
+          padding:<?= $boardH < 1080 ? '8px 4px 0' : '12px 8px 0' ?>; border-bottom:1px solid var(--hairline); }
+  .hero-left { min-width:0; flex:1; }
+  .word { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 118 : 148 ?>px;
+          line-height:0.95; color:var(--seafoam); letter-spacing:2px; text-transform:lowercase; }
+  .word::first-letter { text-transform:uppercase; }
+  .meta-row { display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-top:10px; }
+  .phonetic { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 26 : 32 ?>px; color:var(--mist); font-style:italic; }
+  .pos { padding:6px 14px; border-radius:999px; background:var(--harbor); border:1px solid var(--hairline);
+         font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--beacon); font-weight:600; }
+  .hero-accent { width:<?= $boardH < 1080 ? 120 : 140 ?>px; height:<?= $boardH < 1080 ? 120 : 140 ?>px;
+                 border-radius:50%; flex-shrink:0; align-self:center;
+                 background:radial-gradient(circle at 35% 35%, rgba(110,231,200,.35), rgba(196,168,255,.12) 55%, transparent 70%);
+                 border:1px solid rgba(110,231,200,.25); }
+
+  .body { grid-area:body; display:grid; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0;
+          grid-template-columns: <?= ($hasEtymology || $hasExtras) ? '1.15fr 0.85fr' : '1fr' ?>;
+          grid-template-rows: <?= ($hasUsage || $hasThought) ? '1fr auto' : '1fr' ?>; }
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:<?= $boardH < 1080 ? '24px 28px' : '32px 36px' ?>; min-height:0; overflow:hidden; }
-  .panel .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:14px; }
+           padding:<?= $boardH < 1080 ? '22px 26px' : '28px 34px' ?>; min-height:0; overflow:hidden; }
+  .panel .k { font-size:16px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:12px; }
 
-  .word-panel { display:flex; flex-direction:column; justify-content:center; }
-  .word { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 112 : 136 ?>px;
-          line-height:1.05; color:var(--seafoam); letter-spacing:1px; word-break:break-word; }
-  .phonetic { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 28 : 34 ?>px; color:var(--mist);
-              margin-top:12px; font-style:italic; }
-  .pos { display:inline-block; margin-top:18px; padding:8px 16px; border-radius:999px;
-         background:var(--lake-night); border:1px solid var(--hairline);
-         font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--beacon); }
-  .blurb { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 28 : 34 ?>px; line-height:1.45;
-           color:var(--snow); margin-top:22px; max-width:920px; }
+  .meaning { display:flex; flex-direction:column; justify-content:center; position:relative; }
+  .meaning::before { content:'“'; position:absolute; top:<?= $boardH < 1080 ? '6px' : '10px' ?>; left:<?= $boardH < 1080 ? '18px' : '24px' ?>;
+                     font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 100 : 120 ?>px; line-height:1;
+                     color:rgba(255,179,71,.15); pointer-events:none; }
+  .def-text { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 38 : 46 ?>px; line-height:1.42;
+              color:var(--snow); padding-left:<?= $boardH < 1080 ? '36px' : '44px' ?>; max-width:1100px; }
 
-  .defs { display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 16 ?>px; min-height:0; overflow:hidden; }
-  .def { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-         padding:<?= $boardH < 1080 ? '16px 18px' : '18px 22px' ?>; }
-  .def .pos { margin:0 0 8px 0; padding:0; border:0; background:none; font-size:15px; color:var(--mist); }
-  .def .text { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.45; }
-  .def .ex { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; color:var(--mist); margin-top:10px; font-style:italic; line-height:1.4; }
+  .side { display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 14 ?>px; min-height:0; }
+  .side-block { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
+                padding:<?= $boardH < 1080 ? '16px 18px' : '18px 22px' ?>; flex:1; min-height:0; overflow:hidden; }
+  .side-block .k { margin-bottom:8px; font-size:14px; }
+  .etym { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; line-height:1.5; color:var(--snow); }
+  .alt-def { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; line-height:1.45; color:var(--mist); padding-top:10px;
+             border-top:1px solid var(--hairline); margin-top:10px; }
+  .alt-def:first-of-type { border-top:none; margin-top:0; padding-top:0; }
+  .alt-def .pos { display:inline; padding:0; border:0; background:none; font-size:13px; color:var(--beacon); margin-right:8px; }
+
+  .usage-row { grid-column:1 / -1; display:grid; grid-template-columns: <?= $hasThought ? '1.2fr 0.8fr' : '1fr' ?>; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; }
+  .quote { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 26 : 30 ?>px; line-height:1.45;
+           font-style:italic; color:var(--snow); }
+  .cite { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; color:var(--mist); margin-top:12px; line-height:1.4; }
+  .thought { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.45; color:var(--lilac); }
 
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; }
   <?= signage_stamp_css() ?>
@@ -194,46 +353,79 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
 <body>
 <div class="board">
   <div class="head">
-    <h1><?= h(TITLE) ?><span class="sub"><?= h(SUBTITLE) ?></span></h1>
+    <h1><?= h(TITLE) ?><span class="date"><?= h(date('l, F j')) ?></span></h1>
     <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
   <?php if ($hasData): ?>
-  <div class="main">
-    <section class="panel word-panel">
-      <div class="k"><?= h(date('l, F j')) ?></div>
-      <div class="word"><?= h($wotd['word']) ?></div>
-      <?php if ($phonetic): ?><div class="phonetic"><?= h($phonetic) ?></div><?php endif; ?>
-      <?php if ($primaryPos !== ''): ?><div class="pos"><?= h($primaryPos) ?></div><?php endif; ?>
-      <?php if ($wotd['blurb'] !== ''): ?><div class="blurb"><?= h($wotd['blurb']) ?></div><?php endif; ?>
-    </section>
+  <header class="hero">
+    <div class="hero-left">
+      <div class="word"><?= h($word) ?></div>
+      <div class="meta-row">
+        <?php if ($pronunciation !== ''): ?><span class="phonetic"><?= h($pronunciation) ?></span><?php endif; ?>
+        <?php if ($pos !== ''): ?><span class="pos"><?= h($pos) ?></span><?php endif; ?>
+      </div>
+    </div>
+    <div class="hero-accent" aria-hidden="true"></div>
+  </header>
 
-    <section class="panel">
-      <div class="k">Dictionary</div>
-      <div class="defs">
-      <?php if ($definitions !== []): ?>
-        <?php foreach ($definitions as $d): ?>
-        <div class="def">
-          <?php if ($d['pos'] !== ''): ?><div class="pos"><?= h($d['pos']) ?></div><?php endif; ?>
-          <div class="text"><?= h($d['def']) ?></div>
-          <?php if ($d['example']): ?><div class="ex">“<?= h($d['example']) ?>”</div><?php endif; ?>
+  <div class="body">
+    <?php if ($hasMeaning): ?>
+    <section class="panel meaning">
+      <div class="k">Definition</div>
+      <div class="def-text"><?= h($definition) ?></div>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($hasEtymology || $hasExtras): ?>
+    <aside class="panel side">
+      <?php if ($hasEtymology): ?>
+      <div class="side-block">
+        <div class="k">Etymology</div>
+        <div class="etym"><?= h($etymology) ?></div>
+      </div>
+      <?php endif; ?>
+      <?php if ($hasExtras): ?>
+      <div class="side-block">
+        <div class="k">Also means</div>
+        <?php foreach ($extraDefs as $d): ?>
+        <div class="alt-def">
+          <?php if ($d['pos'] !== ''): ?><span class="pos"><?= h($d['pos']) ?></span><?php endif; ?>
+          <?= h($d['def']) ?>
         </div>
         <?php endforeach; ?>
-      <?php else: ?>
-        <div class="def"><div class="text"><?= h($wotd['blurb']) ?></div></div>
-      <?php endif; ?>
       </div>
-    </section>
+      <?php endif; ?>
+    </aside>
+    <?php endif; ?>
+
+    <?php if ($hasUsage || $hasThought): ?>
+    <div class="usage-row">
+      <?php if ($hasUsage): ?>
+      <section class="panel">
+        <div class="k">In use</div>
+        <div class="quote">“<?= h($usageQuote) ?>”</div>
+        <?php if ($usageCite !== ''): ?><div class="cite"><?= h($usageCite) ?></div><?php endif; ?>
+      </section>
+      <?php endif; ?>
+      <?php if ($hasThought): ?>
+      <section class="panel">
+        <div class="k">A thought for today</div>
+        <div class="thought"><?= h($thought) ?></div>
+      </section>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
   </div>
   <?php else: ?>
-  <section class="panel main" style="grid-column:1/-1">
+  <section class="panel body" style="grid-column:1/-1">
     <div class="notcfg">Word of the day unavailable<?= $GLOBALS['diag'] ? ' — ' . h(implode('; ', $GLOBALS['diag'])) : '' ?>.
-      Check network access to <code>wordsmith.org</code> and <code>api.dictionaryapi.dev</code>.</div>
+      Check network access to <code>wordsmith.org</code>.</div>
   </section>
   <?php endif; ?>
 
   <div class="stamp"><?= h(implode(' · ', array_filter([
-    'Wordsmith.org · Free Dictionary API',
+    SUBTITLE,
     $GLOBALS['diag'] ? implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag'])) : '',
   ]))) ?></div>
 </div>
