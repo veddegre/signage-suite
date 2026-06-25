@@ -1959,8 +1959,11 @@ function admin_field(array $f, $val, string $board): void
               <label class="l"><?= h($f['label']) ?></label>
               <select name="<?= h($f['key']) ?>">
                 <option value="">(default)</option>
-                <?php foreach ($f['options'] as $o): ?>
-                  <option value="<?= h($o) ?>" <?= $val === $o ? 'selected' : '' ?>><?= h($o) ?></option>
+                <?php foreach ($f['options'] as $k => $o):
+                  $optVal = is_int($k) ? $o : (string)$k;
+                  $optLabel = (string)$o;
+                ?>
+                  <option value="<?= h($optVal) ?>" <?= (string)$val === $optVal ? 'selected' : '' ?>><?= h($optLabel) ?></option>
                 <?php endforeach; ?>
               </select>
               <?php if (!empty($f['help'])): ?><div class="help"><?= h($f['help']) ?></div><?php endif;

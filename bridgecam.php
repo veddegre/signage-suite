@@ -29,12 +29,40 @@ function bridgecam_cameras(): array
     ];
 }
 
+/** Normalize admin CAMERA value (handles legacy saves that stored labels instead of keys). */
+function bridgecam_normalize_camera(string $raw): string
+{
+    $pick = strtolower(trim($raw));
+    if ($pick === '' || $pick === 'all') {
+        return 'all';
+    }
+    if (in_array($pick, ['1', '2', '3', '4'], true)) {
+        return $pick;
+    }
+    if (str_contains($pick, 'rotate')) {
+        return 'all';
+    }
+    if (str_contains($pick, 'administration')) {
+        return '1';
+    }
+    if (str_contains($pick, 'dock')) {
+        return '2';
+    }
+    if (str_contains($pick, 'bridge view')) {
+        return '3';
+    }
+    if (str_contains($pick, 'mackinaw')) {
+        return '4';
+    }
+    return '4';
+}
+
 /** @return list<array{id:string,label:string,url:string}> */
 function bridgecam_active_cameras(): array
 {
     $all = bridgecam_cameras();
-    $pick = strtolower(trim((string)CAMERA));
-    if ($pick === '' || $pick === 'all') {
+    $pick = bridgecam_normalize_camera((string)CAMERA);
+    if ($pick === 'all') {
         return $all;
     }
     foreach ($all as $cam) {
@@ -52,8 +80,8 @@ $rotate = count($cameras) > 1;
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
 $heightCss = signage_viewport_height();
-$refreshSec = max(15, (int)REFRESH_SEC);
-$rotateSec = max(15, (int)ROTATE_SEC);
+$refreshSec = max(5, (int)REFRESH_SEC);
+$rotateSec = max(5, (int)ROTATE_SEC);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -141,13 +169,19 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     idx = ((i % cameras.length) + cameras.length) % cameras.length;
     const cam = cameras[idx];
     const next = layers[1 - front];
-    next.onload = function() {
+    const url = bust(cam.url);
+    let done = false;
+    function finish() {
+      if (done) return;
+      done = true;
+      next.onload = null;
       next.classList.add('on');
       layers[front].classList.remove('on');
       front = 1 - front;
-      next.onload = null;
-    };
-    next.src = bust(cam.url);
+    }
+    next.onload = finish;
+    next.src = url;
+    if (next.complete) finish();
     setLabel(cam.label);
   }
 
