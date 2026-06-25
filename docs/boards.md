@@ -23,6 +23,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
+| | Internet attacks | `attacks.php` | `attacks.php` | Cloudflare Radar token |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
@@ -209,6 +210,26 @@ IODA combines BGP prefix visibility, active probing, and other signals. The boar
 **Setup:** admin → **Internet Infrastructure** — toggle BGP and DNS panels, IODA lookback (default 7 days), optional **US scope** for IODA, cache TTLs (IODA default 300s, DNS probes default 180s).
 
 **Rotation:** 60s dwell; IODA and DNS probes refresh on their own cache schedules.
+
+### attacks.php — Internet Attacks (DShield & Cloudflare Radar)
+
+Attack visibility board: **areas under attack** (DShield country targets), **top ports and IPs**, plus optional **Cloudflare Radar** L3/L7 DDoS geography.
+
+**Data:**
+
+| Panel | Source |
+|-------|--------|
+| Countries under attack | [SANS ISC DShield](https://isc.sans.edu/api/country?json) — free, no key |
+| Infocon threat level | `isc.sans.edu/api/infocon?json` |
+| Top ports / top IPs | DShield daily summaries |
+| L3 DDoS targets | [Cloudflare Radar API](https://developers.cloudflare.com/radar/) — token required |
+| L7 attack targets | Cloudflare Radar — token required |
+
+DShield reflects scanning and brute-force noise seen by the ISC sensor network. Cloudflare Radar shows DDoS attack share by target country across Cloudflare's network — closer to large-scale volumetric attacks.
+
+**Setup:** admin → **Internet Attacks** — DShield works out of the box. For Cloudflare panels, create a free account token with **Account → Radar** permission and paste it as **Cloudflare API token**. Toggle **Highlight United States** to pin US at the top of country lists.
+
+**Rotation:** 60s dwell; feeds refresh on cache TTL (default 300s).
 
 ### hibp.php — Data Breaches (Have I Been Pwned)
 

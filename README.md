@@ -68,7 +68,7 @@ Add boards to the playlist under **Rotation**. Each screen has its own URL: `boa
 If you skip `setup-server.sh`:
 
 ```bash
-sudo apt install apache2 libapache2-mod-php php-curl php-xml php-mbstring php-gd php-zip ffmpeg
+sudo apt install apache2 libapache2-mod-php php-curl php-xml php-mbstring php-gd php-zip ffmpeg dnsutils
 sudo mkdir -p /var/www/html/boards/{config,cache,videos,slides,photos}
 sudo chown -R www-data:www-data /var/www/html/boards/{config,cache,videos,slides,photos}
 ```
@@ -119,7 +119,7 @@ video.php?v=drone           slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; NVD key optional; `dig` for DNS roots |
+| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield/Radar), HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Cloudflare Radar for attacks; NVD key optional; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides, RSS feeds, local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
@@ -127,6 +127,16 @@ video.php?v=drone           slides.php?slide=birthday.png
 **Zabbix** — no iframe; server-side `problem.get` + host status. Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
 
 **Splunk panels** — oneshot searches server-side (port 8089), multi-page like Grafana.
+
+**Internet attacks** (`attacks.php`) — DShield (SANS ISC) works with no API key: countries under attack, top ports, top IPs, and the global Infocon level. For L3/L7 DDoS geography, add a **Cloudflare Radar** token:
+
+1. Sign in at [dash.cloudflare.com](https://dash.cloudflare.com) (free account is fine).
+2. **My Profile → API Tokens → Create Token**.
+3. Use the **“Read all Radar data”** template, or a custom token with **Account → Radar** permission.
+4. Admin → **Internet Attacks** → paste the token into **Cloudflare API token**.
+5. Choose a window (default **Last 24 hours**). Panels refresh on the board cache TTL (default 300s).
+
+**Internet infrastructure** (`internet.php`) — BGP/ASN outages via IODA (no key) and DNS root probes via `dig` (`dnsutils` package; installed by `setup-server.sh`).
 
 → **[Full board reference](docs/boards.md)** — setup steps, scheduling, traffic troubleshooting, ticker
 
