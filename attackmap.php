@@ -170,18 +170,25 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   const map = L.map('attackMap', {
     zoomControl: false, dragging: false, scrollWheelZoom: false,
     doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false,
-    attributionControl: true, worldCopyJump: false, maxBoundsViscosity: 1.0,
+    attributionControl: true, worldCopyJump: false, zoomSnap: 0,
   });
 
-  const worldBounds = L.latLngBounds(L.latLng(-58, -180), L.latLng(78, 180));
-  map.setMaxBounds(worldBounds);
-
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 4, minZoom: 2, noWrap: true,
+    subdomains: 'abcd', maxZoom: 6, minZoom: 0, noWrap: true,
     attribution: '&copy; OpenStreetMap &copy; CARTO &middot; attacks &copy; Cloudflare Radar'
   }).addTo(map);
 
-  map.fitBounds(worldBounds, { padding: [12, 12], animate: false });
+  /** Fit the full 360° world to the map width (fitBounds crops longitude on wide screens). */
+  function fitWorldFullWidth() {
+    const size = map.getSize();
+    if (!size.x || !size.y) return;
+    const padX = 6;
+    const w = Math.max(256, size.x - padX * 2);
+    const zoom = Math.log(w / 256) / Math.LN2;
+    map.setView([18, 0], zoom, { animate: false });
+  }
+
+  fitWorldFullWidth();
 
   if (FLOWS.length) {
   FLOWS.forEach((f, i) => { f.phase = i * 0.41; });
@@ -214,12 +221,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       this._dpr = dpr;
     },
     _arcPoints(o, t, steps) {
-      let tLng = t.lng;
-      const dLng = tLng - o.lng;
-      if (dLng > 180) tLng -= 360;
-      else if (dLng < -180) tLng += 360;
+      const mapW = this._map.getSize().x;
       const p0 = this._map.latLngToContainerPoint([o.lat, o.lng]);
-      const p1 = this._map.latLngToContainerPoint([t.lat, tLng]);
+      let p1 = this._map.latLngToContainerPoint([t.lat, t.lng]);
+      let dLng = t.lng - o.lng;
+      if (dLng > 180) dLng -= 360;
+      else if (dLng < -180) dLng += 360;
+      if (dLng > 0 && p1.x < p0.x) p1.x += mapW;
+      else if (dLng < 0 && p1.x > p0.x) p1.x -= mapW;
       const mx = (p0.x + p1.x) / 2;
       const my = (p0.y + p1.y) / 2;
       const dx = p1.x - p0.x;
@@ -307,12 +316,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   map.addLayer(new AttackCanvas());
   }
 
-  setTimeout(() => map.invalidateSize(), 50);
-  setTimeout(() => {
-    map.fitBounds(worldBounds, { padding: [12, 12], animate: false });
-    map.invalidateSize();
-  }, 250);
-  window.addEventListener('load', () => map.invalidateSize());
+  setTimeout(() => { map.invalidateSize(); fitWorldFullWidth(); }, 50);
+  setTimeout(() => { map.invalidateSize(); fitWorldFullWidth(); }, 250);
+  window.addEventListener('load', () => { map.invalidateSize(); fitWorldFullWidth(); });
+  window.addEventListener('resize', () => { map.invalidateSize(); fitWorldFullWidth(); });
   if (RELOAD > 0) setTimeout(() => location.reload(), RELOAD);
 })();
 </script>
