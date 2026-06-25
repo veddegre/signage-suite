@@ -596,16 +596,72 @@ function outages_ms_service_status(?string $status): string
     return 'degraded';
 }
 
-/** @return array<string,mixed> */
-function outages_fetch_o365(): array
+function outages_ms_public_status(?string $status): string
+{
+    $s = strtolower(trim((string)$status));
+    if ($s === '' || in_array($s, ['available', 'operational'], true)) {
+        return 'operational';
+    }
+    if (str_contains($s, 'unavailable') || str_contains($s, 'outage')) {
+        return 'outage';
+    }
+    return 'degraded';
+}
+
+/** @return array<string,mixed>|null */
+function outages_ms_public_post(string $path): ?array
+{
+    $resp = outages_http_get('https://status.office.com/api/posts/' . rawurlencode($path));
+    if ($resp['body'] === false || $resp['code'] !== 200) {
+        return null;
+    }
+    $data = json_decode($resp['body'], true);
+    return is_array($data) ? $data : null;
+}
+
+/**
+ * Public M365 backup status — no app registration.
+ * Microsoft only publishes here when widespread issues affect the admin center / public status page.
+ * Does not replace tenant-specific Graph health (Exchange, Teams, SharePoint per org).
+ *
+ * @return array<string,mixed>
+ */
+function outages_fetch_o365_public(): array
 {
     $out = outages_provider_shell('o365', 'Microsoft 365', 'https://status.cloud.microsoft/');
-    if (!outages_ms_graph_configured()) {
-        $out['status'] = 'unconfigured';
-        $out['summary'] = 'Graph API not configured';
-        $out['error'] = 'Set tenant, client ID, and secret in admin';
+    $post = outages_ms_public_post('mac');
+    if ($post === null) {
+        $out['error'] = 'Public status feed unavailable';
         return $out;
     }
+
+    $statusRaw = trim((string)($post['Status'] ?? ''));
+    $st = outages_ms_public_status($statusRaw);
+    $message = outages_plain((string)($post['Message'] ?? ''));
+    $title = trim((string)($post['Title'] ?? ''));
+    if ($title === '') {
+        $title = 'Microsoft 365 Service Health';
+    }
+
+    $out['status'] = $st;
+    if ($st === 'operational') {
+        $out['summary'] = 'No public advisories (backup feed)';
+        return $out;
+    }
+
+    $out['summary'] = 'Public advisory active';
+    $out['issues'] = [[
+        'title' => $title,
+        'detail' => $message !== '' ? $message : $statusRaw,
+        'impact' => $st,
+    ]];
+    return $out;
+}
+
+/** @return array<string,mixed> */
+function outages_fetch_o365_graph(): array
+{
+    $out = outages_provider_shell('o365', 'Microsoft 365', 'https://status.cloud.microsoft/');
     $token = outages_ms_graph_token();
     if ($token === null) {
         $out['error'] = 'Graph token request failed';
@@ -694,12 +750,22 @@ function outages_fetch_o365(): array
     return $out;
 }
 
+/** @return array<string,mixed> */
+function outages_fetch_o365(): array
+{
+    if (outages_ms_graph_configured()) {
+        return outages_fetch_o365_graph();
+    }
+    return outages_fetch_o365_public();
+}
+
 /** @return list<array<string,mixed>> */
 function outages_fetch_all(): array
 {
     $providers = [];
     foreach (outages_enabled_providers() as $id) {
-        $data = outages_cached_json($id, static function () use ($id): ?array {
+        $cacheId = $id === 'o365' && outages_ms_graph_configured() ? 'o365_graph' : ($id === 'o365' ? 'o365_public' : $id);
+        $data = outages_cached_json($cacheId, static function () use ($id): ?array {
             return match ($id) {
                 'aws' => outages_fetch_aws(),
                 'azure' => outages_fetch_azure(),

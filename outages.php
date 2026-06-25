@@ -151,7 +151,7 @@ function outages_status_class(string $status): string
         <?php endforeach; elseif ($st === 'operational'): ?>
         <div class="empty">No active incidents</div>
         <?php elseif ($st === 'unconfigured'): ?>
-        <div class="empty">Add Graph credentials in admin for M365 health</div>
+        <div class="empty">Add Graph credentials in admin for tenant health</div>
         <?php endif; ?>
       </div>
     </article>

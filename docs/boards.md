@@ -21,7 +21,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Dad jokes | `joke.php` | `joke.php` | — |
 | | XKCD comic | `xkcd.php` | `xkcd.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
-| | Cloud outages | `outages.php` | `outages.php` | Graph (M365 only) |
+| | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
 | Media | Photo rotator | `rotator.php` | `rotator.php` | — |
@@ -180,11 +180,11 @@ Six-card grid for public cloud/SaaS status: **AWS**, **Azure**, **GitHub**, **Cl
 | GitHub | [githubstatus.com](https://www.githubstatus.com) Statuspage API |
 | Cloudflare | [cloudflarestatus.com](https://www.cloudflarestatus.com) Statuspage API |
 | Google Workspace | [Google Workspace Status Dashboard](https://www.google.com/appsstatus/dashboard/) JSON |
-| Microsoft 365 | Microsoft Graph `serviceAnnouncement` (requires Entra app) |
+| Microsoft 365 | Public backup feed (`status.office.com`) — optional Graph for tenant health |
 
-**Setup:** admin → **Cloud Outages** — toggle providers, **US incidents only** (default on), cache TTL (default 120s). For **Microsoft 365**, register an Entra application with **ServiceHealth.Read.All** (application permission), then paste tenant ID, client ID, and client secret. Other providers work out of the box.
+**Setup:** admin → **Cloud Outages** — toggle providers, **US incidents only** (default on), cache TTL (default 120s). **Microsoft 365** works without credentials via Microsoft's public backup status API — it only posts during widespread incidents (when the admin center status page itself is affected). For day-to-day Exchange/Teams/SharePoint health per your tenant, optionally register an Entra app with **ServiceHealth.Read.All** and paste tenant ID, client ID, and secret. Other providers work out of the box.
 
-**US filtering:** When enabled, AWS events are limited to `us-*` regions, Cloudflare to US POPs, Google Workspace to US-affected locations, and Azure RSS posts mentioning US regions. GitHub publishes global service status only — that card stays global and is labeled accordingly.
+**US filtering:** When enabled, AWS events are limited to `us-*` regions, Cloudflare to US POPs, Google Workspace to US-affected locations, and Azure RSS posts mentioning US regions. GitHub publishes global service status only — that card stays global and is labeled accordingly. M365 public feed is global; Graph uses your tenant view.
 
 **Rotation:** 60s dwell is enough; the board auto-refreshes feeds on its own cache schedule.
 
