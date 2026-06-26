@@ -40,7 +40,10 @@ ROOT_SHELL = {
 }
 
 ROOT_RESOURCE_PREFIXES = (
-    '/cache', '/config', '/slides', '/photos', '/videos', '/bin', '/slide_backgrounds',
+    '/cache/', '/cache\'', '/config/', '/config\'',
+    '/slides/', '/slides\'', '/photos/', '/photos\'',
+    '/videos/', '/videos\'', '/bin/', '/bin\'',
+    '/slide_backgrounds', '/slide_backgrounds\'',
 )
 
 

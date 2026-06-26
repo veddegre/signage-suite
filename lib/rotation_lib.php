@@ -926,7 +926,7 @@ function rotation_screen_active_pages(string $screen = 'main'): array
 {
     static $cache = [];
 
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     if (array_key_exists($screen, $cache)) {
         return $cache[$screen];
@@ -1243,7 +1243,7 @@ function rotation_page_label(string $url): string
         return 'Web — ' . web_site_label($key);
     }
 
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     $slideFile = slide_rotation_parse_file($url);
     if ($slideFile !== null) {
         $slide = slide_deck_by_file($slideFile);
@@ -1738,7 +1738,7 @@ function rotation_is_legacy_slides_url(string $url): bool
 
 function rotation_is_slide_url(string $url): bool
 {
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     return slide_rotation_parse_file($url) !== null;
 }
 
@@ -2299,7 +2299,7 @@ function rotator_deploy_flash_message(array $result): string
 /** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,screen:string} */
 function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?array $scopeFiles = null, bool $allowRecovery = false): array
 {
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     $pages = rotation_sync_source_pages($screen);
     $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
@@ -2415,7 +2415,7 @@ function slides_in_rotation(string $screen = 'main'): bool
 /** @return array{expected:int,synced:int,first_index:?int,last_index:?int,dwell_mismatch:int,on_playlist:bool,partial:bool} */
 function slides_rotation_sync_info(string $screen = 'main', ?array $deck = null): array
 {
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     $expected = slides_rotation_pages($deck, $screen);
     $own = rotation_screen_own_pages($screen);
@@ -2493,7 +2493,7 @@ function slides_rotation_entry(string $screen = 'main'): ?array
  */
 function slides_deploy_status(?array $deck = null): array
 {
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
     $out = [];
 
@@ -2588,7 +2588,7 @@ function rotation_remove_url(string $screen, string $url): array
  */
 function slides_deploy_to_screens(array $screens, ?array $deck = null): array
 {
-    require_once SIGNAGE_ROOT . '/slides_lib.php';
+    require_once __DIR__ . '/slides_lib.php';
     $fullDeck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
     if (!is_array($fullDeck)) {
         $fullDeck = [];
