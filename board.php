@@ -18,8 +18,8 @@
  */
 
 require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/rotation_lib.php';
-require_once __DIR__ . '/presence_lib.php';
+require_once __DIR__ . '/lib/rotation_lib.php';
+require_once __DIR__ . '/lib/presence_lib.php';
 
 // Which screen is this device? board.php?screen=garage etc.; default 'main'.
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));

@@ -8,9 +8,9 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 require_once $root . '/config.php';
-require_once $root . '/slides_lib.php';
-require_once $root . '/rotation_lib.php';
-require_once $root . '/users_lib.php';
+require_once $root . '/lib/slides_lib.php';
+require_once $root . '/lib/rotation_lib.php';
+require_once $root . '/lib/users_lib.php';
 
 $deck = cfg('slides.SLIDES', []);
 if (!is_array($deck)) {

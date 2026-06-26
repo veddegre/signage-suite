@@ -97,7 +97,7 @@ function signage_ticker_alerts(): array
         ]];
     }
 
-    $dir = __DIR__ . '/cache';
+    $dir = SIGNAGE_ROOT . '/cache';
     if (!is_dir($dir)) @mkdir($dir, 0775, true);
     $f = $dir . '/ticker_alerts_' . sprintf('%.4F_%.4F', TICKER_LAT, TICKER_LON) . '.dat';
     $maxAge = min(max((int)TICKER_TTL, 30), 90);   // cap so new alerts show within ~90s

@@ -397,13 +397,13 @@ post_install_php() {
 
   if php -m | grep -qi '^gd$'; then
     log "Generating slide theme background PNGs (if missing)"
-    php -r "require '$WEBROOT/slides_lib.php'; slide_background_ensure_assets();"
+    php -r "require '$WEBROOT/lib/slides_lib.php'; slide_background_ensure_assets();"
   else
     warn "php-gd not loaded — slide creator theme PNGs will generate on first admin visit"
   fi
 
   log "Ensuring slide photo backgrounds (download if missing)"
-  if fetched="$(php -r "require '$WEBROOT/slides_lib.php'; echo slide_background_ensure_photos();")"; then
+  if fetched="$(php -r "require '$WEBROOT/lib/slides_lib.php'; echo slide_background_ensure_photos();")"; then
     if [[ -n "$fetched" && "$fetched" != "0" ]]; then
       log "Downloaded $fetched slide photo(s)"
     fi

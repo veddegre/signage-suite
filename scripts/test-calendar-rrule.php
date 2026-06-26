@@ -5,8 +5,8 @@
  */
 define('SIGNAGE_CALENDAR_LIB_ONLY', true);
 require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../calendar_lib.php';
-require_once __DIR__ . '/../calendar.php';
+require_once __DIR__ . '/../lib/calendar_lib.php';
+require_once __DIR__ . '/../boards/media/calendar.php';
 
 date_default_timezone_set(defined('TIMEZONE') ? TIMEZONE : 'America/Detroit');
 

@@ -1,5 +1,8 @@
 <?php
-require_once __DIR__ . '/json_store_lib.php';
+if (!defined('SIGNAGE_ROOT')) {
+    define('SIGNAGE_ROOT', __DIR__);
+}
+require_once __DIR__ . '/lib/json_store_lib.php';
 
 /**
  * CONFIG LOADER — shared by every board and by admin.php
@@ -12,7 +15,7 @@ require_once __DIR__ . '/json_store_lib.php';
 function cfg(string $key, $default = null)
 {
     if (!isset($GLOBALS['__cfg_cache']) || $GLOBALS['__cfg_cache'] === null) {
-        $f = __DIR__ . '/config/settings.json';
+        $f = SIGNAGE_ROOT . '/config/settings.json';
         $conf = [];
         if (is_file($f)) {
             $j = json_decode((string)file_get_contents($f), true);
@@ -20,7 +23,7 @@ function cfg(string $key, $default = null)
                 $conf = $j;
             }
         }
-        require_once __DIR__ . '/calendar_lib.php';
+        require_once __DIR__ . '/lib/calendar_lib.php';
         $migrated = calendar_migrate_from_family($conf);
         if ($migrated['changed']) {
             ksort($migrated['conf']);
@@ -64,7 +67,7 @@ function cfg_all(): array
 
 function cfg_path(): string
 {
-    return __DIR__ . '/config/settings.json';
+    return SIGNAGE_ROOT . '/config/settings.json';
 }
 
 /**

@@ -7,7 +7,8 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-require_once $root . '/rotation_lib.php';
+require_once $root . '/config.php';
+require_once $root . '/lib/rotation_lib.php';
 
 /** @param array<string,mixed> $page */
 function test_page_weight(array $page): int

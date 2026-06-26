@@ -185,7 +185,7 @@ Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weight
 
 ## General notes
 
-- Keep all files in one directory sharing `config/` and `cache/`.
+- **Layout:** board entry URLs stay at the web root (`index.php`, `traffic.php`, …) as thin stubs; implementations live under `boards/<group>/`, shared code under `lib/`.
 - Runtime dirs: `config/`, `cache/`, `videos/`, `slides/`, `photos/`. `slide_backgrounds/` ships theme PNGs.
 - Legacy `config/admin.json` migrates to `config/users.json` on first login.
 - Failed API calls show a diagnostic stamp bottom-right while serving stale cache.

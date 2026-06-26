@@ -8,8 +8,8 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 require_once $root . '/config.php';
-require_once $root . '/rotation_lib.php';
-require_once $root . '/slides_lib.php';
+require_once $root . '/lib/rotation_lib.php';
+require_once $root . '/lib/slides_lib.php';
 
 $screen = rotation_normalize_screen_key($argv[1] ?? 'main');
 $settings = rotation_screen_settings($screen);

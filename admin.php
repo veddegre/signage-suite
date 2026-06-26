@@ -12,21 +12,21 @@
  */
 
 require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/security_lib.php';
+require_once __DIR__ . '/lib/security_lib.php';
 require_once __DIR__ . '/schema.php';
-require_once __DIR__ . '/calendar_lib.php';
-require_once __DIR__ . '/slides_lib.php';
-require_once __DIR__ . '/rotator_lib.php';
-require_once __DIR__ . '/video_lib.php';
-require_once __DIR__ . '/rotation_lib.php';
-require_once __DIR__ . '/presence_lib.php';
-require_once __DIR__ . '/traffic_lib.php';
-require_once __DIR__ . '/splunk_lib.php';
-require_once __DIR__ . '/zabbix_lib.php';
-require_once __DIR__ . '/web_lib.php';
-require_once __DIR__ . '/users_lib.php';
-require_once __DIR__ . '/sso_lib.php';
-require_once __DIR__ . '/audit_lib.php';
+require_once __DIR__ . '/lib/calendar_lib.php';
+require_once __DIR__ . '/lib/slides_lib.php';
+require_once __DIR__ . '/lib/rotator_lib.php';
+require_once __DIR__ . '/lib/video_lib.php';
+require_once __DIR__ . '/lib/rotation_lib.php';
+require_once __DIR__ . '/lib/presence_lib.php';
+require_once __DIR__ . '/lib/traffic_lib.php';
+require_once __DIR__ . '/lib/splunk_lib.php';
+require_once __DIR__ . '/lib/zabbix_lib.php';
+require_once __DIR__ . '/lib/web_lib.php';
+require_once __DIR__ . '/lib/users_lib.php';
+require_once __DIR__ . '/lib/sso_lib.php';
+require_once __DIR__ . '/lib/audit_lib.php';
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json'; // legacy; migrated to users.json
 
@@ -445,7 +445,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
     }
     if ($board === 'slides') {
-        require_once __DIR__ . '/slides_lib.php';
+        require_once __DIR__ . '/lib/slides_lib.php';
         $existingSlides = is_array($conf['slides.SLIDES'] ?? null) ? $conf['slides.SLIDES'] : [];
         $jsonRaw = trim((string)($_POST['SLIDES_JSON'] ?? ''));
         if ($jsonRaw !== '') {
@@ -478,7 +478,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
     }
     if ($board === 'rotator') {
-        require_once __DIR__ . '/rotator_lib.php';
+        require_once __DIR__ . '/lib/rotator_lib.php';
         $allScreenKeys = array_keys(rotation_screens());
         sort($allScreenKeys);
         $existingPhotos = is_array($conf['rotator.PHOTOS'] ?? null) ? $conf['rotator.PHOTOS'] : [];
@@ -740,7 +740,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 }
             } elseif ($board === 'slides') {
                 cfg_reload();
-                require_once __DIR__ . '/slides_lib.php';
+                require_once __DIR__ . '/lib/slides_lib.php';
                 $deck = cfg('slides.SLIDES', []);
                 $purged = slides_purge_stale_slide_playlists(is_array($deck) ? $deck : []);
                 $purgeMsg = slides_purge_stale_flash_message($purged);
@@ -1002,7 +1002,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
     }
 
     if (($_POST['action'] ?? '') === 'slides_reclaim_selected' && admin_is_super()) {
-        require_once __DIR__ . '/slides_lib.php';
+        require_once __DIR__ . '/lib/slides_lib.php';
         $files = array_values(array_filter(array_map(
             static fn($f) => (string)$f,
             (array)($_POST['reclaim_files'] ?? [])
@@ -1036,7 +1036,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
     }
 
     if (($_POST['action'] ?? '') === 'slides_reclaim_from_user' && admin_is_super()) {
-        require_once __DIR__ . '/slides_lib.php';
+        require_once __DIR__ . '/lib/slides_lib.php';
         $userId = trim((string)($_POST['reclaim_user_id'] ?? ''));
         if ($userId === '') {
             $flash = 'Choose a user to reclaim slides from.'; $flashOk = false;
@@ -1066,7 +1066,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         if ($screen === '' || !admin_can_screen($screen)) {
             $flash = 'Invalid display.'; $flashOk = false;
         } else {
-            require_once __DIR__ . '/slides_lib.php';
+            require_once __DIR__ . '/lib/slides_lib.php';
             $result = slides_remove_from_display($screen);
             if (empty($result['ok'])) {
                 $flash = (string)($result['error'] ?? 'Could not remove slides from that display.');
@@ -1106,7 +1106,7 @@ if ($authed && $board === 'slides' && admin_can_board('slides')) {
         } elseif ($files === []) {
             $flash = 'Select one or more slides to remove from that display.'; $flashOk = false;
         } else {
-            require_once __DIR__ . '/slides_lib.php';
+            require_once __DIR__ . '/lib/slides_lib.php';
             $result = slides_remove_files_from_display($screen, $files);
             if (empty($result['ok'])) {
                 $flash = (string)($result['error'] ?? 'Could not remove those slides from that display.');
