@@ -375,6 +375,56 @@ function zabbix_cache_ttl(): int
     return max(30, (int)cfg('zabbix.CACHE_TTL', 60));
 }
 
+function zabbix_group_ids_cache_ttl(): int
+{
+    return max(300, (int)cfg('zabbix.GROUP_IDS_CACHE_TTL', 3600));
+}
+
+function zabbix_connect_timeout(): int
+{
+    return max(1, min(30, (int)cfg('zabbix.ZABBIX_CONNECT_TIMEOUT', 8)));
+}
+
+function zabbix_request_timeout(): int
+{
+    return max(5, min(120, (int)cfg('zabbix.ZABBIX_TIMEOUT', 30)));
+}
+
+/** @return list<string> */
+function zabbix_cached_group_ids(array $groupNames, ?string &$error = null): array
+{
+    $groupNames = array_values(array_unique(array_filter(array_map(
+        'zabbix_normalize_group_name',
+        $groupNames
+    ))));
+    if ($groupNames === []) {
+        return [];
+    }
+
+    $cacheDir = SIGNAGE_ROOT . '/cache';
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0775, true);
+    }
+    $cacheFile = $cacheDir . '/zabbix_groupids_' . md5(json_encode($groupNames)) . '.json';
+    $ttl = zabbix_group_ids_cache_ttl();
+    if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
+        $cached = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($cached) && isset($cached['group_ids']) && is_array($cached['group_ids'])) {
+            $ids = array_values(array_filter(array_map('strval', $cached['group_ids'])));
+            if ($ids !== []) {
+                return $ids;
+            }
+        }
+    }
+
+    $ids = zabbix_resolve_group_ids($groupNames, $error);
+    if ($ids !== []) {
+        @file_put_contents($cacheFile, json_encode(['group_ids' => $ids], JSON_UNESCAPED_SLASHES), LOCK_EX);
+    }
+
+    return $ids;
+}
+
 function zabbix_preview_url(?string $pageKey = null): string
 {
     $key = zabbix_normalize_page_key($pageKey ?? '');
@@ -427,30 +477,33 @@ function zabbix_resolve_group_ids(array $groupNames, ?string &$error = null): ar
     }
 
     $resolved = [];
-    $missing = [];
+    $missing = $groupNames;
 
-    foreach ($groupNames as $want) {
-        $found = false;
-        $result = zabbix_api_call('hostgroup.get', [
-            'output' => ['groupid', 'name'],
-            'filter' => ['name' => [$want]],
-        ], $error);
-        if (is_array($result)) {
-            foreach ($result as $row) {
-                if (!is_array($row) || !isset($row['groupid'])) {
-                    continue;
-                }
-                $name = zabbix_normalize_group_name((string)($row['name'] ?? ''));
-                if (strcasecmp($name, $want) === 0) {
-                    $resolved[$want] = (string)$row['groupid'];
-                    $found = true;
-                    break;
-                }
+    $result = zabbix_api_call('hostgroup.get', [
+        'output' => ['groupid', 'name'],
+        'filter' => ['name' => $groupNames],
+    ], $error);
+    if (is_array($result)) {
+        $byKey = [];
+        foreach ($result as $row) {
+            if (!is_array($row) || !isset($row['groupid'])) {
+                continue;
+            }
+            $name = zabbix_normalize_group_name((string)($row['name'] ?? ''));
+            if ($name !== '') {
+                $byKey[strtolower($name)] = (string)$row['groupid'];
             }
         }
-        if (!$found) {
-            $missing[] = $want;
+        foreach ($groupNames as $want) {
+            $key = strtolower($want);
+            if (isset($byKey[$key])) {
+                $resolved[$want] = $byKey[$key];
+            }
         }
+        $missing = array_values(array_filter(
+            $groupNames,
+            static fn(string $want): bool => !isset($resolved[$want])
+        ));
     }
 
     if ($missing !== []) {
@@ -540,21 +593,41 @@ function zabbix_api_call(string $method, array $params, ?string &$error = null):
         $headers[] = 'Authorization: Bearer ' . $token;
     }
 
-    $ch = curl_init(zabbix_api_url());
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 4,
-        CURLOPT_TIMEOUT => 20,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $payload,
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_SSL_VERIFYPEER => zabbix_verify_tls(),
-        CURLOPT_SSL_VERIFYHOST => zabbix_verify_tls() ? 2 : 0,
-    ]);
-    $body = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    $curlErr = curl_error($ch);
-    curl_close($ch);
+    $connectTimeout = zabbix_connect_timeout();
+    $requestTimeout = zabbix_request_timeout();
+    $attempts = 2;
+    $body = false;
+    $code = 0;
+    $curlErr = '';
+
+    for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+        $ch = curl_init(zabbix_api_url());
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => $connectTimeout,
+            CURLOPT_TIMEOUT => $requestTimeout,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_SSL_VERIFYPEER => zabbix_verify_tls(),
+            CURLOPT_SSL_VERIFYHOST => zabbix_verify_tls() ? 2 : 0,
+            CURLOPT_NOSIGNAL => true,
+        ]);
+        $body = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+
+        if ($body !== false && $code === 200) {
+            break;
+        }
+        $retryable = $curlErr !== ''
+            && (stripos($curlErr, 'timed out') !== false || stripos($curlErr, 'timeout') !== false);
+        if (!$retryable || $attempt >= $attempts) {
+            break;
+        }
+        usleep(250000);
+    }
 
     if ($body === false || $code !== 200) {
         $error = $curlErr !== '' ? 'curl: ' . $curlErr : 'HTTP ' . $code;
@@ -750,6 +823,39 @@ function zabbix_sort_problems(array $problems): array
 }
 
 /**
+ * Return last good wall payload when a refresh fails (expired cache file).
+ *
+ * @param array<string,mixed> $fallback
+ * @return array<string,mixed>
+ */
+function zabbix_stale_wall_data(array $fallback, string $cacheFile, ?string $error): array
+{
+    if (!is_file($cacheFile)) {
+        $fallback['error'] = $error;
+
+        return $fallback;
+    }
+    $stale = json_decode((string)file_get_contents($cacheFile), true);
+    if (!is_array($stale)) {
+        $fallback['error'] = $error;
+
+        return $fallback;
+    }
+    $hasData = ($stale['problems'] ?? []) !== [] || ($stale['hosts'] ?? []) !== [];
+    if (!$hasData) {
+        $fallback['error'] = $error;
+
+        return $fallback;
+    }
+    $stale['ok'] = true;
+    $stale['error'] = $error !== null && $error !== ''
+        ? $error . ' — showing cached data'
+        : 'Zabbix unreachable — showing cached data';
+
+    return $stale;
+}
+
+/**
  * Fetch problems + hosts for one page config (cached).
  *
  * @param array<string,mixed> $page
@@ -814,12 +920,12 @@ function zabbix_fetch_wall_data(array $page): array
     }
 
     $error = null;
-    $groupIds = zabbix_resolve_group_ids($groupNames, $error);
+    $groupIds = zabbix_cached_group_ids($groupNames, $error);
     if ($groupIds === []) {
         $empty['error'] = $error ?: 'Host group(s) not found: ' . implode(', ', $groupNames);
         $empty['group_names'] = $groupNames;
 
-        return $empty;
+        return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
     }
 
     $problemParams = [
@@ -841,7 +947,7 @@ function zabbix_fetch_wall_data(array $page): array
         $empty['group_names'] = $groupNames;
         $empty['group_ids'] = $groupIds;
 
-        return $empty;
+        return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
     }
     $problems = zabbix_filter_unresolved_problems($problems);
     $problems = zabbix_filter_visible_problems($problems, $error);
@@ -860,7 +966,7 @@ function zabbix_fetch_wall_data(array $page): array
         $empty['group_ids'] = $groupIds;
         $empty['problems'] = $problems;
 
-        return $empty;
+        return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
     }
 
     $problemHosts = [];

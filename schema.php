@@ -580,7 +580,7 @@ function admin_schema(): array
         ]],
         'zabbix' => ['title' => 'Zabbix Monitoring', 'file' => 'zabbix.php', 'fields' => [
             ['key' => 'ZABBIX_URL', 'label' => 'Zabbix URL', 'type' => 'text',
-             'help' => 'Base URL, e.g. https://zabbix.example.com — api_jsonrpc.php is appended automatically'],
+             'help' => 'Base URL, e.g. https://zabbix.example.com — api_jsonrpc.php is appended automatically. On the same LAN/Proxmox host, prefer the VM IP or internal hostname (not a public URL) to avoid hairpin NAT and DNS delays.'],
             ['key' => 'ZABBIX_TOKEN', 'label' => 'API token', 'type' => 'password',
              'help' => 'Users → API tokens in Zabbix (6.4+). Zabbix 7.2+ requires a token — sent as Authorization: Bearer'],
             ['key' => 'ZABBIX_VERIFY_TLS', 'label' => 'Verify TLS', 'type' => 'bool', 'default' => false],

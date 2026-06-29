@@ -4,7 +4,7 @@
  * CLI: test Zabbix page host group resolution and API connectivity.
  *
  * Usage:
- *   php scripts/diagnose-zabbix.php [page_key] [--needle=substring] [--root=/path/to/install]
+ *   php scripts/diagnose-zabbix.php [page_key] [--needle=substring] [--root=/path/to/install] [--timing]
  *
  * Reads config/settings.json from the install root. If you run from a git clone
  * without local settings, auto-detects /var/www/html/boards when present.
@@ -65,6 +65,17 @@ if (!zabbix_configured()) {
     echo "  php " . SIGNAGE_ROOT . "/scripts/diagnose-zabbix.php {$pageKey}\n";
     echo "  SIGNAGE_ROOT=" . signage_cli_default_deploy_root() . " php scripts/diagnose-zabbix.php {$pageKey}\n";
     exit(1);
+}
+
+$timing = in_array('--timing', $argv, true);
+if ($timing) {
+    $error = null;
+    $t0 = hrtime(true);
+    $ver = zabbix_api_call('apiinfo.version', [], $error);
+    $ms = (int)round((hrtime(true) - $t0) / 1_000_000);
+    echo 'API URL: ' . zabbix_api_url() . "\n";
+    echo 'apiinfo.version: ' . ($ver !== null ? (string)$ver : 'FAILED (' . ($error ?: 'unknown') . ')') . "\n";
+    echo "Latency: {$ms} ms\n\n";
 }
 
 if ($parsed === []) {
