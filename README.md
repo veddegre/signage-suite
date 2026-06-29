@@ -193,11 +193,12 @@ Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weight
 
 ### CLI diagnostics
 
-Run from the boards install root on the server:
+Run from the boards install root on the server (the directory with `config/settings.json`, usually `/var/www/html/boards`). If you run from a git clone without local settings, the script auto-detects that path. Override with `SIGNAGE_ROOT` or `--root=`.
 
 ```bash
 # Zabbix: API vs wall — HIDDEN = in DB but not in Zabbix UI (disabled trigger/host/item)
 php scripts/diagnose-zabbix.php network --needle=signaltrace
+# from a clone: SIGNAGE_ROOT=/var/www/html/boards php ~/signage-suite/scripts/diagnose-zabbix.php main
 
 # Rotation: weighted mode, eligible pages, per-slide weights
 php scripts/diagnose-rotation.php veddersg

@@ -2,22 +2,49 @@
 <?php
 /**
  * CLI: test Zabbix page host group resolution and API connectivity.
- * Usage: php scripts/diagnose-zabbix.php [page_key] [--needle=substring]
+ *
+ * Usage:
+ *   php scripts/diagnose-zabbix.php [page_key] [--needle=substring] [--root=/path/to/install]
+ *
+ * Reads config/settings.json from the install root. If you run from a git clone
+ * without local settings, auto-detects /var/www/html/boards when present.
+ * Override with SIGNAGE_ROOT or --root=.
  */
 declare(strict_types=1);
 
-$root = dirname(__DIR__);
+require_once dirname(__DIR__) . '/lib/cli_lib.php';
+
+$opts = signage_cli_parse_argv($argv);
+$root = signage_cli_resolve_root($opts['root']);
+if (!defined('SIGNAGE_ROOT')) {
+    define('SIGNAGE_ROOT', $root);
+}
 require_once $root . '/config.php';
 require_once $root . '/lib/zabbix_lib.php';
 
-$pageKey = zabbix_normalize_page_key('main');
-$needle = '';
-foreach (array_slice($argv, 1) as $arg) {
-    if (str_starts_with($arg, '--needle=')) {
-        $needle = substr($arg, 9);
-        continue;
+$pageKey = zabbix_normalize_page_key($opts['positional'][0] ?? 'main');
+$needle = (string)$opts['needle'];
+
+echo 'SIGNAGE_ROOT: ' . SIGNAGE_ROOT . "\n";
+echo 'Config: ' . cfg_path() . "\n";
+if (!is_file(cfg_path())) {
+    echo "settings.json not found — set Zabbix in admin or use --root=/var/www/html/boards\n\n";
+} else {
+    echo "\n";
+}
+
+$allPages = zabbix_admin_pages();
+if ($allPages !== []) {
+    echo "Zabbix pages in config:\n";
+    foreach ($allPages as $key => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $groups = zabbix_host_groups_string($row['host_groups'] ?? '');
+        echo '  ' . $key . ': ' . (string)($row['title'] ?? '') . ' — groups: '
+            . ($groups !== '' ? $groups : '(empty)') . "\n";
     }
-    $pageKey = zabbix_normalize_page_key($arg);
+    echo "\n";
 }
 
 $page = zabbix_resolve_page($pageKey);
@@ -30,14 +57,22 @@ echo 'Host groups (stored): ' . ($rawGroups !== '' ? $rawGroups : '(empty)') . "
 echo 'Parsed: ' . ($parsed !== [] ? implode(' | ', $parsed) : '(none)') . "\n\n";
 
 if (!zabbix_configured()) {
-    echo "Zabbix URL/token not configured.\n";
+    echo "Zabbix URL/token not configured in " . cfg_path() . ".\n";
+    echo "Use the live install, e.g.:\n";
+    echo "  php " . SIGNAGE_ROOT . "/scripts/diagnose-zabbix.php {$pageKey}\n";
+    echo "  SIGNAGE_ROOT=" . signage_cli_default_deploy_root() . " php scripts/diagnose-zabbix.php {$pageKey}\n";
+    exit(1);
+}
+
+if ($parsed === []) {
+    echo "No host groups on this page — pick a page key from the list above.\n";
     exit(1);
 }
 
 $error = null;
 $ids = zabbix_resolve_group_ids($parsed, $error);
 if ($ids === []) {
-    echo "Resolve failed: " . ($error ?: 'unknown error') . "\n";
+    echo 'Resolve failed: ' . ($error ?: 'unknown error') . "\n";
     exit(1);
 }
 
@@ -90,6 +125,7 @@ foreach ($unresolved as $problem) {
 }
 
 $triggerMeta = [];
+$monitoredIds = [];
 if ($triggerIds !== []) {
     $triggers = zabbix_api_call('trigger.get', [
         'output' => ['triggerid', 'description', 'status'],
@@ -117,7 +153,6 @@ if ($triggerIds !== []) {
         'filter' => ['status' => 0],
         'selectHosts' => ['status'],
     ], $error);
-    $monitoredIds = [];
     if (is_array($monitored)) {
         foreach ($monitored as $trigger) {
             if (!is_array($trigger)) {
