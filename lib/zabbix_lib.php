@@ -635,6 +635,22 @@ function zabbix_attach_problem_hosts(array $problems, ?string &$error = null): a
     return $out;
 }
 
+/** Keep only unresolved problems (matches Zabbix Monitoring → Problems default view). */
+function zabbix_filter_unresolved_problems(array $problems): array
+{
+    return array_values(array_filter($problems, static function ($problem): bool {
+        if (!is_array($problem)) {
+            return false;
+        }
+        $recovery = trim((string)($problem['r_eventid'] ?? ''));
+        if ($recovery !== '' && $recovery !== '0') {
+            return false;
+        }
+
+        return true;
+    }));
+}
+
 /** @param list<array<string,mixed>> $problems */
 function zabbix_sort_problems(array $problems): array
 {
@@ -702,7 +718,7 @@ function zabbix_fetch_wall_data(array $page): array
     if (!is_dir($cacheDir)) {
         @mkdir($cacheDir, 0775, true);
     }
-    $cacheKey = 'zabbix_' . md5(json_encode([
+    $cacheKey = 'zabbix_active_' . md5(json_encode([
         $groupNames,
         $minSeverity,
         $maxProblems,
@@ -728,10 +744,10 @@ function zabbix_fetch_wall_data(array $page): array
     }
 
     $problemParams = [
-        'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata'],
+        'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata', 'r_eventid'],
         'groupids' => $groupIds,
         'severities' => zabbix_severities_from_min($minSeverity),
-        'recent' => true,
+        'recent' => false,
         'limit' => $maxProblems,
         'suppressed' => false,
     ];
@@ -747,6 +763,7 @@ function zabbix_fetch_wall_data(array $page): array
 
         return $empty;
     }
+    $problems = zabbix_filter_unresolved_problems($problems);
     $problems = zabbix_attach_problem_hosts($problems, $error);
     $problems = zabbix_sort_problems($problems);
 
