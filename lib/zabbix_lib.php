@@ -651,6 +651,85 @@ function zabbix_filter_unresolved_problems(array $problems): array
     }));
 }
 
+/**
+ * Drop problems whose triggers/hosts/items are disabled — problem.get still returns
+ * these, but the Zabbix UI hides them (see ZBXNEXT-5167).
+ *
+ * @param list<array<string,mixed>> $problems
+ * @return list<array<string,mixed>>
+ */
+function zabbix_filter_visible_problems(array $problems, ?string &$error = null): array
+{
+    $triggerIds = [];
+    foreach ($problems as $problem) {
+        if (!is_array($problem)) {
+            continue;
+        }
+        if ((int)($problem['source'] ?? 0) !== 0) {
+            continue;
+        }
+        $oid = trim((string)($problem['objectid'] ?? ''));
+        if ($oid !== '' && $oid !== '0') {
+            $triggerIds[$oid] = true;
+        }
+    }
+    if ($triggerIds === []) {
+        return $problems;
+    }
+
+    $triggers = zabbix_api_call('trigger.get', [
+        'output' => ['triggerid'],
+        'triggerids' => array_keys($triggerIds),
+        'monitored' => true,
+        'skipDependent' => true,
+        'filter' => ['status' => 0],
+        'selectHosts' => ['hostid', 'status'],
+    ], $error);
+    if (!is_array($triggers)) {
+        return $problems;
+    }
+
+    $visibleTriggerIds = [];
+    foreach ($triggers as $trigger) {
+        if (!is_array($trigger)) {
+            continue;
+        }
+        $tid = trim((string)($trigger['triggerid'] ?? ''));
+        if ($tid === '') {
+            continue;
+        }
+        $hosts = is_array($trigger['hosts'] ?? null) ? $trigger['hosts'] : [];
+        $hostsOk = true;
+        foreach ($hosts as $host) {
+            if (!is_array($host)) {
+                continue;
+            }
+            if ((string)($host['status'] ?? '0') === '1') {
+                $hostsOk = false;
+                break;
+            }
+        }
+        if ($hostsOk) {
+            $visibleTriggerIds[$tid] = true;
+        }
+    }
+
+    return array_values(array_filter($problems, static function ($problem) use ($visibleTriggerIds): bool {
+        if (!is_array($problem)) {
+            return false;
+        }
+        if ((int)($problem['source'] ?? 0) !== 0) {
+            return true;
+        }
+        $oid = trim((string)($problem['objectid'] ?? ''));
+        if ($oid === '' || $oid === '0') {
+            return true;
+        }
+
+        return isset($visibleTriggerIds[$oid]);
+    }));
+}
+
 /** @param list<array<string,mixed>> $problems */
 function zabbix_sort_problems(array $problems): array
 {
@@ -718,7 +797,7 @@ function zabbix_fetch_wall_data(array $page): array
     if (!is_dir($cacheDir)) {
         @mkdir($cacheDir, 0775, true);
     }
-    $cacheKey = 'zabbix_active_' . md5(json_encode([
+    $cacheKey = 'zabbix_visible_' . md5(json_encode([
         $groupNames,
         $minSeverity,
         $maxProblems,
@@ -744,10 +823,11 @@ function zabbix_fetch_wall_data(array $page): array
     }
 
     $problemParams = [
-        'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata', 'r_eventid'],
+        'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata', 'r_eventid', 'objectid', 'source'],
         'groupids' => $groupIds,
         'severities' => zabbix_severities_from_min($minSeverity),
         'recent' => false,
+        'symptom' => false,
         'limit' => $maxProblems,
         'suppressed' => false,
     ];
@@ -764,6 +844,7 @@ function zabbix_fetch_wall_data(array $page): array
         return $empty;
     }
     $problems = zabbix_filter_unresolved_problems($problems);
+    $problems = zabbix_filter_visible_problems($problems, $error);
     $problems = zabbix_attach_problem_hosts($problems, $error);
     $problems = zabbix_sort_problems($problems);
 
