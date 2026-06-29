@@ -3939,7 +3939,7 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
                 <input type="text" name="PAGES[<?= h($pk) ?>][host_groups]"
                        value="<?= h(zabbix_host_groups_string($pg['host_groups'] ?? '')) ?>"
                        placeholder="Linux servers, Network gear">
-                <div class="help">Exact Zabbix host group names, comma-separated. Only problems and hosts in these groups appear.</div>
+                <div class="help">Exact Zabbix host group names, comma-separated. Use quotes when a name contains a comma, e.g. <code>"Linux servers", Network gear</code>.</div>
               </div>
               <div class="field">
                 <label class="mini">Minimum severity</label>

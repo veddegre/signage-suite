@@ -205,13 +205,22 @@ function zabbix_resolve_page(?string $pageKey = null): array
     return ['key' => $resolved] + $pages[$resolved];
 }
 
+/** Collapse odd whitespace (NBSP, multiple spaces) for Zabbix name matching. */
+function zabbix_normalize_group_name(string $name): string
+{
+    $name = str_replace("\xc2\xa0", ' ', $name);
+    $name = trim($name);
+
+    return preg_replace('/\s+/u', ' ', $name) ?? $name;
+}
+
 /** @param mixed $raw */
 function zabbix_host_groups_string($raw): string
 {
     if (is_array($raw)) {
         $parts = [];
         foreach ($raw as $item) {
-            $item = trim((string)$item);
+            $item = zabbix_normalize_group_name((string)$item);
             if ($item !== '') {
                 $parts[] = $item;
             }
@@ -220,21 +229,51 @@ function zabbix_host_groups_string($raw): string
         return implode(', ', $parts);
     }
 
-    return trim((string)$raw);
+    return zabbix_normalize_group_name((string)$raw);
 }
 
-/** @return list<string> */
+/**
+ * Parse comma-separated host group names. Supports quoted names with commas:
+ * "Linux servers", Network gear
+ *
+ * @return list<string>
+ */
 function zabbix_parse_host_groups(string $raw): array
 {
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+
     $out = [];
-    foreach (preg_split('/\s*,\s*/', trim($raw)) ?: [] as $name) {
-        $name = trim((string)$name);
+    if (str_contains($raw, '"')) {
+        if (preg_match_all('/"((?:[^"\\\\]|\\\\.)*)"/', $raw, $m)) {
+            foreach ($m[1] as $name) {
+                $name = zabbix_normalize_group_name(stripslashes((string)$name));
+                if ($name !== '') {
+                    $out[] = $name;
+                }
+            }
+            $rest = preg_replace('/"((?:[^"\\\\]|\\\\.)*)"/', '', $raw) ?? $raw;
+            foreach (preg_split('/\s*,\s*/', trim($rest)) ?: [] as $name) {
+                $name = zabbix_normalize_group_name((string)$name);
+                if ($name !== '') {
+                    $out[] = $name;
+                }
+            }
+
+            return array_values(array_unique($out));
+        }
+    }
+
+    foreach (preg_split('/\s*,\s*/', $raw) ?: [] as $name) {
+        $name = zabbix_normalize_group_name((string)$name);
         if ($name !== '') {
             $out[] = $name;
         }
     }
 
-    return $out;
+    return array_values(array_unique($out));
 }
 
 /**
@@ -379,26 +418,91 @@ function zabbix_format_age(int $clock): string
  */
 function zabbix_resolve_group_ids(array $groupNames, ?string &$error = null): array
 {
+    $groupNames = array_values(array_unique(array_filter(array_map(
+        'zabbix_normalize_group_name',
+        $groupNames
+    ))));
     if ($groupNames === []) {
         return [];
     }
 
-    $result = zabbix_api_call('hostgroup.get', [
-        'output' => ['groupid', 'name'],
-        'filter' => ['name' => $groupNames],
-    ], $error);
-    if (!is_array($result)) {
-        return [];
-    }
+    $resolved = [];
+    $missing = [];
 
-    $ids = [];
-    foreach ($result as $row) {
-        if (is_array($row) && isset($row['groupid'])) {
-            $ids[] = (string)$row['groupid'];
+    foreach ($groupNames as $want) {
+        $found = false;
+        $result = zabbix_api_call('hostgroup.get', [
+            'output' => ['groupid', 'name'],
+            'filter' => ['name' => [$want]],
+        ], $error);
+        if (is_array($result)) {
+            foreach ($result as $row) {
+                if (!is_array($row) || !isset($row['groupid'])) {
+                    continue;
+                }
+                $name = zabbix_normalize_group_name((string)($row['name'] ?? ''));
+                if (strcasecmp($name, $want) === 0) {
+                    $resolved[$want] = (string)$row['groupid'];
+                    $found = true;
+                    break;
+                }
+            }
+        }
+        if (!$found) {
+            $missing[] = $want;
         }
     }
 
-    return array_values(array_unique($ids));
+    if ($missing !== []) {
+        $all = zabbix_api_call('hostgroup.get', [
+            'output' => ['groupid', 'name'],
+        ], $error);
+        if (is_array($all)) {
+            $byKey = [];
+            foreach ($all as $row) {
+                if (!is_array($row) || !isset($row['groupid'])) {
+                    continue;
+                }
+                $name = zabbix_normalize_group_name((string)($row['name'] ?? ''));
+                $byKey[strtolower($name)] = (string)$row['groupid'];
+            }
+            foreach ($missing as $i => $want) {
+                $key = strtolower($want);
+                if (isset($byKey[$key])) {
+                    $resolved[$want] = $byKey[$key];
+                    unset($missing[$i]);
+                }
+            }
+            $missing = array_values($missing);
+        }
+    }
+
+    if ($missing !== []) {
+        $available = [];
+        $all = zabbix_api_call('hostgroup.get', ['output' => ['name']], $error);
+        if (is_array($all)) {
+            foreach ($all as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $name = zabbix_normalize_group_name((string)($row['name'] ?? ''));
+                if ($name !== '') {
+                    $available[] = $name;
+                }
+            }
+            sort($available);
+        }
+        $error = 'Host group(s) not found: ' . implode(', ', $missing);
+        if ($available !== []) {
+            $error .= '. Available in Zabbix: ' . implode(', ', array_slice($available, 0, 24))
+                . (count($available) > 24 ? '…' : '');
+        }
+        if ($resolved === []) {
+            return [];
+        }
+    }
+
+    return array_values(array_unique(array_values($resolved)));
 }
 
 function zabbix_api_call(string $method, array $params, ?string &$error = null): mixed
