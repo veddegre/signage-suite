@@ -1315,6 +1315,11 @@ function admin_preview_session_ready(): bool
     if ($ready !== null) {
         return $ready;
     }
+    if ((defined('SIGNAGE_CLI') && SIGNAGE_CLI) || PHP_SAPI === 'cli') {
+        $ready = false;
+
+        return false;
+    }
     if (!function_exists('signage_session_start')) {
         require_once __DIR__ . '/security_lib.php';
     }

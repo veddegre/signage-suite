@@ -19,6 +19,9 @@ $root = signage_cli_resolve_root($opts['root']);
 if (!defined('SIGNAGE_ROOT')) {
     define('SIGNAGE_ROOT', $root);
 }
+if (!defined('SIGNAGE_CLI')) {
+    define('SIGNAGE_CLI', true);
+}
 require_once $root . '/config.php';
 require_once $root . '/lib/zabbix_lib.php';
 
