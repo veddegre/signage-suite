@@ -124,7 +124,7 @@ video.php?v=drone           slides.php?slide=birthday.png
 | **Media** | Photo rotator, scheduled slides, RSS feeds, local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
 
-**Zabbix** — no iframe; server-side `problem.get` + host status. Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
+**Zabbix** — no iframe; server-side `problem.get` + host status. Problems are filtered to match the Zabbix UI (unresolved only; excludes disabled triggers/hosts/items and symptom events that `problem.get` still returns). Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. If the wall shows an alert you cannot find in Zabbix, run `php scripts/diagnose-zabbix.php <page_key> [--needle=substring]` on the server — **HIDDEN** rows are API-only leftovers (e.g. a Docker trigger disabled after a container was removed). See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
 
 **Splunk panels** — oneshot searches server-side (port 8089), multi-page like Grafana.
 
@@ -190,3 +190,15 @@ Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weight
 - Legacy `config/admin.json` migrates to `config/users.json` on first login.
 - Failed API calls show a diagnostic stamp bottom-right while serving stale cache.
 - `*.lock` files beside JSON during writes are normal.
+
+### CLI diagnostics
+
+Run from the boards install root on the server:
+
+```bash
+# Zabbix: API vs wall — HIDDEN = in DB but not in Zabbix UI (disabled trigger/host/item)
+php scripts/diagnose-zabbix.php network --needle=signaltrace
+
+# Rotation: weighted mode, eligible pages, per-slide weights
+php scripts/diagnose-rotation.php veddersg
+```
