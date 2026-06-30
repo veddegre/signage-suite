@@ -466,24 +466,43 @@ function unifi_wan_pill_label(array $wan): string
     return '↓ ' . unifi_format_mbps($down) . ' ↑ ' . unifi_format_mbps($up) . ' Mbps';
 }
 
-/** @return array{rx_bps:float,tx_bps:float}|null bytes per second */
+/** @return array{rx:float,tx:float,unit:'bytes_per_sec'|'auto'}|null */
 function unifi_bytes_r_rates(array $row): ?array
 {
-    if (!isset($row['bytes-r']) || !is_array($row['bytes-r'])) {
-        return null;
+    if (isset($row['bytes-r']) && is_array($row['bytes-r'])) {
+        $rx = (float)($row['bytes-r'][0] ?? 0);
+        $tx = (float)($row['bytes-r'][1] ?? 0);
+        if ($rx > 0 || $tx > 0) {
+            return ['rx' => $rx, 'tx' => $tx, 'unit' => 'auto'];
+        }
     }
-    $rx = (float)($row['bytes-r'][0] ?? 0);
-    $tx = (float)($row['bytes-r'][1] ?? 0);
+
+    $wired = !empty($row['is_wired']);
+    if ($wired) {
+        $rx = (float)($row['wired-rx_bytes-r'] ?? $row['wired-rx_bytes_r'] ?? 0);
+        $tx = (float)($row['wired-tx_bytes-r'] ?? $row['wired-tx_bytes_r'] ?? 0);
+    } else {
+        $rx = (float)($row['rx_bytes-r'] ?? $row['rx_bytes_r'] ?? 0);
+        $tx = (float)($row['tx_bytes-r'] ?? $row['tx_bytes_r'] ?? 0);
+    }
+    if ($rx <= 0 && $tx <= 0) {
+        $rx = (float)($row['rx_bytes-r'] ?? $row['rx_bytes_r'] ?? $row['wired-rx_bytes-r'] ?? $row['wired-rx_bytes_r'] ?? 0);
+        $tx = (float)($row['tx_bytes-r'] ?? $row['tx_bytes_r'] ?? $row['wired-tx_bytes-r'] ?? $row['wired-tx_bytes_r'] ?? 0);
+    }
     if ($rx <= 0 && $tx <= 0) {
         return null;
     }
 
-    return ['rx_bps' => $rx, 'tx_bps' => $tx];
+    return ['rx' => $rx, 'tx' => $tx, 'unit' => 'bytes_per_sec'];
 }
 
-/** Convert a UniFi bytes-r sample to Mbps (bytes/s on older controllers, bits/s on some gateways). */
-function unifi_bytes_r_to_mbps(float $rate): float
+/** Convert a UniFi rate sample to Mbps. */
+function unifi_rate_to_mbps(float $rate, string $unit = 'auto'): float
 {
+    if ($unit === 'bytes_per_sec') {
+        return round($rate * 8 / 1_000_000, 1);
+    }
+    // Legacy bytes-r arrays: bytes/s on older controllers, bits/s on some gateways.
     if ($rate >= 50_000_000) {
         return round($rate / 1_000_000, 1);
     }
@@ -500,8 +519,8 @@ function unifi_bytes_r_mbps(array $row): ?array
     }
 
     return [
-        'download_mbps' => unifi_bytes_r_to_mbps($rates['rx_bps']),
-        'upload_mbps' => unifi_bytes_r_to_mbps($rates['tx_bps']),
+        'download_mbps' => unifi_rate_to_mbps($rates['rx'], $rates['unit']),
+        'upload_mbps' => unifi_rate_to_mbps($rates['tx'], $rates['unit']),
     ];
 }
 
@@ -720,17 +739,6 @@ function unifi_wan_from_integration_stats(?array $stats): array
 /** @return array{download_mbps:?float,upload_mbps:?float,total_mbps:float} */
 function unifi_row_throughput_mbps(array $row): array
 {
-    if (isset($row['rxRateBps']) || isset($row['txRateBps'])) {
-        $down = round((float)($row['rxRateBps'] ?? 0) / 1000000, 1);
-        $up = round((float)($row['txRateBps'] ?? 0) / 1000000, 1);
-
-        return [
-            'download_mbps' => $down,
-            'upload_mbps' => $up,
-            'total_mbps' => round($down + $up, 1),
-        ];
-    }
-
     $rates = unifi_bytes_r_mbps($row);
     if ($rates !== null) {
         return [
@@ -738,6 +746,18 @@ function unifi_row_throughput_mbps(array $row): array
             'upload_mbps' => $rates['upload_mbps'],
             'total_mbps' => round($rates['download_mbps'] + $rates['upload_mbps'], 1),
         ];
+    }
+
+    if (isset($row['rxRateBps']) || isset($row['txRateBps'])) {
+        $down = round((float)($row['rxRateBps'] ?? 0) / 1_000_000, 1);
+        $up = round((float)($row['txRateBps'] ?? 0) / 1_000_000, 1);
+        if ($down > 0 || $up > 0) {
+            return [
+                'download_mbps' => $down,
+                'upload_mbps' => $up,
+                'total_mbps' => round($down + $up, 1),
+            ];
+        }
     }
 
     return [
