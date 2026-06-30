@@ -29,6 +29,10 @@ $clients = is_array($data['clients'] ?? null) ? $data['clients'] : ['total' => 0
 $health = is_array($data['health'] ?? null) ? $data['health'] : [];
 $counts = is_array($data['counts'] ?? null) ? $data['counts'] : ['devices' => 0, 'online' => 0, 'offline' => 0];
 $offlineDevices = array_values(array_filter($devices, static fn($d) => empty($d['online'])));
+$wan = is_array($data['wan'] ?? null) ? $data['wan'] : [];
+$topTalkers = is_array($data['top_talkers'] ?? null) ? $data['top_talkers'] : [];
+$wanPill = unifi_wan_pill_label($wan);
+$hasLiveWan = ($wan['download_mbps'] ?? null) !== null || ($wan['upload_mbps'] ?? null) !== null;
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -89,6 +93,24 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .issue.warn { border-color:rgba(255,200,89,.35); }
   .issue.bad { border-color:rgba(228,89,89,.35); }
 
+  .bandwidth { display:flex; flex-direction:column; gap:18px; margin-bottom:18px; }
+  .wan-speeds { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .wan-speed { background:var(--lake-night); border:1px solid rgba(38,52,77,.55); border-radius:10px;
+                padding:16px 18px; }
+  .wan-speed .lab { font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
+  .wan-speed .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:52px; color:var(--beacon);
+                    line-height:1.05; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .wan-speed .val small { font-size:24px; color:var(--mist); font-weight:600; }
+  .speedtest-note { font-size:17px; color:var(--mist); margin-top:4px; }
+
+  .talkers { display:flex; flex-direction:column; gap:8px; }
+  .talker { display:grid; grid-template-columns:1fr auto; gap:16px; align-items:center;
+            padding:10px 14px; border-radius:10px; background:var(--lake-night);
+            border:1px solid rgba(38,52,77,.55); min-width:0; }
+  .talker .name { font-size:21px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .talker .rate { font-family:'IBM Plex Mono',monospace; font-size:18px; color:var(--mist);
+                  white-space:nowrap; font-variant-numeric:tabular-nums; }
+
   .nodata, .err, .setupmsg { font-size:24px; color:var(--mist); line-height:1.6; }
   .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
@@ -116,6 +138,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <?php endif; ?>
       <span class="pill"><strong><?= (int)($clients['total'] ?? 0) ?></strong> clients</span>
       <span class="pill"><?= (int)($clients['wireless'] ?? 0) ?> Wi‑Fi · <?= (int)($clients['wired'] ?? 0) ?> wired<?php if ((int)($clients['guest'] ?? 0) > 0): ?> · <?= (int)$clients['guest'] ?> guest<?php endif; ?></span>
+      <?php if ($wanPill !== ''): ?>
+        <span class="pill"><strong><?= h($wanPill) ?></strong></span>
+      <?php endif; ?>
       <span class="pill">Site <strong><?= h((string)($data['site'] ?? '')) ?></strong></span>
       <?php foreach (['wan' => 'WAN', 'wlan' => 'Wi‑Fi', 'lan' => 'LAN'] as $key => $label): ?>
         <?php $st = (string)($health[$key] ?? 'unknown'); ?>
@@ -157,8 +182,51 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       </div>
 
       <div class="panel">
-        <div class="k">Status</div>
-        <div class="body issues">
+        <div class="k">Bandwidth</div>
+        <div class="body">
+          <div class="bandwidth">
+            <?php if ($hasLiveWan): ?>
+              <div class="wan-speeds">
+                <div class="wan-speed">
+                  <div class="lab">Download</div>
+                  <div class="val"><?= h(unifi_format_mbps($wan['download_mbps'] ?? null)) ?> <small>Mbps</small></div>
+                </div>
+                <div class="wan-speed">
+                  <div class="lab">Upload</div>
+                  <div class="val"><?= h(unifi_format_mbps($wan['upload_mbps'] ?? null)) ?> <small>Mbps</small></div>
+                </div>
+              </div>
+            <?php elseif (($wan['speedtest_down_mbps'] ?? null) !== null || ($wan['speedtest_up_mbps'] ?? null) !== null): ?>
+              <div class="wan-speeds">
+                <div class="wan-speed">
+                  <div class="lab">Last speed test ↓</div>
+                  <div class="val"><?= h(unifi_format_mbps($wan['speedtest_down_mbps'] ?? null)) ?> <small>Mbps</small></div>
+                </div>
+                <div class="wan-speed">
+                  <div class="lab">Last speed test ↑</div>
+                  <div class="val"><?= h(unifi_format_mbps($wan['speedtest_up_mbps'] ?? null)) ?> <small>Mbps</small></div>
+                </div>
+              </div>
+              <div class="speedtest-note">Live WAN rates unavailable — showing last UniFi speed test.</div>
+            <?php else: ?>
+              <div class="nodata">WAN throughput will appear after the next refresh (needs two samples or gateway <code>bytes-r</code> stats).</div>
+            <?php endif; ?>
+
+            <?php if ($topTalkers !== []): ?>
+              <div class="talkers">
+                <div class="k" style="margin:0;">Top talkers</div>
+                <?php foreach ($topTalkers as $talker): ?>
+                  <?php if (!is_array($talker)) { continue; } ?>
+                  <div class="talker">
+                    <div class="name"><?= h((string)($talker['name'] ?? 'Client')) ?></div>
+                    <div class="rate"><?= h(unifi_talker_rate_label($talker)) ?></div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            <?php endif; ?>
+          </div>
+
+          <div class="issues">
           <?php if (!empty($data['stale'])): ?>
             <div class="issue warn">
               <div class="title">Serving cached data</div>
@@ -194,6 +262,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
               <div class="sub"><?= (int)($clients['total'] ?? 0) ?> active clients · cache <?= (int)$cacheTtl ?>s</div>
             </div>
           <?php endif; ?>
+          </div>
         </div>
       </div>
     </div>

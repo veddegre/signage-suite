@@ -414,6 +414,271 @@ function unifi_device_meta_line(array $dev): string
     return implode(' · ', $parts);
 }
 
+function unifi_top_talkers_limit(): int
+{
+    return max(3, min(10, (int)cfg('unifi.TOP_TALKERS', 5)));
+}
+
+function unifi_format_mbps(?float $mbps): string
+{
+    if ($mbps === null || $mbps < 0.05) {
+        return '—';
+    }
+    if ($mbps >= 100) {
+        return (string)(int)round($mbps);
+    }
+
+    return rtrim(rtrim(number_format($mbps, 1, '.', ''), '0'), '.');
+}
+
+function unifi_wan_pill_label(array $wan): string
+{
+    $down = $wan['download_mbps'] ?? null;
+    $up = $wan['upload_mbps'] ?? null;
+    if ($down === null && $up === null) {
+        return '';
+    }
+
+    return '↓ ' . unifi_format_mbps($down) . ' ↑ ' . unifi_format_mbps($up) . ' Mbps';
+}
+
+/** @return array{rx_bps:float,tx_bps:float}|null bytes per second */
+function unifi_bytes_r_rates(array $row): ?array
+{
+    if (!isset($row['bytes-r']) || !is_array($row['bytes-r'])) {
+        return null;
+    }
+    $rx = (float)($row['bytes-r'][0] ?? 0);
+    $tx = (float)($row['bytes-r'][1] ?? 0);
+    if ($rx <= 0 && $tx <= 0) {
+        return null;
+    }
+
+    return ['rx_bps' => $rx, 'tx_bps' => $tx];
+}
+
+function unifi_client_display_name(array $row): string
+{
+    foreach (['hostname', 'name', 'oui'] as $key) {
+        $value = trim((string)($row[$key] ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    return trim((string)($row['mac'] ?? 'Client'));
+}
+
+function unifi_is_gateway_row(array $row): bool
+{
+    return unifi_device_kind(strtolower((string)($row['type'] ?? $row['model'] ?? '')), $row) === 'gateway';
+}
+
+/** @param list<array<string,mixed>> $rows */
+function unifi_find_gateway_row(array $rows): ?array
+{
+    foreach ($rows as $row) {
+        if (unifi_is_gateway_row($row)) {
+            return $row;
+        }
+    }
+
+    return null;
+}
+
+/** @return array{download_mbps:?float,upload_mbps:?float,speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_speedtest_from_gateway(array $row): array
+{
+    $out = [
+        'speedtest_down_mbps' => null,
+        'speedtest_up_mbps' => null,
+    ];
+    $status = $row['speedtest-status'] ?? $row['speedtest_status'] ?? null;
+    if (!is_array($status)) {
+        return $out;
+    }
+    if (isset($status['xput_download'])) {
+        $out['speedtest_down_mbps'] = round((float)$status['xput_download'], 0);
+    }
+    if (isset($status['xput_upload'])) {
+        $out['speedtest_up_mbps'] = round((float)$status['xput_upload'], 0);
+    }
+
+    return $out;
+}
+
+/** @return array{download_mbps:?float,upload_mbps:?float,speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_wan_delta_mbps(array $gatewayRaw): array
+{
+    $mac = (string)($gatewayRaw['mac'] ?? 'gateway');
+    $rx = (int)($gatewayRaw['rx_bytes'] ?? 0);
+    $tx = (int)($gatewayRaw['tx_bytes'] ?? 0);
+    if (isset($gatewayRaw['uplink']) && is_array($gatewayRaw['uplink'])) {
+        $rx = (int)($gatewayRaw['uplink']['rx_bytes'] ?? $rx);
+        $tx = (int)($gatewayRaw['uplink']['tx_bytes'] ?? $tx);
+    }
+
+    $now = time();
+    $path = UNIFI_CACHE_DIR . '/unifi_wan_delta.json';
+    $prev = is_file($path) ? json_decode((string)file_get_contents($path), true) : null;
+    @file_put_contents($path, json_encode(['mac' => $mac, 'rx' => $rx, 'tx' => $tx, 'ts' => $now]), LOCK_EX);
+
+    $out = [
+        'download_mbps' => null,
+        'upload_mbps' => null,
+    ];
+    if (is_array($prev) && (string)($prev['mac'] ?? '') === $mac) {
+        $dt = $now - (int)($prev['ts'] ?? 0);
+        if ($dt > 0 && $dt <= 120) {
+            $drx = max(0, $rx - (int)($prev['rx'] ?? 0));
+            $dtx = max(0, $tx - (int)($prev['tx'] ?? 0));
+            $out['download_mbps'] = round($drx * 8 / $dt / 1000000, 1);
+            $out['upload_mbps'] = round($dtx * 8 / $dt / 1000000, 1);
+        }
+    }
+
+    return $out + unifi_speedtest_from_gateway($gatewayRaw);
+}
+
+/** @return array{download_mbps:?float,upload_mbps:?float,speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_wan_from_gateway_row(array $row): array
+{
+    $wan = [
+        'download_mbps' => null,
+        'upload_mbps' => null,
+        'speedtest_down_mbps' => null,
+        'speedtest_up_mbps' => null,
+    ];
+
+    $rates = unifi_bytes_r_rates($row);
+    if ($rates === null && isset($row['wan1']) && is_array($row['wan1'])) {
+        $rates = unifi_bytes_r_rates($row['wan1']);
+    }
+    if ($rates !== null) {
+        $wan['download_mbps'] = round($rates['rx_bps'] * 8 / 1000000, 1);
+        $wan['upload_mbps'] = round($rates['tx_bps'] * 8 / 1000000, 1);
+    } else {
+        $delta = unifi_wan_delta_mbps($row);
+        $wan['download_mbps'] = $delta['download_mbps'];
+        $wan['upload_mbps'] = $delta['upload_mbps'];
+        $wan['speedtest_down_mbps'] = $delta['speedtest_down_mbps'];
+        $wan['speedtest_up_mbps'] = $delta['speedtest_up_mbps'];
+
+        return $wan;
+    }
+
+    return $wan + unifi_speedtest_from_gateway($row);
+}
+
+/** @return array{download_mbps:?float,upload_mbps:?float,speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_wan_from_integration_stats(?array $stats): array
+{
+    $wan = [
+        'download_mbps' => null,
+        'upload_mbps' => null,
+        'speedtest_down_mbps' => null,
+        'speedtest_up_mbps' => null,
+    ];
+    if ($stats === null) {
+        return $wan;
+    }
+    $payload = $stats;
+    if (isset($stats['data']) && is_array($stats['data'])) {
+        $payload = $stats['data'];
+    }
+    $uplink = is_array($payload['uplink'] ?? null) ? $payload['uplink'] : [];
+    if (isset($uplink['rxRateBps'])) {
+        $wan['download_mbps'] = round((float)$uplink['rxRateBps'] / 1000000, 1);
+    }
+    if (isset($uplink['txRateBps'])) {
+        $wan['upload_mbps'] = round((float)$uplink['txRateBps'] / 1000000, 1);
+    }
+
+    return $wan;
+}
+
+/** @return array{download_mbps:?float,upload_mbps:?float,total_mbps:float} */
+function unifi_row_throughput_mbps(array $row): array
+{
+    if (isset($row['rxRateBps']) || isset($row['txRateBps'])) {
+        $down = round((float)($row['rxRateBps'] ?? 0) / 1000000, 1);
+        $up = round((float)($row['txRateBps'] ?? 0) / 1000000, 1);
+
+        return [
+            'download_mbps' => $down,
+            'upload_mbps' => $up,
+            'total_mbps' => round($down + $up, 1),
+        ];
+    }
+
+    $rates = unifi_bytes_r_rates($row);
+    if ($rates !== null) {
+        $down = round($rates['rx_bps'] * 8 / 1000000, 1);
+        $up = round($rates['tx_bps'] * 8 / 1000000, 1);
+
+        return [
+            'download_mbps' => $down,
+            'upload_mbps' => $up,
+            'total_mbps' => round($down + $up, 1),
+        ];
+    }
+
+    $totalBytes = (int)($row['rx_bytes'] ?? 0) + (int)($row['tx_bytes'] ?? 0);
+
+    return [
+        'download_mbps' => null,
+        'upload_mbps' => null,
+        'total_mbps' => round($totalBytes / 1000000, 2),
+    ];
+}
+
+/**
+ * @param list<array<string,mixed>> $rows
+ * @return list<array{name:string,download_mbps:?float,upload_mbps:?float,total_mbps:float}>
+ */
+function unifi_top_talkers_from_rows(array $rows, int $limit): array
+{
+    $talkers = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $rates = unifi_row_throughput_mbps($row);
+        $sort = $rates['total_mbps'];
+        if (isset($rates['download_mbps'], $rates['upload_mbps']) && $rates['download_mbps'] !== null) {
+            $sort = (float)$rates['download_mbps'] + (float)$rates['upload_mbps'];
+        }
+        if ($sort < 0.05) {
+            continue;
+        }
+        $talkers[] = [
+            'name' => unifi_client_display_name($row),
+            'download_mbps' => $rates['download_mbps'],
+            'upload_mbps' => $rates['upload_mbps'],
+            'total_mbps' => $rates['total_mbps'],
+            '_sort' => $sort,
+        ];
+    }
+    usort($talkers, static fn(array $a, array $b): int => ($b['_sort'] <=> $a['_sort']));
+    $out = [];
+    foreach (array_slice($talkers, 0, $limit) as $talker) {
+        unset($talker['_sort']);
+        $out[] = $talker;
+    }
+
+    return $out;
+}
+
+function unifi_talker_rate_label(array $talker): string
+{
+    if (($talker['download_mbps'] ?? null) !== null || ($talker['upload_mbps'] ?? null) !== null) {
+        return '↓' . unifi_format_mbps($talker['download_mbps'] ?? null)
+            . ' ↑' . unifi_format_mbps($talker['upload_mbps'] ?? null) . ' Mbps';
+    }
+
+    return unifi_format_mbps((float)($talker['total_mbps'] ?? 0)) . ' Mbps';
+}
+
 function unifi_state_online(array $device): bool
 {
     $state = strtolower(trim((string)($device['state'] ?? $device['status'] ?? '')));
@@ -505,6 +770,13 @@ function unifi_fetch_live(?string &$error = null): array
         'clients' => ['total' => 0, 'wireless' => 0, 'wired' => 0, 'guest' => 0],
         'pending' => 0,
         'api' => '',
+        'wan' => [
+            'download_mbps' => null,
+            'upload_mbps' => null,
+            'speedtest_down_mbps' => null,
+            'speedtest_up_mbps' => null,
+        ],
+        'top_talkers' => [],
     ];
 
     if (!unifi_configured()) {
@@ -526,6 +798,14 @@ function unifi_fetch_live(?string &$error = null): array
     $pending = 0;
     $siteLabel = unifi_site_setting();
     $api = '';
+    $wan = [
+        'download_mbps' => null,
+        'upload_mbps' => null,
+        'speedtest_down_mbps' => null,
+        'speedtest_up_mbps' => null,
+    ];
+    $topTalkers = [];
+    $talkerLimit = unifi_top_talkers_limit();
 
     if (unifi_uses_integration_api()) {
         $api = 'integration';
@@ -551,6 +831,8 @@ function unifi_fetch_live(?string &$error = null): array
         foreach (unifi_extract_rows($devicePayload) as $row) {
             $devices[] = unifi_normalize_integration_device($row);
         }
+        $gatewayRaw = unifi_find_gateway_row(unifi_extract_rows($devicePayload));
+        $gatewayId = is_array($gatewayRaw) ? trim((string)($gatewayRaw['id'] ?? '')) : '';
 
         $clientPayload = unifi_integration_get('sites/' . rawurlencode($siteId) . '/clients?limit=500', $error);
         if ($clientPayload === null) {
@@ -570,6 +852,20 @@ function unifi_fetch_live(?string &$error = null): array
             } else {
                 $clients['wired']++;
             }
+        }
+
+        $topTalkers = unifi_top_talkers_from_rows(unifi_extract_rows($clientPayload), $talkerLimit);
+
+        if ($gatewayId !== '') {
+            $statsError = null;
+            $stats = unifi_integration_get(
+                'sites/' . rawurlencode($siteId) . '/devices/' . rawurlencode($gatewayId) . '/statistics/latest',
+                $statsError
+            );
+            $wan = unifi_wan_from_integration_stats($stats);
+        }
+        if (($wan['download_mbps'] ?? null) === null && is_array($gatewayRaw)) {
+            $wan = unifi_wan_from_gateway_row($gatewayRaw);
         }
 
         $pendingPayload = unifi_integration_get('pending-devices?limit=50', $error);
@@ -607,12 +903,18 @@ function unifi_fetch_live(?string &$error = null): array
         }
 
         $devicePayload = unifi_legacy_get('stat/device', $session, $error);
-        foreach (unifi_extract_rows($devicePayload) as $row) {
+        $deviceRows = unifi_extract_rows($devicePayload);
+        foreach ($deviceRows as $row) {
             $devices[] = unifi_normalize_legacy_device($row);
+        }
+        $gatewayRaw = unifi_find_gateway_row($deviceRows);
+        if (is_array($gatewayRaw)) {
+            $wan = unifi_wan_from_gateway_row($gatewayRaw);
         }
 
         $staPayload = unifi_legacy_get('stat/sta', $session, $error);
         $staRows = unifi_extract_rows($staPayload);
+        $topTalkers = unifi_top_talkers_from_rows($staRows, $talkerLimit);
         if ($staRows !== []) {
             $clients = ['total' => 0, 'wireless' => 0, 'wired' => 0, 'guest' => 0];
             foreach ($staRows as $row) {
@@ -662,6 +964,8 @@ function unifi_fetch_live(?string &$error = null): array
         'clients' => $clients,
         'pending' => $pending,
         'api' => $api,
+        'wan' => $wan,
+        'top_talkers' => $topTalkers,
         'counts' => [
             'devices' => count($devices),
             'online' => $online,
