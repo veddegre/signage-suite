@@ -568,6 +568,9 @@ function unifi_fetch_live(?string &$error = null): array
                 $clients['wireless'] = max($clients['wireless'], (int)($row['num_user'] ?? 0));
                 $clients['guest'] = max($clients['guest'], (int)($row['num_guest'] ?? 0));
             }
+            if ($sub === 'lan') {
+                $clients['wired'] = max($clients['wired'], (int)($row['num_user'] ?? 0));
+            }
         }
 
         $devicePayload = unifi_legacy_get('stat/device', $session, $error);
@@ -576,9 +579,23 @@ function unifi_fetch_live(?string &$error = null): array
         }
 
         $staPayload = unifi_legacy_get('stat/sta', $session, $error);
-        $clients['total'] = count(unifi_extract_rows($staPayload));
-        if ($clients['wireless'] === 0) {
-            $clients['wireless'] = $clients['total'];
+        $staRows = unifi_extract_rows($staPayload);
+        if ($staRows !== []) {
+            $clients = ['total' => 0, 'wireless' => 0, 'wired' => 0, 'guest' => 0];
+            foreach ($staRows as $row) {
+                $clients['total']++;
+                $isGuest = !empty($row['is_guest']) || !empty($row['guest']);
+                $isWired = !empty($row['is_wired']);
+                if ($isGuest) {
+                    $clients['guest']++;
+                } elseif ($isWired) {
+                    $clients['wired']++;
+                } else {
+                    $clients['wireless']++;
+                }
+            }
+        } elseif ($clients['total'] === 0 && ($clients['wireless'] > 0 || $clients['wired'] > 0)) {
+            $clients['total'] = $clients['wireless'] + $clients['wired'] + $clients['guest'];
         }
 
         $pendingPayload = unifi_legacy_get('stat/device-basic', $session, $error);
