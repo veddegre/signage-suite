@@ -440,7 +440,7 @@ function unifi_device_meta_line(array $dev): string
 
 function unifi_top_talkers_limit(): int
 {
-    return max(3, min(10, (int)cfg('unifi.TOP_TALKERS', 5)));
+    return max(3, min(10, (int)cfg('unifi.TOP_TALKERS', 4)));
 }
 
 function unifi_format_mbps(?float $mbps): string

@@ -459,7 +459,7 @@ function admin_schema(): array
             ['key' => 'BOARD_TITLE', 'label' => 'Board title', 'type' => 'text', 'default' => 'UniFi'],
             ['key' => 'BOARD_SUB', 'label' => 'Board subtitle', 'type' => 'text', 'default' => 'Network'],
             ['key' => 'MAX_DEVICES', 'label' => 'Max devices shown', 'type' => 'number', 'default' => 24],
-            ['key' => 'TOP_TALKERS', 'label' => 'Top talkers shown', 'type' => 'number', 'default' => 5],
+            ['key' => 'TOP_TALKERS', 'label' => 'Top talkers shown', 'type' => 'number', 'default' => 4],
             $tz, $ttl('Device and client queries'),
         ]],
         'rotator' => ['title' => 'Photo Rotator', 'file' => 'rotator.php', 'fields' => [
