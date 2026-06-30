@@ -131,7 +131,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         <div class="k">Devices</div>
         <div class="body">
           <?php if ($devices === []): ?>
-            <div class="nodata"><?= !empty($data['error']) ? h((string)$data['error']) : 'No devices returned from the controller.' ?></div>
+            <div class="nodata"><?= h(unifi_error_hint($data['error'] ?? null)) ?></div>
           <?php else: ?>
             <div class="devices">
               <?php foreach ($devices as $dev): ?>
@@ -162,7 +162,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           <?php if (!empty($data['stale'])): ?>
             <div class="issue warn">
               <div class="title">Serving cached data</div>
-              <div class="sub"><?= h((string)($data['error'] ?? 'Controller unreachable')) ?></div>
+              <div class="sub"><?= h(unifi_error_hint($data['error'] ?? 'Controller unreachable')) ?></div>
             </div>
           <?php endif; ?>
           <?php if ($offlineDevices !== []): ?>

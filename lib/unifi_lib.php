@@ -676,3 +676,20 @@ function unifi_health_class(string $status): string
         default => 'unknown',
     };
 }
+
+/** User-facing hint when the controller cannot be reached. */
+function unifi_error_hint(?string $error): string
+{
+    $error = trim((string)$error);
+    if ($error === '') {
+        return 'No devices returned from the controller.';
+    }
+    if (str_contains($error, 'private or reserved')) {
+        return 'LAN controller blocked. In admin go to Security → enable Allow private URL fetches → Save, then reload this board.';
+    }
+    if (str_contains($error, 'blocked URL') || str_contains($error, 'blocked destination')) {
+        return $error . ' — check Security → Allow private URL fetches for LAN controllers.';
+    }
+
+    return $error;
+}
