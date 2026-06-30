@@ -34,6 +34,7 @@ Every board is a **1920×1080** PHP page with shared styling. Configure all boar
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
+| | UniFi network | `unifi.php` | `unifi.php` | Local admin (UDM) or API key |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
 | Media | Photo rotator | `rotator.php` | `rotator.php` | — |
 | | Custom slides | `slides.php` | `slides.php?slide=…` | — |
@@ -327,6 +328,24 @@ All calls server-side; export token never reaches the kiosk. 60-second cache.
 | **Services** | Add HTTP(S) URLs to ping — empty by default |
 
 Each panel degrades independently.
+
+### unifi.php — UniFi Network
+
+**Data:** Adopted gateways, switches, and APs; online/offline state; client counts (Wi‑Fi, wired, guest); WAN/WLAN/LAN health; pending adoptions.
+
+**Dream Machine / UDM (typical — no API key needed):**
+
+1. **Controller URL** — `https://<gateway-ip>` (the UDM’s LAN IP, port 443). Do not add `/network`.
+2. **Local admin** — Settings → **Admins** → add or use a **local** account with **local access** (not a ui.com-only cloud account; MFA off for API use).
+3. Admin → **Monitoring → UniFi Network:** `UNIFI_URL`, `UNIFI_USERNAME`, `UNIFI_PASSWORD`, `UNIFI_SITE` = `default`
+4. **Security → Allow private URL fetches** on the signage server
+5. **Verify TLS** off for the UDM’s self-signed certificate
+
+The Integrations / API key UI appears only on newer **Network 9.3+** firmware. If you don’t see it, username/password is the correct path.
+
+**Optional — Integration API (newer firmware):** Settings → **Integrations** (sidebar) or Control Plane → Integrations → API key. Use instead of username/password when available.
+
+**Rotation:** `unifi.php` — quick-add under **UniFi network** in the rotation editor.
 
 ### zabbix.php — Zabbix Monitoring (JSON-RPC, 7.x)
 

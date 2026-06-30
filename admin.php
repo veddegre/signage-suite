@@ -1558,7 +1558,7 @@ $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
     'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'traffic'],
     'Daily'           => ['wotd', 'history', 'joke', 'xkcd'],
-    'Monitoring'      => ['homelab', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'signaltrace', 'zabbix'],
+    'Monitoring'      => ['homelab', 'unifi', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
