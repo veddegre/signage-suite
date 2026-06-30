@@ -398,6 +398,22 @@ function unifi_kind_label(string $kind): string
     };
 }
 
+/** Model and IP for device cards — separator only when both parts exist. */
+function unifi_device_meta_line(array $dev): string
+{
+    $parts = [];
+    $model = trim((string)($dev['model'] ?? ''));
+    $ip = trim((string)($dev['ip'] ?? ''));
+    if ($model !== '') {
+        $parts[] = $model;
+    }
+    if ($ip !== '') {
+        $parts[] = $ip;
+    }
+
+    return implode(' · ', $parts);
+}
+
 function unifi_state_online(array $device): bool
 {
     $state = strtolower(trim((string)($device['state'] ?? $device['status'] ?? '')));
@@ -513,21 +529,36 @@ function unifi_fetch_live(?string &$error = null): array
 
     if (unifi_uses_integration_api()) {
         $api = 'integration';
-        $sites = unifi_integration_get('sites', $error);
-        foreach (unifi_extract_rows($sites) as $site) {
-            if ((string)($site['id'] ?? '') === $siteId) {
-                $siteLabel = trim((string)($site['name'] ?? $siteLabel));
-                break;
+        $siteError = null;
+        $sites = unifi_integration_get('sites', $siteError);
+        if ($sites !== null) {
+            foreach (unifi_extract_rows($sites) as $site) {
+                if ((string)($site['id'] ?? '') === $siteId) {
+                    $siteLabel = trim((string)($site['name'] ?? $siteLabel));
+                    break;
+                }
             }
         }
 
         $limit = unifi_max_devices();
         $devicePayload = unifi_integration_get('sites/' . rawurlencode($siteId) . '/devices?limit=' . $limit, $error);
+        if ($devicePayload === null) {
+            $empty['error'] = $error ?: 'UniFi devices request failed';
+            $empty['api'] = $api;
+
+            return $empty;
+        }
         foreach (unifi_extract_rows($devicePayload) as $row) {
             $devices[] = unifi_normalize_integration_device($row);
         }
 
         $clientPayload = unifi_integration_get('sites/' . rawurlencode($siteId) . '/clients?limit=500', $error);
+        if ($clientPayload === null) {
+            $empty['error'] = $error ?: 'UniFi clients request failed';
+            $empty['api'] = $api;
+
+            return $empty;
+        }
         foreach (unifi_extract_rows($clientPayload) as $row) {
             $clients['total']++;
             $isGuest = !empty($row['isGuest']) || !empty($row['guest']);
@@ -542,7 +573,9 @@ function unifi_fetch_live(?string &$error = null): array
         }
 
         $pendingPayload = unifi_integration_get('pending-devices?limit=50', $error);
-        $pending = count(unifi_extract_rows($pendingPayload));
+        if ($pendingPayload !== null) {
+            $pending = count(unifi_extract_rows($pendingPayload));
+        }
 
         $offline = count(array_filter($devices, static fn($d) => empty($d['online'])));
         $health['wan'] = $offline > 0 ? 'warning' : 'ok';

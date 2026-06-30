@@ -139,7 +139,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                   <span class="dot"></span>
                   <div>
                     <div class="name"><?= h((string)($dev['name'] ?? 'Device')) ?></div>
-                    <div class="meta"><?= h(trim((string)($dev['model'] ?? '') . (($dev['ip'] ?? '') !== '' ? ' · ' . $dev['ip'] : ''))) ?></div>
+                    <div class="meta"><?= h(unifi_device_meta_line($dev)) ?></div>
                   </div>
                   <div class="side">
                     <div class="kind"><?= h((string)($dev['kind_label'] ?? '')) ?></div>
