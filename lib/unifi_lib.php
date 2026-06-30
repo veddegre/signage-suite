@@ -338,7 +338,29 @@ function unifi_legacy_get(string $path, array $session, ?string &$error = null):
     return unifi_decode_json($resp['body']);
 }
 
-function unifi_resolve_site_id(?string &$error = null): ?string
+/** @param array{cookie:string,csrf:string} $session */
+function unifi_legacy_post(string $path, array $session, array $payload, ?string &$error = null): ?array
+{
+    $site = rawurlencode(unifi_site_setting());
+    $url = unifi_legacy_url('s/' . $site . '/' . ltrim($path, '/'));
+    $headers = [];
+    if (($session['csrf'] ?? '') !== '') {
+        $headers[] = 'X-CSRF-Token: ' . $session['csrf'];
+    }
+    $resp = unifi_http($url, 'POST', $payload, $headers, $session['cookie'] ?? '');
+    if ($resp['err'] !== '') {
+        $error = 'curl: ' . $resp['err'];
+
+        return null;
+    }
+    if ($resp['code'] < 200 || $resp['code'] >= 300) {
+        $error = 'HTTP ' . $resp['code'];
+
+        return null;
+    }
+
+    return unifi_decode_json($resp['body']);
+}
 {
     $want = strtolower(unifi_site_setting());
     if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $want)) {
@@ -457,6 +479,30 @@ function unifi_bytes_r_rates(array $row): ?array
     return ['rx_bps' => $rx, 'tx_bps' => $tx];
 }
 
+/** Convert a UniFi bytes-r sample to Mbps (bytes/s on older controllers, bits/s on some gateways). */
+function unifi_bytes_r_to_mbps(float $rate): float
+{
+    if ($rate >= 50_000_000) {
+        return round($rate / 1_000_000, 1);
+    }
+
+    return round($rate * 8 / 1_000_000, 1);
+}
+
+/** @return array{download_mbps:float,upload_mbps:float}|null */
+function unifi_bytes_r_mbps(array $row): ?array
+{
+    $rates = unifi_bytes_r_rates($row);
+    if ($rates === null) {
+        return null;
+    }
+
+    return [
+        'download_mbps' => unifi_bytes_r_to_mbps($rates['rx_bps']),
+        'upload_mbps' => unifi_bytes_r_to_mbps($rates['tx_bps']),
+    ];
+}
+
 function unifi_client_display_name(array $row): string
 {
     foreach (['hostname', 'name', 'oui'] as $key) {
@@ -486,25 +532,97 @@ function unifi_find_gateway_row(array $rows): ?array
     return null;
 }
 
-/** @return array{download_mbps:?float,upload_mbps:?float,speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
-function unifi_speedtest_from_gateway(array $row): array
+/** @return array{speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_parse_speedtest_status(?array $status): array
 {
     $out = [
         'speedtest_down_mbps' => null,
         'speedtest_up_mbps' => null,
     ];
-    $status = $row['speedtest-status'] ?? $row['speedtest_status'] ?? null;
     if (!is_array($status)) {
         return $out;
     }
-    if (isset($status['xput_download'])) {
-        $out['speedtest_down_mbps'] = round((float)$status['xput_download'], 0);
+    foreach (['xput_download', 'download', 'download_mbps'] as $key) {
+        $value = (float)($status[$key] ?? 0);
+        if ($value > 0) {
+            $out['speedtest_down_mbps'] = round($value, 0);
+            break;
+        }
     }
-    if (isset($status['xput_upload'])) {
-        $out['speedtest_up_mbps'] = round((float)$status['xput_upload'], 0);
+    foreach (['xput_upload', 'upload', 'upload_mbps'] as $key) {
+        $value = (float)($status[$key] ?? 0);
+        if ($value > 0) {
+            $out['speedtest_up_mbps'] = round($value, 0);
+            break;
+        }
     }
 
     return $out;
+}
+
+function unifi_wan_has_speedtest(array $wan): bool
+{
+    return ((float)($wan['speedtest_down_mbps'] ?? 0)) >= 0.05
+        || ((float)($wan['speedtest_up_mbps'] ?? 0)) >= 0.05;
+}
+
+/** @return array{speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_speedtest_from_gateway(array $row): array
+{
+    $candidates = [
+        $row['speedtest-status-saved'] ?? null,
+        $row['speedtest-status'] ?? null,
+        $row['speedtest_status'] ?? null,
+        $row['speedtest_status_saved'] ?? null,
+    ];
+    if (isset($row['wan1']) && is_array($row['wan1'])) {
+        $candidates[] = $row['wan1']['speedtest-status-saved'] ?? null;
+        $candidates[] = $row['wan1']['speedtest-status'] ?? null;
+    }
+    foreach ($candidates as $status) {
+        if (!is_array($status)) {
+            continue;
+        }
+        $parsed = unifi_parse_speedtest_status($status);
+        if (unifi_wan_has_speedtest($parsed)) {
+            return $parsed;
+        }
+    }
+
+    return [
+        'speedtest_down_mbps' => null,
+        'speedtest_up_mbps' => null,
+    ];
+}
+
+/** @param array{cookie:string,csrf:string} $session @return array{speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
+function unifi_fetch_latest_speedtest_legacy(array $session, ?string &$error = null): array
+{
+    $empty = [
+        'speedtest_down_mbps' => null,
+        'speedtest_up_mbps' => null,
+    ];
+    $end = time() * 1000;
+    $start = $end - (7 * 24 * 3600 * 1000);
+    $payload = unifi_legacy_post('stat/report/archive.speedtest', $session, [
+        'attrs' => ['xput_download', 'xput_upload', 'latency', 'time'],
+        'start' => $start,
+        'end' => $end,
+    ], $error);
+    if ($payload === null) {
+        return $empty;
+    }
+    $rows = unifi_extract_rows($payload);
+    if ($rows === []) {
+        return $empty;
+    }
+    usort($rows, static fn(array $a, array $b): int => (int)($b['time'] ?? 0) <=> (int)($a['time'] ?? 0));
+    $parsed = unifi_parse_speedtest_status($rows[0]);
+    if (!unifi_wan_has_speedtest($parsed)) {
+        return $empty;
+    }
+
+    return $parsed;
 }
 
 /** @return array{download_mbps:?float,upload_mbps:?float,speedtest_down_mbps:?float,speedtest_up_mbps:?float} */
@@ -550,13 +668,13 @@ function unifi_wan_from_gateway_row(array $row): array
         'speedtest_up_mbps' => null,
     ];
 
-    $rates = unifi_bytes_r_rates($row);
+    $rates = unifi_bytes_r_mbps($row);
     if ($rates === null && isset($row['wan1']) && is_array($row['wan1'])) {
-        $rates = unifi_bytes_r_rates($row['wan1']);
+        $rates = unifi_bytes_r_mbps($row['wan1']);
     }
     if ($rates !== null) {
-        $wan['download_mbps'] = round($rates['rx_bps'] * 8 / 1000000, 1);
-        $wan['upload_mbps'] = round($rates['tx_bps'] * 8 / 1000000, 1);
+        $wan['download_mbps'] = $rates['download_mbps'];
+        $wan['upload_mbps'] = $rates['upload_mbps'];
     } else {
         $delta = unifi_wan_delta_mbps($row);
         $wan['download_mbps'] = $delta['download_mbps'];
@@ -611,24 +729,19 @@ function unifi_row_throughput_mbps(array $row): array
         ];
     }
 
-    $rates = unifi_bytes_r_rates($row);
+    $rates = unifi_bytes_r_mbps($row);
     if ($rates !== null) {
-        $down = round($rates['rx_bps'] * 8 / 1000000, 1);
-        $up = round($rates['tx_bps'] * 8 / 1000000, 1);
-
         return [
-            'download_mbps' => $down,
-            'upload_mbps' => $up,
-            'total_mbps' => round($down + $up, 1),
+            'download_mbps' => $rates['download_mbps'],
+            'upload_mbps' => $rates['upload_mbps'],
+            'total_mbps' => round($rates['download_mbps'] + $rates['upload_mbps'], 1),
         ];
     }
-
-    $totalBytes = (int)($row['rx_bytes'] ?? 0) + (int)($row['tx_bytes'] ?? 0);
 
     return [
         'download_mbps' => null,
         'upload_mbps' => null,
-        'total_mbps' => round($totalBytes / 1000000, 2),
+        'total_mbps' => 0.0,
     ];
 }
 
@@ -644,10 +757,10 @@ function unifi_top_talkers_from_rows(array $rows, int $limit): array
             continue;
         }
         $rates = unifi_row_throughput_mbps($row);
-        $sort = $rates['total_mbps'];
-        if (isset($rates['download_mbps'], $rates['upload_mbps']) && $rates['download_mbps'] !== null) {
-            $sort = (float)$rates['download_mbps'] + (float)$rates['upload_mbps'];
+        if ($rates['download_mbps'] === null && $rates['upload_mbps'] === null) {
+            continue;
         }
+        $sort = (float)($rates['download_mbps'] ?? 0) + (float)($rates['upload_mbps'] ?? 0);
         if ($sort < 0.05) {
             continue;
         }
@@ -910,6 +1023,13 @@ function unifi_fetch_live(?string &$error = null): array
         $gatewayRaw = unifi_find_gateway_row($deviceRows);
         if (is_array($gatewayRaw)) {
             $wan = unifi_wan_from_gateway_row($gatewayRaw);
+            if (!unifi_wan_has_speedtest($wan)) {
+                $speedtest = unifi_fetch_latest_speedtest_legacy($session, $error);
+                if (unifi_wan_has_speedtest($speedtest)) {
+                    $wan['speedtest_down_mbps'] = $speedtest['speedtest_down_mbps'];
+                    $wan['speedtest_up_mbps'] = $speedtest['speedtest_up_mbps'];
+                }
+            }
         }
 
         $staPayload = unifi_legacy_get('stat/sta', $session, $error);

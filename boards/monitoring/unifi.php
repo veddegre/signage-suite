@@ -33,6 +33,7 @@ $wan = is_array($data['wan'] ?? null) ? $data['wan'] : [];
 $topTalkers = is_array($data['top_talkers'] ?? null) ? $data['top_talkers'] : [];
 $wanPill = unifi_wan_pill_label($wan);
 $hasLiveWan = ($wan['download_mbps'] ?? null) !== null || ($wan['upload_mbps'] ?? null) !== null;
+$hasSpeedtest = unifi_wan_has_speedtest($wan);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -196,7 +197,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                   <div class="val"><?= h(unifi_format_mbps($wan['upload_mbps'] ?? null)) ?> <small>Mbps</small></div>
                 </div>
               </div>
-            <?php elseif (($wan['speedtest_down_mbps'] ?? null) !== null || ($wan['speedtest_up_mbps'] ?? null) !== null): ?>
+            <?php elseif ($hasSpeedtest): ?>
               <div class="wan-speeds">
                 <div class="wan-speed">
                   <div class="lab">Last speed test ↓</div>
