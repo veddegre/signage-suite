@@ -361,6 +361,8 @@ function unifi_legacy_post(string $path, array $session, array $payload, ?string
 
     return unifi_decode_json($resp['body']);
 }
+
+function unifi_resolve_site_id(?string &$error = null): ?string
 {
     $want = strtolower(unifi_site_setting());
     if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $want)) {
