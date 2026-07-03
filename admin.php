@@ -814,6 +814,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
 }
 
 if ($authed && admin_can_manage_users() && ($_POST['action'] ?? '') === 'save_users' && csrf_ok()) {
+    if (admin_is_super()) {
+        cfg_update(static function (array $conf): array {
+            $conf['security.OPERATOR_MULTI_SCREEN'] = isset($_POST['operator_multi_screen']);
+            return $conf;
+        });
+        cfg_reload();
+    }
     $result = users_save_from_post($_POST['USERS'] ?? []);
     if ($result['ok']) {
         $flash = 'Saved ' . (int)($result['count'] ?? 0) . ' user account' . ((int)($result['count'] ?? 0) === 1 ? '' : 's') . '.';
@@ -2803,6 +2810,16 @@ function admin_field(array $f, $val, string $board): void
         <input type="hidden" name="action" value="save_users">
         <input type="hidden" name="board" value="users">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <?php if (admin_is_super()): ?>
+        <div class="panel" style="padding:14px 18px;margin-bottom:16px">
+          <label class="check" style="font-size:16px">
+            <input type="checkbox" name="operator_multi_screen" value="1" id="operatorMultiScreen"
+              <?= users_operator_multi_screen_enabled() ? 'checked' : '' ?>>
+            Operators may manage <strong>multiple displays</strong>
+          </label>
+          <div class="help" style="margin-top:8px">When checked, each operator row below shows display checkboxes. When unchecked, one display per operator (dropdown). Also under <a href="?board=security">Security</a>.</div>
+        </div>
+        <?php endif; ?>
         <div class="users-list" id="usersList">
             <?php foreach ($userAdminRows as $ui => $urow):
               $uAuth = ($urow['auth_provider'] ?? 'local') === 'sso' ? 'sso' : 'local';
@@ -6971,6 +6988,39 @@ function syncUserAuthRow(card) {
   pw.placeholder = isSso ? 'SSO — no password' : (pw.dataset.newUser ? 'Required for new user' : 'Leave blank to keep');
 }
 
+function collectUserScreenChecked(cell) {
+  if (!cell) return [];
+  const select = cell.querySelector('.user-screen-select');
+  if (select && select.value) return [select.value];
+  return Array.from(cell.querySelectorAll('input[name*="[screens]"]:checked')).map(function (cb) { return cb.value; });
+}
+
+function refreshUserDisplayCell(card) {
+  const roleSel = card.querySelector('.user-role-select');
+  const cell = card.querySelector('.user-display-cell');
+  if (!roleSel || !cell) return;
+  const idxMatch = roleSel.name.match(/USERS\[([^\]]+)\]/);
+  if (!idxMatch) return;
+  const idInput = card.querySelector('input[name*="[id]"]');
+  const userId = idInput ? idInput.value : '';
+  const checked = collectUserScreenChecked(cell);
+  cell.innerHTML = userScreensCellHtml(idxMatch[1], roleSel.value, checked, userId);
+  if (window.OPERATOR_MULTI_SCREEN) {
+    initScreenPickers(cell);
+  }
+}
+
+function initOperatorMultiScreenToggle() {
+  const toggle = document.getElementById('operatorMultiScreen');
+  if (!toggle) return;
+  toggle.addEventListener('change', function () {
+    window.OPERATOR_MULTI_SCREEN = toggle.checked;
+    document.querySelectorAll('.user-card').forEach(function (card) {
+      if ((card.dataset.role || '') === 'operator') refreshUserDisplayCell(card);
+    });
+  });
+}
+
 function bindUserRow(card) {
   const sel = card.querySelector('.user-role-select');
   const authSel = card.querySelector('.user-auth-select');
@@ -6988,13 +7038,13 @@ function bindUserRow(card) {
     card.dataset.role = sel.value;
     const cell = card.querySelector('.user-display-cell');
     if (!cell) return;
-    const select = cell.querySelector('.user-screen-select');
-    const checks = cell.querySelectorAll('input[name*="[screens]"]:checked');
-    const checked = select && select.value ? [select.value]
-      : Array.from(checks).map(function (cb) { return cb.value; });
+    const checked = collectUserScreenChecked(cell);
     const idInput = card.querySelector('input[name*="[id]"]');
     const userId = idInput ? idInput.value : '';
     cell.innerHTML = userScreensCellHtml(idx, sel.value, checked, userId);
+    if (window.OPERATOR_MULTI_SCREEN) {
+      initScreenPickers(cell);
+    }
   });
 }
 
@@ -7120,6 +7170,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   initRotationTargetFilter();
   document.querySelectorAll('#usersList .user-card').forEach(bindUserRow);
+  initOperatorMultiScreenToggle();
+  if (document.getElementById('usersList') && window.OPERATOR_MULTI_SCREEN) {
+    initScreenPickers(document.getElementById('usersList'));
+  }
   initVideoPlaylist();
   initSplunkPanels();
   initZabbixPages();

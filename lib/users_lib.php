@@ -130,7 +130,7 @@ const USERS_OPERATOR_SCREEN_MAX = 1;
 
 function users_operator_multi_screen_enabled(): bool
 {
-    return (bool)cfg('security.OPERATOR_MULTI_SCREEN', false);
+    return (bool)cfg('security.OPERATOR_MULTI_SCREEN', true);
 }
 
 function users_operator_screen_max(): int
