@@ -388,6 +388,14 @@ Legacy single-slug configs (`KUMA_STATUS_SLUG` / `KUMA_TAGS` at board level) are
 
 **Rotation:** quick-add under **Daily** when not strip-only.
 
+### emergency.php — Emergency override (inline)
+
+**Data:** Full-screen title and body from **Rotation → Emergency override** when **Full-screen announcement** mode is active and no existing `announce.php?d=` item is selected.
+
+Not a normal content board — activated site-wide by a super admin. Also usable as a URL in an **emergency playlist**. See [rotation-and-deployment.md → Emergency override](rotation-and-deployment.md#emergency-override-super-admin).
+
+**URL:** `emergency.php` (no `?d=` key).
+
 ### tailscale.php — Tailscale mesh
 
 **Data:** Online/offline devices, IPs, OS, last seen — from the Tailscale API.

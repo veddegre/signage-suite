@@ -200,9 +200,9 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 
 | Doc | Contents |
 |-----|----------|
-| [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, ownership & sharing (users + roles), SSO, hardening |
+| [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
-| [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, scripts, PWA, DVR |
+| [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, scripts, PWA, DVR |
 | [docs/video-youtube.md](docs/video-youtube.md) | yt-dlp, cookies, headless YouTube |
 
 ---
