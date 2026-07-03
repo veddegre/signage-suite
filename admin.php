@@ -1849,7 +1849,7 @@ function admin_user_screen_picker(string $prefix, array $options, array $checked
             . '>' . h((string)$opt['name']) . '</option>';
     }
     echo '</select>';
-    echo '<div class="help" style="margin-top:6px">Only unassigned displays are listed. Enable <strong>Operators may manage multiple displays</strong> to assign more than one.</div>';
+    echo '<div class="help" style="margin-top:6px">Only unassigned displays are listed. Enable <a href="?board=security#' . h(admin_settings_field_anchor('security', 'OPERATOR_MULTI_SCREEN')) . '">Operators may manage multiple displays</a> to assign more than one.</div>';
 }
 
 /** @param array<string,array<string,mixed>> $deployStatus */
@@ -2019,6 +2019,13 @@ function admin_slides_sync_panel(array $deployStatus, array $deckStats, ?string 
       </div>
     </section>
     <?php
+}
+
+function admin_settings_field_anchor(string $board, string $key): string
+{
+    $slug = strtolower(trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($key)) ?? '', '-'));
+
+    return $board . '-' . ($slug !== '' ? $slug : 'field');
 }
 
 function admin_field(array $f, $val, string $board): void
@@ -2326,6 +2333,7 @@ function admin_field(array $f, $val, string $board): void
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; position:relative; z-index:1; }
   .entry-sharing-menu { position:fixed; z-index:1200; width:min(280px, calc(100vw - 24px)); padding:14px;
     background:var(--harbor); border:1px solid var(--line); border-radius:12px; box-shadow:0 16px 40px rgba(0,0,0,.55); }
+  .field[id^="security-"], #security-sso-setup { scroll-margin-top:88px; }
   .entry-sharing-menu[hidden] { display:none !important; }
   .entry-sharing-menu select { width:100%; max-width:none; margin-top:4px; }
   .entry-sharing-cell { width:118px; max-width:118px; vertical-align:middle; padding-right:6px !important; }
@@ -2719,7 +2727,7 @@ function admin_field(array $f, $val, string $board): void
       <h2>Audit log</h2>
       <div class="sub">Admin sign-ins, saves, and user changes. Stored in <code>cache/admin_audit.json</code> (not cleared with API cache).</div>
       <?php if (!audit_enabled()): ?>
-      <div class="flash bad">Audit logging is disabled under <strong>Security → Enable audit log</strong>.</div>
+      <div class="flash bad">Audit logging is disabled under <a href="?board=security#<?= h(admin_settings_field_anchor('security', 'AUDIT_ENABLED')) ?>">Security → Enable audit log</a>.</div>
       <?php endif; ?>
       <div class="rows-scroll" style="margin-top:12px">
       <table class="play-log audit-log">
@@ -2834,7 +2842,7 @@ function admin_field(array $f, $val, string $board): void
               <?= users_operator_multi_screen_enabled() ? 'checked' : '' ?>>
             Operators may manage <strong>multiple displays</strong>
           </label>
-          <div class="help" style="margin-top:8px">When checked, each operator row below shows display checkboxes. When unchecked, one display per operator (dropdown). Also under <a href="?board=security">Security</a>.</div>
+          <div class="help" style="margin-top:8px">When checked, each operator row below shows display checkboxes. When unchecked, one display per operator (dropdown). Also under <a href="?board=security#<?= h(admin_settings_field_anchor('security', 'OPERATOR_MULTI_SCREEN')) ?>">Security</a>.</div>
         </div>
         <?php endif; ?>
         <div class="users-list" id="usersList">
@@ -4637,7 +4645,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               continue;
           }
           $val = current_val($rawConf, $board, $f['key']); ?>
-          <div class="field">
+          <div class="field" id="<?= h(admin_settings_field_anchor($board, (string)$f['key'])) ?>">
             <?php if ($f['type'] === 'rows'):
               $cols = $f['columns'];
               $rows = [];
@@ -4812,6 +4820,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               admin_field($f, $val, $board);
             endif; ?>
           </div>
+          <?php if ($board === 'security' && ($f['key'] ?? '') === 'SSO_JIT_REQUIRE_GROUPS'): ?>
+          <?= sso_admin_setup_html() ?>
+          <?php endif; ?>
         <?php endforeach; endif; ?>
 
         <?php if ($board === 'rss'):
@@ -4828,10 +4839,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <?php admin_deploy_picker_from_screens($rssDeployScreens, $rssDeployChecked); ?>
           <span class="help" style="margin:8px 0 0">Adds <code>rss.php?feed=KEY</code> for each feed with dwell from stories × seconds per story. Leave all unchecked to skip rotation sync.</span>
         </div>
-        <?php endif; ?>
-
-        <?php if ($board === 'security'): ?>
-        <?= sso_admin_setup_html() ?>
         <?php endif; ?>
 
         <div class="actions">

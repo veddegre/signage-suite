@@ -658,7 +658,7 @@ function sso_admin_setup_html(): string
         default => 'Generic OIDC: paste the issuer URL from your provider; discovery is loaded automatically.',
     };
 
-    return '<div class="upload-box" style="margin-top:8px">'
+    return '<div class="upload-box sso-setup-box" id="security-sso-setup" style="margin-top:14px;margin-bottom:6px">'
         . '<h3>SSO setup (' . $provider . ')</h3>'
         . '<div class="help" style="margin-bottom:10px">' . $issuerHelp . '</div>'
         . '<div class="help"><strong>Redirect URI</strong> (register this in Entra / Authentik):<br>'
