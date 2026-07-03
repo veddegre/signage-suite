@@ -10,6 +10,8 @@
  *
  * Per feed you can set how many stories to cycle ('stories') and seconds per
  * story ('dwell'); omit either to use the DEFAULT_* values.
+ * Optional per-feed 'fit': auto (default), cover, or contain — see IMAGE FIT
+ * in admin. Auto shows portrait images full-height on the right with a blur fill.
  *
  * Images are pulled from media:content / media:thumbnail / enclosure /
  * itunes:image, falling back to the first <img> inside the article body.
@@ -64,9 +66,21 @@ if ($feedKey === null || !isset(FEEDS[$feedKey])) {
     <?php
     exit;
 }
+function rss_image_fit_setting(array $feed): string
+{
+    $raw = trim((string)($feed['fit'] ?? ''));
+    $fit = strtolower($raw !== '' ? $raw : (string)cfg('rss.FIT', 'auto'));
+    if (!in_array($fit, ['auto', 'cover', 'contain'], true)) {
+        return 'auto';
+    }
+
+    return $fit;
+}
+
 $feed    = FEEDS[$feedKey];
 $stories = max(1, (int)($feed['stories'] ?? DEFAULT_STORIES));
 $dwell   = max(3, (int)($feed['dwell'] ?? DEFAULT_DWELL));
+$imageFit = rss_image_fit_setting($feed);
 
 function cached_get(string $url, string $key): ?string
 {
@@ -228,13 +242,29 @@ $payload = array_map(fn($i) => [
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
 
-  .photo { position:absolute; inset:0; background-position:center; background-size:cover;
-           opacity:0; transition:opacity 1.6s ease; }
+  .photo { position:absolute; inset:0; opacity:0; transition:opacity 1.6s ease;
+           --img:none; background-image:var(--img); background-repeat:no-repeat; }
   .photo.show { opacity:1; }
-  .photo::after { content:''; position:absolute; inset:0;
+  .photo.fit-cover { background-size:cover; background-position:center; }
+  .photo.fit-contain { background-size:contain; background-position:center; }
+  .photo.fit-portrait { background-size:contain; background-position:center right 72px; }
+  .photo.fit-contain::before,
+  .photo.fit-portrait::before { content:''; position:absolute; inset:-40px;
+    background-image:var(--img); background-size:cover; background-position:center;
+    filter:blur(56px) brightness(0.38) saturate(1.12); transform:scale(1.06); z-index:0; }
+  .photo::after { content:''; position:absolute; inset:0; z-index:1; pointer-events:none;
     background:linear-gradient(90deg, rgba(12,20,34,.96) 0%, rgba(12,20,34,.86) 34%,
                                        rgba(12,20,34,.45) 62%, rgba(12,20,34,.25) 100%),
                linear-gradient(0deg, rgba(12,20,34,.85) 0%, rgba(12,20,34,0) 38%); }
+  .photo.fit-portrait::after {
+    background:linear-gradient(90deg, rgba(12,20,34,.98) 0%, rgba(12,20,34,.94) 38%,
+                                       rgba(12,20,34,.55) 52%, rgba(12,20,34,.12) 72%,
+                                       rgba(12,20,34,0) 88%),
+               linear-gradient(0deg, rgba(12,20,34,.88) 0%, rgba(12,20,34,0) 36%); }
+  .photo.fit-contain::after {
+    background:linear-gradient(90deg, rgba(12,20,34,.92) 0%, rgba(12,20,34,.72) 28%,
+                                       rgba(12,20,34,.72) 72%, rgba(12,20,34,.92) 100%),
+               linear-gradient(0deg, rgba(12,20,34,.82) 0%, rgba(12,20,34,0) 34%); }
   @media (prefers-reduced-motion: reduce) { .photo, .text { transition:none !important; } }
 
   .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:5;
@@ -300,6 +330,7 @@ $payload = array_map(fn($i) => [
     const STORIES = <?= json_encode($payload, JSON_UNESCAPED_SLASHES) ?>;
     const DWELL   = <?= $dwell ?> * 1000;
     const FEED    = <?= json_encode($feed['name']) ?>;
+    const IMAGE_FIT = <?= json_encode($imageFit) ?>;
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const SETTLE  = <?= (int)$settleMs ?>;
     const photos  = [document.getElementById('photoA'), document.getElementById('photoB')];
@@ -314,11 +345,34 @@ $payload = array_map(fn($i) => [
 
     function preload(src) {
       return new Promise(res => {
-        if (!src) return res(false);
+        if (!src) return res(null);
         const i = new Image();
-        i.onload = () => res(true); i.onerror = () => res(false);
+        i.onload = () => res(i);
+        i.onerror = () => res(null);
         i.src = src;
       });
+    }
+
+    function cssUrl(src) {
+      return "url('" + String(src).replace(/'/g, '%27') + "')";
+    }
+
+    function resolveFitClass(img) {
+      let mode = IMAGE_FIT;
+      if (mode === 'auto') {
+        mode = img && img.naturalHeight > img.naturalWidth * 1.05 ? 'portrait' : 'cover';
+      }
+      return 'fit-' + mode;
+    }
+
+    function applyPhotoLayer(el, img) {
+      el.classList.remove('fit-cover', 'fit-contain', 'fit-portrait');
+      if (!img) {
+        el.style.removeProperty('--img');
+        return;
+      }
+      el.style.setProperty('--img', cssUrl(img.src));
+      el.classList.add(resolveFitClass(img));
     }
 
     function notifyDone() {
@@ -344,10 +398,10 @@ $payload = array_map(fn($i) => [
         idx = 0;
       }
       const s = STORIES[idx];
-      const ok = await preload(s.image);
+      const img = await preload(s.image);
 
       const back = 1 - front;
-      photos[back].style.backgroundImage = ok ? "url('" + s.image.replace(/'/g, "%27") + "')" : 'none';
+      applyPhotoLayer(photos[back], img);
       photos[back].classList.add('show');
       photos[front].classList.remove('show');
       front = back;
