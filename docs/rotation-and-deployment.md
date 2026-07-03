@@ -8,22 +8,40 @@ Screens, playlists, dwell times, and hour windows (0–23, overnight 22→6 supp
 
 Two stacked iframes preload each board before crossfade. Hang timeout skips pages that fail to load. Weather ticker lives in the shell (persistent across transitions).
 
+Optional **hero status strip** — a bar above the ticker showing live Kuma/Zabbix/announcement/ntfy snippets without burning rotation airtime. Configure per display under **Rotation → Display options** (enable strip, add up to four sources, height). The shell polls `board.php?api=hero` every 30s.
+
 ### Display settings (super admin)
 
-Open **Display settings** on the Rotation page:
+Open **Display settings** on the Rotation page (screen list, names, shared editors):
 
 | Setting | Purpose |
 |---------|---------|
+| Shared editors | Operators who may manage the full display (playlist, options, deploy) |
 | Weather ticker | Per-screen NWS ticker on/off |
 | Clock | Overlay on/off |
 | Debug | Show debug overlay |
 | Crossfade / settle / hang | Timings in ms (blank = global default) |
 | Weighted / Shuffle | Rotation mode (see below) |
+| Hero status strip | Persistent Kuma / Zabbix / announce / ntfy bar above ticker |
 | Blank hours / CEC | HDMI-CEC power schedule |
 
-Operators with **multiple displays** assigned see a playlist panel per screen (or a combined view where the UI groups their displays). Deploy pickers on **Slides**, **Photo Rotator**, **RSS**, and **Video** target any display they own.
+Operators with **multiple displays** assigned, or **shared editors** on a display, see a playlist panel per screen (or a combined view where the UI groups their displays). Deploy pickers on **Slides**, **Photo Rotator**, **RSS**, and **Video** target any display they may fully edit.
 
-Operators see a smaller options block inside their assigned playlist panel(s).
+Operators see display options (including hero strip) inside their assigned or shared playlist panel(s).
+
+### Emergency override (super admin)
+
+**Rotation → Emergency override** — site-wide takeover within ~30 seconds on every kiosk:
+
+| Mode | Effect |
+|------|--------|
+| **Forced ticker** | Normal rotation continues; a custom message runs in the alert bar on every display. Optionally **include NWS weather alerts** in the same ticker (your message first). |
+| **Full-screen announcement** | Every display shows one message — inline text (`emergency.php`) or an existing `announce.php?d=` item. |
+| **Emergency playlist** | Every display’s rotation is replaced with the same URL list until release. |
+
+Save draft content, then **Activate on all displays**. **Release** restores per-display playlists. While active, operators cannot save rotation changes (super admins still can). Actions are audit-logged.
+
+Optional: **Auto-release** after N minutes, **ntfy** push on activate/release/expiry (topic defaults to the ntfy board poll topic), and a visible banner on **Status** for all admins.
 
 ### Playlists
 
@@ -56,6 +74,8 @@ Define screens under **Rotation → Display settings** (e.g. `main` / Living Roo
 | `board.php?screen=garage` | garage |
 
 Assign each display to **one operator** under **Users** (primary owner). With **Security → Operators may manage multiple displays** enabled (default), one operator may own several screens and manage all of their playlists and deploy targets.
+
+**Shared editors** (super admin → **Rotation** → expand a display → check operators under **Shared editing**) may manage that display’s **full** configuration: playlist order, dwell/hours/skip, display options, hero strip, and deploy/sync — including slides and quick-add boards owned by the primary operator. Shared editors do not gain access to other displays or unrelated content boards unless they own or are shared on those rows separately.
 
 The **Users** display picker shows only unassigned screens plus that operator’s current assignments — screens assigned to someone else are omitted.
 

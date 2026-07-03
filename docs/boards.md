@@ -21,6 +21,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
 | | This day in history | `history.php` | `history.php` | — |
 | | Dad jokes | `joke.php` | `joke.php` | — |
+| | Announcements | `announce.php?d=<key>` | `announce.php?d=<key>` | — |
 | | XKCD comic | `xkcd.php` | `xkcd.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
@@ -37,6 +38,9 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | UniFi network | `unifi.php` | `unifi.php` | Local admin (UDM) or API key |
+| | Uptime Kuma | `kuma.php?d=<key>` | `kuma.php?d=<key>` | Status page slug per page and/or API key |
+| | Tailscale | `tailscale.php` | `tailscale.php` | Tailscale API key |
+| | ntfy alerts | `ntfy.php` | `ntfy.php` | Webhook token and/or poll topic |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
 | Media | Photo rotator | `rotator.php` | `rotator.php` | — |
 | | Custom slides | `slides.php` | `slides.php?slide=…` | — |
@@ -348,6 +352,64 @@ The Integrations / API key UI appears only on newer **Network 9.3+** firmware. I
 **Optional — Integration API (newer firmware):** Settings → **Integrations** (sidebar) or Control Plane → Integrations → API key. Use instead of username/password when available.
 
 **Rotation:** `unifi.php` — quick-add under **UniFi network** in the rotation editor.
+
+### kuma.php — Uptime Kuma
+
+**Data:** Monitor up/down grid, ping, 24h uptime (when available), summary counts, and a **Down now** panel.
+
+**Multiple pages:** `kuma.php?d=<key>` — same pattern as Zabbix and Splunk. Each page has its own status page slug, optional tag filter, title, and sharing.
+
+**Setup:**
+
+1. **Uptime Kuma URL** — base URL, e.g. `http://192.168.x.x:3001` (board settings)
+2. **Per page — status page slug** — from **Status Pages** in Kuma (works without an API key; uses `/api/status-page/heartbeat/{slug}`)
+3. **Or board API key** — **Settings → API Keys** in Uptime Kuma (`Authorization: Bearer …`). Lists all monitors; optional **tag filter** per page (comma-separated)
+4. **Security → Allow private URL fetches** when Kuma is on your LAN
+
+Legacy single-slug configs (`KUMA_STATUS_SLUG` / `KUMA_TAGS` at board level) are migrated automatically to a `main` page until you save new pages in admin.
+
+**Rotation:** `kuma.php?d=<key>` — quick-add lists each configured page under **Uptime Kuma** in the rotation editor.
+
+### announce.php — Announcements & countdown
+
+**Data:** Full-screen title, message body, or live countdown to a date/time.
+
+**Multiple items:** `announce.php?d=<key>` — one rotation row per admin entry (unless **Strip only**).
+
+| Setting | Purpose |
+|---------|---------|
+| Mode | **announcement** or **countdown** |
+| Countdown until | `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` |
+| Show from / Hide after | Optional schedule window |
+| Strip only | Hero strip only — omitted from rotation quick-add; add via **Rotation → hero strip** |
+| Off wall | Skip in rotation |
+
+**Hero strip:** pick the item key under **Rotation → Display options → Strip sources**, or choose **All active strip-only items** to rotate every active strip-only row in one bar.
+
+**Rotation:** quick-add under **Daily** when not strip-only.
+
+### tailscale.php — Tailscale mesh
+
+**Data:** Online/offline devices, IPs, OS, last seen — from the Tailscale API.
+
+**Setup:**
+
+1. **Tailnet name** — your tailnet slug (admin → **Monitoring → Tailscale**)
+2. **API key** — [Tailscale admin → Keys](https://login.tailscale.com/admin/settings/keys) with **Devices read**
+3. **Security → Allow private URL fetches** not required (cloud API)
+
+**Rotation:** `tailscale.php` — quick-add when URL and key are configured.
+
+### ntfy.php — ntfy alerts
+
+**Data:** Recent alert titles from a local cache — shown on the full board or in the hero strip.
+
+**Ingest (pick one or both):**
+
+1. **Webhook** — set **Webhook token**, POST JSON to `ntfy_webhook.php` with header `X-Signage-Token: <token>` (or `?token=`). Optional `?topic=` tags the message.
+2. **Poll topic** — set **Poll topic** and **ntfy server** (default `https://ntfy.sh`). Signage polls `{server}/{topic}/json` on an interval (default 30s) and merges into the same cache.
+
+**Rotation:** `ntfy.php` — or add **ntfy alerts** as a hero strip source on a display.
 
 ### zabbix.php — Zabbix Monitoring (JSON-RPC, 7.x)
 

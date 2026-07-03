@@ -18,7 +18,7 @@ Accounts live in `config/users.json`, blocked from direct HTTP like `settings.js
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **UniFi Network**, **Calendar**, **Rotation** (assigned display(s) only); **Account**, **Status** |
+| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **UniFi Network**, **Calendar**, **Rotation** (assigned display(s) and shared-editor displays); **Account**, **Status** |
 
 ### Sidebar layout
 
@@ -28,7 +28,8 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 |-------|--------|
 | **Setup** | Security, Rotation, Ticker |
 | **Weather & home** | Weather, Lake, Webcam, Photo, Air, Sports, Calendar, Traffic |
-| **Monitoring** | Homelab, SignalTrace, UniFi Network, Zabbix |
+| **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy, Zabbix |
+| **Daily** | Word of the day, This day in history, Dad jokes, Announcements, XKCD |
 | **Media** | Slides, Photo Rotator, Video, RSS |
 | **Dashboards** | Grafana, Splunk Panels, Splunk Published, Websites |
 
@@ -61,6 +62,21 @@ When assigning displays on **Users**, the picker lists only:
 Screens owned by **other** operators are **hidden** (not greyed out) to avoid confusion.
 
 Operators with multiple displays can manage rotation, deploy targets, and per-screen playlists for **all** of their assigned screens. Super admins see every display.
+
+### Shared display editing
+
+Super admins assign **shared editors** per display under **Rotation** (checkboxes in each playlist panel). A shared editor is an operator who is **not** the primary owner but may manage that display’s **full** configuration:
+
+- Playlist order, dwell, hour windows, skip, weights
+- Display options (ticker, shuffle/weighted, crossfade timings, **hero status strip**)
+- Deploy and sync (slides, photos, etc.) including content owned by the primary operator on that display
+- Rotation quick-add for boards visible to the primary owner
+
+Shared editors do **not** automatically see the primary owner’s content on **other** displays, or unrelated boards in admin — only what they own, what is shared with them, and what belongs to the primary owner **for displays they edit**.
+
+### Emergency override
+
+Super admins only — **Rotation → Emergency override**. Forces one of three modes on **every** display (within ~30s): custom **ticker** over normal rotation (optionally with NWS weather alerts in the same bar), a single **announcement** wall, or a shared **emergency playlist**. Optional **auto-release**, **ntfy** notifications, and a banner on **Status** for all admins. Operators cannot save rotation while it is active. **Release** restores normal per-display behavior. Logged under **Audit**.
 
 ## Content ownership & sharing
 

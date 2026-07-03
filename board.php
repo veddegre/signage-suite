@@ -20,12 +20,17 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/rotation_lib.php';
 require_once __DIR__ . '/lib/presence_lib.php';
+require_once __DIR__ . '/lib/hero_strip_lib.php';
+require_once __DIR__ . '/lib/emergency_lib.php';
 
 // Which screen is this device? board.php?screen=garage etc.; default 'main'.
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 
 $runtime = rotation_screen_runtime($SCREEN);
+$heroStrip = hero_strip_render(is_array($runtime['hero_strip'] ?? null) ? $runtime['hero_strip'] : [], $SCREEN);
+$heroStripHeight = !empty($heroStrip['enabled']) ? (int)($heroStrip['height'] ?? 120) : 0;
 $blankActive = (bool)$runtime['blank'];
+$emergencyTicker = emergency_ticker_forces_display();
 $showTicker = rotation_screen_ticker_enabled($SCREEN);
 $showDebug = !empty($runtime['show_debug']) || (isset($_GET['debug']) && (string)$_GET['debug'] === '1');
 
@@ -40,6 +45,19 @@ if (($_GET['api'] ?? '') === 'cec') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
     echo json_encode(rotation_cec_api_payload($SCREEN), JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if (($_GET['api'] ?? '') === 'hero') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    $strip = hero_strip_render(is_array($runtime['hero_strip'] ?? null) ? $runtime['hero_strip'] : [], $SCREEN);
+    echo json_encode([
+        'enabled' => !empty($strip['enabled']),
+        'html' => (string)($strip['html'] ?? ''),
+        'height' => (int)($strip['height'] ?? 0),
+        'class' => (string)($strip['class'] ?? ''),
+    ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -71,17 +89,28 @@ if (($_GET['api'] ?? '') === 'presence') {
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; }
   iframe { position:absolute; top:0; left:0; width:1920px;
-           height:calc(1080px - var(--signage-ticker-inset, 0px)); border:0;
+           height:calc(1080px - var(--signage-ticker-inset, 0px) - var(--signage-hero-inset, 0px)); border:0;
            opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease;
            pointer-events:none; }
   iframe.show { opacity:1; }
+  #hero-strip { position:absolute; left:0; right:0; bottom:var(--signage-ticker-inset, 0px); height:var(--signage-hero-inset, 0px);
+               display:flex; align-items:center; gap:18px; padding:0 28px; overflow:hidden;
+               background:rgba(20,31,51,.94); border-top:1px solid #26344d; z-index:9000;
+               font:600 22px/1.3 'IBM Plex Sans',system-ui,sans-serif; color:#edf2fb; }
+  #hero-strip:empty { display:none; }
+  #hero-strip .hero-strip-item { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:640px; }
+  #hero-strip .hero-strip-item.label { color:#ffb347; text-transform:uppercase; letter-spacing:.08em; font-size:18px; max-width:220px; }
+  #hero-strip .hero-strip-item.ok { color:#59db8f; }
+  #hero-strip .hero-strip-item.bad { color:#e45959; }
+  #hero-strip .hero-strip-item.warn { color:#ffc859; }
+  #hero-strip .hero-strip-item.muted { color:#8aa0c0; }
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
            flex-direction:column; gap:16px; color:#8aa0c0; font-family:system-ui,sans-serif; }
   #empty h1 { font-size:48px; color:#ffb347; }
   #empty p { font-size:24px; }
   #blank { position:absolute; inset:0; z-index:10000; background:#000; display:none; }
-  body.signage-blank #signage-ticker-root,
-  body.signage-blank #signage-ticker { display:none !important; }
+  body.signage-blank:not(.signage-emergency-ticker) #signage-ticker-root,
+  body.signage-blank:not(.signage-emergency-ticker) #signage-ticker { display:none !important; }
   #rotate-debug { position:absolute; top:24px; left:24px; z-index:9500; pointer-events:none;
                   max-width:880px; padding:14px 18px; border-radius:10px;
                   background:rgba(0,0,0,.78); color:#edf2fb; font:600 22px/1.35 system-ui,sans-serif;
@@ -96,7 +125,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   #rotate-debug.rd-wait .rd-status { color:#8aa0c0; }
 </style>
 </head>
-<body<?= $blankActive ? ' class="signage-blank"' : '' ?>>
+<body<?= $blankActive ? ' class="signage-blank' . ($emergencyTicker ? ' signage-emergency-ticker' : '') . '"' : ($emergencyTicker ? ' class="signage-emergency-ticker"' : '') ?> style="--signage-hero-inset: <?= (int)$heroStripHeight ?>px">
 <div id="empty">
   <h1>No pages in rotation</h1>
   <p>Add boards in admin.php → Rotation, or check hour windows and Skip flags.</p>
@@ -105,6 +134,7 @@ if (($_GET['api'] ?? '') === 'presence') {
 <div id="rotate-debug" aria-live="polite"<?= $showDebug ? '' : ' style="display:none"' ?>></div>
 <iframe id="fA" allow="autoplay; fullscreen"></iframe>
 <iframe id="fB" allow="autoplay; fullscreen"></iframe>
+<div id="hero-strip" aria-live="polite"><?= !empty($heroStrip['html']) ? $heroStrip['html'] : '' ?></div>
 <?php signage_kiosk_pointer_shield_html(); ?>
 <script>
   const PAGES   = <?= json_encode($runtime['pages'], JSON_UNESCAPED_SLASHES) ?>;
@@ -120,6 +150,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
+  const HERO_STRIP = <?= json_encode(!empty($heroStrip['enabled'])) ?>;
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
   let showDebug = SHOW_DEBUG;
@@ -573,6 +604,30 @@ if (($_GET['api'] ?? '') === 'presence') {
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') pollRotationConfig();
   });
+
+  function pollHeroStrip() {
+    if (!HERO_STRIP) return;
+    const q = SCREEN === 'main' ? 'board.php?api=hero' : ('board.php?api=hero&screen=' + encodeURIComponent(SCREEN));
+    fetch(q, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.enabled) return;
+        const el = document.getElementById('hero-strip');
+        if (!el) return;
+        if ((data.html || '') !== el.innerHTML) el.innerHTML = data.html || '';
+        const h = Math.max(0, (+data.height || 0)) + 'px';
+        if (document.body.style.getPropertyValue('--signage-hero-inset') !== h) {
+          document.body.style.setProperty('--signage-hero-inset', h);
+        }
+      })
+      .catch(function () {});
+  }
+  if (HERO_STRIP) {
+    setInterval(pollHeroStrip, POLL_MS);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') pollHeroStrip();
+    });
+  }
 
   // If rotation stalls (lost timer, hung iframe, throttled background tab), recover.
   setInterval(function () {

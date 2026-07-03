@@ -26,8 +26,11 @@
 if (isset($_GET['noticker'])) return;
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/lib/emergency_lib.php';
 
-if (!signage_ticker_enabled()) {
+$emergencyTicker = emergency_ticker_forces_display();
+
+if (!signage_ticker_enabled() && !$emergencyTicker) {
     if (isset($_GET['api']) && $_GET['api'] === '1') {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
@@ -77,8 +80,8 @@ function signage_ticker_event_kind(string $event): string
 }
 }
 
-if (!function_exists('signage_ticker_alerts')) {
-function signage_ticker_alerts(): array
+if (!function_exists('signage_weather_ticker_alerts')) {
+function signage_weather_ticker_alerts(): array
 {
     if (TICKER_DEMO) {
         return [[
@@ -139,6 +142,23 @@ function signage_ticker_alerts(): array
 }
 }
 
+if (!function_exists('signage_ticker_alerts')) {
+function signage_ticker_alerts(): array
+{
+    require_once __DIR__ . '/lib/emergency_lib.php';
+    $emergency = emergency_ticker_alert();
+    if ($emergency !== null) {
+        if (emergency_ticker_show_weather()) {
+            return array_merge([$emergency], signage_weather_ticker_alerts());
+        }
+
+        return [$emergency];
+    }
+
+    return signage_weather_ticker_alerts();
+}
+}
+
 // JSON feed for client-side polling (board.php shell, direct board views).
 if (isset($_GET['api']) && $_GET['api'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
@@ -147,6 +167,8 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
         'alerts' => signage_ticker_alerts(),
         'mode'   => TICKER_MODE,
         'demo'   => (bool)TICKER_DEMO,
+        'emergency' => $emergencyTicker,
+        'emergency_weather' => emergency_ticker_show_weather(),
     ], JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -244,7 +266,8 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
   }
 
   function apply(data) {
-    if (document.body.classList.contains('signage-blank')) {
+    var emergency = !!(data && data.emergency);
+    if (document.body.classList.contains('signage-blank') && !emergency) {
       var blankRoot = document.getElementById('signage-ticker-root');
       stopAnim();
       if (blankRoot) blankRoot.innerHTML = '';
@@ -305,13 +328,12 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
     if (document.visibilityState === 'visible') refresh();
   });
   document.addEventListener('signage-blank', function (ev) {
-    if (ev.detail && ev.detail.on) apply({ alerts: [] });
+    if (ev.detail && ev.detail.on) refresh();
     else refresh();
   });
   if (typeof MutationObserver !== 'undefined') {
     new MutationObserver(function () {
-      if (document.body.classList.contains('signage-blank')) apply({ alerts: [] });
-      else refresh();
+      refresh();
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
 })();

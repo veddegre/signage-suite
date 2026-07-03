@@ -2266,7 +2266,7 @@ function slides_repair_deck_untargeted(?array $deck = null): array
 }
 
 /** Files the current user may push to rotation. null = super admin (manage entire slide block). */
-function slides_deploy_scope_files(?array $deck = null): ?array
+function slides_deploy_scope_files(?array $deck = null, ?string $screen = null): ?array
 {
     require_once __DIR__ . '/users_lib.php';
     if (admin_is_super()) {
@@ -2277,7 +2277,7 @@ function slides_deploy_scope_files(?array $deck = null): ?array
         return [];
     }
     $files = [];
-    foreach (admin_filter_owned_list($deck) as $slide) {
+    foreach (admin_filter_list_for_deploy_scope($deck, $screen) as $slide) {
         if (!is_array($slide)) {
             continue;
         }

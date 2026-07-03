@@ -119,6 +119,8 @@ function audit_action_label(string $action): string
         'media.photo_upload' => 'Photo uploaded',
         'media.photo_delete' => 'Photo deleted',
         'media.video_fetch' => 'Videos fetched',
+        'emergency_activate' => 'Emergency activated',
+        'emergency_release' => 'Emergency released',
         default => $action,
     };
 }

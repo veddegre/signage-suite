@@ -14,7 +14,7 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
-    'grafana', 'splunk', 'splunkdash', 'zabbix', 'unifi', 'calendar', 'account',
+    'grafana', 'splunk', 'splunkdash', 'zabbix', 'unifi', 'kuma', 'announce', 'tailscale', 'ntfy', 'calendar', 'account',
 ];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
@@ -542,7 +542,7 @@ function admin_username(): string
     return is_array($user) ? (string)($user['username'] ?? '') : '';
 }
 
-/** @return list<string> Screen keys this session may manage. Super = all displays; operators = assigned displays. */
+/** @return list<string> Screen keys this session may manage. Super = all displays; operators = assigned + shared-editor displays. */
 function admin_allowed_screen_keys(): array
 {
     require_once __DIR__ . '/rotation_lib.php';
@@ -557,14 +557,24 @@ function admin_allowed_screen_keys(): array
     $out = [];
     foreach (users_normalize_screens($user['screens'] ?? []) as $key) {
         if (isset($allowed[$key])) {
-            $out[] = $key;
+            $out[$key] = true;
             if (!users_operator_multi_screen_enabled()) {
                 break;
             }
         }
     }
+    $uid = (string)($user['id'] ?? '');
+    if ($uid !== '') {
+        foreach (rotation_shared_editor_screen_keys($uid) as $key) {
+            if (isset($allowed[$key])) {
+                $out[$key] = true;
+            }
+        }
+    }
+    $keys = array_keys($out);
+    sort($keys);
 
-    return $out;
+    return $keys;
 }
 
 function admin_can_screen(string $screen): bool
@@ -575,6 +585,135 @@ function admin_can_screen(string $screen): bool
         return false;
     }
     return in_array($screen, admin_allowed_screen_keys(), true);
+}
+
+/** Primary operator user id for a display (Users assignment). */
+function admin_screen_primary_owner_id(string $screen): ?string
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === '') {
+        return null;
+    }
+    $uid = users_screen_assignments()[$screen] ?? null;
+
+    return is_string($uid) && $uid !== '' ? $uid : null;
+}
+
+/** True when the current user is a shared editor (not the primary owner) on this display. */
+function admin_is_shared_editor_for_screen(string $screen): bool
+{
+    if (admin_is_super()) {
+        return false;
+    }
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    $uid = admin_user_id();
+    if ($uid === null || $screen === '') {
+        return false;
+    }
+    if (admin_screen_primary_owner_id($screen) === $uid) {
+        return false;
+    }
+
+    return in_array($uid, rotation_screen_shared_editors($screen), true);
+}
+
+function admin_user_owns_screen(string $screen): bool
+{
+    $uid = admin_user_id();
+
+    return $uid !== null && admin_screen_primary_owner_id($screen) === $uid;
+}
+
+/** Full rotation/deploy control on a display (primary owner, shared editor, or super admin). */
+function admin_has_full_screen_edit(string $screen): bool
+{
+    if (admin_is_super()) {
+        return true;
+    }
+    require_once __DIR__ . '/rotation_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    if (!admin_can_screen($screen)) {
+        return false;
+    }
+
+    return admin_user_owns_screen($screen) || admin_is_shared_editor_for_screen($screen);
+}
+
+/**
+ * User ids whose registry/deck rows may be deployed when managing a display.
+ * Always includes the current user; shared editors also inherit the primary owner's content.
+ * @return list<string>
+ */
+function admin_deploy_scope_user_ids(?string $screen = null): array
+{
+    if (admin_is_super()) {
+        return [];
+    }
+    $uid = admin_user_id();
+    $ids = $uid !== null ? [$uid] : [];
+    if ($screen !== null && $screen !== '') {
+        require_once __DIR__ . '/rotation_lib.php';
+        $screen = rotation_normalize_screen_key($screen);
+        if (admin_is_shared_editor_for_screen($screen)) {
+            $owner = admin_screen_primary_owner_id($screen);
+            if ($owner !== null && $owner !== '' && !in_array($owner, $ids, true)) {
+                $ids[] = $owner;
+            }
+        }
+
+        return $ids;
+    }
+    foreach (admin_allowed_screen_keys() as $sk) {
+        if (!admin_is_shared_editor_for_screen($sk)) {
+            continue;
+        }
+        $owner = admin_screen_primary_owner_id($sk);
+        if ($owner !== null && $owner !== '' && !in_array($owner, $ids, true)) {
+            $ids[] = $owner;
+        }
+    }
+
+    return $ids;
+}
+
+/** Whether a config row is visible for deploy/quick-add (own, shared, or primary-owner scope). */
+function admin_entry_visible_for_deploy(?array $entry, ?string $screen = null): bool
+{
+    if (!is_array($entry)) {
+        return false;
+    }
+    if (admin_is_super()) {
+        return true;
+    }
+    if (admin_entry_visible($entry)) {
+        return true;
+    }
+    $self = admin_user_id();
+    foreach (admin_deploy_scope_user_ids($screen) as $scopeUid) {
+        if ($scopeUid === $self || $scopeUid === null || $scopeUid === '') {
+            continue;
+        }
+        if (admin_entry_visible_for_user($entry, $scopeUid)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** @param list<array<string,mixed>> $list */
+function admin_filter_list_for_deploy_scope(array $list, ?string $screen = null): array
+{
+    if (admin_is_super()) {
+        return $list;
+    }
+
+    return array_values(array_filter(
+        $list,
+        static fn($row) => is_array($row) && admin_entry_visible_for_deploy($row, $screen)
+    ));
 }
 
 /** @param array<string,mixed> $screens From rotation_screens() */

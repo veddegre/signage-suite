@@ -23,6 +23,10 @@ require_once __DIR__ . '/lib/presence_lib.php';
 require_once __DIR__ . '/lib/traffic_lib.php';
 require_once __DIR__ . '/lib/splunk_lib.php';
 require_once __DIR__ . '/lib/zabbix_lib.php';
+require_once __DIR__ . '/lib/kuma_lib.php';
+require_once __DIR__ . '/lib/announce_lib.php';
+require_once __DIR__ . '/lib/hero_strip_lib.php';
+require_once __DIR__ . '/lib/emergency_lib.php';
 require_once __DIR__ . '/lib/web_lib.php';
 require_once __DIR__ . '/lib/users_lib.php';
 require_once __DIR__ . '/lib/sso_lib.php';
@@ -272,6 +276,43 @@ if ($authed && in_array($board, ['rotation', 'status'], true) && ($_GET['action'
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
     echo json_encode(admin_filter_presence_dashboard(signage_presence_dashboard()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'emergency_activate') {
+    require_once __DIR__ . '/lib/audit_lib.php';
+    $existing = emergency_config();
+    $draft = emergency_config_from_post($_POST, $existing);
+    $draft['mode'] = strtolower(trim((string)($_POST['EMERGENCY_ACTIVATE_MODE'] ?? $_POST['EMERGENCY_MODE'] ?? $draft['mode'] ?? 'ticker')));
+    $err = emergency_validate_for_activate($draft);
+    if ($err !== null) {
+        $flash = $err;
+        $flashOk = false;
+    } elseif (emergency_activate($draft, admin_username())) {
+        audit_log('emergency_activate', emergency_status_label(), ['mode' => $draft['mode']]);
+        $flash = 'Emergency override activated — all displays will update within ~30 seconds.';
+        $flashOk = true;
+        cfg_reload();
+    } else {
+        $flash = 'Emergency activation failed.';
+        $flashOk = false;
+    }
+    header('Location: admin.php?board=rotation');
+    exit;
+}
+
+if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'emergency_release') {
+    require_once __DIR__ . '/lib/audit_lib.php';
+    if (emergency_release()) {
+        audit_log('emergency_release', 'Emergency override released');
+        $flash = 'Emergency override released — displays return to normal playlists.';
+        $flashOk = true;
+        cfg_reload();
+    } else {
+        $flash = 'Release failed.';
+        $flashOk = false;
+    }
+    header('Location: admin.php?board=rotation');
     exit;
 }
 
@@ -586,10 +627,50 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
     }
+    if ($board === 'kuma') {
+        if (!admin_is_super() && !empty($_POST['kuma_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['kuma_use_json'])) {
+            $parsed = kuma_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Pages JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['kuma.PAGES']);
+            } else {
+                $conf['kuma.PAGES'] = $parsed;
+            }
+        } else {
+            $existingPages = is_array($conf['kuma.PAGES'] ?? null) ? $conf['kuma.PAGES'] : [];
+            $outV = kuma_pages_from_post($_POST['PAGES'] ?? []);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = kuma_normalize_page_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
+            if ($mergedPages === []) {
+                unset($conf['kuma.PAGES']);
+            } else {
+                $conf['kuma.PAGES'] = $mergedPages;
+            }
+        }
+    }
     if ($board === 'rotation') {
+        $rotationSaveLocked = emergency_blocks_operator_rotation();
+        if ($rotationSaveLocked) {
+            $errors[] = 'Emergency override is active — only super admins can change rotation until it is released.';
+        }
         $existingScreens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
         $protectedScreens = array_flip(users_protected_screen_keys());
-        if (admin_is_super()) {
+        if (admin_is_super() && !$rotationSaveLocked) {
         $screensOut = [];
         foreach ($_POST['SCREENS'] ?? [] as $row) {
             if (!is_array($row)) {
@@ -607,6 +688,19 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             );
             $screensOut[$key] = $entry;
         }
+        foreach ($screensOut as $sk => &$screenEntry) {
+            if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
+                $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
+                if ($editors !== []) {
+                    $screenEntry['shared_editors'] = $editors;
+                } else {
+                    unset($screenEntry['shared_editors']);
+                }
+            } elseif (isset($existingScreens[$sk]['shared_editors']) && is_array($existingScreens[$sk]['shared_editors'])) {
+                $screenEntry['shared_editors'] = $existingScreens[$sk]['shared_editors'];
+            }
+        }
+        unset($screenEntry);
         foreach ($protectedScreens as $pkey => $_) {
             if (!isset($screensOut[$pkey]) && isset($existingScreens[$pkey])) {
                 $prev = $existingScreens[$pkey];
@@ -625,31 +719,41 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
         }
 
-        if (!admin_is_super()) {
-            $screenOpts = $_POST['SCREEN_OPTS'] ?? [];
-            if (is_array($screenOpts) && $screenOpts !== []) {
-                $screens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
-                foreach ($screenOpts as $sk => $opts) {
-                    if (!is_array($opts)) {
-                        continue;
-                    }
-                    $sk = rotation_normalize_screen_key((string)$sk);
-                    if ($sk === '' || !admin_can_screen($sk)) {
-                        continue;
-                    }
-                    $entry = is_array($screens[$sk] ?? null) ? $screens[$sk] : ['name' => rotation_screen_display_name($sk, rotation_screens())];
-                    if (!is_array($entry)) {
-                        $entry = ['name' => (string)$entry];
-                    }
-                    $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false);
+        $screenOpts = $_POST['SCREEN_OPTS'] ?? [];
+        if (!$rotationSaveLocked && is_array($screenOpts) && $screenOpts !== []) {
+            $screens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
+            foreach ($screenOpts as $sk => $opts) {
+                if (!is_array($opts)) {
+                    continue;
                 }
-                $conf['rotation.SCREENS'] = $screens;
+                $sk = rotation_normalize_screen_key((string)$sk);
+                if ($sk === '' || !admin_can_screen($sk)) {
+                    continue;
+                }
+                $entry = is_array($screens[$sk] ?? null) ? $screens[$sk] : ['name' => rotation_screen_display_name($sk, rotation_screens())];
+                if (!is_array($entry)) {
+                    $entry = ['name' => (string)$entry];
+                }
+                $prevEditors = is_array($existingScreens[$sk]['shared_editors'] ?? null)
+                    ? $existingScreens[$sk]['shared_editors'] : null;
+                $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false);
+                if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
+                    $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
+                    if ($editors !== []) {
+                        $screens[$sk]['shared_editors'] = $editors;
+                    } else {
+                        unset($screens[$sk]['shared_editors']);
+                    }
+                } elseif (is_array($prevEditors) && $prevEditors !== []) {
+                    $screens[$sk]['shared_editors'] = $prevEditors;
+                }
             }
+            $conf['rotation.SCREENS'] = $screens;
         }
 
         $rotationPagesFromJson = false;
         $jsonRaw = trim((string)($_POST['ROTATION_PAGES_JSON'] ?? ''));
-        if ($jsonRaw !== '') {
+        if (!$rotationSaveLocked && $jsonRaw !== '') {
             $parsedByScreen = rotation_pages_from_json_string($jsonRaw);
             if ($parsedByScreen === null) {
                 $errors[] = 'Rotation playlist data invalid — not saved.';
@@ -670,7 +774,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 }
             }
         }
-        if (!$rotationPagesFromJson) {
+        if (!$rotationPagesFromJson && !$rotationSaveLocked) {
             if (admin_post_input_vars_saturated()) {
                 $errors[] = 'Rotation save may have been truncated (PHP max_input_vars=' . (int)ini_get('max_input_vars')
                     . '). Reload the page and save again.';
@@ -690,6 +794,23 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     continue;
                 }
                 $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
+            }
+        }
+        if (admin_is_super()) {
+            $existingEm = emergency_normalize_config(is_array($conf['rotation.EMERGENCY'] ?? null) ? $conf['rotation.EMERGENCY'] : []);
+            $emDraft = emergency_config_from_post($_POST, $existingEm);
+            if (!empty($existingEm['active'])) {
+                $emDraft['active'] = true;
+                $emDraft['activated_at'] = (int)($existingEm['activated_at'] ?? 0);
+                $emDraft['activated_by'] = (string)($existingEm['activated_by'] ?? '');
+                $emDraft['expires_at'] = (int)($existingEm['expires_at'] ?? 0);
+            }
+            if (($emDraft['ticker_text'] ?? '') !== '' || ($emDraft['announce_body'] ?? '') !== ''
+                || ($emDraft['announce_key'] ?? '') !== '' || ($emDraft['pages'] ?? []) !== []
+                || !empty($existingEm['active'])) {
+                $conf['rotation.EMERGENCY'] = $emDraft;
+            } else {
+                unset($conf['rotation.EMERGENCY']);
             }
         }
     }
@@ -1564,8 +1685,8 @@ if ($authed && $board === 'video') {
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
     'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'traffic'],
-    'Daily'           => ['wotd', 'history', 'joke', 'xkcd'],
-    'Monitoring'      => ['homelab', 'unifi', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'signaltrace', 'zabbix'],
+    'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
+    'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
@@ -1573,9 +1694,11 @@ $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK'
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
+$kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
+$heroStripKeyOptions = hero_strip_key_options();
 $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
@@ -1593,7 +1716,7 @@ $slidesDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' =
 $slidesDeployStatus = [];
 if ($authed && in_array($board, ['slides', 'status'], true)) {
     $slidesDeckFullConf = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
-    $slidesDeckForUser = admin_filter_owned_list($slidesDeckFullConf);
+    $slidesDeckForUser = admin_filter_list_for_deploy_scope($slidesDeckFullConf);
     $slidesDeckStats = slides_deck_stats($slidesDeckForUser);
     $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status(
         admin_is_super() ? $slidesDeckFullConf : $slidesDeckForUser
@@ -1647,6 +1770,15 @@ if ($board === 'zabbix') {
     $zabbixActivePage = zabbix_normalize_page_key((string)($_GET['page'] ?? ''));
     if (!isset($zabbixPages[$zabbixActivePage])) {
         $zabbixActivePage = (string)(array_key_first($zabbixPages) ?: 'main');
+    }
+}
+$kumaPages = [];
+$kumaActivePage = 'main';
+if ($board === 'kuma') {
+    $kumaPages = admin_filter_owned_map(kuma_admin_pages($rawConf));
+    $kumaActivePage = kuma_normalize_page_key((string)($_GET['page'] ?? ''));
+    if (!isset($kumaPages[$kumaActivePage])) {
+        $kumaActivePage = (string)(array_key_first($kumaPages) ?: 'main');
     }
 }
 
@@ -2757,6 +2889,18 @@ function admin_field(array $f, $val, string $board): void
       <h2>Status</h2>
       <div class="sub">Live kiosk health and deck-to-rotation sync. Deploy actions stay on each media board.</div>
 
+      <?php if (emergency_active()):
+          $emStatus = emergency_status_detail();
+          $emExpires = (int)($emStatus['expires_at'] ?? 0);
+      ?>
+      <div class="help" style="margin:0 0 16px;padding:14px 16px;border:2px solid var(--warn);border-radius:10px;background:rgba(255,93,93,.08);color:var(--warn)">
+        <strong>Emergency override active</strong> — <?= h($emStatus['label']) ?>
+        <?php if ($emStatus['by'] !== ''): ?> · activated by <code><?= h($emStatus['by']) ?></code><?php endif; ?>
+        <?php if ($emExpires > 0): ?> · auto-release <?= h(date('M j, g:i A', $emExpires)) ?><?php endif; ?>
+        <?php if (admin_is_super()): ?> · <a href="?board=rotation" style="color:inherit">Manage in Rotation</a><?php endif; ?>
+      </div>
+      <?php endif; ?>
+
       <section class="status-section">
         <h2 style="font-size:22px;margin-bottom:6px">Sign status</h2>
         <div class="help" style="margin-bottom:10px">Kiosks report while <code>board.php</code> is open (~30s). Offline = no heartbeat in <?= (int)SIGNAGE_PRESENCE_STALE_SEC ?>s.</div>
@@ -2932,7 +3076,8 @@ function admin_field(array $f, $val, string $board): void
 window.USER_SCREEN_ASSIGNMENTS = <?= json_encode($userScreenAssignmentsJs, JSON_UNESCAPED_UNICODE) ?>;
 window.ADMIN_OPERATOR_SCREEN = <?= json_encode(admin_operator_screen_key()) ?>;
 window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_locked()) ?>;
-window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabled()) ?>;</script>
+window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabled()) ?>;
+window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESCAPED_UNICODE) ?>;</script>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
@@ -2951,12 +3096,16 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
         <?php elseif ($board === 'zabbix'): ?>
           Each page is <code>zabbix.php?d=<em>key</em></code> in rotation — filter by Zabbix host group per tab below.
+        <?php elseif ($board === 'kuma'): ?>
+          Each page is <code>kuma.php?d=<em>key</em></code> in rotation — one status page slug per tab below.
         <?php elseif ($board === 'grafana'): ?>
           Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'splunkdash'): ?>
           Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'web'): ?>
           Each site is <code>web.php?d=<em>key</em></code> in rotation — preview per row below.
+        <?php elseif ($board === 'announce'): ?>
+          Each announcement is <code>announce.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif (in_array($board, ['rss', 'video', 'calendar', 'slides', 'rotator'], true)): ?>
           Preview per row or card below — pick a specific entry to preview.
         <?php elseif (!empty($b['file'])): ?>
@@ -3218,7 +3367,119 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   $scrRows[] = rotation_admin_screen_row((string)$rk, $rv);
               }
           }
+          $emergencyCfg = emergency_config($rawConf);
+          $emergencyAnnounceItems = announce_items_registry($rawConf);
+          if (($emergencyCfg['pages'] ?? []) === []) {
+              $emergencyCfg['pages'] = [['url' => 'emergency.php', 'dwell' => 60]];
+          }
         ?>
+          <?php if (emergency_active() && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 16px;padding:14px 16px;border:2px solid var(--warn);border-radius:10px;background:rgba(255,93,93,.08);color:var(--warn)">
+            <strong>Emergency override active</strong> — <?= h(emergency_status_label()) ?>. Playlist edits are disabled until a super admin releases it.
+          </div>
+          <?php endif; ?>
+          <?php if (admin_is_super()): ?>
+          <details class="panel" style="margin-bottom:16px;border:2px solid <?= emergency_active() ? 'var(--warn)' : 'var(--hairline)' ?>;border-radius:10px"<?= emergency_active() ? ' open' : '' ?>>
+            <summary style="color:<?= emergency_active() ? 'var(--warn)' : 'inherit' ?>">Emergency override — all displays<?php if (emergency_active()): ?> · <strong>ACTIVE</strong><?php endif; ?></summary>
+            <div class="panel-body" style="padding-top:12px">
+              <div class="help" style="margin-bottom:14px">Instant site-wide takeover. Kiosks pick this up within ~30 seconds (<code>board.php</code> polling). Operators cannot change rotation while active. Save draft content below, then activate. Modes: <strong>forced ticker</strong> (normal rotation + your message in the alert bar), <strong>announcement</strong> (one full-screen message everywhere), or <strong>emergency playlist</strong> (replace every display’s rotation).</div>
+              <?php if (emergency_active()): ?>
+              <div class="help" style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px;color:var(--warn)">
+                <?= h(emergency_status_label()) ?><?php if (!empty($emergencyCfg['activated_by'])): ?> — activated by <code><?= h((string)$emergencyCfg['activated_by']) ?></code><?php endif; ?>
+                <?php if (!empty($emergencyCfg['expires_at'])): ?> · auto-release <?= h(date('M j, g:i A', (int)$emergencyCfg['expires_at'])) ?><?php endif; ?>
+              </div>
+              <form method="post" action="?board=rotation" style="margin-bottom:16px" onsubmit="return confirm('Release emergency override on all displays?');">
+                <input type="hidden" name="action" value="emergency_release">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button type="submit" class="secondary" style="border-color:var(--warn);color:var(--warn)">Release emergency override</button>
+              </form>
+              <?php endif; ?>
+              <input type="hidden" name="EMERGENCY_ACTIVATE_MODE" id="emergencyActivateMode" value="">
+              <div class="field-grid" style="margin-bottom:14px">
+                <div class="field">
+                  <label class="mini">Draft mode (for activate)</label>
+                  <select name="EMERGENCY_MODE" id="emergencyModeSelect">
+                    <?php foreach (['ticker' => 'Forced ticker', 'announce' => 'Full-screen announcement', 'playlist' => 'Emergency playlist'] as $ev => $el): ?>
+                    <option value="<?= h($ev) ?>" <?= ($emergencyCfg['mode'] ?? 'ticker') === $ev ? 'selected' : '' ?>><?= h($el) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+              </div>
+              <div class="field-grid emergency-mode-panel" data-emergency-mode="ticker" style="margin-bottom:12px">
+                <div class="field">
+                  <label class="mini">Ticker label</label>
+                  <input type="text" name="EMERGENCY_TICKER_LABEL" value="<?= h((string)($emergencyCfg['ticker_label'] ?? 'Emergency')) ?>" placeholder="Emergency">
+                </div>
+                <div class="field span-2">
+                  <label class="mini">Ticker message</label>
+                  <textarea name="EMERGENCY_TICKER_TEXT" rows="3" placeholder="Shelter in place until further notice."><?= h((string)($emergencyCfg['ticker_text'] ?? '')) ?></textarea>
+                  <label class="check" style="margin-top:8px">
+                    <input type="hidden" name="EMERGENCY_TICKER_SHOW_WEATHER" value="0">
+                    <input type="checkbox" name="EMERGENCY_TICKER_SHOW_WEATHER" value="1"
+                      <?= !empty($emergencyCfg['ticker_show_weather']) ? 'checked' : '' ?>>
+                    Also show NWS weather alerts in the ticker (your message appears first)
+                  </label>
+                  <div class="help">Shown on every display’s alert bar. By default your message replaces weather alerts; enable the checkbox for weather-related emergencies.</div>
+                </div>
+              </div>
+              <div class="field-grid" style="margin-bottom:12px">
+                <div class="field">
+                  <label class="mini">Auto-release after (minutes)</label>
+                  <input type="number" min="0" max="10080" name="EMERGENCY_EXPIRE_MINUTES"
+                         value="<?= (int)($emergencyCfg['expire_minutes'] ?? 0) ?>" placeholder="0 = no auto-release">
+                  <div class="help">0 = manual release only. Timer starts on activate.</div>
+                </div>
+                <div class="field span-2">
+                  <label class="check">
+                    <input type="hidden" name="EMERGENCY_NTFY_NOTIFY" value="0">
+                    <input type="checkbox" name="EMERGENCY_NTFY_NOTIFY" value="1"
+                      <?= !empty($emergencyCfg['ntfy_notify']) ? 'checked' : '' ?>>
+                    Push ntfy alert on activate / release / auto-expire
+                  </label>
+                  <label class="mini" style="margin-top:8px">ntfy topic (blank = poll topic from ntfy board)</label>
+                  <input type="text" name="EMERGENCY_NTFY_TOPIC" value="<?= h((string)($emergencyCfg['ntfy_topic'] ?? '')) ?>"
+                         placeholder="alerts">
+                </div>
+              </div>
+              <div class="field-grid emergency-mode-panel" data-emergency-mode="announce" style="margin-bottom:12px">
+                <div class="field span-2">
+                  <label class="mini">Title</label>
+                  <input type="text" name="EMERGENCY_ANNOUNCE_TITLE" value="<?= h((string)($emergencyCfg['announce_title'] ?? '')) ?>" placeholder="Important notice">
+                </div>
+                <div class="field span-2">
+                  <label class="mini">Message body</label>
+                  <textarea name="EMERGENCY_ANNOUNCE_BODY" rows="4" placeholder="Details shown full-screen on every display."><?= h((string)($emergencyCfg['announce_body'] ?? '')) ?></textarea>
+                </div>
+                <div class="field span-2">
+                  <label class="mini">Or use existing announcement</label>
+                  <select name="EMERGENCY_ANNOUNCE_KEY">
+                    <option value="">Inline message above (emergency.php)</option>
+                    <?php foreach ($emergencyAnnounceItems as $ak => $aitem): ?>
+                    <option value="<?= h((string)$ak) ?>" <?= ($emergencyCfg['announce_key'] ?? '') === (string)$ak ? 'selected' : '' ?>><?= h((string)($aitem['title'] ?? $ak)) ?> (<?= h((string)$ak) ?>)</option>
+                    <?php endforeach; ?>
+                  </select>
+                </div>
+              </div>
+              <div class="emergency-mode-panel" data-emergency-mode="playlist" style="margin-bottom:12px">
+                <div class="help" style="margin-bottom:8px">Replaces every display’s playlist with this list (same order on all screens).</div>
+                <div id="emergencyPlaylistRows">
+                  <?php foreach ($emergencyCfg['pages'] as $epi => $epage): ?>
+                  <div class="field-grid emergency-playlist-row" style="grid-template-columns:1fr 100px auto;margin-bottom:8px">
+                    <div class="field"><input type="text" name="EMERGENCY_PAGES[<?= (int)$epi ?>][url]" value="<?= h((string)($epage['url'] ?? '')) ?>" placeholder="announce.php?d=main"></div>
+                    <div class="field"><input type="number" min="5" name="EMERGENCY_PAGES[<?= (int)$epi ?>][dwell]" value="<?= (int)($epage['dwell'] ?? 60) ?>" placeholder="Sec"></div>
+                    <div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px"><button type="button" class="rowdel" onclick="this.closest('.emergency-playlist-row').remove()">×</button></div>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+                <button type="button" class="secondary" style="padding:4px 10px;font-size:12px" onclick="addEmergencyPlaylistRow()">+ Add page</button>
+              </div>
+              <?php if (!emergency_active()): ?>
+              <button type="submit" name="action" value="emergency_activate" class="secondary" style="margin-top:8px;border-color:var(--warn);color:var(--warn)"
+                      onclick="return prepareEmergencyActivate();">Activate on all displays</button>
+              <?php endif; ?>
+            </div>
+          </details>
+          <?php endif; ?>
           <?php if (admin_is_super()): ?>
           <details class="panel rotation-display-settings-panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
@@ -3402,13 +3663,49 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <?php endif; ?>
           </div>
 
-          <?php if (!admin_is_super()):
+          <?php if (admin_is_super()):
+            $sharedEditors = rotation_screen_shared_editors($screenKey);
+            $screenOwner = users_screen_assigned_username($screenKey);
+          ?>
+          <div class="rotation-shared-editors" style="margin:12px 0;padding:14px 16px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
+            <div class="help" style="margin-bottom:10px"><strong>Shared editing</strong> — primary owner is set under <a href="?board=users">Users</a><?php if ($screenOwner): ?> (<code><?= h($screenOwner) ?></code>)<?php else: ?> (unassigned)<?php endif; ?>. Shared editors manage the <strong>full display</strong>: playlist, display options, hero strip, and deploy targets (including the primary owner’s slides and quick-add boards).</div>
+            <div class="field-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+              <?php foreach (users_by_id() as $ou):
+                if (!is_array($ou) || users_normalize_role((string)($ou['role'] ?? '')) !== 'operator') {
+                    continue;
+                }
+                $uid = (string)($ou['id'] ?? '');
+                if ($uid === '') {
+                    continue;
+                }
+                $ownerUid = null;
+                foreach (users_screen_assignments() as $ask => $aUid) {
+                    if ($ask === $screenKey) {
+                        $ownerUid = $aUid;
+                        break;
+                    }
+                }
+                if ($ownerUid === $uid) {
+                    continue;
+                }
+              ?>
+              <label class="check"><input type="checkbox" name="SCREEN_EDITORS[<?= h($screenKey) ?>][]" value="<?= h($uid) ?>"
+                <?= in_array($uid, $sharedEditors, true) ? 'checked' : '' ?>> <?= h((string)($ou['username'] ?? '')) ?></label>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <?php endif; ?>
+
+          <?php
             $scrValOpts = current_val($rawConf, $board, 'SCREENS');
             $scrRaw = is_array($scrValOpts[$screenKey] ?? null) ? $scrValOpts[$screenKey] : [];
             $fadeOpt = isset($scrRaw['fade_ms']) ? (string)(int)$scrRaw['fade_ms'] : '';
             $settleOpt = isset($scrRaw['settle_ms']) ? (string)(int)$scrRaw['settle_ms'] : '';
             $hangOpt = isset($scrRaw['hang_ms']) ? (string)(int)$scrRaw['hang_ms'] : '';
             $schedOpt = $screenSettings['schedule'];
+            $heroCfg = is_array($screenSettings['hero_strip'] ?? null) ? $screenSettings['hero_strip'] : rotation_hero_strip_from_screen($scrRaw);
+            $heroSlots = is_array($heroCfg['slots'] ?? null) && $heroCfg['slots'] !== []
+                ? $heroCfg['slots'] : [['source' => (string)($heroCfg['source'] ?? ''), 'key' => (string)($heroCfg['key'] ?? '')]];
           ?>
           <div class="rotation-display-options">
             <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
@@ -3471,9 +3768,58 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                        name="SCREEN_OPTS[<?= h($screenKey) ?>][hang_ms]" value="<?= h($hangOpt) ?>"
                        placeholder="<?= (int)rotation_global_hang_ms() ?>">
               </div>
+              <div class="field span-2" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--hairline)">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip]" value="1"
+                  <?= !empty($heroCfg['enabled']) ? 'checked' : '' ?>> Status strip (persistent bar above ticker)</label>
+              </div>
+              <div class="field span-2">
+                <span class="mini">Strip sources</span>
+                <div class="hero-strip-slots" data-hero-strip-slots="<?= h($screenKey) ?>">
+                  <?php foreach ($heroSlots as $si => $slot):
+                    $slotSource = (string)($slot['source'] ?? '');
+                    $slotKey = (string)($slot['key'] ?? '');
+                  ?>
+                  <div class="hero-strip-slot-row field-grid" style="grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto;margin-top:8px">
+                    <div class="field">
+                      <label class="mini">Source</label>
+                      <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][source]">
+                        <option value="">—</option>
+                        <?php foreach (['kuma' => 'Uptime Kuma', 'zabbix' => 'Zabbix', 'announce' => 'Announcement', 'ntfy' => 'ntfy alerts'] as $hv => $hl): ?>
+                        <option value="<?= h($hv) ?>" <?= $slotSource === $hv ? 'selected' : '' ?>><?= h($hl) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label class="mini">Page / item</label>
+                      <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][key]">
+                        <?php
+                          $opts = $heroStripKeyOptions[$slotSource] ?? [['value' => '', 'label' => 'Default']];
+                          if ($slotSource === 'announce' && !array_filter($opts, static fn($o) => ($o['value'] ?? '') === 'strip')) {
+                              array_unshift($opts, ['value' => 'strip', 'label' => 'All active strip-only items']);
+                          }
+                          foreach ($opts as $opt):
+                        ?>
+                        <option value="<?= h((string)($opt['value'] ?? '')) ?>" <?= $slotKey === (string)($opt['value'] ?? '') ? 'selected' : '' ?>><?= h((string)($opt['label'] ?? '')) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px">
+                      <button type="button" class="rowdel" style="width:auto;padding:6px 10px;font-size:12px" onclick="removeHeroStripSlot(this)" title="Remove source">×</button>
+                    </div>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+                <button type="button" class="secondary" style="margin-top:8px;padding:4px 10px;font-size:12px"
+                        onclick="addHeroStripSlot('<?= h($screenKey) ?>')">+ Add strip source</button>
+                <div class="help">Combine up to four sources (e.g. Kuma summary + ntfy alert + countdown). Announcements marked <em>strip only</em> are for the hero bar — pick them here or choose “All active strip-only items”.</div>
+              </div>
+              <div class="field">
+                <label class="mini">Strip height (px)</label>
+                <input type="number" min="60" max="240" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_height]"
+                       value="<?= !empty($heroCfg['enabled']) ? (int)($heroCfg['height'] ?? 120) : '' ?>" placeholder="120">
+              </div>
             </div>
           </div>
-          <?php endif; ?>
 
           <?php if ($effectivePages !== [] && $mirrorsMain): ?>
           <div class="rotation-effective-list mirror-note">Mirrors main — <?= (int)$activeEffective ?> page<?= $activeEffective === 1 ? '' : 's' ?> on wall</div>
@@ -4080,6 +4426,100 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
                   if (!in_array($f['key'], $zabbixBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'kuma'): ?>
+          <div class="section-title">Uptime Kuma pages</div>
+          <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
+            <code>kuma.php?d=<em>key</em></code>. Set a status page slug per tab (works without an API key), or use the board API key with optional tag filters.</div>
+
+          <div class="splunk-pages-bar" id="kumaPagesBar">
+            <?php foreach ($kumaPages as $pk => $pg): ?>
+            <button type="button" class="splunk-page-tab<?= $pk === $kumaActivePage ? ' active' : '' ?>"
+                    data-kuma-page-tab="<?= h($pk) ?>">
+              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="addrow" onclick="addKumaPage()">+ Add page</button>
+          </div>
+
+          <?php foreach ($kumaPages as $pk => $pg): ?>
+          <div class="splunk-page-editor" data-kuma-page-editor="<?= h($pk) ?>"
+               style="<?= $pk === $kumaActivePage ? '' : 'display:none' ?>">
+            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-kuma-page-key>
+            <div class="splunk-page-head">
+              <div>
+                <label class="mini">Page title</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="Production" data-kuma-page-title>
+              </div>
+              <div>
+                <label class="mini">Subtitle</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Public services" data-kuma-page-sub>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
+                   href="<?= h(kuma_preview_url($pk)) ?>" target="_blank" rel="noopener" data-kuma-page-preview>Preview ↗</a>
+                <?php if (count($kumaPages) > 1): ?>
+                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
+                        onclick="removeKumaPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(kuma_page_url($pk)) ?></code></div>
+
+            <div class="field-grid" style="margin-bottom:12px">
+              <div class="field span-2">
+                <label class="mini">Status page slug</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][status_slug]"
+                       value="<?= h((string)($pg['status_slug'] ?? '')) ?>"
+                       placeholder="my-status-page">
+                <div class="help">From <strong>Status Pages</strong> in Uptime Kuma — the slug in the public URL. Works without an API key.</div>
+              </div>
+              <div class="field span-2">
+                <label class="mini">Tag filter</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][tags]"
+                       value="<?= h((string)($pg['tags'] ?? '')) ?>"
+                       placeholder="prod, web">
+                <div class="help">Comma-separated tags — show only monitors with any listed tag (optional; mainly with API key mode).</div>
+              </div>
+              <div class="field">
+                <label class="mini">Max monitors</label>
+                <input type="number" name="PAGES[<?= h($pk) ?>][max_monitors]" min="4" max="60"
+                       value="<?= (int)($pg['max_monitors'] ?? kuma_max_monitors()) ?>">
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
+                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+              </div>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="kuma_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Keyed object: <code>{"prod":{"title":"…","status_slug":"my-slug"}}</code>.</div>
+              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($kumaPages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('kuma') ? '' : ' hidden' ?>>
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $kumaBoardKeys, true)) continue;
                   $val = current_val($rawConf, $board, $f['key']); ?>
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
@@ -4778,6 +5218,14 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                         <button type="button" class="secondary web-delete-btn" style="padding:4px 10px;font-size:12px;margin-left:6px"
                                 data-delete-key="<?= h($siteKey) ?>">Delete</button>
                         <?php endif; ?>
+                      </td>
+                      <?php elseif ($board === 'announce' && $f['key'] === 'ITEMS'):
+                        $annKey = trim((string)($row['_key'] ?? ''));
+                        $annPrev = $annKey !== '' ? announce_preview_url($annKey) : '';
+                      ?>
+                      <td>
+                        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $annPrev === '' ? ';display:none' : '' ?>"
+                           href="<?= h($annPrev !== '' ? $annPrev : '#') ?>" target="_blank" rel="noopener" data-board-preview>Preview ↗</a>
                       </td>
                       <?php elseif (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS'):
                         $dashKey = trim((string)($row['_key'] ?? ''));
@@ -7274,6 +7722,9 @@ document.addEventListener('DOMContentLoaded', function () {
   initVideoPlaylist();
   initSplunkPanels();
   initZabbixPages();
+  initKumaPages();
+  initHeroStripSlots();
+  initEmergencyPanel();
   initPresencePanel();
   initRssFeedPreviews();
   initWebSitePreviews();
@@ -8075,6 +8526,252 @@ function removeZabbixPage(pageKey) {
   if (tab) tab.remove();
   const remaining = document.querySelector('[data-zabbix-page-tab]');
   if (remaining) showZabbixPage(remaining.getAttribute('data-zabbix-page-tab'));
+}
+
+function kumaNormalizePageKey(raw) {
+  raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+  return raw || 'main';
+}
+
+function kumaPreviewHref(pageKey) {
+  return 'kuma.php?d=' + encodeURIComponent(pageKey) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function showKumaPage(pageKey) {
+  document.querySelectorAll('[data-kuma-page-editor]').forEach(function (el) {
+    el.style.display = el.getAttribute('data-kuma-page-editor') === pageKey ? '' : 'none';
+  });
+  document.querySelectorAll('[data-kuma-page-tab]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-kuma-page-tab') === pageKey);
+  });
+}
+
+function syncKumaPageTabLabel(titleInp) {
+  const editor = titleInp.closest('[data-kuma-page-editor]');
+  if (!editor) return;
+  const pageKey = editor.getAttribute('data-kuma-page-editor');
+  const tab = document.querySelector('[data-kuma-page-tab="' + pageKey + '"]');
+  if (!tab) return;
+  const title = titleInp.value.trim() || pageKey;
+  const code = tab.querySelector('code');
+  tab.textContent = '';
+  tab.appendChild(document.createTextNode(title + ' '));
+  const codeEl = code || document.createElement('code');
+  codeEl.textContent = pageKey;
+  tab.appendChild(codeEl);
+}
+
+function bindKumaPageTab(btn) {
+  if (btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', function () {
+    showKumaPage(btn.getAttribute('data-kuma-page-tab'));
+  });
+}
+
+function bindKumaPageTabs() {
+  document.querySelectorAll('[data-kuma-page-tab]').forEach(bindKumaPageTab);
+}
+
+function initKumaPages() {
+  bindKumaPageTabs();
+  document.querySelectorAll('[data-kuma-page-title]').forEach(function (inp) {
+    inp.addEventListener('input', function () { syncKumaPageTabLabel(inp); });
+  });
+}
+
+function addKumaPage() {
+  const key = prompt('Page key (letters, numbers, underscore — used in kuma.php?d=KEY):', 'page2');
+  if (key === null) return;
+  const pageKey = kumaNormalizePageKey(key);
+  if (document.querySelector('[data-kuma-page-editor="' + pageKey + '"]')) {
+    alert('A page with key "' + pageKey + '" already exists.');
+    showKumaPage(pageKey);
+    return;
+  }
+  const bar = document.getElementById('kumaPagesBar');
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'splunk-page-tab';
+  tab.setAttribute('data-kuma-page-tab', pageKey);
+  tab.appendChild(document.createTextNode('New page '));
+  const tabCode = document.createElement('code');
+  tabCode.textContent = pageKey;
+  tab.appendChild(tabCode);
+  if (bar) {
+    const addBtn = bar.querySelector('.addrow');
+    if (addBtn) bar.insertBefore(tab, addBtn);
+    else bar.appendChild(tab);
+  }
+  bindKumaPageTab(tab);
+
+  const editor = document.createElement('div');
+  editor.className = 'splunk-page-editor';
+  editor.setAttribute('data-kuma-page-editor', pageKey);
+  editor.style.display = 'none';
+  editor.innerHTML =
+    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-kuma-page-key>' +
+    '<div class="splunk-page-head">' +
+      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="Production" data-kuma-page-title></div>' +
+      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Public services" data-kuma-page-sub></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
+        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + kumaPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-kuma-page-preview>Preview ↗</a>' +
+        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeKumaPage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>kuma.php?d=' + pageKey + '</code></div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
+    '<div class="field-grid" style="margin-bottom:12px">' +
+      '<div class="field span-2"><label class="mini">Status page slug</label>' +
+        '<input type="text" name="PAGES[' + pageKey + '][status_slug]" placeholder="my-status-page">' +
+        '<div class="help">Public status page slug from Uptime Kuma.</div></div>' +
+      '<div class="field span-2"><label class="mini">Tag filter</label>' +
+        '<input type="text" name="PAGES[' + pageKey + '][tags]" placeholder="prod, web">' +
+        '<div class="help">Comma-separated tags (optional).</div></div>' +
+      '<div class="field"><label class="mini">Max monitors</label>' +
+        '<input type="number" name="PAGES[' + pageKey + '][max_monitors]" min="4" max="60" value="24"></div>' +
+      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
+      '</div>' +
+    '</div>';
+
+  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
+  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
+  if (jsonDetails && jsonDetails.closest('details')) {
+    jsonDetails.closest('details').before(editor);
+  } else if (form) {
+    form.appendChild(editor);
+  }
+  editor.querySelector('[data-kuma-page-title]').addEventListener('input', function () { syncKumaPageTabLabel(this); });
+  showKumaPage(pageKey);
+}
+
+function removeKumaPage(pageKey) {
+  if (!confirm('Remove page "' + pageKey + '"?')) return;
+  const editor = document.querySelector('[data-kuma-page-editor="' + pageKey + '"]');
+  const tab = document.querySelector('[data-kuma-page-tab="' + pageKey + '"]');
+  if (editor) editor.remove();
+  if (tab) tab.remove();
+  const remaining = document.querySelector('[data-kuma-page-tab]');
+  if (remaining) showKumaPage(remaining.getAttribute('data-kuma-page-tab'));
+}
+
+function heroStripKeySelectHtml(name, source, selectedKey) {
+  const opts = window.HERO_STRIP_KEY_OPTIONS || {};
+  let list = (opts[source] || [{ value: '', label: 'Default' }]).slice();
+  if (source === 'announce' && !list.some(function (o) { return o.value === 'strip'; })) {
+    list.unshift({ value: 'strip', label: 'All active strip-only items' });
+  }
+  let html = '<select name="' + name + '">';
+  list.forEach(function (o) {
+    const val = o.value || '';
+    html += '<option value="' + val.replace(/"/g, '&quot;') + '"' + (val === (selectedKey || '') ? ' selected' : '') + '>'
+      + (o.label || val).replace(/</g, '&lt;') + '</option>';
+  });
+  html += '</select>';
+  return html;
+}
+
+function bindHeroStripSlotRow(row) {
+  if (!row || row.dataset.bound) return;
+  row.dataset.bound = '1';
+  const sourceSel = row.querySelector('select[name*="[source]"]');
+  const keyField = row.querySelector('.hero-strip-key-field');
+  if (!sourceSel || !keyField) return;
+  sourceSel.addEventListener('change', function () {
+    const screenKey = row.closest('[data-hero-strip-slots]')?.getAttribute('data-hero-strip-slots') || '';
+    const idxMatch = sourceSel.name.match(/\[hero_strip_slots\]\[(\d+)\]/);
+    const idx = idxMatch ? idxMatch[1] : '0';
+    const keyName = 'SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][key]';
+    keyField.innerHTML = heroStripKeySelectHtml(keyName, sourceSel.value, '');
+  });
+}
+
+function initHeroStripSlots() {
+  document.querySelectorAll('.hero-strip-slot-row').forEach(bindHeroStripSlotRow);
+}
+
+function addHeroStripSlot(screenKey) {
+  const deck = document.querySelector('[data-hero-strip-slots="' + screenKey + '"]');
+  if (!deck) return;
+  if (deck.querySelectorAll('.hero-strip-slot-row').length >= 4) {
+    alert('Maximum four strip sources.');
+    return;
+  }
+  const idx = deck.querySelectorAll('.hero-strip-slot-row').length;
+  const row = document.createElement('div');
+  row.className = 'hero-strip-slot-row field-grid';
+  row.style.cssText = 'grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto;margin-top:8px';
+  row.innerHTML =
+    '<div class="field"><label class="mini">Source</label>' +
+      '<select name="SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][source]">' +
+        '<option value="">—</option>' +
+        '<option value="kuma">Uptime Kuma</option>' +
+        '<option value="zabbix">Zabbix</option>' +
+        '<option value="announce">Announcement</option>' +
+        '<option value="ntfy">ntfy alerts</option>' +
+      '</select></div>' +
+    '<div class="field hero-strip-key-field"><label class="mini">Page / item</label>' +
+      heroStripKeySelectHtml('SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][key]', '', '') +
+    '</div>' +
+    '<div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px">' +
+      '<button type="button" class="rowdel" style="width:auto;padding:6px 10px;font-size:12px" onclick="removeHeroStripSlot(this)" title="Remove source">×</button>' +
+    '</div>';
+  deck.appendChild(row);
+  bindHeroStripSlotRow(row);
+}
+
+function removeHeroStripSlot(btn) {
+  const row = btn.closest('.hero-strip-slot-row');
+  const deck = row && row.closest('[data-hero-strip-slots]');
+  if (!row || !deck) return;
+  if (deck.querySelectorAll('.hero-strip-slot-row').length <= 1) {
+    row.querySelectorAll('select').forEach(function (sel) { sel.value = ''; });
+    return;
+  }
+  row.remove();
+  deck.querySelectorAll('.hero-strip-slot-row').forEach(function (r, i) {
+    r.querySelectorAll('select').forEach(function (sel) {
+      sel.name = sel.name.replace(/\[hero_strip_slots\]\[\d+\]/, '[hero_strip_slots][' + i + ']');
+    });
+  });
+}
+
+function syncEmergencyModePanels() {
+  const sel = document.getElementById('emergencyModeSelect');
+  const mode = sel ? sel.value : 'ticker';
+  document.querySelectorAll('.emergency-mode-panel').forEach(function (el) {
+    el.style.display = el.getAttribute('data-emergency-mode') === mode ? '' : 'none';
+  });
+}
+
+function prepareEmergencyActivate() {
+  syncEmergencyModePanels();
+  const sel = document.getElementById('emergencyModeSelect');
+  const hidden = document.getElementById('emergencyActivateMode');
+  if (hidden) hidden.value = sel ? sel.value : 'ticker';
+  return confirm('Activate emergency override on ALL displays? Operator rotation edits will be blocked until you release it.');
+}
+
+function addEmergencyPlaylistRow() {
+  const deck = document.getElementById('emergencyPlaylistRows');
+  if (!deck) return;
+  const idx = deck.querySelectorAll('.emergency-playlist-row').length;
+  const row = document.createElement('div');
+  row.className = 'field-grid emergency-playlist-row';
+  row.style.cssText = 'grid-template-columns:1fr 100px auto;margin-bottom:8px';
+  row.innerHTML =
+    '<div class="field"><input type="text" name="EMERGENCY_PAGES[' + idx + '][url]" placeholder="announce.php?d=main"></div>' +
+    '<div class="field"><input type="number" min="5" name="EMERGENCY_PAGES[' + idx + '][dwell]" value="60" placeholder="Sec"></div>' +
+    '<div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px"><button type="button" class="rowdel" onclick="this.closest(\'.emergency-playlist-row\').remove()">×</button></div>';
+  deck.appendChild(row);
+}
+
+function initEmergencyPanel() {
+  const sel = document.getElementById('emergencyModeSelect');
+  if (!sel) return;
+  sel.addEventListener('change', syncEmergencyModePanels);
+  syncEmergencyModePanels();
 }
 
 function addSplunkPanelCard(pageKey) {

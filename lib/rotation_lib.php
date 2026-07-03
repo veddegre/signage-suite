@@ -75,6 +75,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'hang_ms' => $transition['hang_ms'],
         'schedule' => rotation_schedule_defaults(),
         'cec' => rotation_cec_defaults(),
+        'hero_strip' => rotation_hero_strip_from_screen(null),
     ];
     if ($scr === null) {
         return $defaults;
@@ -93,6 +94,7 @@ function rotation_screen_settings(string $screen = 'main'): array
             'hang_ms' => $transition['hang_ms'],
             'schedule' => rotation_schedule_defaults(),
             'cec' => rotation_cec_defaults(),
+            'hero_strip' => rotation_hero_strip_from_screen(is_array($scr) ? $scr : null),
         ];
     }
     if (!is_array($scr)) {
@@ -119,12 +121,17 @@ function rotation_screen_settings(string $screen = 'main'): array
         'hang_ms' => $transition['hang_ms'],
         'schedule' => rotation_schedule_from_screen($scr),
         'cec' => rotation_cec_from_screen($scr),
+        'hero_strip' => rotation_hero_strip_from_screen(is_array($scr) ? $scr : null),
     ];
 }
 
-/** Per-display ticker (global Alert Ticker setting must also be on). */
+/** Per-display ticker (global Alert Ticker setting must also be on). Emergency ticker overrides all. */
 function rotation_screen_ticker_enabled(string $screen): bool
 {
+    require_once __DIR__ . '/emergency_lib.php';
+    if (emergency_ticker_forces_display()) {
+        return true;
+    }
     if (!signage_ticker_enabled()) {
         return false;
     }
@@ -498,9 +505,212 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         unset($entry['cec']);
     }
 
+    if ($includeIdentity || !empty($row['_screen_opts_form'])) {
+        if (isset($row['hero_strip'])) {
+            $entry['hero_strip'] = true;
+            $slots = rotation_hero_strip_slots_from_post($row);
+            if ($slots !== []) {
+                $entry['hero_strip_slots'] = $slots;
+                unset($entry['hero_strip_source'], $entry['hero_strip_key']);
+            } else {
+                unset($entry['hero_strip_slots']);
+                $source = strtolower(trim((string)($row['hero_strip_source'] ?? '')));
+                if (in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)) {
+                    $entry['hero_strip_source'] = $source;
+                } else {
+                    unset($entry['hero_strip_source']);
+                }
+                $heroKey = trim((string)($row['hero_strip_key'] ?? ''));
+                if ($heroKey !== '') {
+                    $entry['hero_strip_key'] = $heroKey;
+                } else {
+                    unset($entry['hero_strip_key']);
+                }
+            }
+            $heroHeight = trim((string)($row['hero_strip_height'] ?? ''));
+            if ($heroHeight !== '') {
+                $entry['hero_strip_height'] = max(60, min(240, (int)$heroHeight));
+            } else {
+                unset($entry['hero_strip_height']);
+            }
+        } elseif (array_key_exists('hero_strip', $row)) {
+            unset(
+                $entry['hero_strip'],
+                $entry['hero_strip_source'],
+                $entry['hero_strip_key'],
+                $entry['hero_strip_height'],
+                $entry['hero_strip_slots']
+            );
+        }
+    }
+
     unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on'], $entry['_screen_opts_form']);
 
     return $entry;
+}
+
+/** @return list<string> User ids with shared edit access to a display. */
+function rotation_screen_shared_editors(string $screen): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $screensCfg = cfg('rotation.SCREENS', ['main' => 'Main Display']);
+    if (!is_array($screensCfg)) {
+        return [];
+    }
+    foreach ($screensCfg as $k => $v) {
+        if (rotation_normalize_screen_key((string)$k) !== $screen || !is_array($v)) {
+            continue;
+        }
+        $raw = $v['shared_editors'] ?? [];
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $uid) {
+            $uid = trim((string)$uid);
+            if ($uid !== '') {
+                $out[$uid] = true;
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    return [];
+}
+
+/** @return list<string> Display keys where the user is a shared editor. */
+function rotation_shared_editor_screen_keys(string $userId): array
+{
+    $userId = trim($userId);
+    if ($userId === '') {
+        return [];
+    }
+    $out = [];
+    foreach (rotation_screens() as $key => $_meta) {
+        $key = rotation_normalize_screen_key((string)$key);
+        if ($key === '') {
+            continue;
+        }
+        if (in_array($userId, rotation_screen_shared_editors($key), true)) {
+            $out[] = $key;
+        }
+    }
+    sort($out);
+
+    return $out;
+}
+
+/** @param list<string> $posted */
+function rotation_normalize_shared_editors(array $posted): array
+{
+    $out = [];
+    foreach ($posted as $uid) {
+        $uid = trim((string)$uid);
+        if ($uid !== '') {
+            $out[$uid] = true;
+        }
+    }
+    $ids = array_keys($out);
+    sort($ids);
+
+    return $ids;
+}
+
+/** @param array<string,mixed> $row POST row from SCREEN_OPTS */
+function rotation_hero_strip_slots_from_post(array $row): array
+{
+    $raw = $row['hero_strip_slots'] ?? null;
+    if (!is_array($raw)) {
+        return [];
+    }
+    $allowed = ['kuma', 'zabbix', 'announce', 'ntfy'];
+    $out = [];
+    foreach ($raw as $slot) {
+        if (!is_array($slot)) {
+            continue;
+        }
+        $source = strtolower(trim((string)($slot['source'] ?? '')));
+        if (!in_array($source, $allowed, true)) {
+            continue;
+        }
+        $out[] = [
+            'source' => $source,
+            'key' => trim((string)($slot['key'] ?? '')),
+        ];
+        if (count($out) >= 4) {
+            break;
+        }
+    }
+
+    return $out;
+}
+
+/** @param list<mixed> $rawSlots from settings.json */
+function rotation_hero_strip_slots_from_config(array $rawSlots): array
+{
+    $allowed = ['kuma', 'zabbix', 'announce', 'ntfy'];
+    $out = [];
+    foreach ($rawSlots as $slot) {
+        if (!is_array($slot)) {
+            continue;
+        }
+        $source = strtolower(trim((string)($slot['source'] ?? '')));
+        if (!in_array($source, $allowed, true)) {
+            continue;
+        }
+        $out[] = [
+            'source' => $source,
+            'key' => trim((string)($slot['key'] ?? '')),
+        ];
+        if (count($out) >= 4) {
+            break;
+        }
+    }
+
+    return $out;
+}
+
+/** @param array<string,mixed>|null $scr */
+function rotation_hero_strip_from_screen(?array $scr): array
+{
+    $defaults = [
+        'enabled' => false,
+        'source' => '',
+        'key' => '',
+        'height' => 120,
+        'slots' => [],
+    ];
+    if (!is_array($scr)) {
+        return $defaults;
+    }
+    if (empty($scr['hero_strip'])) {
+        return $defaults;
+    }
+    $height = max(60, min(240, (int)($scr['hero_strip_height'] ?? 120)));
+    $slots = [];
+    if (isset($scr['hero_strip_slots']) && is_array($scr['hero_strip_slots'])) {
+        $slots = rotation_hero_strip_slots_from_config($scr['hero_strip_slots']);
+    }
+    if ($slots === []) {
+        $source = strtolower(trim((string)($scr['hero_strip_source'] ?? '')));
+        if (in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)) {
+            $slots[] = [
+                'source' => $source,
+                'key' => trim((string)($scr['hero_strip_key'] ?? '')),
+            ];
+        }
+    }
+    $firstSource = (string)($slots[0]['source'] ?? '');
+    $firstKey = (string)($slots[0]['key'] ?? '');
+
+    return [
+        'enabled' => true,
+        'source' => $firstSource,
+        'key' => $firstKey,
+        'height' => $height,
+        'slots' => $slots,
+    ];
 }
 
 /** @return array{enabled:bool,off:int,on:int,device:int} */
@@ -1023,6 +1233,11 @@ function rotation_config_revision(string $screen = 'main'): string
         'fade_ms' => $settings['fade_ms'],
         'settle_ms' => $settings['settle_ms'],
         'hang_ms' => $settings['hang_ms'],
+        'emergency' => (static function () {
+            require_once __DIR__ . '/emergency_lib.php';
+
+            return emergency_revision_blob();
+        })(),
     ], JSON_UNESCAPED_SLASHES);
     return substr(sha1($blob ?: ''), 0, 12);
 }
@@ -1037,13 +1252,13 @@ function rotation_screen_runtime(string $screen = 'main'): array
     $settings = rotation_screen_settings($screen);
     $blank = rotation_screen_blank_active($screen);
 
-    return [
+    $runtime = [
         'screen' => $screen,
         'timezone' => rotation_timezone(),
         'pages' => rotation_pages_labeled(rotation_screen_active_pages($screen)),
         'shuffle' => $settings['shuffle'],
         'weighted' => $settings['weighted'],
-        'show_ticker' => $settings['show_ticker'],
+        'show_ticker' => rotation_screen_ticker_enabled($screen),
         'show_clock' => $settings['show_clock'],
         'show_debug' => $settings['show_debug'],
         'keyboard_nav' => $settings['keyboard_nav'],
@@ -1052,8 +1267,12 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'fade_ms' => $settings['fade_ms'],
         'settle_ms' => $settings['settle_ms'],
         'hang_ms' => $settings['hang_ms'],
+        'hero_strip' => $settings['hero_strip'],
         'revision' => rotation_config_revision($screen),
     ];
+    require_once __DIR__ . '/emergency_lib.php';
+
+    return emergency_apply_runtime($runtime, $screen);
 }
 
 /** Default playlist when nothing is configured yet (matches board.php fallback). */
@@ -1234,6 +1453,20 @@ function rotation_page_label(string $url): string
         $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(zabbix_pages_config()) ?: 'main');
 
         return 'Zabbix — ' . zabbix_page_label($key);
+    }
+
+    if (preg_match('/^kuma\.php(?:\?d=([^&]+))?/', $url, $m)) {
+        require_once __DIR__ . '/kuma_lib.php';
+        $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(kuma_pages_config()) ?: 'main');
+
+        return 'Uptime Kuma — ' . kuma_page_label($key);
+    }
+
+    if (preg_match('/^announce\.php(?:\?d=([^&]+))?/', $url, $m)) {
+        require_once __DIR__ . '/announce_lib.php';
+        $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(announce_items_registry()) ?: 'main');
+
+        return 'Announcement — ' . announce_item_label($key);
     }
 
     if (preg_match('/^web\.php(?:\?d=([^&]+))?/', $url, $m)) {
@@ -1620,6 +1853,67 @@ function rotation_quick_add_items(): array
         ];
     }
 
+    require_once __DIR__ . '/kuma_lib.php';
+    foreach (kuma_pages_config() as $key => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        if (!rotation_quick_add_entry_allowed($page)) {
+            continue;
+        }
+        if (!empty($page['off'])) {
+            continue;
+        }
+        if (!kuma_page_has_source($page)) {
+            continue;
+        }
+        $title = trim((string)($page['title'] ?? $key));
+        $items[] = [
+            'label' => 'Uptime Kuma — ' . $title,
+            'url' => kuma_page_url((string)$key),
+            'dwell' => 45,
+            'group' => 'Monitoring',
+        ];
+    }
+
+    require_once __DIR__ . '/announce_lib.php';
+    foreach (announce_items_registry() as $key => $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        if (!rotation_quick_add_entry_allowed($item)) {
+            continue;
+        }
+        if (!empty($item['off']) || !empty($item['strip_only'])) {
+            continue;
+        }
+        $title = trim((string)($item['title'] ?? $key));
+        $items[] = [
+            'label' => 'Announcement — ' . $title,
+            'url' => announce_page_url((string)$key),
+            'dwell' => 30,
+            'group' => 'Daily',
+        ];
+    }
+
+    require_once __DIR__ . '/tailscale_lib.php';
+    if (tailscale_configured()) {
+        $items[] = [
+            'label' => 'Tailscale',
+            'url' => 'tailscale.php',
+            'dwell' => 45,
+            'group' => 'Monitoring',
+        ];
+    }
+
+    require_once __DIR__ . '/ntfy_lib.php';
+    $items[] = [
+        'label' => 'ntfy alerts',
+        'url' => 'ntfy.php',
+        'dwell' => 30,
+        'group' => 'Monitoring',
+    ];
+
     require_once __DIR__ . '/web_lib.php';
     foreach (web_sites_config() as $key => $site) {
         if (!is_array($site)) {
@@ -1650,7 +1944,7 @@ function rotation_quick_add_entry_allowed(array $entry): bool
         return true;
     }
 
-    return admin_entry_visible($entry);
+    return admin_entry_visible_for_deploy($entry);
 }
 
 function rotation_screen_display_name(string $screenKey, array $screens): string
@@ -2595,7 +2889,6 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     if (!is_array($fullDeck)) {
         $fullDeck = [];
     }
-    $scopeFiles = slides_deploy_scope_files($fullDeck);
     $recoveryDeploy = slides_deck_targets_no_configured_screens($fullDeck)
         || slides_deck_untargeted_misconfig($fullDeck);
     $repairedDeck = slides_repair_deck($fullDeck, $recoveryDeploy);
@@ -2611,7 +2904,22 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     $done = [];
     $deployed = [];
     $pageWrites = [];
-    if ($scopeFiles !== null && $scopeFiles === []) {
+    $anyScope = false;
+    foreach ($screens as $screen) {
+        $screen = rotation_normalize_screen_key((string)$screen);
+        if ($screen === '') {
+            continue;
+        }
+        $scope = slides_deploy_scope_files($fullDeck, $screen);
+        if ($scope === null) {
+            $anyScope = true;
+            break;
+        }
+        if ($scope !== []) {
+            $anyScope = true;
+        }
+    }
+    if (!$anyScope) {
         foreach ($screens as $screen) {
             $screen = rotation_normalize_screen_key((string)$screen);
             if ($screen !== '') {
@@ -2637,6 +2945,11 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $done[$screen] = true;
+        $scopeFiles = slides_deploy_scope_files($fullDeck, $screen);
+        if ($scopeFiles !== null && $scopeFiles === []) {
+            $skipped[] = $screen;
+            continue;
+        }
         $expected = slides_deploy_expected_pages($fullDeck, $screen, $scopeFiles);
         if ($expected === []) {
             $skipped[] = $screen;
