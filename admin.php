@@ -2040,8 +2040,20 @@ function admin_field(array $f, $val, string $board): void
   nav a:hover { background:var(--harbor); }
   nav a.active { background:var(--harbor); border-left:3px solid var(--beacon); padding-left:19px; font-weight:600; }
   nav .sep { margin:12px 22px; border-top:1px solid var(--line); }
+  nav .nav-group { border:0; margin:0; }
+  nav .nav-group + .nav-group { margin-top:2px; }
   nav .nav-label { padding:14px 22px 6px; font-size:11px; letter-spacing:1.2px; text-transform:uppercase;
                    color:var(--mist); opacity:.85; }
+  nav .nav-group > summary.nav-label { list-style:none; cursor:pointer; user-select:none; display:flex;
+    align-items:center; justify-content:space-between; gap:8px; padding:12px 22px 8px; margin:0;
+    border-radius:0; transition:color .15s ease, background .15s ease; }
+  nav .nav-group > summary.nav-label::-webkit-details-marker { display:none; }
+  nav .nav-group > summary.nav-label::marker { content:''; }
+  nav .nav-group > summary.nav-label::after { content:'▾'; font-size:10px; opacity:.65; flex:0 0 auto;
+    transition:transform .15s ease; }
+  nav .nav-group:not([open]) > summary.nav-label::after { transform:rotate(-90deg); }
+  nav .nav-group > summary.nav-label:hover { color:var(--snow); background:var(--harbor); opacity:1; }
+  nav .nav-group-links { padding-bottom:4px; }
   main { flex:1; padding:28px 34px 40px; max-width:920px; min-width:0; }
   main.main-wide { max-width:none; width:100%; overflow-x:hidden; }
   h2 { font-family:'Big Shoulders Display'; font-weight:600; font-size:28px; margin-bottom:4px; }
@@ -2580,20 +2592,33 @@ function admin_field(array $f, $val, string $board): void
   <nav>
     <?php
     $navSeen = [];
+    $navBoardActive = !$tools && !$usersBoard && !$accountBoard && !$statusBoard && !$auditBoard;
     foreach ($navGroupsFiltered as $groupLabel => $keys):
       $any = false;
       foreach ($keys as $k) {
           if (isset($schema[$k])) { $any = true; break; }
       }
       if (!$any) continue;
+      $groupOpen = false;
+      $groupId = 'nav-' . preg_replace('/[^a-z0-9]+/i', '-', strtolower(trim($groupLabel)));
+      foreach ($keys as $k) {
+          if ($navBoardActive && $k === $board && isset($schema[$k])) {
+              $groupOpen = true;
+              break;
+          }
+      }
     ?>
-      <div class="nav-label"><?= h($groupLabel) ?></div>
+      <details class="nav-group" data-nav-group="<?= h($groupId) ?>"<?= $groupOpen ? ' open data-nav-active="1"' : '' ?>>
+        <summary class="nav-label"><?= h($groupLabel) ?></summary>
+        <div class="nav-group-links">
       <?php foreach ($keys as $k):
         if (!isset($schema[$k])) continue;
         $navSeen[$k] = true;
       ?>
-        <a href="?board=<?= h($k) ?>" class="<?= (!$tools && !$usersBoard && !$accountBoard && !$statusBoard && !$auditBoard && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
+        <a href="?board=<?= h($k) ?>" class="<?= ($navBoardActive && $k === $board) ? 'active' : '' ?>"><?= h($schema[$k]['title']) ?></a>
       <?php endforeach; ?>
+        </div>
+      </details>
     <?php endforeach;
     foreach ($schema as $k => $b) {
         if (!empty($navSeen[$k]) || !admin_can_board($k)) {
@@ -6951,7 +6976,38 @@ function addUserRow() {
   bindUserRow(card);
 }
 
+function initAdminNavGroups() {
+  const storageKey = 'adminNavCollapsed';
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+  } catch (e) {
+    saved = null;
+  }
+  const groups = document.querySelectorAll('.nav-group[data-nav-group]');
+  if (!groups.length) return;
+  groups.forEach(function (details) {
+    const id = details.dataset.navGroup || '';
+    if (saved && Object.prototype.hasOwnProperty.call(saved, id)) {
+      details.open = !saved[id];
+    }
+  });
+  groups.forEach(function (details) {
+    details.addEventListener('toggle', function () {
+      const state = {};
+      groups.forEach(function (d) {
+        const id = d.dataset.navGroup || '';
+        if (id) state[id] = !d.open;
+      });
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      } catch (e) {}
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+  initAdminNavGroups();
   initSlideDeck();
   initSlidesSectionNav();
   initPhotoDeck();
