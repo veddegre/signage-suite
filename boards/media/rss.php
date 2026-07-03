@@ -242,17 +242,17 @@ $payload = array_map(fn($i) => [
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
 
-  .photo { position:absolute; inset:0; opacity:0; transition:opacity 1.6s ease;
-           --img:none; background-image:var(--img); background-repeat:no-repeat; }
+  .photo { position:absolute; inset:0; opacity:0; transition:opacity 1.6s ease; --img:none; }
   .photo.show { opacity:1; }
-  .photo.fit-cover { background-size:cover; background-position:center; }
-  .photo.fit-contain { background-size:contain; background-position:center; }
-  .photo.fit-portrait { background-size:contain; background-position:center right 72px; }
-  .photo.fit-contain::before,
-  .photo.fit-portrait::before { content:''; position:absolute; inset:-40px;
-    background-image:var(--img); background-size:cover; background-position:center;
-    filter:blur(56px) brightness(0.38) saturate(1.12); transform:scale(1.06); z-index:0; }
-  .photo::after { content:''; position:absolute; inset:0; z-index:1; pointer-events:none;
+  .photo-blur, .photo-main { position:absolute; background-image:var(--img); background-repeat:no-repeat; }
+  .photo-blur { inset:-40px; background-size:cover; background-position:center;
+    filter:blur(56px) brightness(0.38) saturate(1.12); transform:scale(1.06); }
+  .photo-main { inset:0; z-index:1; }
+  .photo.fit-cover .photo-blur { display:none; }
+  .photo.fit-cover .photo-main { background-size:cover; background-position:center; }
+  .photo.fit-contain .photo-main { background-size:contain; background-position:center; }
+  .photo.fit-portrait .photo-main { background-size:contain; background-position:center right 72px; }
+  .photo::after { content:''; position:absolute; inset:0; z-index:2; pointer-events:none;
     background:linear-gradient(90deg, rgba(12,20,34,.96) 0%, rgba(12,20,34,.86) 34%,
                                        rgba(12,20,34,.45) 62%, rgba(12,20,34,.25) 100%),
                linear-gradient(0deg, rgba(12,20,34,.85) 0%, rgba(12,20,34,0) 38%); }
@@ -262,9 +262,10 @@ $payload = array_map(fn($i) => [
                                        rgba(12,20,34,0) 88%),
                linear-gradient(0deg, rgba(12,20,34,.88) 0%, rgba(12,20,34,0) 36%); }
   .photo.fit-contain::after {
-    background:linear-gradient(90deg, rgba(12,20,34,.92) 0%, rgba(12,20,34,.72) 28%,
-                                       rgba(12,20,34,.72) 72%, rgba(12,20,34,.92) 100%),
-               linear-gradient(0deg, rgba(12,20,34,.82) 0%, rgba(12,20,34,0) 34%); }
+    background:linear-gradient(90deg, rgba(12,20,34,.78) 0%, rgba(12,20,34,.42) 22%,
+                                       rgba(12,20,34,.18) 42%, rgba(12,20,34,.18) 58%,
+                                       rgba(12,20,34,.42) 78%, rgba(12,20,34,.78) 100%),
+               linear-gradient(0deg, rgba(12,20,34,.55) 0%, rgba(12,20,34,0) 28%); }
   @media (prefers-reduced-motion: reduce) { .photo, .text { transition:none !important; } }
 
   .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:5;
@@ -302,8 +303,8 @@ $payload = array_map(fn($i) => [
 </style>
 </head>
 <body>
-<div class="photo" id="photoA"></div>
-<div class="photo" id="photoB"></div>
+<div class="photo" id="photoA"><span class="photo-blur" aria-hidden="true"></span><span class="photo-main" aria-hidden="true"></span></div>
+<div class="photo" id="photoB"><span class="photo-blur" aria-hidden="true"></span><span class="photo-main" aria-hidden="true"></span></div>
 
 <div class="chrome">
   <div class="brand-block">
