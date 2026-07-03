@@ -1798,6 +1798,21 @@ function admin_screen_picker_operator_cfg(array $cfg = []): array
     return $cfg;
 }
 
+/** Screens an operator may be offered: theirs plus unassigned (hide other operators' displays). @param list<array{key:string,name:string}> $options @param array<string,string> $assignedElsewhere @return list<array{key:string,name:string}> */
+function admin_user_screen_picker_options(array $options, array $assignedElsewhere): array
+{
+    $out = [];
+    foreach ($options as $opt) {
+        $k = (string)($opt['key'] ?? '');
+        if ($k === '' || isset($assignedElsewhere[$k])) {
+            continue;
+        }
+        $out[] = $opt;
+    }
+
+    return $out;
+}
+
 /** Operator display assignment in Users admin. @param array<string,string> $assignedElsewhere screen key => username */
 function admin_user_screen_picker(string $prefix, array $options, array $checked, array $assignedElsewhere): void
 {
@@ -1805,38 +1820,36 @@ function admin_user_screen_picker(string $prefix, array $options, array $checked
         echo '<span class="help" style="margin:0">No displays configured yet — add screens under Rotation.</span>';
         return;
     }
+    $pickerOptions = admin_user_screen_picker_options($options, $assignedElsewhere);
+    if ($pickerOptions === [] && users_normalize_screens($checked) === []) {
+        echo '<span class="help" style="margin:0">No displays available — every screen is assigned to another operator.</span>';
+        return;
+    }
     if (users_operator_multi_screen_enabled()) {
         echo '<label class="l">Displays</label>';
-        admin_screen_picker($prefix, $options, users_normalize_screens($checked), [
+        admin_screen_picker($prefix, $pickerOptions, users_normalize_screens($checked), [
             'name_key' => 'screens',
             'summary_mode' => 'assign',
             'compact' => true,
             'class' => 'screen-picker-assign',
-            'blocked' => $assignedElsewhere,
             'hide_none' => true,
         ]);
-        echo '<div class="help" style="margin-top:6px">Select every display this operator may manage. Each display can only belong to one operator.</div>';
+        echo '<div class="help" style="margin-top:6px">Only unassigned displays and this operator&rsquo;s current displays are listed.</div>';
         return;
     }
     $checkedKey = (string)($checked[0] ?? '');
     echo '<label class="l">Display</label>';
     echo '<select name="' . h($prefix . '[screen]') . '" class="user-screen-select">';
     echo '<option value=""' . ($checkedKey === '' ? ' selected' : '') . '>Unassigned</option>';
-    foreach ($options as $opt) {
+    foreach ($pickerOptions as $opt) {
         $k = (string)$opt['key'];
-        $blocked = isset($assignedElsewhere[$k]);
         $isChecked = $checkedKey === $k;
-        $label = (string)$opt['name'];
-        if ($blocked && !$isChecked) {
-            $label .= ' (' . $assignedElsewhere[$k] . ')';
-        }
         echo '<option value="' . h($k) . '"'
             . ($isChecked ? ' selected' : '')
-            . ($blocked && !$isChecked ? ' disabled' : '')
-            . '>' . h($label) . '</option>';
+            . '>' . h((string)$opt['name']) . '</option>';
     }
     echo '</select>';
-    echo '<div class="help" style="margin-top:6px">One display per operator. Enable <strong>Operators may manage multiple displays</strong> under Security for more.</div>';
+    echo '<div class="help" style="margin-top:6px">Only unassigned displays are listed. Enable <strong>Operators may manage multiple displays</strong> to assign more than one.</div>';
 }
 
 /** @param array<string,array<string,mixed>> $deployStatus */
@@ -6927,13 +6940,23 @@ function userScreenAssignedElsewhere(userId) {
   return taken;
 }
 
+function userScreenPickerOptions(userId) {
+  const opts = window.USER_SCREEN_OPTIONS || [];
+  const assignedElsewhere = userScreenAssignedElsewhere(userId);
+  return opts.filter(function (o) {
+    return !Object.prototype.hasOwnProperty.call(assignedElsewhere, String(o.key));
+  });
+}
+
 function userScreensCellHtml(idx, role, checkedKeys, userId) {
   if (role === 'super') {
     return '<span class="help" style="margin:0">Super admins can access all displays.</span>';
   }
-  const opts = window.USER_SCREEN_OPTIONS || [];
-  const assignedElsewhere = userScreenAssignedElsewhere(userId);
+  const opts = userScreenPickerOptions(userId);
   const checked = Array.isArray(checkedKeys) ? checkedKeys.map(String) : [];
+  if (opts.length === 0 && checked.length === 0) {
+    return '<span class="help" style="margin:0">No displays available — every screen is assigned to another operator.</span>';
+  }
   if (window.OPERATOR_MULTI_SCREEN) {
     const checkedSet = {};
     checked.forEach(function (sk) { checkedSet[sk] = true; });
@@ -6943,18 +6966,13 @@ function userScreensCellHtml(idx, role, checkedKeys, userId) {
       const sk = String(o.key);
       const name = String(o.name).replace(/</g, '&lt;');
       const isChecked = !!checkedSet[sk];
-      const blocked = Object.prototype.hasOwnProperty.call(assignedElsewhere, sk);
-      const owner = blocked ? String(assignedElsewhere[sk]).replace(/</g, '&lt;') : '';
-      let label = name;
-      if (blocked && !isChecked) label += ' (' + owner + ')';
-      html += '<label data-screen-key="' + sk.replace(/"/g, '&quot;') + '"' + (blocked && !isChecked ? ' class="screen-assign-taken"' : '') + '>'
+      html += '<label data-screen-key="' + sk.replace(/"/g, '&quot;') + '">'
         + '<input type="checkbox" name="USERS[' + idx + '][screens][]" value="' + sk.replace(/"/g, '&quot;') + '"'
         + (isChecked ? ' checked' : '')
-        + (blocked && !isChecked ? ' disabled' : '')
-        + '> ' + label + '</label>';
+        + '> ' + name + '</label>';
     });
     html += '</div></div>';
-    html += '<div class="help" style="margin-top:6px">Select every display this operator may manage.</div>';
+    html += '<div class="help" style="margin-top:6px">Only unassigned displays and this operator&rsquo;s current displays are listed.</div>';
     return html;
   }
   const checkedKey = checked.length ? checked[0] : '';
@@ -6964,16 +6982,11 @@ function userScreensCellHtml(idx, role, checkedKeys, userId) {
     const sk = String(o.key);
     const name = String(o.name).replace(/</g, '&lt;');
     const isChecked = checkedKey === sk;
-    const blocked = Object.prototype.hasOwnProperty.call(assignedElsewhere, sk);
-    const owner = blocked ? String(assignedElsewhere[sk]).replace(/</g, '&lt;') : '';
-    let label = name;
-    if (blocked && !isChecked) label += ' (' + owner + ')';
     html += '<option value="' + sk.replace(/"/g, '&quot;') + '"'
       + (isChecked ? ' selected' : '')
-      + (blocked && !isChecked ? ' disabled' : '')
-      + '>' + label + '</option>';
+      + '>' + name + '</option>';
   });
-  html += '</select><div class="help">One display per operator.</div>';
+  html += '</select><div class="help">Only unassigned displays are listed.</div>';
   return html;
 }
 
