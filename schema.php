@@ -77,6 +77,8 @@ function admin_schema(): array
              'help' => 'Record admin logins, saves, and user changes. Super admins view under Audit.'],
             ['key' => 'AUDIT_MAX_ENTRIES', 'label' => 'Audit log max entries', 'type' => 'number', 'default' => 2000,
              'help' => 'Oldest entries are dropped when the log exceeds this size (100–20000).'],
+            ['key' => 'OPERATOR_MULTI_SCREEN', 'label' => 'Operators may manage multiple displays', 'type' => 'bool', 'default' => false,
+             'help' => 'When on, assign more than one rotation display per operator under Users. When off, each operator gets exactly one display.'],
         ]],
         'rotation' => ['title' => 'Rotation', 'file' => 'board.php', 'fields' => array_merge([
             ['key' => 'SCREENS', 'label' => 'Screens', 'type' => 'rows', 'keyed' => true,

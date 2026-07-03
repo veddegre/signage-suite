@@ -94,9 +94,11 @@ Prefer `pipx install yt-dlp` over apt for YouTube (repo builds go stale).
 | Role | What they can do |
 |------|------------------|
 | **Super admin** | Everything — users, security, all displays |
-| **Operator** | Own content boards + rotation for **one** assigned display |
+| **Operator** | Own content boards + rotation for assigned display(s) — **one** by default, or **multiple** when **Security → Operators may manage multiple displays** is enabled |
 
 Operators can **own** and **share** playlist rows (slides, RSS, Zabbix pages, Splunk pages, …). Weather, homelab, and setup boards stay super-admin only. API tokens stay super-admin only.
+
+The admin **sidebar groups** (Setup, Weather & home, Monitoring, …) are **collapsible** — click a category header to expand or collapse; your choices are remembered in the browser.
 
 Settings use file locking so concurrent saves on different boards merge safely. The **Users** page is the exception — last save wins if two super admins edit it at once.
 
@@ -119,9 +121,9 @@ video.php?v=drone           slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **UniFi Network** (local controller API), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; `dig` for DNS roots |
+| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **UniFi Network** (gateway/switches/APs, WAN throughput, top talkers, last speed test), **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, XKCD comic | — |
-| **Media** | Photo rotator, scheduled slides, RSS feeds, local video (yt-dlp) | — |
+| **Media** | Photo rotator, scheduled slides, RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
 
 **Zabbix** — no iframe; server-side `problem.get` + host status. Problems are filtered to match the Zabbix UI (unresolved only; excludes disabled triggers/hosts/items and symptom events that `problem.get` still returns). Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. If the wall shows an alert you cannot find in Zabbix, run `php scripts/diagnose-zabbix.php <page_key> [--needle=substring]` on the server — **HIDDEN** rows are API-only leftovers (e.g. a Docker trigger disabled after a container was removed). See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
@@ -150,6 +152,10 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 **Internet infrastructure** (`internet.php`) — BGP/ASN outages via IODA (no key) and DNS root probes via `dig` (`dnsutils` package; installed by `setup-server.sh`).
 
+**UniFi Network** (`unifi.php`) — Dream Machine / UCG / UDM via local admin login (most installs) or optional Integration API key (Network 9.3+). Shows device grid, client counts, health pills, **WAN download/upload**, **top talkers**, and **last speed test** when available. Requires **Security → Allow private URL fetches** for LAN controllers. Add via **Rotation** → pick target display → quick-add **UniFi network**.
+
+**RSS stories** (`rss.php?feed=<key>`) — **Image fit** under **RSS Stories** (global) or per feed: **auto** (default — landscape fills the screen; portrait posters show full height on the right with a blurred backdrop), **cover**, or **contain**. Useful for poster-style feeds (e.g. portrait artwork).
+
 → **[Full board reference](docs/boards.md)** — setup steps, scheduling, traffic troubleshooting, ticker
 
 → **[YouTube / video troubleshooting](docs/video-youtube.md)** — cookies, deno, bot checks
@@ -166,7 +172,9 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
-Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weighted** rotation (weight 1–20), multiple displays (`?screen=`).
+Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weighted** rotation (weight 1–20), multiple displays (`?screen=`). Under **Rotation**, use **Add to display** before quick-adding a board so it lands on the right playlist (e.g. `veddersg`, not `main`).
+
+Operators with **multiple displays** assigned (see [Admin & security](#admin--security)) see and edit every playlist they own; deploy pickers (slides, photos, RSS, video) target any of their displays.
 
 → **[Rotation & deployment guide](docs/rotation-and-deployment.md)** — weighted mode, CEC, Channels DVR, standalone board URLs
 
@@ -185,11 +193,32 @@ Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weight
 
 ## General notes
 
-- **Layout:** board entry URLs stay at the web root (`index.php`, `traffic.php`, …) as thin stubs; implementations live under `boards/<group>/`, shared code under `lib/`.
-- Runtime dirs: `config/`, `cache/`, `videos/`, `slides/`, `photos/`. `slide_backgrounds/` ships theme PNGs.
+### Project layout
+
+Board entry URLs stay at the web root (`index.php`, `unifi.php`, `traffic.php`, …) as **thin stubs** that load implementations from `boards/<group>/`. Shared libraries live in `lib/` (`SIGNAGE_ROOT` in `config.php`). After `git pull`, run `setup-server.sh` so stubs and paths stay in sync.
+
+| Path | Purpose |
+|------|---------|
+| `lib/` | `*_lib.php` — API clients, rotation, users, slides, etc. |
+| `boards/weather/`, `boards/monitoring/`, `boards/media/`, … | Board implementations |
+| `config/` | `settings.json`, `users.json` (not web-accessible) |
+| `cache/` | API response cache |
+| `videos/`, `slides/`, `photos/` | Uploaded media |
+
+Runtime dirs: `config/`, `cache/`, `videos/`, `slides/`, `photos/`. `slide_backgrounds/` ships theme PNGs.
+
 - Legacy `config/admin.json` migrates to `config/users.json` on first login.
 - Failed API calls show a diagnostic stamp bottom-right while serving stale cache.
 - `*.lock` files beside JSON during writes are normal.
+
+### Deploy after updates
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash setup-server.sh --skip-apt --source ~/signage-suite --webroot /var/www/html/boards
+```
+
+Clear board-specific cache if needed (e.g. `cache/unifi_wall.json` after UniFi changes).
 
 ### CLI diagnostics
 

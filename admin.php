@@ -1548,7 +1548,7 @@ if ($authed && $board === 'video') {
             continue;
         }
         $st = video_entry_status($k, $v);
-        $st['in_rotation'] = video_in_rotation($k, admin_operator_screen_key() ?? 'main');
+        $st['in_rotation'] = admin_video_in_rotation_any($k);
         $videoStatuses[] = $st;
         $videoStatusByKey[$k] = $st;
     }
@@ -1728,6 +1728,7 @@ function admin_screen_picker(string $prefix, array $options, array $checked, arr
     $hideQuickNone = !empty($cfg['hide_none']) || $summaryMode === 'assign';
     $hideQuickAll = !empty($cfg['hide_all']) || $summaryMode === 'assign';
     $checkedSet = array_flip($checked);
+    $blocked = is_array($cfg['blocked'] ?? null) ? $cfg['blocked'] : [];
     $checkboxName = $flat ? $flatName . '[]' : $prefix . '[' . $nameKey . '][]';
     $pickerClass = 'screen-picker' . ($compact ? ' screen-picker-compact' : '') . ($extraClass !== '' ? ' ' . $extraClass : '');
 
@@ -1759,8 +1760,17 @@ function admin_screen_picker(string $prefix, array $options, array $checked, arr
     foreach ($options as $opt) {
         $k = $opt['key'];
         $isChecked = isset($checkedSet[$k]);
-        echo '<label data-screen-key="' . h($k) . '"><input type="checkbox" name="' . h($checkboxName) . '" value="' . h($k) . '"'
-            . ($isChecked ? ' checked' : '') . '> ' . h($opt['name']) . '</label>';
+        $owner = (string)($blocked[$k] ?? '');
+        $isBlocked = $owner !== '' && !$isChecked;
+        $label = (string)$opt['name'];
+        if ($isBlocked) {
+            $label .= ' (' . $owner . ')';
+        }
+        echo '<label data-screen-key="' . h($k) . '"' . ($isBlocked ? ' class="screen-assign-taken"' : '') . '>'
+            . '<input type="checkbox" name="' . h($checkboxName) . '" value="' . h($k) . '"'
+            . ($isChecked ? ' checked' : '')
+            . ($isBlocked ? ' disabled' : '')
+            . '> ' . h($label) . '</label>';
     }
     echo '</div>';
     if ($compact) {
@@ -1781,11 +1791,24 @@ function admin_screen_picker_operator_cfg(array $cfg = []): array
     return $cfg;
 }
 
-/** One display per operator — compact select in Users admin. @param array<string,string> $assignedElsewhere screen key => username */
+/** Operator display assignment in Users admin. @param array<string,string> $assignedElsewhere screen key => username */
 function admin_user_screen_picker(string $prefix, array $options, array $checked, array $assignedElsewhere): void
 {
     if ($options === []) {
         echo '<span class="help" style="margin:0">No displays configured yet — add screens under Rotation.</span>';
+        return;
+    }
+    if (users_operator_multi_screen_enabled()) {
+        echo '<label class="l">Displays</label>';
+        admin_screen_picker($prefix, $options, users_normalize_screens($checked), [
+            'name_key' => 'screens',
+            'summary_mode' => 'assign',
+            'compact' => true,
+            'class' => 'screen-picker-assign',
+            'blocked' => $assignedElsewhere,
+            'hide_none' => true,
+        ]);
+        echo '<div class="help" style="margin-top:6px">Select every display this operator may manage. Each display can only belong to one operator.</div>';
         return;
     }
     $checkedKey = (string)($checked[0] ?? '');
@@ -1806,7 +1829,7 @@ function admin_user_screen_picker(string $prefix, array $options, array $checked
             . '>' . h($label) . '</option>';
     }
     echo '</select>';
-    echo '<div class="help" style="margin-top:6px">One display per operator.</div>';
+    echo '<div class="help" style="margin-top:6px">One display per operator. Enable <strong>Operators may manage multiple displays</strong> under Security for more.</div>';
 }
 
 /** @param array<string,array<string,mixed>> $deployStatus */
@@ -2736,7 +2759,8 @@ function admin_field(array $f, $val, string $board): void
       <?php if (!admin_is_super()):
         $allowed = admin_allowed_screen_keys();
       ?>
-      <div class="help" style="margin-bottom:18px">You manage one display:
+      <div class="help" style="margin-bottom:18px">You manage
+        <?= count($allowed) === 1 ? 'one display' : count($allowed) . ' displays' ?>:
         <?php if ($allowed === []): ?>
           <span class="pill warn">none — ask a super admin to assign a display under <strong>Users</strong></span>
         <?php else: ?>
@@ -2843,7 +2867,7 @@ function admin_field(array $f, $val, string $board): void
             <?php endforeach; ?>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. Each <strong>operator</strong> gets exactly one display.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. Each <strong>operator</strong> gets <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -2865,17 +2889,18 @@ function admin_field(array $f, $val, string $board): void
       <script>window.USER_SCREEN_OPTIONS = <?= json_encode($userScreenOptionsJs, JSON_UNESCAPED_UNICODE) ?>;
 window.USER_SCREEN_ASSIGNMENTS = <?= json_encode($userScreenAssignmentsJs, JSON_UNESCAPED_UNICODE) ?>;
 window.ADMIN_OPERATOR_SCREEN = <?= json_encode(admin_operator_screen_key()) ?>;
-window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_locked()) ?>;</script>
+window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_locked()) ?>;
+window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabled()) ?>;</script>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
       <div class="sub">Changes save to <code>config/settings.json</code>.
         <?php if ($board === 'rotation'):
-          $rotationHeaderScreen = admin_operator_screen_locked()
-              ? (string)(admin_operator_screen_key() ?? '')
-              : 'main';
+          $rotationHeaderScreen = admin_is_super()
+              ? 'main'
+              : (string)(admin_allowed_screen_keys()[0] ?? '');
           if ($rotationHeaderScreen !== ''): ?>
-          <a href="<?= h(rotation_screen_preview_url($rotationHeaderScreen)) ?>" target="_blank" rel="noopener"><?= admin_operator_screen_locked() ? 'Preview your rotation ↗' : 'Preview main rotation ↗' ?></a>
+          <a href="<?= h(rotation_screen_preview_url($rotationHeaderScreen)) ?>" target="_blank" rel="noopener"><?= admin_operator_screen_locked() ? 'Preview your rotation ↗' : (admin_is_super() ? 'Preview main rotation ↗' : 'Preview your rotation ↗') ?></a>
           · kiosk URL <code><?= h(rotation_screen_kiosk_url($rotationHeaderScreen)) ?></code>
           <?php else: ?>
           <span class="help" style="margin:0">No display assigned — ask a super admin under <strong>Users</strong>.</span>
@@ -3299,7 +3324,9 @@ window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_lock
             }
             $playlistOpen = admin_operator_screen_locked()
                 ? $screenKey === admin_operator_screen_key()
-                : ($screenKey === 'main' && $pageCount <= 6);
+                : (admin_is_super()
+                    ? ($screenKey === 'main' && $pageCount <= 6)
+                    : in_array($screenKey, admin_allowed_screen_keys(), true));
           ?>
           <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $playlistOpen ? ' open' : '' ?>>
             <summary>
@@ -6889,7 +6916,31 @@ function userScreensCellHtml(idx, role, checkedKeys, userId) {
   }
   const opts = window.USER_SCREEN_OPTIONS || [];
   const assignedElsewhere = userScreenAssignedElsewhere(userId);
-  const checkedKey = (checkedKeys && checkedKeys.length) ? String(checkedKeys[0]) : '';
+  const checked = Array.isArray(checkedKeys) ? checkedKeys.map(String) : [];
+  if (window.OPERATOR_MULTI_SCREEN) {
+    const checkedSet = {};
+    checked.forEach(function (sk) { checkedSet[sk] = true; });
+    let html = '<label class="l">Displays</label><div class="screen-picker screen-picker-compact screen-picker-assign" data-screen-picker data-summary-mode="assign">';
+    html += '<div class="screen-picker-list slide-screen-checks">';
+    opts.forEach(function (o) {
+      const sk = String(o.key);
+      const name = String(o.name).replace(/</g, '&lt;');
+      const isChecked = !!checkedSet[sk];
+      const blocked = Object.prototype.hasOwnProperty.call(assignedElsewhere, sk);
+      const owner = blocked ? String(assignedElsewhere[sk]).replace(/</g, '&lt;') : '';
+      let label = name;
+      if (blocked && !isChecked) label += ' (' + owner + ')';
+      html += '<label data-screen-key="' + sk.replace(/"/g, '&quot;') + '"' + (blocked && !isChecked ? ' class="screen-assign-taken"' : '') + '>'
+        + '<input type="checkbox" name="USERS[' + idx + '][screens][]" value="' + sk.replace(/"/g, '&quot;') + '"'
+        + (isChecked ? ' checked' : '')
+        + (blocked && !isChecked ? ' disabled' : '')
+        + '> ' + label + '</label>';
+    });
+    html += '</div></div>';
+    html += '<div class="help" style="margin-top:6px">Select every display this operator may manage.</div>';
+    return html;
+  }
+  const checkedKey = checked.length ? checked[0] : '';
   let html = '<label class="l">Display</label><select name="USERS[' + idx + '][screen]" class="user-screen-select">';
   html += '<option value=""' + (checkedKey === '' ? ' selected' : '') + '>Unassigned</option>';
   opts.forEach(function (o) {
@@ -6938,7 +6989,9 @@ function bindUserRow(card) {
     const cell = card.querySelector('.user-display-cell');
     if (!cell) return;
     const select = cell.querySelector('.user-screen-select');
-    const checked = select && select.value ? [select.value] : [];
+    const checks = cell.querySelectorAll('input[name*="[screens]"]:checked');
+    const checked = select && select.value ? [select.value]
+      : Array.from(checks).map(function (cb) { return cb.value; });
     const idInput = card.querySelector('input[name*="[id]"]');
     const userId = idInput ? idInput.value : '';
     cell.innerHTML = userScreensCellHtml(idx, sel.value, checked, userId);
