@@ -30,7 +30,7 @@ flowchart LR
 | | |
 |---|---|
 | [Getting started](#getting-started) | Install, first login, manual requirements |
-| [Admin & security](#admin--security) | Roles, ownership — [full guide](docs/admin-and-security.md) |
+| [Admin & security](#admin--security) | Roles, display assignment, sharing (users + roles) — [full guide](docs/admin-and-security.md) |
 | [Boards](#boards) | Overview — [per-board reference](docs/boards.md) |
 | [Rotation & deployment](#rotation--deployment) | Playlists, scripts — [full guide](docs/rotation-and-deployment.md) |
 | [Documentation](#documentation) | Deep-dive docs in `docs/` |
@@ -96,9 +96,11 @@ Prefer `pipx install yt-dlp` over apt for YouTube (repo builds go stale).
 | **Super admin** | Everything — users, security, all displays |
 | **Operator** | Own content boards + rotation for assigned display(s) — **one** by default, or **multiple** when **Security → Operators may manage multiple displays** is enabled |
 
-Operators can **own** and **share** playlist rows (slides, RSS, Zabbix pages, Splunk pages, …). Weather, homelab, and setup boards stay super-admin only. API tokens stay super-admin only.
+Operators can **own** content and grant access to **individual users** or **roles** (e.g. all **Operators**) on playlist rows — slides, photos, RSS feeds, Zabbix pages, Splunk pages, video entries, and more. Share with a role once instead of checking every user on every item. Weather, homelab, and setup boards stay super-admin only. API tokens stay super-admin only.
 
 The admin **sidebar groups** (Setup, Weather & home, Monitoring, …) are **collapsible** — click a category header to expand or collapse; your choices are remembered in the browser.
+
+**Users** assigns each display to **one operator** (primary owner). Enable **Security → Operators may manage multiple displays** (default on) to give one person several screens; the display picker then lists only **unassigned** displays and that operator’s **current** assignments — screens owned by someone else are hidden so you cannot accidentally assign the same TV twice. Toggle the same setting on the **Users** page when saving accounts.
 
 Settings use file locking so concurrent saves on different boards merge safely. The **Users** page is the exception — last save wins if two super admins edit it at once.
 
@@ -184,7 +186,7 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 
 | Doc | Contents |
 |-----|----------|
-| [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, ownership, SSO (Entra/Authentik), hardening |
+| [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, ownership & sharing (users + roles), SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
 | [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, scripts, PWA, DVR |
 | [docs/video-youtube.md](docs/video-youtube.md) | yt-dlp, cookies, headless YouTube |

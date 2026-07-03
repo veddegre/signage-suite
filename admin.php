@@ -2310,6 +2310,10 @@ function admin_field(array $f, $val, string $board): void
   .entry-sharing select { width:100%; max-width:280px; padding:8px 10px; font-size:14px;
     background:#0f1728; border:1px solid var(--line); border-radius:8px; color:var(--snow); margin-top:4px; }
   .entry-sharing-shared-label { display:block; margin-top:10px; margin-bottom:4px; }
+  .entry-sharing-roles-label { display:block; margin-top:10px; margin-bottom:4px; }
+  .entry-sharing-roles { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:4px; }
+  .entry-sharing-roles label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); cursor:pointer; }
+  .entry-sharing-roles input { width:15px; height:15px; min-width:15px; accent-color:var(--beacon); margin:0; }
   .entry-sharing-panel-head { margin-bottom:8px; font-size:13px; color:var(--snow); }
   .entry-sharing-owner-list { display:flex; flex-direction:column; gap:2px; max-height:120px; overflow-y:auto; margin-top:4px; padding-right:2px; }
   .entry-sharing-owner-list label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--snow); padding:4px 2px; cursor:pointer; }
@@ -4311,7 +4315,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           </div>
 
           <div class="admin-tab-panel<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab-panel="deck" id="slide-deck-panel">
-          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. <strong>Owner</strong> (Access) is who owns the slide; <strong>Share with</strong> lets operators edit without owning. Slides marked hidden on all displays are auto-fixed on Save and Deploy.</div>
+          <div class="help" style="margin-bottom:12px"><strong>Save</strong> stores deck order, schedule, and which displays each slide targets (<strong>Show on displays</strong>). <strong>Deploy</strong> pushes those slides to wall rotation. <strong>Access</strong> sets the owner, individual users, and roles that may edit. Slides marked hidden on all displays are auto-fixed on Save and Deploy.</div>
           <?php if ($slideHighlight !== null): ?>
           <div class="slide-added-notice">Added <code><?= h($slideHighlight) ?></code> to the deck — review schedule, then Save.</div>
           <?php endif; ?>
@@ -4372,6 +4376,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <button type="button" class="secondary deck-bulk-remove" id="slideDeckShareRemove" style="padding:6px 12px;font-size:13px">Remove share</button>
             <button type="button" class="secondary" id="slideDeckShareDisplayOwner" style="padding:6px 12px;font-size:13px" title="Share with the operator assigned to the display chosen in Assign to">Display owner</button>
             <button type="button" class="secondary" id="slideDeckShareAllUsers" style="padding:6px 12px;font-size:13px" title="Add share for every user in the list">All users</button>
+            <button type="button" class="secondary" id="slideDeckShareAllOperators" style="padding:6px 12px;font-size:13px" title="Share selected slides with every operator">All operators</button>
             <span class="deck-selection-sep" aria-hidden="true">|</span>
             <button type="button" class="secondary" id="slideDeckReclaimSelected" style="padding:6px 12px;font-size:13px" title="Super admin owns selected slides; current owner moves to Share with">Reclaim selected</button>
             <label class="deck-selection-assign">Reclaim all from
@@ -5071,6 +5076,7 @@ window.ROTATION_WEIGHTED_MODE_TOOLTIP = <?= json_encode(rotation_weighted_mode_t
 <?php endif; ?>
 <?php if ($authed && admin_is_super()): ?>
 window.SHARING_USER_OPTIONS = <?= json_encode(admin_sharing_user_options(), JSON_UNESCAPED_UNICODE) ?>;
+window.SHARING_ROLE_OPTIONS = <?= json_encode(admin_sharing_role_options(), JSON_UNESCAPED_UNICODE) ?>;
 window.SCREEN_OPERATOR_MAP = <?= json_encode(admin_screen_operator_map(), JSON_UNESCAPED_UNICODE) ?>;
 <?php endif; ?>
 const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1' . (signage_ticker_enabled() ? '&safebottom=' . SIGNAGE_TICKER_H : '')) ?>;
@@ -5263,7 +5269,7 @@ function addRow(btn) {
   if (window.SHARING_USER_OPTIONS && window.SHARING_USER_OPTIONS.length) {
     const shareTd = document.createElement('td');
     shareTd.className = 'entry-sharing-cell';
-    shareTd.innerHTML = entrySharingHtml(field + '[' + idx + ']', '', [], true);
+    shareTd.innerHTML = entrySharingHtml(field + '[' + idx + ']', '', [], [], true);
     tr.appendChild(shareTd);
     initEntrySharingPopovers(tr);
   }
@@ -5414,15 +5420,21 @@ function collectMediaDeckRow(card, includeSchedule) {
   const owner = ownerChecked ? ownerChecked.value : (ownerSelect ? ownerSelect.value : '');
   const shared = [];
   card.querySelectorAll('[name*="[shared]"]:checked').forEach(function (cb) { shared.push(cb.value); });
+  const sharedRoles = [];
+  card.querySelectorAll('[name*="[shared_roles]"]:checked').forEach(function (cb) { sharedRoles.push(cb.value); });
   const sharingRoot = slideCardSharingRoot(card);
   if (sharingRoot) {
     row._sharing_form = '1';
     row.owner = owner || '';
     row.shared = shared;
+    row.shared_roles = sharedRoles;
   } else if (owner) {
     row.owner = owner;
   } else if (shared.length) {
     row.shared = shared;
+  }
+  if (!sharingRoot && sharedRoles.length) {
+    row.shared_roles = sharedRoles;
   }
   return row;
 }
@@ -6014,6 +6026,20 @@ function setSlideCardSharedUsers(card, mode, userIds) {
   syncSlideCardAccessMeta(card);
 }
 
+function setSlideCardSharedRoles(card, mode, roleKeys) {
+  const root = slideCardSharingRoot(card);
+  if (!root) return;
+  roleKeys = (roleKeys || []).map(String).filter(Boolean);
+  const roleSet = new Set(roleKeys);
+  root.querySelectorAll('[data-entry-sharing-shared-role]').forEach(function (cb) {
+    const rk = cb.value;
+    if (mode === 'only') cb.checked = roleSet.has(rk);
+    else if (mode === 'add' && roleSet.has(rk)) cb.checked = true;
+    else if (mode === 'remove' && roleSet.has(rk)) cb.checked = false;
+  });
+  syncSlideCardAccessMeta(card);
+}
+
 function syncSlideCardAccessMeta(card) {
   const pill = card.querySelector('[data-slide-access-pill]');
   const root = slideCardSharingRoot(card);
@@ -6022,7 +6048,11 @@ function syncSlideCardAccessMeta(card) {
   root.querySelectorAll('[data-entry-sharing-shared]:checked').forEach(function (cb) {
     shared.push(cb.value);
   });
-  pill.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared);
+  const sharedRoles = [];
+  root.querySelectorAll('[data-entry-sharing-shared-role]:checked').forEach(function (cb) {
+    sharedRoles.push(cb.value);
+  });
+  pill.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared, sharedRoles);
 }
 
 function slideDeckShareUserLabel(userId) {
@@ -6054,6 +6084,20 @@ function slideDeckShareSelected(mode, userIds) {
   updateSlideDeckSelectionUI();
 }
 
+function slideDeckShareRoleSelected(mode, roleKeys) {
+  roleKeys = (roleKeys || []).map(String).filter(Boolean);
+  if (!roleKeys.length) return;
+  const selected = slideDeckSelectedCards();
+  if (!selected.length) {
+    alert('Select one or more slides using the checkboxes on the left.');
+    return;
+  }
+  selected.forEach(function (card) {
+    setSlideCardSharedRoles(card, mode, roleKeys);
+  });
+  updateSlideDeckSelectionUI();
+}
+
 function slideDeckShareDisplayOwner() {
   const screen = document.getElementById('slideDeckAssignScreen')?.value || '';
   if (!screen) {
@@ -6073,6 +6117,10 @@ function slideDeckShareAllUsers() {
   const ids = users.map(function (u) { return u.id; });
   if (!ids.length) return;
   slideDeckShareSelected('add', ids);
+}
+
+function slideDeckShareAllOperators() {
+  slideDeckShareRoleSelected('add', ['operator']);
 }
 
 function slideDeckReclaimSubmit(action, fields) {
@@ -6142,7 +6190,7 @@ function bindSlideCardSharing(card) {
   const root = slideCardSharingRoot(card);
   if (!root || root.dataset.slideSharingBound) return;
   root.dataset.slideSharingBound = '1';
-  root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared]').forEach(function (el) {
+  root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared], [data-entry-sharing-shared-role]').forEach(function (el) {
     el.addEventListener('change', function () {
       syncEntrySharingSharedList(root);
       syncSlideCardAccessMeta(card);
@@ -6374,6 +6422,7 @@ function initSlideDeckToolbar() {
   });
   document.getElementById('slideDeckShareDisplayOwner')?.addEventListener('click', slideDeckShareDisplayOwner);
   document.getElementById('slideDeckShareAllUsers')?.addEventListener('click', slideDeckShareAllUsers);
+  document.getElementById('slideDeckShareAllOperators')?.addEventListener('click', slideDeckShareAllOperators);
   document.getElementById('slideDeckReclaimSelected')?.addEventListener('click', slideDeckReclaimSelected);
   document.getElementById('slideDeckReclaimFromUser')?.addEventListener('click', slideDeckReclaimFromUser);
   updateSlideDeckSelectionUI();
@@ -6523,17 +6572,26 @@ function initRotationTargetFilter() {
   });
 }
 
-function entryAccessTriggerLabel(ownerId, sharedIds) {
+function entryAccessTriggerLabel(ownerId, sharedIds, sharedRoleKeys) {
   const users = window.SHARING_USER_OPTIONS || [];
+  const roleOptions = window.SHARING_ROLE_OPTIONS || [];
   const byId = {};
   users.forEach(function (u) { byId[u.id] = u.username; });
+  const roleLabels = {};
+  roleOptions.forEach(function (r) { roleLabels[r.key] = r.label; });
   ownerId = ownerId || '';
   sharedIds = sharedIds || [];
-  if (!ownerId && !sharedIds.length) return 'Super only';
+  sharedRoleKeys = sharedRoleKeys || [];
+  if (!ownerId && !sharedIds.length && !sharedRoleKeys.length) return 'Super only';
   const label = ownerId ? (byId[ownerId] || ownerId) : 'Super only';
-  if (!sharedIds.length) return label;
-  if (sharedIds.length === 1) return label + ' · ' + (byId[sharedIds[0]] || sharedIds[0]);
-  return label + ' · +' + sharedIds.length;
+  const bits = [];
+  if (sharedIds.length === 1) bits.push(byId[sharedIds[0]] || sharedIds[0]);
+  else if (sharedIds.length > 1) bits.push('+' + sharedIds.length);
+  sharedRoleKeys.forEach(function (rk) {
+    bits.push(roleLabels[rk] || rk);
+  });
+  if (!bits.length) return label;
+  return label + ' · ' + bits.join(' · ');
 }
 
 function entrySharingOwnerValue(root) {
@@ -6563,7 +6621,11 @@ function syncEntrySharingTrigger(root) {
   root.querySelectorAll('[data-entry-sharing-shared]:checked').forEach(function (cb) {
     shared.push(cb.value);
   });
-  trigger.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared);
+  const sharedRoles = [];
+  root.querySelectorAll('[data-entry-sharing-shared-role]:checked').forEach(function (cb) {
+    sharedRoles.push(cb.value);
+  });
+  trigger.textContent = entryAccessTriggerLabel(entrySharingOwnerValue(root), shared, sharedRoles);
 }
 
 function positionEntrySharingMenu(menu, trigger) {
@@ -6620,7 +6682,7 @@ function initEntrySharingPopovers(scope) {
       openEntrySharingMenu(root, menu, trigger);
     });
     menu.addEventListener('click', function (e) { e.stopPropagation(); });
-    root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared]').forEach(function (el) {
+    root.querySelectorAll('[data-entry-sharing-owner], [data-entry-sharing-shared], [data-entry-sharing-shared-role]').forEach(function (el) {
       el.addEventListener('change', function () {
         syncEntrySharingSharedList(root);
         syncEntrySharingTrigger(root);
@@ -6629,12 +6691,16 @@ function initEntrySharingPopovers(scope) {
   });
 }
 
-function entrySharingFieldsHtml(prefix, ownerId, sharedIds, popover) {
+function entrySharingFieldsHtml(prefix, ownerId, sharedIds, sharedRoleIds, popover) {
   const users = window.SHARING_USER_OPTIONS || [];
+  const roleOptions = window.SHARING_ROLE_OPTIONS || [];
   ownerId = ownerId || '';
   sharedIds = sharedIds || [];
+  sharedRoleIds = sharedRoleIds || [];
   const sharedSet = {};
   sharedIds.forEach(function (id) { sharedSet[id] = true; });
+  const sharedRoleSet = {};
+  sharedRoleIds.forEach(function (id) { sharedRoleSet[id] = true; });
   let html = popover ? '<div class="entry-sharing-panel-head"><strong>Access</strong></div>' : '';
   html += '<label class="mini">Owner</label>';
   if (popover) {
@@ -6655,7 +6721,7 @@ function entrySharingFieldsHtml(prefix, ownerId, sharedIds, popover) {
     });
     html += '</select>';
   }
-  html += '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+  html += '<span class="mini entry-sharing-shared-label">Also shared with users</span>';
   html += '<div class="entry-sharing-users-scroll entry-sharing-users" data-entry-sharing-shared-list">';
   users.forEach(function (u) {
     if (ownerId && u.id === ownerId) return;
@@ -6664,23 +6730,34 @@ function entrySharingFieldsHtml(prefix, ownerId, sharedIds, popover) {
       + u.username.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
   });
   html += '</div>';
+  if (roleOptions.length) {
+    html += '<span class="mini entry-sharing-roles-label">Also shared with roles</span>';
+    html += '<div class="entry-sharing-roles" data-entry-sharing-shared-roles-list">';
+    roleOptions.forEach(function (r) {
+      html += '<label><input type="checkbox" name="' + prefix + '[shared_roles][]" value="' + String(r.key).replace(/"/g, '&quot;') + '"'
+        + ' data-entry-sharing-shared-role' + (sharedRoleSet[r.key] ? ' checked' : '') + '> '
+        + String(r.label).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</label>';
+    });
+    html += '</div>';
+  }
   return html;
 }
 
-function entrySharingHtml(prefix, ownerId, sharedIds, compact) {
+function entrySharingHtml(prefix, ownerId, sharedIds, sharedRoleIds, compact) {
   const users = window.SHARING_USER_OPTIONS || [];
   if (!users.length) return '';
+  sharedRoleIds = sharedRoleIds || [];
   let html = '<input type="hidden" name="' + prefix + '[_sharing_form]" value="1">';
   if (compact) {
     html += '<div class="entry-sharing entry-sharing--popover" data-entry-sharing>';
     html += '<button type="button" class="secondary entry-sharing-trigger" data-entry-sharing-trigger>'
-      + entryAccessTriggerLabel(ownerId, sharedIds).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</button>';
+      + entryAccessTriggerLabel(ownerId, sharedIds, sharedRoleIds).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</button>';
     html += '<div class="entry-sharing-menu" hidden data-entry-sharing-menu role="dialog" aria-label="Access">';
-    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, true);
+    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, sharedRoleIds, true);
     html += '</div></div>';
   } else {
     html += '<div class="entry-sharing">';
-    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, false);
+    html += entrySharingFieldsHtml(prefix, ownerId, sharedIds, sharedRoleIds, false);
     html += '</div>';
   }
   return html;
@@ -6697,7 +6774,7 @@ function photoScreenChecksHtml(idx) {
     formMarker: true
   });
   html += '</div>';
-  html += entrySharingHtml('PHOTOS[' + idx + ']', '', []);
+  html += entrySharingHtml('PHOTOS[' + idx + ']', '', [], []);
   return html;
 }
 
@@ -6714,7 +6791,7 @@ function slideScreenChecksHtml(idx) {
     formMarker: true
   });
   html += '</div>';
-  html += entrySharingHtml('SLIDES[' + idx + ']', '', []);
+  html += entrySharingHtml('SLIDES[' + idx + ']', '', [], []);
   return html;
 }
 
@@ -7553,7 +7630,7 @@ function addVideoCard() {
         (showYoutube ? 'or local file' : 'Local file') +
       '</label><input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
     '</div>' +
-    entrySharingHtml('VIDEOS[' + idx + ']', '', []) +
+    entrySharingHtml('VIDEOS[' + idx + ']', '', [], []) +
     '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>' +
       (showYoutube ? 'Save, then fetch or upload file' : 'Save after adding a file in videos/') +
     '</span></div>';
@@ -7820,7 +7897,7 @@ function addSplunkPage() {
       '</div>' +
     '</div>' +
     '<div class="help" style="margin-bottom:10px">Rotation URL: <code>splunk.php?d=' + pageKey + '</code></div>' +
-    entrySharingHtml('PAGES[' + pageKey + ']', '', []) +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
     '<div class="splunk-playlist video-playlist" data-splunk-panels-deck="' + pageKey + '">' +
       '<div class="rotation-playlist-empty">No panels yet — add one below.</div>' +
     '</div>' +
@@ -7955,7 +8032,7 @@ function addZabbixPage() {
       '</div>' +
     '</div>' +
     '<div class="help" style="margin-bottom:10px">Rotation URL: <code>zabbix.php?d=' + pageKey + '</code></div>' +
-    entrySharingHtml('PAGES[' + pageKey + ']', '', []) +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
     '<div class="field-grid" style="margin-bottom:12px">' +
       '<div class="field span-2"><label class="mini">Host groups</label>' +
         '<input type="text" name="PAGES[' + pageKey + '][host_groups]" placeholder="Linux servers, Network gear">' +

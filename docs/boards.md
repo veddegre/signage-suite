@@ -2,6 +2,8 @@
 
 Every board is a **1920×1080** PHP page with shared styling. Configure all boards in **admin.php**; settings save to `config/settings.json`.
 
+On operator-editable boards, super admins set **Access** per row: **owner**, **shared with users**, and **shared with roles** (e.g. all Operators). See [admin-and-security.md → Content ownership & sharing](admin-and-security.md#content-ownership--sharing).
+
 ## Quick index
 
 | Group | Board | File | Rotation URL | Keys |
@@ -331,7 +333,7 @@ Each panel degrades independently.
 
 ### unifi.php — UniFi Network
 
-**Data:** Adopted gateways, switches, and APs; online/offline state; client counts (Wi‑Fi, wired, guest); WAN/WLAN/LAN health; pending adoptions.
+**Data:** Adopted gateways, switches, and APs; online/offline state; client counts (Wi‑Fi, wired, guest); WAN/WLAN/LAN health; **WAN download/upload**; **top talkers**; **last speed test** when the controller has results; pending adoptions.
 
 **Dream Machine / UDM (typical — no API key needed):**
 
@@ -369,7 +371,7 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 | Max problems / Max hosts | List limits (defaults 12 / 24) |
 | Hide acknowledged | Omit acknowledged problems from the wall |
 | Off wall | Keep in admin but skip on kiosk |
-| Access | Owner + shared with (operators) |
+| Access | Owner; shared with users and/or roles (e.g. Operators) |
 
 **Wall layout:** severity summary pills, active problem list (host, age, acknowledged), host grid (green = OK, red = problem, grey = disabled). Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
 
@@ -382,6 +384,8 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 **Upload:** admin → **Photo Rotator** — JPG/PNG up to 25 MB. Deploy sync status on **Status**.
 
 Photos in `./photos/` by default; served via `?img=` (not direct HTTP). EXIF captions, crossfade, configurable brand wordmark. Reloads every 6h for new files.
+
+Per-photo **Access** (owner, users, roles) like slides. Deploy targets respect operator display assignment.
 
 ### slides.php — Custom Slides
 
@@ -405,11 +409,23 @@ Upload JPG/PNG/WebP or build slides in the **Slide creator** (templates, photo s
 
 Optional **Hr from / Hr to** (0–23, overnight 22→6 works). Board reloads every 5 minutes for schedule boundaries.
 
+**Access:** super admins set owner, individual users, and roles on each slide card (**Access** popover in the deck, or bulk **Share with** / **All operators** in the deck toolbar). Operators see slides they own, that are shared with them, or that are shared with the **Operators** role.
+
 ### rss.php — RSS Story Board
 
 Keyed feeds: `rss.php?feed=krebs`, etc. Per-feed story count and dwell; defaults 8 stories / 12s.
 
 RSS 2.0 and Atom. Images from media/enclosure/itunes/body. Progress dots show cycle position.
+
+**Image fit** — global default under **RSS Stories**, or per feed:
+
+| Mode | Behavior |
+|------|----------|
+| **auto** (default) | Landscape images fill the screen; portrait images show full height on the right with a blurred backdrop |
+| **cover** | Always crop to fill 1920×1080 |
+| **contain** | Always show the full image (letterboxed) |
+
+Useful for poster-style feeds (e.g. portrait artwork).
 
 **Requires:** `php-xml`, `php-mbstring`.
 
@@ -417,7 +433,7 @@ RSS 2.0 and Atom. Images from media/enclosure/itunes/body. Progress dots show cy
 
 Videos downloaded locally with **yt-dlp** — no live YouTube embed (no ads, no embed blocks on headless servers).
 
-**Registry:** `youtube` URL or local `file` per entry → `video.php?v=<key>`.
+**Registry:** `youtube` URL or local `file` per entry → `video.php?v=<key>`. Per-entry **Access** (owner, users, roles).
 
 Muted by default; uncheck **Mute all videos** in admin if needed. Refresh via admin UI or `php video.php fetch`.
 
@@ -429,7 +445,7 @@ See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
 
 ### grafana.php — Grafana (iframe)
 
-`grafana.php?d=<key>`. Registry maps keys to dashboard URLs; kiosk mode, dark theme, and refresh appended automatically.
+`grafana.php?d=<key>`. Registry maps keys to dashboard URLs; kiosk mode, dark theme, and refresh appended automatically. Per-dashboard **Access** (owner, users, roles) like other operator boards.
 
 **Grafana (one time):** `[security] allow_embedding = true`, plus either `[auth.anonymous] enabled = true` with `org_role = Viewer` **or** a public dashboard share URL.
 
@@ -441,7 +457,7 @@ Oneshot searches server-side — no Splunk Web iframe.
 
 **Panel types:** `single` (big number), `list` (label + bar + count), `trend` (timechart). Optional `earliest`/`latest`, `unit`, `wide` (2 columns).
 
-Multi-page: `splunk.php?d=<key>` with per-page panel decks and ownership. Cache default 120s per search.
+Multi-page: `splunk.php?d=<key>` with per-page panel decks and **Access** (owner, users, roles). Cache default 120s per search.
 
 ### splunkdash.php — Splunk published (iframe)
 
@@ -451,7 +467,7 @@ Splunk Enterprise 10.x / Cloud published Dashboard Studio dashboards.
 
 ### web.php — Websites (iframe)
 
-Keyed sites: `web.php?d=<key>`. Target URLs must allow iframe embedding.
+Keyed sites: `web.php?d=<key>`. Target URLs must allow iframe embedding. Per-site **Access** (owner, users, roles).
 
 ---
 

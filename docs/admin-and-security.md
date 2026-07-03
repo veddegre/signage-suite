@@ -18,15 +18,17 @@ Accounts live in `config/users.json`, blocked from direct HTTP like `settings.js
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **Calendar**, **Rotation** (assigned display only); **Account**, **Status** |
+| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **UniFi Network**, **Calendar**, **Rotation** (assigned display(s) only); **Account**, **Status** |
 
 ### Sidebar layout
+
+Admin boards are grouped in a **collapsible** sidebar — click a category header to expand or collapse. State is saved in the browser (`localStorage`).
 
 | Group | Boards |
 |-------|--------|
 | **Setup** | Security, Rotation, Ticker |
 | **Weather & home** | Weather, Lake, Webcam, Photo, Air, Sports, Calendar, Traffic |
-| **Monitoring** | Homelab, SignalTrace, Zabbix |
+| **Monitoring** | Homelab, SignalTrace, UniFi Network, Zabbix |
 | **Media** | Slides, Photo Rotator, Video, RSS |
 | **Dashboards** | Grafana, Splunk Panels, Splunk Published, Websites |
 
@@ -35,18 +37,50 @@ Accounts live in `config/users.json`, blocked from direct HTTP like `settings.js
 | Admin page | Purpose |
 |------------|---------|
 | **Account** | Change local password (hidden for SSO-linked accounts) |
-| **Users** | Create users, assign roles, one display per operator |
+| **Users** | Create users, assign roles, assign display(s) to operators |
 | **Status** | Kiosk heartbeats, play log, slide/photo deploy sync |
-| **Security** | Idle timeout, outbound URL policy, SSO, audit settings |
+| **Security** | Idle timeout, outbound URL policy, SSO, multi-display policy, audit settings |
 | **Audit** | Sign-ins, saves, user changes (not cleared with API cache) |
 
 **Login:** local username/password and/or SSO, CSRF-protected sessions, configurable idle logout, lockout after repeated failures.
 
+### Display assignment (operators)
+
+Each physical display (rotation screen) has **one primary operator** — enforced on save so the same screen cannot be assigned to two people.
+
+| Mode | Setting | Behavior |
+|------|---------|----------|
+| **Single display** (legacy) | **Security → Operators may manage multiple displays** off | Each operator gets exactly one display via a dropdown |
+| **Multiple displays** (default) | Same setting **on** (also toggled on **Users** when saving) | Checkbox picker — assign one or more screens per operator |
+
+When assigning displays on **Users**, the picker lists only:
+
+- Displays **already assigned to that operator** (so they can keep or remove them)
+- Displays **not assigned to anyone**
+
+Screens owned by **other** operators are **hidden** (not greyed out) to avoid confusion.
+
+Operators with multiple displays can manage rotation, deploy targets, and per-screen playlists for **all** of their assigned screens. Super admins see every display.
+
 ## Content ownership & sharing
 
-On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Calendar**, …), each row can have an **owner** and **shared with** list. Super admins see an **Access** control on each row.
+On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
 
-Homelab, SignalTrace, weather, and setup boards stay super-admin only. Operators only see and edit entries they own or that are shared with them; new entries they create are owned automatically.
+| Layer | Purpose |
+|-------|---------|
+| **Owner** | One user responsible for the row; operators they create own automatically |
+| **Shared with users** | Named operators (or any account) who may view and edit |
+| **Shared with roles** | Everyone with that role — today **Operators** (super admins already see everything) |
+
+Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["operator"]`).
+
+**Examples:**
+
+- Team slide deck — set owner to one person, check **Operators** under roles so the whole team can edit without listing every username.
+- One-off collaboration — add specific users under **Shared with users** only.
+- **Slides** deck toolbar — **All operators** bulk-adds the Operators role to selected slides; **All users** adds every account individually.
+
+Homelab, SignalTrace, weather, and setup boards stay super-admin only. Operators only see and edit entries they **own**, that are **shared with them**, or that are **shared with their role**. Delete/reclaim rules still apply: operators may only delete rows they own; super admins can reclaim ownership.
 
 Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
 
@@ -98,6 +132,7 @@ Register a **Web** OAuth2/OIDC application. Note the **client ID**, **client sec
 | **Auto-link by email** | On first SSO sign-in, match existing user when email local-part equals username |
 | **Allow local password login** | Keep username/password form when SSO is on (default: yes) |
 | **SSO just-in-time provisioning** | Auto-create **operator** accounts on first sign-in (never super); optional domain/group filters |
+| **Operators may manage multiple displays** | When on (default), assign more than one rotation display per operator under **Users** |
 | **Enable audit log** | Record admin actions (default on) |
 
 ### 3. Create SSO users (or enable JIT)
@@ -130,7 +165,7 @@ On first successful SSO sign-in the account **links** (“Linked” status). Unt
 
 - `config/settings.json` and `config/users.json` hold secrets. Admin drops deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` (Apache). **nginx:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }`
 - Login uses CSRF protection, strict session cookies, configurable idle timeout (**Security → Admin idle timeout**), and lockout after failures
-- **Outbound fetch policy:** RSS/ICS URLs block private IPs unless **Security → Allow private URL fetches** is enabled (required for LAN Zabbix, homelab, some RSS feeds)
+- **Outbound fetch policy:** RSS/ICS URLs block private IPs unless **Security → Allow private URL fetches** is enabled (required for LAN Zabbix, homelab, UniFi, some RSS feeds)
 - YouTube downloads only accept `youtube.com` / `youtu.be`; yt-dlp updates verify SHA-256 from official GitHub releases
 - Put **HTTPS** in front if admin is internet-facing (reverse proxy, Cloudflare Tunnel). VPN or Cloudflare Access recommended on semi-public hosts
 - `php video.php fetch` works from CLI; admin can refresh YouTube entries from the Video Board

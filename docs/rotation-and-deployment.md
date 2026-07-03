@@ -21,7 +21,9 @@ Open **Display settings** on the Rotation page:
 | Weighted / Shuffle | Rotation mode (see below) |
 | Blank hours / CEC | HDMI-CEC power schedule |
 
-Operators see a smaller options block inside their assigned playlist panel.
+Operators with **multiple displays** assigned see a playlist panel per screen (or a combined view where the UI groups their displays). Deploy pickers on **Slides**, **Photo Rotator**, **RSS**, and **Video** target any display they own.
+
+Operators see a smaller options block inside their assigned playlist panel(s).
 
 ### Playlists
 
@@ -53,7 +55,11 @@ Define screens under **Rotation → Display settings** (e.g. `main` / Living Roo
 | `board.php` | main |
 | `board.php?screen=garage` | garage |
 
-Assign operators to exactly one display under **Users**. Many devices can share one URL (independent render; shared server cache).
+Assign each display to **one operator** under **Users** (primary owner). With **Security → Operators may manage multiple displays** enabled (default), one operator may own several screens and manage all of their playlists and deploy targets.
+
+The **Users** display picker shows only unassigned screens plus that operator’s current assignments — screens assigned to someone else are omitted.
+
+Many kiosks can point at the same URL (independent render; shared server cache).
 
 Unknown `?screen=` or empty playlist falls back to **main**.
 

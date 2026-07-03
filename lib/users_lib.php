@@ -124,6 +124,11 @@ function users_normalize_role(string $role): string
     return $role === 'super' ? 'super' : 'operator';
 }
 
+/** Roles that may be granted on shared content (super admins already see everything). */
+const ADMIN_SHARING_ROLES = [
+    'operator' => 'Operators',
+];
+
 /** @return list<string> */
 /** Max displays per operator when multi-display mode is off. */
 const USERS_OPERATOR_SCREEN_MAX = 1;
@@ -752,6 +757,65 @@ function admin_entry_shared_users(?array $entry): array
     return admin_normalize_shared($entry['shared'] ?? []);
 }
 
+/** @return list<string> */
+function admin_normalize_shared_roles(mixed $raw): array
+{
+    $roles = [];
+    if (is_array($raw)) {
+        foreach ($raw as $role) {
+            $role = users_normalize_role((string)$role);
+            if (isset(ADMIN_SHARING_ROLES[$role])) {
+                $roles[$role] = true;
+            }
+        }
+    }
+    $list = array_keys($roles);
+    sort($list);
+
+    return $list;
+}
+
+/** @param array<string,mixed>|null $entry @return list<string> */
+function admin_entry_shared_roles(?array $entry): array
+{
+    if (!is_array($entry)) {
+        return [];
+    }
+
+    return admin_normalize_shared_roles($entry['shared_roles'] ?? []);
+}
+
+function admin_sharing_role_label(string $role): string
+{
+    $role = users_normalize_role($role);
+
+    return ADMIN_SHARING_ROLES[$role] ?? $role;
+}
+
+/** @return list<array{key:string,label:string}> */
+function admin_sharing_role_options(): array
+{
+    $out = [];
+    foreach (ADMIN_SHARING_ROLES as $key => $label) {
+        $out[] = ['key' => $key, 'label' => $label];
+    }
+
+    return $out;
+}
+
+function admin_user_role_for_id(?string $userId): ?string
+{
+    if ($userId === null || $userId === '') {
+        return null;
+    }
+    $user = users_find_by_id($userId);
+    if (!is_array($user)) {
+        return null;
+    }
+
+    return users_normalize_role((string)($user['role'] ?? 'operator'));
+}
+
 /**
  * Preserve owner/shared when normalizing a registry row for admin or wall load.
  *
@@ -768,6 +832,10 @@ function admin_merge_entry_access_meta(array $out, array $source): array
     $shared = admin_entry_shared_users($source);
     if ($shared !== []) {
         $out['shared'] = $shared;
+    }
+    $sharedRoles = admin_entry_shared_roles($source);
+    if ($sharedRoles !== []) {
+        $out['shared_roles'] = $sharedRoles;
     }
 
     return $out;
@@ -804,7 +872,16 @@ function admin_entry_visible_for_user(?array $entry, ?string $userId): bool
         return true;
     }
 
-    return in_array($userId, admin_entry_shared_users($entry), true);
+    if (in_array($userId, admin_entry_shared_users($entry), true)) {
+        return true;
+    }
+
+    $role = admin_user_role_for_id($userId);
+    if ($role !== null && in_array($role, admin_entry_shared_roles($entry), true)) {
+        return true;
+    }
+
+    return false;
 }
 
 function admin_can_edit_entry(?array $entry): bool
@@ -841,6 +918,12 @@ function admin_stamp_owner(array $entry, ?array $prev = null): array
             $shared = admin_entry_shared_users($prev);
             if ($shared !== []) {
                 $entry['shared'] = $shared;
+            }
+        }
+        if (!array_key_exists('shared_roles', $entry)) {
+            $sharedRoles = admin_entry_shared_roles($prev);
+            if ($sharedRoles !== []) {
+                $entry['shared_roles'] = $sharedRoles;
             }
         }
     }
@@ -892,6 +975,23 @@ function admin_apply_sharing_from_post(array $entry, array $postRow): array
     } else {
         $entry['shared'] = $sharedList;
     }
+    $sharedRoles = [];
+    if (isset($postRow['shared_roles']) && is_array($postRow['shared_roles'])) {
+        foreach ($postRow['shared_roles'] as $role) {
+            $role = users_normalize_role((string)$role);
+            if (isset(ADMIN_SHARING_ROLES[$role])) {
+                $sharedRoles[$role] = true;
+            }
+        }
+    }
+    $sharedRoleList = array_keys($sharedRoles);
+    sort($sharedRoleList);
+    if ($sharedRoleList === []) {
+        unset($entry['shared_roles']);
+    } else {
+        $entry['shared_roles'] = $sharedRoleList;
+    }
+
     return $entry;
 }
 
@@ -954,7 +1054,8 @@ function admin_entry_access_summary(?array $entry): string
     }
     $owner = admin_entry_owner($entry);
     $shared = admin_entry_shared_users($entry);
-    if ($owner === null && $shared === []) {
+    $sharedRoles = admin_entry_shared_roles($entry);
+    if ($owner === null && $shared === [] && $sharedRoles === []) {
         return 'Super only (no owner)';
     }
     $parts = [];
@@ -965,6 +1066,10 @@ function admin_entry_access_summary(?array $entry): string
         $names = array_map('admin_username_for_id', $shared);
         $parts[] = 'shared: ' . implode(', ', $names);
     }
+    if ($sharedRoles !== []) {
+        $parts[] = 'roles: ' . implode(', ', array_map('admin_sharing_role_label', $sharedRoles));
+    }
+
     return implode(' · ', $parts);
 }
 
@@ -976,17 +1081,25 @@ function admin_entry_access_trigger_label(?array $entry): string
     }
     $owner = admin_entry_owner($entry);
     $shared = admin_entry_shared_users($entry);
-    if ($owner === null && $shared === []) {
+    $sharedRoles = admin_entry_shared_roles($entry);
+    if ($owner === null && $shared === [] && $sharedRoles === []) {
         return 'Super only';
     }
     $label = $owner !== null ? admin_username_for_id($owner) : 'Super only';
-    if ($shared === []) {
+    $bits = [];
+    if (count($shared) === 1) {
+        $bits[] = admin_username_for_id($shared[0]);
+    } elseif (count($shared) > 1) {
+        $bits[] = '+' . count($shared);
+    }
+    foreach ($sharedRoles as $role) {
+        $bits[] = admin_sharing_role_label($role);
+    }
+    if ($bits === []) {
         return $label;
     }
-    if (count($shared) === 1) {
-        return $label . ' · ' . admin_username_for_id($shared[0]);
-    }
-    return $label . ' · +' . count($shared);
+
+    return $label . ' · ' . implode(' · ', $bits);
 }
 
 /** @param list<array{id:string,username:string}> $users */
@@ -994,6 +1107,7 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
 {
     $owner = admin_entry_owner($entry);
     $sharedSet = array_flip(admin_entry_shared_users($entry));
+    $sharedRoleSet = array_flip(admin_entry_shared_roles($entry));
     if ($popover) {
         echo '<div class="entry-sharing-panel-head"><strong>Access</strong></div>';
     }
@@ -1017,7 +1131,7 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
         }
         echo '</select>';
     }
-    echo '<span class="mini entry-sharing-shared-label">Also shared with</span>';
+    echo '<span class="mini entry-sharing-shared-label">Also shared with users</span>';
     echo '<div class="entry-sharing-users-scroll entry-sharing-users" data-entry-sharing-shared-list>';
     foreach ($users as $u) {
         if ($owner !== null && $u['id'] === $owner) {
@@ -1028,6 +1142,18 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
             . (isset($sharedSet[$u['id']]) ? ' checked' : '') . '> ' . h($u['username']) . '</label>';
     }
     echo '</div>';
+    $roleOptions = admin_sharing_role_options();
+    if ($roleOptions !== []) {
+        echo '<span class="mini entry-sharing-roles-label">Also shared with roles</span>';
+        echo '<div class="entry-sharing-roles" data-entry-sharing-shared-roles-list>';
+        foreach ($roleOptions as $role) {
+            $rk = (string)$role['key'];
+            echo '<label><input type="checkbox" name="' . h($prefix . '[shared_roles][]') . '" value="' . h($rk) . '"'
+                . ' data-entry-sharing-shared-role'
+                . (isset($sharedRoleSet[$rk]) ? ' checked' : '') . '> ' . h((string)$role['label']) . '</label>';
+        }
+        echo '</div>';
+    }
 }
 
 /** Super-admin: owner dropdown + shared-with checkboxes. */
