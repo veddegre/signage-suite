@@ -87,11 +87,17 @@ Full-screen live stills from the [Mackinac Bridge Authority bridge cams](https:/
 
 ### photo.php — Photo Conditions
 
-**Data:** PHP sun math (golden/blue hour), synodic moon phase (SVG), OpenWeatherMap sunset cloud cover (tonight + next 3 evenings), NOAA SWPC Kp + 24h forecast.
+**Data:** PHP sun math (golden/blue hour), synodic moon phase (SVG), OpenWeatherMap sunset cloud cover (tonight + next 3 evenings), Open-Meteo air quality (PM2.5 + aerosol optical depth for smoke/haze tint), NWS active alerts (air quality / smoke / dust / fog), NOAA SWPC Kp + 24h forecast.
 
-**Setup:** `OWM_API_KEY` (same as weather). SWPC needs no key.
+**Setup:** `OWM_API_KEY` (same as weather). Open-Meteo AQ, NWS, and SWPC need no key.
 
-Verdict: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY. Aurora panel highlights when Kp ≥ 6.
+**Verdict inputs (not clouds alone):**
+- Cloud cover near sunset (OWM 3-hour slots blended within ±3h of sunset)
+- Smoke / haze tint from OWM weather types (smoke, haze, dust), Open-Meteo PM2.5 + AOD, reduced visibility, and NWS Air Quality / Smoke advisories
+- Clear deck + smoke tint → **DRAMATIC SKY** (deep orange/red without needing broken clouds)
+- Otherwise: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY
+
+Aurora panel highlights when Kp ≥ 6. The board shows both a **cloud cover** bar and a **color potential / smoke tint** bar (Clear → Broken → Heavy).
 
 ### air.php — Air & Pollen
 
