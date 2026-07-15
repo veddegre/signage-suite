@@ -372,12 +372,59 @@ guess_url_base() {
 post_install_php() {
   log "Checking PHP"
   php -v | head -1
+
+  local phpver
+  phpver="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+
+  # Ubuntu/Debian: php-gd may be installed while /etc/php/*/mods-available/gd.ini
+  # is not enabled for this SAPI (common after --skip-apt or partial installs).
+  enable_php_mod() {
+    local mod="$1"
+    if php -m 2>/dev/null | grep -qi "^${mod}$"; then
+      return 0
+    fi
+    if command -v phpenmod >/dev/null 2>&1; then
+      log "Enabling PHP module ${mod} (phpenmod)"
+      phpenmod -v ALL -s ALL "$mod" 2>/dev/null || phpenmod "$mod" 2>/dev/null || true
+    fi
+    if [[ -n "$phpver" && -f "/etc/php/${phpver}/mods-available/${mod}.ini" ]]; then
+      local sapi
+      for sapi in cli apache2 fpm; do
+        local confd="/etc/php/${phpver}/${sapi}/conf.d"
+        [[ -d "$confd" ]] || continue
+        if [[ ! -e "${confd}/20-${mod}.ini" && ! -e "${confd}/15-${mod}.ini" ]]; then
+          ln -sf "../mods-available/${mod}.ini" "${confd}/20-${mod}.ini" 2>/dev/null || true
+        fi
+      done
+    fi
+  }
+
+  local ext
   for ext in curl xml mbstring gd zip; do
-    php -m | grep -qi "^${ext}$" || warn "PHP extension missing: $ext"
+    enable_php_mod "$ext"
   done
 
-  local phpver opcache_ini=0
-  phpver="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+  for ext in curl xml mbstring gd zip; do
+    if php -m 2>/dev/null | grep -qi "^${ext}$"; then
+      continue
+    fi
+    warn "PHP extension missing: $ext"
+    if [[ "$ext" == "gd" ]]; then
+      warn "  Fix: sudo apt install php${phpver}-gd && sudo phpenmod gd && sudo systemctl reload apache2"
+      if [[ -n "$phpver" ]]; then
+        if dpkg -l "php${phpver}-gd" 2>/dev/null | grep -q '^ii'; then
+          warn "  php${phpver}-gd is installed, but not loaded by: $(command -v php)"
+          warn "  Check: php -m | grep -i gd · ls /etc/php/${phpver}/cli/conf.d/*gd*"
+        elif dpkg -l php-gd 2>/dev/null | grep -q '^ii'; then
+          warn "  php-gd meta-package is installed; ensure php${phpver}-gd matches this PHP"
+        else
+          warn "  Package not installed — run without --skip-apt, or: sudo apt install php-gd"
+        fi
+      fi
+    fi
+  done
+
+  local opcache_ini=0
   if [[ -n "$phpver" ]]; then
     for sapi in apache2 fpm; do
       [[ -f "/etc/php/${phpver}/${sapi}/conf.d/98-signage-opcache.ini" ]] && opcache_ini=1
