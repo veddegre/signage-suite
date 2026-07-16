@@ -101,15 +101,40 @@ Aurora panel highlights when Kp ≥ 6. The board shows both a **cloud cover** ba
 
 ### air.php — Air & Pollen
 
-US AQI, per-pollutant AQI (PM2.5, PM10, ozone, NO₂), pollen bars, three-day outlook.
+US AQI, per-pollutant AQI (PM2.5, PM10, ozone), pollen bars, and a three-day **Open-Meteo model** outlook.
 
-**Data:** [EPA AirNow](https://docs.airnowapi.org/) observations when an API key is set (ground monitors — matches weather apps during smoke events). Fallback: [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) per-pollutant US AQI — free, no key, but CAMS model can read much lower than real monitors. **NWS active alerts** (`api.weather.gov`) supply official wording (e.g. “Hazardous”) used as an AQI floor when monitor data is missing or low; NWS does not expose numeric PM2.5/ozone AQI via their REST API (they link to AirNow for current readings). US pollen uses **Google Pollen API** (optional).
+**Data**
 
-**Scoring:** overall AQI = highest pollutant sub-index (EPA method), then raised if NWS alert category language (Hazardous → 301+, Very Unhealthy → 201+, etc.) or smoke/haze (AOD) floors are higher.
+| Signal | Source | Notes |
+|--------|--------|--------|
+| Current AQI + pollutant tiles | [EPA AirNow API](https://docs.airnowapi.org/) | Ground monitors — matches weather apps (recommended for US) |
+| Fallback AQI | [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) | Free CAMS model; can lag wildfire smoke |
+| Outlook (3-day) | Open-Meteo | Model forecast only — not EPA monitors |
+| Alerts | NWS (`api.weather.gov`) | Badges + verdict; no numeric AQI from NWS |
+| Pollen | Google Pollen API (optional) | Separate key from AirNow |
 
-**Setup:** admin → **Air & Pollen** — place name, lat/lon, timezone. For accurate US AQI during wildfire smoke: register at [docs.airnowapi.org](https://docs.airnowapi.org/) and paste the **AirNow API key**. For US pollen: enable Pollen API in Google Cloud (5,000 calls/month free tier; 15-minute cache keeps usage low).
+**Scoring:** overall AQI = highest pollutant sub-index (EPA method). With only Open-Meteo, NWS alert wording can raise the displayed category when monitors are unavailable.
 
-Without Google key, air quality works; pollen shows a setup note. Default cache TTL 900s.
+**Setup — admin → Air & Pollen**
+
+1. Place name, lat/lon, timezone.
+2. **EPA AirNow API key** (AQI / PM2.5 / ozone):
+   - The public map site is [airnow.gov](https://www.airnow.gov/) — the **API key is not there**.
+   - Developer portal: [docs.airnowapi.org/login](https://docs.airnowapi.org/login) → **Request an AirNow API Account** ([registration form](https://docs.airnowapi.org/account/request/)).
+   - Activate via the email confirmation link, then log in.
+   - Open [Web Services](https://docs.airnowapi.org/webservices) — your **API key is in the upper-right corner** (also embedded in Query Tool example URLs).
+   - Paste into admin → **EPA AirNow API key** → **Save**.
+3. **Google Pollen API key** (optional, pollen only): enable Pollen API in Google Cloud; 5,000 calls/month free tier.
+
+**Diagnose on the server**
+
+```bash
+php scripts/diagnose-air.php --root=/var/www/html/boards
+```
+
+Expect `air.AIRNOW_API_KEY: set` and `AirNow HTTP 200` with PM2.5 / PM10 / O3 lines. `air.AIRNOW_API_KEY` and `air.GOOGLE_POLLEN_API_KEY` are different settings.
+
+Default cache TTL 900s.
 
 ### uv.php — UV Index
 

@@ -355,6 +355,67 @@ function air_parse_airnow(?array $rows): ?array
     ];
 }
 
+/**
+ * @param array{pm25:?int,pm10:?int,ozone:?int,no2:?int} $pollutantAqis
+ * @return list<array{lab:string,aqi:?int,color:string,sub:string}>
+ */
+function air_pollutant_stat_rows(
+    string $aqSource,
+    array $pollutantAqis,
+    ?array $airnow,
+    ?float $pm25,
+    ?float $pm10,
+    ?float $ozoneUg,
+    ?float $no2Ug
+): array {
+    $defs = [
+        ['key' => 'pm25', 'lab' => 'PM2.5', 'ug' => $pm25],
+        ['key' => 'pm10', 'lab' => 'PM10', 'ug' => $pm10],
+        ['key' => 'ozone', 'lab' => 'Ozone', 'ug' => $ozoneUg],
+        ['key' => 'no2', 'lab' => 'NO₂', 'ug' => $no2Ug],
+    ];
+    $rows = [];
+    foreach ($defs as $d) {
+        $key = (string)$d['key'];
+        $aqi = $pollutantAqis[$key] ?? null;
+        if ($aqSource === 'airnow' && $aqi === null) {
+            continue;
+        }
+        [, $color] = air_aqi_band($aqi);
+        $sub = '';
+        if ($aqSource === 'airnow' && is_array($airnow)) {
+            $sub = trim((string)($airnow['pollutants'][$key]['category'] ?? ''));
+        } elseif ($d['ug'] !== null) {
+            $sub = ($key === 'ozone' ? (string)(int)$d['ug'] : (string)$d['ug']) . ' µg/m³';
+        }
+        $rows[] = [
+            'lab' => (string)$d['lab'],
+            'aqi' => $aqi,
+            'color' => $color,
+            'sub' => $sub,
+        ];
+    }
+
+    return $rows;
+}
+
+/** @param list<array{event:string,headline:string,severity:string,description?:string}> $alerts */
+function air_nws_alert_labels(array $alerts): array
+{
+    $out = [];
+    $seen = [];
+    foreach ($alerts as $a) {
+        $label = trim((string)($a['event'] ?? 'Alert'));
+        if ($label === '' || isset($seen[$label])) {
+            continue;
+        }
+        $seen[$label] = true;
+        $out[] = $label;
+    }
+
+    return $out;
+}
+
 function air_fetch_airnow(): ?array
 {
     $key = trim((string)AIRNOW_API_KEY);
@@ -855,10 +916,20 @@ $pm25Aqi = $pollutantAqis['pm25'];
 $pm10Aqi = $pollutantAqis['pm10'];
 $ozoneAqi = $pollutantAqis['ozone'];
 $no2Aqi = $pollutantAqis['no2'];
-[, $pm25Color] = air_aqi_band($pm25Aqi);
-[, $pm10Color] = air_aqi_band($pm10Aqi);
-[, $ozoneColor] = air_aqi_band($ozoneAqi);
-[, $no2Color] = air_aqi_band($no2Aqi);
+$pollutantStats = air_pollutant_stat_rows($aqSource, $pollutantAqis, $airnow, $pm25, $pm10, $ozoneUg, $no2Ug);
+$statGridCols = count($pollutantStats) >= 4 ? 2 : max(1, count($pollutantStats));
+$nwsAlertLabels = air_nws_alert_labels($nwsAlerts);
+$aqiNumClass = '';
+if (empty($aqiHeadlineIsText) && $aqiNow !== null) {
+    if ($aqiNow >= 500) {
+        $aqiNumClass = ' tight huge';
+    } elseif ($aqiNow >= 200) {
+        $aqiNumClass = ' tight';
+    }
+}
+if ($aqSource === 'airnow' && $nwsAlerts !== [] && ($aqiInfo['note'] ?? '') === (string)($nwsAlerts[0]['event'] ?? 'Air quality alert') . ' active') {
+    $aqiHint = '';
+}
 
 $todayKey = date('Y-m-d');
 $googlePollen = air_fetch_google_pollen();
@@ -924,14 +995,14 @@ $gap = $compact ? 12 : 16;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; min-height:0; padding:<?= $padY ?>px 28px;
            display:grid; gap:<?= $gap ?>px;
-           grid-template-columns: 1fr 1fr 1fr;
-           grid-template-rows: auto minmax(0,1.15fr) minmax(0,1fr) auto minmax(0,auto);
+           grid-template-columns: 1.05fr 0.95fr;
+           grid-template-rows: auto minmax(0,1fr) minmax(0,0.95fr) auto auto;
            grid-template-areas:
-             "head head head"
-             "aqi aqi parts"
-             "pollen pollen forecast"
-             "verdict verdict verdict"
-             "meta meta meta"; }
+             "head head"
+             "aqi parts"
+             "pollen forecast"
+             "verdict verdict"
+             "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; min-height:0; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 48 : 56 ?>px; }
   .head h1 span { color:var(--beacon); }
@@ -944,12 +1015,14 @@ $gap = $compact ? 12 : 16;
   .panel .k { font-size:16px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
 
   .aqi-panel { grid-area:aqi; display:flex; flex-direction:column; justify-content:flex-start; gap:6px; }
-  .aqi-panel .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 112 : 140 ?>px;
-              line-height:1; font-variant-numeric:tabular-nums; color:<?= h($aqiColor) ?>; }
-  .aqi-panel .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 30 : 38 ?>px;
-               letter-spacing:2px; text-transform:uppercase; color:<?= h($aqiColor) ?>; margin-top:4px; }
-  .aqi-panel .hint { font-size:<?= $compact ? 17 : 20 ?>px; color:var(--mist); margin-top:4px; line-height:1.35; max-width:920px;
-                     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .aqi-panel .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 100 : 128 ?>px;
+              line-height:0.95; font-variant-numeric:tabular-nums; color:<?= h($aqiColor) ?>; }
+  .aqi-panel .num.tight { font-size:<?= $compact ? 84 : 104 ?>px; }
+  .aqi-panel .num.tight.huge { font-size:<?= $compact ? 68 : 84 ?>px; }
+  .aqi-panel .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 34 ?>px;
+               letter-spacing:2px; text-transform:uppercase; color:<?= h($aqiColor) ?>; margin-top:2px; }
+  .aqi-panel .hint { font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); margin-top:4px; line-height:1.35; max-width:100%;
+                     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .aqi-panel .model { font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); margin-top:2px; }
   .aqi-panel .num.text { font-size:<?= $compact ? 72 : 88 ?>px; letter-spacing:1px; }
   .parts-stale .k { color:var(--beacon); }
@@ -960,18 +1033,21 @@ $gap = $compact ? 12 : 16;
   .adv { font-size:14px; letter-spacing:1px; text-transform:uppercase; color:var(--beacon);
          border:1px solid rgba(255,179,71,.45); padding:3px 8px; border-radius:8px; }
 
-  .parts { grid-area:parts; display:grid; grid-template-columns:1fr 1fr; gap:<?= $compact ? 10 : 12 ?>px; }
+  .parts { grid-area:parts; display:flex; flex-direction:column; min-height:0; gap:<?= $compact ? 8 : 10 ?>px; }
+  .parts .stats-grid { flex:1; min-height:0; display:grid; grid-template-columns:repeat(<?= $statGridCols ?>, 1fr);
+          gap:<?= $compact ? 8 : 10 ?>px; align-content:start; }
   .stat { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-          padding:<?= $compact ? '12px 14px' : '16px 18px' ?>; min-height:0; }
-  .stat .lab { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
-  .stat .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 40 : 52 ?>px;
+          padding:<?= $compact ? '10px 12px' : '14px 16px' ?>; min-height:0; display:flex; flex-direction:column; justify-content:center; }
+  .stat .lab { font-size:<?= $compact ? 12 : 13 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
+  .stat .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 34 : 44 ?>px;
                line-height:1; font-variant-numeric:tabular-nums; }
-  .stat .unit { font-size:<?= $compact ? 18 : 22 ?>px; color:var(--mist); font-weight:500; margin-left:6px; }
-  .stat .conc { font-size:<?= $compact ? 14 : 16 ?>px; color:var(--mist); margin-top:4px; }
+  .stat .unit { font-size:<?= $compact ? 15 : 18 ?>px; color:var(--mist); font-weight:500; margin-left:4px; }
+  .stat .conc { font-size:<?= $compact ? 12 : 14 ?>px; color:var(--mist); margin-top:4px; line-height:1.2;
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   .pollen { grid-area:pollen; }
-  .prow { display:grid; grid-template-columns:110px 1fr 90px 80px; align-items:center; gap:10px;
-          padding:<?= $compact ? '8px 0' : '10px 0' ?>; border-bottom:1px solid var(--hairline); }
+  .prow { display:grid; grid-template-columns:72px 1fr 36px minmax(68px,auto); align-items:center; gap:8px;
+          padding:<?= $compact ? '7px 0' : '9px 0' ?>; border-bottom:1px solid var(--hairline); }
   .prow:last-child { border-bottom:none; }
   .prow .n { font-size:<?= $compact ? 20 : 24 ?>px; }
   .prow .track { height:16px; background:var(--lake-night); border-radius:9px; overflow:hidden; }
@@ -989,7 +1065,9 @@ $gap = $compact ? 12 : 16;
   .fday .d { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
   .fday .aqi-num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 30 : 38 ?>px;
                line-height:1.15; margin:0; }
-  .fday .line { font-size:<?= $compact ? 14 : 16 ?>px; color:var(--mist); margin-top:6px; line-height:1.3; }
+  .fday .line { font-size:<?= $compact ? 12 : 14 ?>px; color:var(--mist); margin-top:4px; line-height:1.25;
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fday .line.sub { margin-top:2px; opacity:.9; }
 
   .pollen-note { font-size:<?= $compact ? 15 : 17 ?>px; color:var(--mist); margin-top:8px; line-height:1.4; }
   .pollen-note code { background:var(--lake-night); padding:2px 6px; border-radius:6px; }
@@ -1020,18 +1098,18 @@ $gap = $compact ? 12 : 16;
   <section class="panel aqi-panel">
     <div class="k"><?= $aqiDriver === 'nws' ? 'NWS Air Quality Alert' : 'US Air Quality Index' ?></div>
     <div>
-      <div class="num<?= !empty($aqiHeadlineIsText) ? ' text' : '' ?>"><?= h($aqiHeadline) ?></div>
+      <div class="num<?= !empty($aqiHeadlineIsText) ? ' text' : $aqiNumClass ?>"><?= h($aqiHeadline) ?></div>
       <div class="band"><?= h($aqiBandText) ?></div>
       <?php if ($aqSource === 'airnow'): ?>
-        <div class="model"><?= h($aqSourceLabel) ?><?= $reportingArea !== '' ? ' · ' . h($reportingArea) : '' ?><?= $aqiModel !== null ? ' · model ' . (int)$aqiModel : '' ?></div>
+        <div class="model"><?= h($aqSourceLabel) ?><?= $reportingArea !== '' ? ' · ' . h($reportingArea) : '' ?></div>
       <?php elseif ($aqiDriver !== 'nws' && $pollutantMax !== null): ?>
         <div class="model"><?= h($aqSourceLabel) ?> · max pollutant <?= (int)$pollutantMax ?><?= $aqiModel !== null ? ' · consolidated ' . (int)$aqiModel : '' ?></div>
       <?php endif; ?>
-      <div class="hint"><?= h($aqiHint) ?></div>
-      <?php if ($nwsAlerts !== []): ?>
+      <?php if ($aqiHint !== ''): ?><div class="hint"><?= h($aqiHint) ?></div><?php endif; ?>
+      <?php if ($nwsAlertLabels !== []): ?>
         <div class="advisories">
-          <?php foreach ($nwsAlerts as $alert): ?>
-            <span class="adv"><?= h((string)($alert['event'] ?? 'Alert')) ?></span>
+          <?php foreach ($nwsAlertLabels as $label): ?>
+            <span class="adv"><?= h($label) ?></span>
           <?php endforeach; ?>
         </div>
       <?php endif; ?>
@@ -1043,25 +1121,14 @@ $gap = $compact ? 12 : 16;
     <?php if ($pollutantsStale): ?>
       <div class="parts-note">CAMS forecast model — lags wildfire smoke; not current monitor readings</div>
     <?php endif; ?>
+    <div class="stats-grid">
+    <?php foreach ($pollutantStats as $stat): ?>
     <div class="stat">
-      <div class="lab">PM2.5</div>
-      <div><span class="val" style="color:<?= h($pm25Color) ?>"><?= $pm25Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
-      <?php if ($pm25 !== null): ?><div class="conc"><?= h((string)$pm25) ?> µg/m³</div><?php endif; ?>
+      <div class="lab"><?= h($stat['lab']) ?></div>
+      <div><span class="val" style="color:<?= h($stat['color']) ?>"><?= $stat['aqi'] ?? '—' ?></span><span class="unit">AQI</span></div>
+      <?php if ($stat['sub'] !== ''): ?><div class="conc"><?= h($stat['sub']) ?></div><?php endif; ?>
     </div>
-    <div class="stat">
-      <div class="lab">PM10</div>
-      <div><span class="val" style="color:<?= h($pm10Color) ?>"><?= $pm10Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
-      <?php if ($pm10 !== null): ?><div class="conc"><?= h((string)$pm10) ?> µg/m³</div><?php endif; ?>
-    </div>
-    <div class="stat">
-      <div class="lab">Ozone</div>
-      <div><span class="val" style="color:<?= h($ozoneColor) ?>"><?= $ozoneAqi ?? '—' ?></span><span class="unit">AQI</span></div>
-      <?php if ($ozoneUg !== null): ?><div class="conc"><?= h((string)$ozoneUg) ?> µg/m³</div><?php endif; ?>
-    </div>
-    <div class="stat">
-      <div class="lab">NO₂</div>
-      <div><span class="val" style="color:<?= h($no2Color) ?>"><?= $no2Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
-      <?php if ($no2Ug !== null): ?><div class="conc"><?= h((string)$no2Ug) ?> µg/m³</div><?php endif; ?>
+    <?php endforeach; ?>
     </div>
   </section>
 
@@ -1101,7 +1168,7 @@ $gap = $compact ? 12 : 16;
   </section>
 
   <section class="panel forecast">
-    <div class="k">Outlook · <?= $pollutantsAreModel ? 'model forecast' : 'forecast' ?></div>
+    <div class="k">Outlook · Open-Meteo model</div>
     <div class="days">
     <?php foreach ($forecast as $fd):
       [, $fdColor] = air_aqi_band($fd['aqi']);
@@ -1109,7 +1176,8 @@ $gap = $compact ? 12 : 16;
     <div class="fday">
       <div class="d"><?= h($fd['label']) ?></div>
       <div class="aqi-num" style="color:<?= h($fdColor) ?>">AQI <?= $fd['aqi'] ?? '—' ?></div>
-      <div class="line">PM2.5 AQI <?= $fd['pm25_aqi'] ?? '—' ?> · <?= h($fd['pollen']) ?> <?= h($fd['pollen_level']) ?></div>
+      <div class="line">PM2.5 <?= $fd['pm25_aqi'] ?? '—' ?></div>
+      <div class="line sub"><?= h($fd['pollen']) ?> · <?= h($fd['pollen_level']) ?></div>
     </div>
     <?php endforeach; ?>
     </div>

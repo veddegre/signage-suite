@@ -247,4 +247,7 @@ php scripts/diagnose-zabbix.php network --needle=signaltrace
 
 # Rotation: weighted mode, eligible pages, per-slide weights
 php scripts/diagnose-rotation.php veddersg
+
+# Air & Pollen: AirNow key, EPA monitor AQI, NWS alerts, Open-Meteo model
+php scripts/diagnose-air.php --root=/var/www/html/boards
 ```

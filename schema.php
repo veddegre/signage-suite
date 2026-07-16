@@ -174,7 +174,7 @@ function admin_schema(): array
             ['key' => 'GOOGLE_POLLEN_API_KEY', 'label' => 'Google Pollen API key', 'type' => 'password',
              'help' => 'Pollen only (not AQI). Enable Pollen API in Google Cloud; free tier is 5,000 calls/month.'],
             ['key' => 'AIRNOW_API_KEY', 'label' => 'EPA AirNow API key', 'type' => 'password',
-             'help' => 'AQI / PM2.5 / ozone readings from EPA ground monitors (separate from Google Pollen). Free at docs.airnowapi.org — register, then paste the API key here and Save.'],
+             'help' => 'AQI from EPA ground monitors (not airnow.gov). Register at docs.airnowapi.org/account/request/, activate via email, log in, open Web Services — API key is in the upper-right corner. Paste here and Save.'],
             ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
             $tz, $ttl('Open-Meteo + Google Pollen responses — default 900s (15 min)'),
