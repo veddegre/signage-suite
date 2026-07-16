@@ -36,7 +36,9 @@ function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'
     $f = CACHE_DIR . '/' . $key . '.json';
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
         $d = json_decode((string)file_get_contents($f), true);
-        if (is_array($d)) return $d;
+        if (is_array($d) && !isset($d['WebServiceError'])) {
+            return $d;
+        }
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -52,16 +54,35 @@ function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'
     curl_close($ch);
     if ($body !== false && $code === 200) {
         $d = json_decode($body, true);
-        if (is_array($d)) {
+        if (!is_array($d)) {
+            $GLOBALS['diag'][$diagKey] = 'invalid JSON';
+        } elseif (isset($d['WebServiceError'])) {
+            $msg = '';
+            foreach ((array)($d['WebServiceError'] ?? []) as $row) {
+                if (is_array($row) && ($row['Message'] ?? '') !== '') {
+                    $msg = (string)$row['Message'];
+                    break;
+                }
+            }
+            $GLOBALS['diag'][$diagKey] = $msg !== '' ? $msg : 'AirNow API error';
+            @unlink($f);
+        } else {
             @file_put_contents($f, $body, LOCK_EX);
             return $d;
         }
+    } else {
+        $GLOBALS['diag'][$diagKey] = $err !== '' ? "curl: $err" : "HTTP $code";
+        if ($code === 401 || $code === 403) {
+            @unlink($f);
+        }
     }
-    $GLOBALS['diag'][$diagKey] = $err !== '' ? "curl: $err" : "HTTP $code";
     if (is_file($f)) {
         $d = json_decode((string)file_get_contents($f), true);
-        return is_array($d) ? $d : null;
+        if (is_array($d) && !isset($d['WebServiceError'])) {
+            return $d;
+        }
     }
+
     return null;
 }
 
@@ -153,21 +174,58 @@ function air_nws_aq_alerts(array $alerts): array
 /** Map EPA category language in NWS alert text to a minimum AQI floor. */
 function air_nws_text_aqi_floor(string $text): ?int
 {
+    $cat = air_nws_text_category($text);
+
+    return $cat['floor'] ?? null;
+}
+
+/**
+ * @return array{label:string,floor:int}|null
+ */
+function air_nws_text_category(string $text): ?array
+{
     $t = strtolower($text);
     if (preg_match('/\bhazardous\b/', $t)) {
-        return 301;
+        return ['label' => 'Hazardous', 'floor' => 301];
     }
     if (preg_match('/very\s+unhealthy/', $t)) {
-        return 201;
+        return ['label' => 'Very Unhealthy', 'floor' => 201];
     }
     if (preg_match('/unhealthy\s+for\s+sensitive|sensitive\s+groups/', $t)) {
-        return 101;
+        return ['label' => 'Unhealthy for Sensitive Groups', 'floor' => 101];
     }
     if (preg_match('/\bunhealthy\b/', $t)) {
-        return 151;
+        return ['label' => 'Unhealthy', 'floor' => 151];
     }
 
     return null;
+}
+
+/**
+ * Highest EPA category mentioned across active NWS air-quality alerts.
+ *
+ * @param list<array{event:string,headline:string,severity:string,description?:string}> $alerts
+ * @return array{label:string,floor:int}|null
+ */
+function air_nws_alert_category(array $alerts): ?array
+{
+    $best = null;
+    foreach ($alerts as $a) {
+        $blob = implode(' ', array_filter([
+            (string)($a['event'] ?? ''),
+            (string)($a['headline'] ?? ''),
+            (string)($a['description'] ?? ''),
+        ]));
+        $cat = air_nws_text_category($blob);
+        if ($cat === null) {
+            continue;
+        }
+        if ($best === null || $cat['floor'] > $best['floor']) {
+            $best = $cat;
+        }
+    }
+
+    return $best;
 }
 
 /** @param list<array{event:string,headline:string,severity:string,description?:string}> $alerts */
@@ -245,10 +303,14 @@ function air_openmeteo_pollutant_aqis(array $current): array
     return $out;
 }
 
-/** @param list<array<string,mixed>>|null $rows */
+/** @param array<int|string,mixed>|null $rows */
 function air_parse_airnow(?array $rows): ?array
 {
     if ($rows === null || $rows === []) {
+        return null;
+    }
+    // AirNow returns a JSON array; error payloads are associative objects handled upstream.
+    if (!array_is_list($rows)) {
         return null;
     }
     $paramKeys = [
@@ -299,17 +361,23 @@ function air_fetch_airnow(): ?array
     if ($key === '') {
         return null;
     }
-    $cacheKey = 'airnow_' . md5(sprintf('%.4F_%.4F', LAT, LON));
+    $cacheKey = 'airnow_v2_' . md5(sprintf('%.4F_%.4F', LAT, LON));
     $url = 'https://www.airnowapi.org/aq/observation/latLong/current/?' . http_build_query([
         'format' => 'application/json',
         'latitude' => LAT,
         'longitude' => LON,
-        'distance' => 50,
+        'distance' => 100,
         'API_KEY' => $key,
     ]);
     $raw = air_cached_json($url, $cacheKey, 'airnow');
+    $parsed = air_parse_airnow($raw);
+    if ($parsed === null && $raw !== null && $raw !== []) {
+        $GLOBALS['diag']['airnow'] = 'Unexpected AirNow payload';
+    } elseif ($parsed === null && ($raw === null || $raw === []) && !isset($GLOBALS['diag']['airnow'])) {
+        $GLOBALS['diag']['airnow'] = 'No EPA monitor readings within 100 mi';
+    }
 
-    return air_parse_airnow($raw);
+    return $parsed;
 }
 
 /** Max hourly US AQI across pollutant indices for one calendar day. */
@@ -331,8 +399,18 @@ function air_day_max_combined_aqi(array $hourly, string $dayKey): ?int
  * EPA overall AQI = max pollutant sub-index (+ NWS / smoke floors when higher).
  *
  * @param array{pm25:?int,pm10:?int,ozone:?int,no2:?int} $pollutantAqis
- * @param list<array{event:string,headline:string,severity:string}> $nwsAlerts
- * @return array{effective:?int,pollutant_max:?int,model:?int,floor:?int,note:string}
+ * @param list<array{event:string,headline:string,severity:string,description?:string}> $nwsAlerts
+ * @return array{
+ *   effective:?int,
+ *   pollutant_max:?int,
+ *   model:?int,
+ *   floor:?int,
+ *   nws_floor:?int,
+ *   smoke_floor:?int,
+ *   driver:string,
+ *   nws_category:?array{label:string,floor:int},
+ *   note:string
+ * }
  */
 function air_effective_aqi(array $pollutantAqis, ?int $modelAqi, ?float $pm25, ?float $aod, array $nwsAlerts): array
 {
@@ -341,6 +419,7 @@ function air_effective_aqi(array $pollutantAqis, ?int $modelAqi, ?float $pm25, ?
     if ($pollutantMax === null) {
         $pollutantMax = $modelAqi ?? air_pm25_to_aqi($pm25);
     }
+    $nwsCategory = air_nws_alert_category($nwsAlerts);
     $nwsFloor = air_nws_alert_floor($nwsAlerts);
     $smokeFloor = air_smoke_floor($aod, $pm25);
     $candidates = array_filter([$pollutantMax, $nwsFloor, $smokeFloor], static fn($v) => $v !== null);
@@ -352,13 +431,20 @@ function air_effective_aqi(array $pollutantAqis, ?int $modelAqi, ?float $pm25, ?
         }
     }
 
+    $driver = 'pollutants';
+    if ($effective !== null && $nwsFloor !== null && $effective === $nwsFloor && $nwsFloor > ($pollutantMax ?? 0)) {
+        $driver = 'nws';
+    } elseif ($effective !== null && $smokeFloor !== null && $effective === $smokeFloor && $smokeFloor > ($pollutantMax ?? 0)) {
+        $driver = 'smoke';
+    }
+
     $note = '';
-    if ($nwsAlerts !== []) {
+    if ($driver === 'nws' && $nwsCategory !== null) {
+        $note = 'NWS alert: ' . $nwsCategory['label'] . ' — model readings below are not current ground conditions';
+    } elseif ($nwsAlerts !== []) {
         $note = (string)($nwsAlerts[0]['event'] ?? 'Air quality alert') . ' active';
         if ($pollutantMax !== null && $effective !== null && $effective > $pollutantMax) {
-            $note .= ' — elevated by alert / smoke signals';
-        } elseif ($modelAqi !== null && $pollutantMax !== null && $pollutantMax > $modelAqi + 20) {
-            $note .= ' — ground monitors above model';
+            $note .= ' — elevated above model';
         }
     } elseif ($modelAqi !== null && $pollutantMax !== null && $pollutantMax > $modelAqi + 20) {
         $note = 'Per-pollutant AQI above consolidated model reading';
@@ -371,6 +457,10 @@ function air_effective_aqi(array $pollutantAqis, ?int $modelAqi, ?float $pm25, ?
         'pollutant_max' => $pollutantMax,
         'model' => $modelAqi,
         'floor' => $floor,
+        'nws_floor' => $nwsFloor,
+        'smoke_floor' => $smokeFloor,
+        'driver' => $driver,
+        'nws_category' => $nwsCategory,
         'note' => $note,
     ];
 }
@@ -684,6 +774,8 @@ $query = http_build_query([
 $data = air_cached_json('https://air-quality-api.open-meteo.com/v1/air-quality?' . $query, $cacheKey);
 
 $airnow = air_fetch_airnow();
+$airnowKeySet = trim((string)AIRNOW_API_KEY) !== '';
+$airnowError = $airnowKeySet && $airnow === null ? (string)($GLOBALS['diag']['airnow'] ?? 'unavailable') : '';
 $nwsAlerts = air_nws_aq_alerts(air_fetch_nws_alerts());
 
 $current = is_array($data['current'] ?? null) ? $data['current'] : [];
@@ -724,14 +816,40 @@ if ($airnow !== null) {
 }
 
 $aqiInfo = air_effective_aqi($pollutantAqis, $aqiModel, $pm25, $aod, $nwsAlerts);
-$aqiNow = $aqiInfo['effective'];
-[$aqiLabel, $aqiColor, $aqiHint] = air_aqi_band($aqiNow);
-if (($aqiInfo['note'] ?? '') !== '') {
-    $aqiHint = $aqiInfo['note'];
+$aqiDriver = (string)($aqiInfo['driver'] ?? 'pollutants');
+$nwsCategory = $aqiInfo['nws_category'] ?? null;
+$pollutantMax = $aqiInfo['pollutant_max'] ?? null;
+
+// When NWS alert drives the headline, show the official category — not a synthetic floor beside model tiles.
+if ($aqiDriver === 'nws' && is_array($nwsCategory)) {
+    $aqiNow = null;
+    $aqiHeadline = $nwsCategory['label'];
+    $aqiHeadlineIsText = true;
+    $aqiBandText = $nwsCategory['floor'] . '+ AQI range · NWS alert';
+    [, $aqiColor] = air_aqi_band($nwsCategory['floor']);
+    $aqiHint = 'Open-Meteo model max ' . ($pollutantMax !== null ? (int)$pollutantMax : '—')
+        . ' — not current ground conditions during smoke';
+    if ($aqSource === 'openmeteo' && !$airnowKeySet) {
+        $aqiHint .= ' · add AirNow key for EPA monitor readings';
+    } elseif ($airnowKeySet && $airnow === null && $airnowError !== '') {
+        $aqiHint .= ' · AirNow: ' . $airnowError;
+    }
+} else {
+    $aqiNow = $aqiInfo['effective'];
+    $aqiHeadline = $aqiNow !== null ? (string)$aqiNow : '—';
+    $aqiHeadlineIsText = false;
+    [$aqiBandText, $aqiColor, $aqiHint] = air_aqi_band($aqiNow);
+    if (($aqiInfo['note'] ?? '') !== '') {
+        $aqiHint = $aqiInfo['note'];
+    }
+    if ($aqSource === 'openmeteo' && !$airnowKeySet && $nwsAlerts !== []) {
+        $aqiHint = ($aqiHint !== '' ? $aqiHint . ' · ' : '') . 'Add EPA AirNow API key for ground-monitor AQI';
+    } elseif ($airnowKeySet && $airnow === null && $airnowError !== '') {
+        $aqiHint = ($aqiHint !== '' ? $aqiHint . ' · ' : '') . 'AirNow: ' . $airnowError;
+    }
 }
-if ($aqSource === 'openmeteo' && trim((string)AIRNOW_API_KEY) === '' && $nwsAlerts !== []) {
-    $aqiHint = ($aqiHint !== '' ? $aqiHint . ' · ' : '') . 'Add EPA AirNow API key in admin for ground-monitor AQI';
-}
+$pollutantsAreModel = $aqSource === 'openmeteo';
+$pollutantsStale = $pollutantsAreModel && $aqiDriver === 'nws';
 
 $pm25Aqi = $pollutantAqis['pm25'];
 $pm10Aqi = $pollutantAqis['pm10'];
@@ -774,7 +892,13 @@ foreach ($forecastDays as $i => $dayKey) {
     ];
 }
 
-[$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $aqiModel, $pollenToday, $pollenSource, $nwsAlerts);
+[$verdictTitle, $verdictSub, $verdictColor] = air_verdict(
+    $aqiDriver === 'nws' && is_array($nwsCategory) ? $nwsCategory['floor'] : $aqiInfo['effective'],
+    $aqiModel,
+    $pollenToday,
+    $pollenSource,
+    $nwsAlerts
+);
 
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
@@ -825,8 +949,13 @@ $gap = $compact ? 12 : 16;
   .aqi-panel .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 30 : 38 ?>px;
                letter-spacing:2px; text-transform:uppercase; color:<?= h($aqiColor) ?>; margin-top:4px; }
   .aqi-panel .hint { font-size:<?= $compact ? 17 : 20 ?>px; color:var(--mist); margin-top:4px; line-height:1.35; max-width:920px;
-                     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+                     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .aqi-panel .model { font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); margin-top:2px; }
+  .aqi-panel .num.text { font-size:<?= $compact ? 72 : 88 ?>px; letter-spacing:1px; }
+  .parts-stale .k { color:var(--beacon); }
+  .parts-stale .stat { opacity:.82; }
+  .parts-stale .stat .val { color:var(--mist) !important; }
+  .parts-note { font-size:<?= $compact ? 14 : 16 ?>px; color:var(--beacon); margin:-4px 0 8px; line-height:1.35; }
   .advisories { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; }
   .adv { font-size:14px; letter-spacing:1px; text-transform:uppercase; color:var(--beacon);
          border:1px solid rgba(255,179,71,.45); padding:3px 8px; border-radius:8px; }
@@ -889,13 +1018,14 @@ $gap = $compact ? 12 : 16;
 
   <?php if ($hasData): ?>
   <section class="panel aqi-panel">
-    <div class="k">US Air Quality Index</div>
+    <div class="k"><?= $aqiDriver === 'nws' ? 'NWS Air Quality Alert' : 'US Air Quality Index' ?></div>
     <div>
-      <div class="num"><?= $aqiNow ?? '—' ?></div>
-      <div class="band"><?= h($aqiLabel) ?></div>
-      <div class="model"><?= h($aqSourceLabel) ?><?= $reportingArea !== '' ? ' · ' . h($reportingArea) : '' ?><?= $aqiModel !== null && $aqSource === 'airnow' ? ' · model ' . (int)$aqiModel : '' ?></div>
-      <?php if ($aqiModel !== null && $aqiNow !== null && $aqSource === 'openmeteo' && $aqiNow > $aqiModel): ?>
-        <div class="model">Model consolidated AQI <?= (int)$aqiModel ?><?= $aod !== null ? ' · AOD ' . h((string)$aod) : '' ?></div>
+      <div class="num<?= !empty($aqiHeadlineIsText) ? ' text' : '' ?>"><?= h($aqiHeadline) ?></div>
+      <div class="band"><?= h($aqiBandText) ?></div>
+      <?php if ($aqSource === 'airnow'): ?>
+        <div class="model"><?= h($aqSourceLabel) ?><?= $reportingArea !== '' ? ' · ' . h($reportingArea) : '' ?><?= $aqiModel !== null ? ' · model ' . (int)$aqiModel : '' ?></div>
+      <?php elseif ($aqiDriver !== 'nws' && $pollutantMax !== null): ?>
+        <div class="model"><?= h($aqSourceLabel) ?> · max pollutant <?= (int)$pollutantMax ?><?= $aqiModel !== null ? ' · consolidated ' . (int)$aqiModel : '' ?></div>
       <?php endif; ?>
       <div class="hint"><?= h($aqiHint) ?></div>
       <?php if ($nwsAlerts !== []): ?>
@@ -908,7 +1038,11 @@ $gap = $compact ? 12 : 16;
     </div>
   </section>
 
-  <section class="panel parts">
+  <section class="panel parts<?= $pollutantsStale ? ' parts-stale' : '' ?>">
+    <div class="k"><?= $pollutantsAreModel ? 'Model estimates · Open-Meteo' : 'Pollutant AQI · EPA AirNow' ?></div>
+    <?php if ($pollutantsStale): ?>
+      <div class="parts-note">CAMS forecast model — lags wildfire smoke; not current monitor readings</div>
+    <?php endif; ?>
     <div class="stat">
       <div class="lab">PM2.5</div>
       <div><span class="val" style="color:<?= h($pm25Color) ?>"><?= $pm25Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
@@ -967,7 +1101,7 @@ $gap = $compact ? 12 : 16;
   </section>
 
   <section class="panel forecast">
-    <div class="k">Outlook</div>
+    <div class="k">Outlook · <?= $pollutantsAreModel ? 'model forecast' : 'forecast' ?></div>
     <div class="days">
     <?php foreach ($forecast as $fd):
       [, $fdColor] = air_aqi_band($fd['aqi']);
