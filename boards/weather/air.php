@@ -42,6 +42,7 @@ function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
         CURLOPT_USERAGENT => 'HomeSignage/AirBoard/1.0',
+        CURLOPT_HTTPHEADER => ['Accept: application/json, application/geo+json'],
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
@@ -65,13 +66,199 @@ function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'
 /** EPA US AQI band → label, accent color, short advice. */
 function air_aqi_band(?int $aqi): array
 {
-    if ($aqi === null) return ['—', 'var(--mist)', 'Air quality data unavailable'];
-    if ($aqi <= 50)  return ['Good', '#39c46d', 'Air is clean — open windows freely'];
-    if ($aqi <= 100) return ['Moderate', 'var(--beacon)', 'Acceptable for most — unusually sensitive people take it easy'];
-    if ($aqi <= 150) return ['Sensitive', '#ff9d4d', 'Unhealthy for sensitive groups — limit prolonged outdoor exertion'];
-    if ($aqi <= 200) return ['Unhealthy', '#ff5d5d', 'Everyone may feel effects — keep windows closed'];
-    if ($aqi <= 300) return ['Very unhealthy', '#c850ff', 'Health alert — minimize outdoor time'];
+    if ($aqi === null) {
+        return ['—', 'var(--mist)', 'Air quality data unavailable'];
+    }
+    if ($aqi <= 50) {
+        return ['Good', '#39c46d', 'Air is clean — open windows freely'];
+    }
+    if ($aqi <= 100) {
+        return ['Moderate', 'var(--beacon)', 'Acceptable for most — unusually sensitive people take it easy'];
+    }
+    if ($aqi <= 150) {
+        return ['Sensitive', '#ff9d4d', 'Unhealthy for sensitive groups — limit prolonged outdoor exertion'];
+    }
+    if ($aqi <= 200) {
+        return ['Unhealthy', '#ff5d5d', 'Everyone may feel effects — keep windows closed'];
+    }
+    if ($aqi <= 300) {
+        return ['Very unhealthy', '#c850ff', 'Health alert — minimize outdoor time'];
+    }
+
     return ['Hazardous', '#7a001a', 'Emergency conditions — stay indoors'];
+}
+
+/** Convert PM2.5 (µg/m³) to EPA US AQI using standard breakpoints. */
+function air_pm25_to_aqi(?float $pm25): ?int
+{
+    if ($pm25 === null) {
+        return null;
+    }
+    $bps = [
+        [0.0, 12.0, 0, 50],
+        [12.1, 35.4, 51, 100],
+        [35.5, 55.4, 101, 150],
+        [55.5, 150.4, 151, 200],
+        [150.5, 250.4, 201, 300],
+        [250.5, 350.4, 301, 400],
+        [350.5, 500.4, 401, 500],
+    ];
+    foreach ($bps as [$cLow, $cHigh, $iLow, $iHigh]) {
+        if ($pm25 < $cLow) {
+            continue;
+        }
+        if ($pm25 <= $cHigh) {
+            return (int)round(($iHigh - $iLow) / ($cHigh - $cLow) * ($pm25 - $cLow) + $iLow);
+        }
+    }
+
+    return 500;
+}
+
+/**
+ * @param list<array{event:string,headline:string,severity:string}> $alerts
+ * @return list<array{event:string,headline:string,severity:string}>
+ */
+function air_nws_aq_alerts(array $alerts): array
+{
+    $out = [];
+    foreach ($alerts as $a) {
+        if (!is_array($a)) {
+            continue;
+        }
+        $event = trim((string)($a['event'] ?? ''));
+        $headline = trim((string)($a['headline'] ?? ''));
+        if ($event === '') {
+            continue;
+        }
+        $blob = $event . ' ' . $headline;
+        if (
+            preg_match('/air\s+quality|smoke|haze|ozone\s+action|dense\s+fog|particulate|pm2\.?5/i', $blob)
+            || preg_match('/\b(fire\s+weather|red\s+flag)\b/i', $blob)
+        ) {
+            $out[] = [
+                'event' => $event,
+                'headline' => $headline,
+                'severity' => trim((string)($a['severity'] ?? 'Moderate')),
+            ];
+        }
+    }
+
+    return $out;
+}
+
+/** @param list<array{event:string,headline:string,severity:string}> $alerts */
+function air_nws_alert_floor(array $alerts): ?int
+{
+    if ($alerts === []) {
+        return null;
+    }
+    $floor = null;
+    foreach ($alerts as $a) {
+        $event = strtolower((string)($a['event'] ?? ''));
+        $sev = strtolower((string)($a['severity'] ?? ''));
+        if (str_contains($event, 'warning') || $sev === 'extreme') {
+            $floor = max($floor ?? 0, 201);
+        } elseif ($sev === 'severe') {
+            $floor = max($floor ?? 0, 151);
+        } elseif (preg_match('/air\s+quality|ozone\s+action|smoke|haze|particulate/', $event)) {
+            $floor = max($floor ?? 0, 101);
+        } else {
+            $floor = max($floor ?? 0, 101);
+        }
+    }
+
+    return $floor;
+}
+
+/** Smoke/haze layer can warrant a higher effective AQI than a single PM2.5 snapshot. */
+function air_smoke_floor(?float $aod, ?float $pm25): ?int
+{
+    if ($aod !== null) {
+        if ($aod >= 0.35) {
+            return 151;
+        }
+        if ($aod >= 0.18) {
+            return 101;
+        }
+    }
+    if ($pm25 !== null && $pm25 >= 35.0) {
+        return air_pm25_to_aqi($pm25);
+    }
+
+    return null;
+}
+
+/**
+ * Reconcile model AQI with PM2.5, smoke/haze, and active NWS alerts.
+ *
+ * @param list<array{event:string,headline:string,severity:string}> $nwsAlerts
+ * @return array{effective:?int,model:?int,pm25_aqi:?int,floor:?int,note:string}
+ */
+function air_effective_aqi(?int $modelAqi, ?float $pm25, ?float $aod, array $nwsAlerts): array
+{
+    $pm25Aqi = air_pm25_to_aqi($pm25);
+    $nwsFloor = air_nws_alert_floor($nwsAlerts);
+    $smokeFloor = air_smoke_floor($aod, $pm25);
+    $candidates = array_filter([$modelAqi, $pm25Aqi, $nwsFloor, $smokeFloor], static fn($v) => $v !== null);
+    $effective = $candidates !== [] ? max($candidates) : null;
+    $floor = null;
+    foreach ([$nwsFloor, $smokeFloor] as $f) {
+        if ($f !== null) {
+            $floor = max($floor ?? 0, $f);
+        }
+    }
+
+    $note = '';
+    if ($nwsAlerts !== []) {
+        $note = (string)($nwsAlerts[0]['event'] ?? 'Air quality alert') . ' active';
+        if ($modelAqi !== null && $effective !== null && $effective > $modelAqi) {
+            $note .= ' — model AQI may lag official alerts';
+        }
+    } elseif ($pm25Aqi !== null && $modelAqi !== null && $pm25Aqi > $modelAqi + 15) {
+        $note = 'PM2.5 suggests worse air than the model AQI';
+    } elseif ($smokeFloor !== null && $modelAqi !== null && $smokeFloor > $modelAqi) {
+        $note = 'Smoke / haze layer in the forecast';
+    }
+
+    return [
+        'effective' => $effective,
+        'model' => $modelAqi,
+        'pm25_aqi' => $pm25Aqi,
+        'floor' => $floor,
+        'note' => $note,
+    ];
+}
+
+/** @return list<array{event:string,headline:string,severity:string}> */
+function air_fetch_nws_alerts(): array
+{
+    $cacheKey = 'nws_air_' . md5(sprintf('%.4F_%.4F', LAT, LON));
+    $raw = air_cached_json(
+        sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', LAT, LON),
+        $cacheKey,
+        'nws'
+    );
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach (($raw['features'] ?? []) as $feat) {
+        if (!is_array($feat)) {
+            continue;
+        }
+        $p = $feat['properties'] ?? [];
+        if (!is_array($p)) {
+            continue;
+        }
+        $out[] = [
+            'event' => (string)($p['event'] ?? ''),
+            'headline' => (string)($p['headline'] ?? ''),
+            'severity' => (string)($p['severity'] ?? 'Moderate'),
+        ];
+    }
+
+    return $out;
 }
 
 /** Pollen grains/m³ → label and color. */
@@ -277,11 +464,31 @@ function air_pollen_max_score(array $rows, string $source): float
     return $max;
 }
 
-function air_verdict(?int $aqi, array $pollenRows, string $pollenSource): array
-{
+function air_verdict(
+    ?int $effectiveAqi,
+    ?int $modelAqi,
+    array $pollenRows,
+    string $pollenSource,
+    array $nwsAlerts
+): array {
+    if ($nwsAlerts !== []) {
+        $eventLabel = (string)($nwsAlerts[0]['event'] ?? 'Air quality alert');
+        if ($effectiveAqi !== null && $effectiveAqi > 150) {
+            return ['Keep windows closed', $eventLabel . ' — poor air quality', '#ff5d5d'];
+        }
+
+        return [
+            'Air quality alert',
+            $eventLabel . ($modelAqi !== null && $modelAqi <= 100
+                ? ' — NWS alert active; do not trust a moderate model reading'
+                : ' — limit outdoor time'),
+            '#ff9d4d',
+        ];
+    }
+
     $maxScore = air_pollen_max_score($pollenRows, $pollenSource);
-    $aqiBad = $aqi !== null && $aqi > 100;
-    $aqiWarn = $aqi !== null && $aqi > 50;
+    $aqiBad = $effectiveAqi !== null && $effectiveAqi > 100;
+    $aqiWarn = $effectiveAqi !== null && $effectiveAqi > 50;
     if ($pollenSource === 'google') {
         $pollenBad = $maxScore >= 4;
         $pollenWarn = $maxScore >= 3;
@@ -292,7 +499,7 @@ function air_verdict(?int $aqi, array $pollenRows, string $pollenSource): array
         $pollenBad = $pollenWarn = false;
     }
 
-    if ($aqi !== null && $aqi > 150) {
+    if ($effectiveAqi !== null && $effectiveAqi > 150) {
         return ['Keep windows closed', 'Poor air quality — limit time outside', '#ff5d5d'];
     }
     if ($pollenSource === 'google' && $maxScore >= 5) {
@@ -307,12 +514,14 @@ function air_verdict(?int $aqi, array $pollenRows, string $pollenSource): array
     if ($aqiWarn || $pollenWarn) {
         return ['Mostly fine', 'OK for most people — watch symptoms if you are sensitive', 'var(--beacon)'];
     }
-    if ($aqi !== null) {
+    if ($effectiveAqi !== null) {
         if ($pollenSource === 'none') {
             return ['Fresh air day', 'Good air quality — add Google Pollen key for allergy outlook', '#39c46d'];
         }
+
         return ['Fresh air day', 'Good air and low pollen — open windows, enjoy outside', '#39c46d'];
     }
+
     return ['—', 'Forecast unavailable', 'var(--mist)'];
 }
 
@@ -323,18 +532,34 @@ $query = http_build_query([
     'longitude' => LON,
     'timezone' => TIMEZONE,
     'forecast_days' => 3,
-    'current' => 'us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide',
-    'hourly' => 'us_aqi,pm2_5,ragweed_pollen,grass_pollen,birch_pollen,alder_pollen',
+    'current' => 'us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,aerosol_optical_depth',
+    'hourly' => 'us_aqi,pm2_5,aerosol_optical_depth,ragweed_pollen,grass_pollen,birch_pollen,alder_pollen',
 ]);
 $data = air_cached_json('https://air-quality-api.open-meteo.com/v1/air-quality?' . $query, $cacheKey);
+
+$nwsAlerts = air_nws_aq_alerts(air_fetch_nws_alerts());
 
 $current = is_array($data['current'] ?? null) ? $data['current'] : [];
 $hourly  = is_array($data['hourly'] ?? null) ? $data['hourly'] : [];
 $hasData = $current !== [] || $hourly !== [];
 
-$aqiNow = isset($current['us_aqi']) ? (int)round((float)$current['us_aqi']) : null;
-[$aqiLabel, $aqiColor, $aqiHint] = air_aqi_band($aqiNow);
+$aqiModel = isset($current['us_aqi']) ? (int)round((float)$current['us_aqi']) : null;
 $pm25 = isset($current['pm2_5']) ? round((float)$current['pm2_5'], 1) : null;
+$aod = isset($current['aerosol_optical_depth']) ? round((float)$current['aerosol_optical_depth'], 2) : null;
+if ($aod === null && $hourly !== []) {
+    foreach (array_reverse($hourly['aerosol_optical_depth'] ?? []) as $v) {
+        if ($v !== null && $v !== '') {
+            $aod = round((float)$v, 2);
+            break;
+        }
+    }
+}
+$aqiInfo = air_effective_aqi($aqiModel, $pm25, $aod, $nwsAlerts);
+$aqiNow = $aqiInfo['effective'];
+[$aqiLabel, $aqiColor, $aqiHint] = air_aqi_band($aqiNow);
+if (($aqiInfo['note'] ?? '') !== '') {
+    $aqiHint = $aqiInfo['note'];
+}
 $pm10 = isset($current['pm10']) ? round((float)$current['pm10'], 1) : null;
 $ozone = isset($current['ozone']) ? round((float)$current['ozone'], 0) : null;
 $no2 = isset($current['nitrogen_dioxide']) ? round((float)$current['nitrogen_dioxide'], 1) : null;
@@ -371,7 +596,7 @@ foreach ($forecastDays as $i => $dayKey) {
     ];
 }
 
-[$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $pollenToday, $pollenSource);
+[$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $aqiModel, $pollenToday, $pollenSource, $nwsAlerts);
 
 $embedded = isset($_GET['noticker']);
 $heightCss = signage_viewport_height();
@@ -422,6 +647,10 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   .aqi-panel .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 38 : 46 ?>px;
                letter-spacing:2px; text-transform:uppercase; color:<?= h($aqiColor) ?>; margin-top:8px; }
   .aqi-panel .hint { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:10px; line-height:1.4; max-width:920px; }
+  .aqi-panel .model { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; color:var(--mist); margin-top:8px; }
+  .advisories { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; }
+  .adv { font-size:15px; letter-spacing:1px; text-transform:uppercase; color:var(--beacon);
+         border:1px solid rgba(255,179,71,.45); padding:4px 10px; border-radius:8px; }
 
   .parts { grid-area:parts; display:grid; grid-template-columns:1fr 1fr; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; }
   .stat { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
@@ -483,7 +712,17 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
     <div>
       <div class="num"><?= $aqiNow ?? '—' ?></div>
       <div class="band"><?= h($aqiLabel) ?></div>
+      <?php if ($aqiModel !== null && $aqiNow !== null && $aqiNow > $aqiModel): ?>
+        <div class="model">Open-Meteo model AQI <?= (int)$aqiModel ?><?= $pm25 !== null ? ' · PM2.5 ' . h((string)$pm25) : '' ?><?= $aod !== null ? ' · AOD ' . h((string)$aod) : '' ?></div>
+      <?php endif; ?>
       <div class="hint"><?= h($aqiHint) ?></div>
+      <?php if ($nwsAlerts !== []): ?>
+        <div class="advisories">
+          <?php foreach ($nwsAlerts as $alert): ?>
+            <span class="adv"><?= h((string)($alert['event'] ?? 'Alert')) ?></span>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </div>
   </section>
 
@@ -569,6 +808,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
 
   <div class="stamp"><?= h(implode(' · ', array_filter([
     'Open-Meteo Air Quality',
+    $nwsAlerts !== [] ? 'NWS alerts' : '',
     $pollenSource === 'google' ? 'Google Pollen' : '',
     $GLOBALS['diag'] ? implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag'])) : '',
   ]))) ?></div>

@@ -103,7 +103,9 @@ Aurora panel highlights when Kp ≥ 6. The board shows both a **cloud cover** ba
 
 US AQI, PM2.5/PM10, ozone, NO₂, pollen bars, three-day outlook.
 
-**Data:** [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) — free, no key. US pollen uses **Google Pollen API** (optional); Open-Meteo pollen is Europe-only.
+**Data:** [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) — free, no key. US pollen uses **Google Pollen API** (optional); Open-Meteo pollen is Europe-only. **NWS active alerts** (Air Quality, smoke, ozone action) are factored into the displayed AQI and verdict — a moderate model reading will not override an official alert.
+
+**Scoring:** effective AQI = highest of Open-Meteo `us_aqi`, PM2.5-derived EPA AQI, smoke/haze (AOD), and NWS alert floor (alerts typically elevate to Sensitive / 101+).
 
 **Setup:** admin → **Air & Pollen** — place name, lat/lon, timezone. For US pollen: enable Pollen API in Google Cloud, paste key (5,000 calls/month free tier; 15-minute cache keeps usage low).
 
