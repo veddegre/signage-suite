@@ -18,11 +18,12 @@ define('PLACE', cfg('air.PLACE', 'West Michigan'));
 define('LAT', cfg('air.LAT', 42.9720));
 define('LON', cfg('air.LON', -85.9536));
 define('TIMEZONE', cfg('air.TIMEZONE', 'America/Detroit'));
-define('RELOAD_SEC', cfg('air.RELOAD_SEC', 900));
+define('RELOAD_SEC', cfg('air.RELOAD_SEC', 3600));
 define('GOOGLE_POLLEN_API_KEY', cfg('air.GOOGLE_POLLEN_API_KEY', ''));
 define('AIRNOW_API_KEY', cfg('air.AIRNOW_API_KEY', ''));
 const CACHE_DIR = SIGNAGE_ROOT . '/cache';
-define('CACHE_TTL', cfg('air.CACHE_TTL', 900));
+define('CACHE_TTL', cfg('air.CACHE_TTL', 3600));
+define('NWS_CACHE_TTL', max(60, (int)cfg('air.NWS_CACHE_TTL', 300)));
 
 date_default_timezone_set(TIMEZONE);
 $showClock = signage_show_clock();
@@ -30,16 +31,26 @@ $GLOBALS['diag'] = [];
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'): ?array
+function air_cache_is_fresh(string $cacheFile, int $ttl): bool
 {
-    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
-    $f = CACHE_DIR . '/' . $key . '.json';
-    if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
-        $d = json_decode((string)file_get_contents($f), true);
-        if (is_array($d) && !isset($d['WebServiceError'])) {
-            return $d;
-        }
+    return is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl;
+}
+
+function air_read_cache_file(string $cacheFile): ?array
+{
+    if (!is_file($cacheFile)) {
+        return null;
     }
+    $d = json_decode((string)file_get_contents($cacheFile), true);
+    if (!is_array($d) || isset($d['WebServiceError'])) {
+        return null;
+    }
+
+    return $d;
+}
+
+function air_fetch_and_cache_json(string $url, string $cacheFile, string $diagKey): ?array
+{
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -65,25 +76,71 @@ function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo'
                 }
             }
             $GLOBALS['diag'][$diagKey] = $msg !== '' ? $msg : 'AirNow API error';
-            @unlink($f);
+            @unlink($cacheFile);
         } else {
-            @file_put_contents($f, $body, LOCK_EX);
+            @file_put_contents($cacheFile, $body, LOCK_EX);
+
             return $d;
         }
     } else {
         $GLOBALS['diag'][$diagKey] = $err !== '' ? "curl: $err" : "HTTP $code";
         if ($code === 401 || $code === 403) {
-            @unlink($f);
+            @unlink($cacheFile);
         }
     }
-    if (is_file($f)) {
-        $d = json_decode((string)file_get_contents($f), true);
-        if (is_array($d) && !isset($d['WebServiceError'])) {
+
+    return air_read_cache_file($cacheFile);
+}
+
+/**
+ * Cached JSON fetch with single-flight lock — one upstream request per cache key when TTL expires.
+ */
+function air_cached_json(string $url, string $key, string $diagKey = 'openmeteo', ?int $ttl = null): ?array
+{
+    $ttl = $ttl ?? CACHE_TTL;
+    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
+    $cacheFile = CACHE_DIR . '/' . $key . '.json';
+    if (air_cache_is_fresh($cacheFile, $ttl)) {
+        $d = air_read_cache_file($cacheFile);
+        if ($d !== null) {
             return $d;
         }
     }
 
-    return null;
+    $lockFile = $cacheFile . '.lock';
+    $lockFp = @fopen($lockFile, 'c+');
+    if ($lockFp === false) {
+        return air_fetch_and_cache_json($url, $cacheFile, $diagKey);
+    }
+
+    $gotLock = flock($lockFp, LOCK_EX | LOCK_NB);
+    if (!$gotLock) {
+        flock($lockFp, LOCK_EX);
+        flock($lockFp, LOCK_UN);
+        fclose($lockFp);
+        if (air_cache_is_fresh($cacheFile, $ttl)) {
+            $d = air_read_cache_file($cacheFile);
+            if ($d !== null) {
+                return $d;
+            }
+        }
+
+        return air_read_cache_file($cacheFile);
+    }
+
+    try {
+        if (air_cache_is_fresh($cacheFile, $ttl)) {
+            $d = air_read_cache_file($cacheFile);
+            if ($d !== null) {
+                return $d;
+            }
+        }
+
+        return air_fetch_and_cache_json($url, $cacheFile, $diagKey);
+    } finally {
+        flock($lockFp, LOCK_UN);
+        fclose($lockFp);
+    }
 }
 
 /** EPA US AQI band → label, accent color, short advice. */
@@ -533,7 +590,8 @@ function air_fetch_nws_alerts(): array
     $raw = air_cached_json(
         sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', LAT, LON),
         $cacheKey,
-        'nws'
+        'nws',
+        NWS_CACHE_TTL
     );
     if (!is_array($raw)) {
         return [];

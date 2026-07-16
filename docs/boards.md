@@ -110,10 +110,19 @@ US AQI, per-pollutant AQI (PM2.5, PM10, ozone), pollen bars, and a three-day **O
 | Current AQI + pollutant tiles | [EPA AirNow API](https://docs.airnowapi.org/) | Ground monitors — matches weather apps (recommended for US) |
 | Fallback AQI | [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) | Free CAMS model; can lag wildfire smoke |
 | Outlook (3-day) | Open-Meteo | Model forecast only — not EPA monitors |
-| Alerts | NWS (`api.weather.gov`) | Badges + verdict; no numeric AQI from NWS |
+| Alerts | NWS (`api.weather.gov`) | Badges + verdict; no API key — **5 min cache** by default |
 | Pollen | Google Pollen API (optional) | Separate key from AirNow |
 
 **Scoring:** overall AQI = highest pollutant sub-index (EPA method). With only Open-Meteo, NWS alert wording can raise the displayed category when monitors are unavailable.
+
+**Cache TTL** (admin → Air & Pollen)
+
+| Setting | Default | Applies to |
+|---------|---------|------------|
+| Cache TTL | 3600s (1 h) | AirNow, Google Pollen, Open-Meteo |
+| NWS alert cache | 300s (5 min) | NWS active alerts only (free, no quota) |
+
+Single-flight lock (`*.json.lock`) prevents duplicate upstream calls when a TTL expires. Lower cache TTL during heavy smoke for fresher AQI; NWS can be shortened further (min 60s) if you want faster alert badges.
 
 **Setup — admin → Air & Pollen**
 
@@ -133,8 +142,6 @@ php scripts/diagnose-air.php --root=/var/www/html/boards
 ```
 
 Expect `air.AIRNOW_API_KEY: set` and `AirNow HTTP 200` with PM2.5 / PM10 / O3 lines. `air.AIRNOW_API_KEY` and `air.GOOGLE_POLLEN_API_KEY` are different settings.
-
-Default cache TTL 900s.
 
 ### uv.php — UV Index
 

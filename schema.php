@@ -177,7 +177,9 @@ function admin_schema(): array
              'help' => 'AQI from EPA ground monitors (not airnow.gov). Register at docs.airnowapi.org/account/request/, activate via email, log in, open Web Services — API key is in the upper-right corner. Paste here and Save.'],
             ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
-            $tz, $ttl('Open-Meteo + Google Pollen responses — default 900s (15 min)'),
+            ['key' => 'NWS_CACHE_TTL', 'label' => 'NWS alert cache (seconds)', 'type' => 'number',
+             'help' => 'NWS has no API key or quota — default 300s (5 min) so alerts refresh sooner than AQI/pollen'],
+            $tz, $ttl('AirNow, Google Pollen, Open-Meteo — default 3600s (1 h)'),
         ]],
         'uv' => ['title' => 'UV Index', 'file' => 'uv.php', 'fields' => [
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
