@@ -529,12 +529,13 @@ if (($smokeTonight['level'] ?? 'none') === 'broken') {
 $conditionBits = array_values(array_unique($conditionBits));
 $outlookNights = array_slice($evenings, 1);
 
-$frameH = signage_frame_height();
-$compact = $frameH < 1080;
-$rowHead = $compact ? 80 : 88;
-$rowOutlook = $compact ? 92 : 108;
-$rowFoot = $compact ? 220 : 248;
-$padY = $compact ? 20 : 24;
+$boardH = signage_frame_height();
+$compact = $boardH < 1008;
+$rowHead = $compact ? 72 : 84;
+$rowOutlook = $compact ? 76 : 92;
+$rowFoot = $compact ? 188 : 216;
+$padY = $compact ? 16 : 20;
+$gap = $compact ? 12 : 16;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -551,9 +552,9 @@ $padY = $compact ? 20 : 24;
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
-  .board { width:1920px; height:100%; padding:<?= $padY ?>px 32px; display:grid; gap:<?= $compact ? 16 : 20 ?>px;
+  .board { width:1920px; height:100%; min-height:0; padding:<?= $padY ?>px 28px; display:grid; gap:<?= $gap ?>px;
            grid-template-columns: 1.2fr 1fr;
-           grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowOutlook ?>px <?= $rowFoot ?>px auto;
+           grid-template-rows: <?= $rowHead ?>px minmax(0,1fr) <?= $rowOutlook ?>px <?= $rowFoot ?>px minmax(0,auto);
            grid-template-areas: "head head" "verdict sky" "nights nights" "windows windows" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 56 : 64 ?>px; }
@@ -564,17 +565,17 @@ $padY = $compact ? 20 : 24;
              border-radius:14px; padding:<?= $compact ? '24px 28px' : '30px 36px' ?>; display:flex;
              flex-direction:column; min-height:0; overflow:hidden; gap:0; }
   .verdict .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); flex:0 0 auto; }
-  .verdict .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 84 : 96 ?>px; line-height:1.02; flex:0 0 auto; }
-  .verdict .why { font-size:<?= $compact ? 22 : 26 ?>px; color:var(--mist); margin-top:8px; line-height:1.3;
-                  flex:0 1 auto; min-height:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
-  .cloudbar { margin-top:<?= $compact ? 14 : 18 ?>px; flex:0 0 auto; }
+  .verdict .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 72 : 88 ?>px; line-height:1.02; flex:0 0 auto; }
+  .verdict .why { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; line-height:1.25;
+                  flex:0 1 auto; min-height:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .cloudbar { margin-top:<?= $compact ? 10 : 14 ?>px; flex:0 0 auto; }
   .cloudbar .lab { display:flex; justify-content:space-between; font-size:18px; color:var(--mist); margin-bottom:6px; }
   .cloudbar .track { height:16px; background:var(--lake-night); border:1px solid var(--hairline); border-radius:11px; overflow:hidden; position:relative; }
   .cloudbar .fill { height:100%; background:var(--beacon); border-radius:11px; }
   .cloudbar.smoke .fill { background:linear-gradient(90deg, #ffb347, #e07040); }
   .cloudbar .marks { display:flex; justify-content:space-between; margin-top:4px; font-size:14px; letter-spacing:1px; text-transform:uppercase; color:var(--mist); }
-  .conds { margin-top:10px; font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); line-height:1.3;
-           flex:0 1 auto; min-height:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .conds { margin-top:8px; font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); line-height:1.25;
+           flex:0 1 auto; min-height:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
   .conds strong { color:var(--snow); font-weight:600; }
   .advisories { margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; flex:0 0 auto; }
   .adv { font-size:15px; letter-spacing:1px; text-transform:uppercase; color:var(--beacon);
@@ -585,8 +586,8 @@ $padY = $compact ? 20 : 24;
             padding:<?= $compact ? '16px 22px' : '18px 26px' ?>; align-content:center; min-height:0; overflow:hidden; }
   .nights.empty { display:flex; align-items:center; }
   .night { min-width:0; }
-  .night .d { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px; letter-spacing:1px; text-transform:uppercase; }
-  .night .c { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
+  .night .d { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 24 : 28 ?>px; letter-spacing:1px; text-transform:uppercase; }
+  .night .c { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px; }
   .nights .fallback { font-size:22px; color:var(--mist); }
 
   .sky { grid-area:sky; display:flex; flex-direction:column; gap:<?= $compact ? 16 : 18 ?>px; min-height:0; }
@@ -616,7 +617,7 @@ $padY = $compact ? 20 : 24;
   .win { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px; padding:<?= $compact ? '16px 20px' : '20px 24px' ?>; }
   .win.prime { border-color:var(--beacon); }
   .win .k { font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
-  .win .v { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 44 : 50 ?>px; margin-top:6px;
+  .win .v { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 38 : 44 ?>px; margin-top:4px;
             font-variant-numeric:tabular-nums; }
   .win.prime .v { color:var(--beacon); }
   .win .s { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); margin-top:4px; }

@@ -3,7 +3,8 @@
  * AIR & POLLEN — 1920×1080 signage
  * US AQI, PM2.5/PM10, ozone, and pollen levels for your location.
  *
- * Data: Open-Meteo Air Quality API for US AQI + pollutants (free, no key).
+ * Data: EPA AirNow observations when an API key is set (ground monitors, per-pollutant AQI).
+ *   Fallback: Open-Meteo per-pollutant US AQI (CAMS model — can lag smoke events).
  * Pollen: Google Pollen API for the US (optional key in admin); Open-Meteo pollen is Europe-only.
  *   https://open-meteo.com/en/docs/air-quality-api
  *
@@ -19,6 +20,7 @@ define('LON', cfg('air.LON', -85.9536));
 define('TIMEZONE', cfg('air.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('air.RELOAD_SEC', 900));
 define('GOOGLE_POLLEN_API_KEY', cfg('air.GOOGLE_POLLEN_API_KEY', ''));
+define('AIRNOW_API_KEY', cfg('air.AIRNOW_API_KEY', ''));
 const CACHE_DIR = SIGNAGE_ROOT . '/cache';
 define('CACHE_TTL', cfg('air.CACHE_TTL', 900));
 
@@ -140,6 +142,7 @@ function air_nws_aq_alerts(array $alerts): array
                 'event' => $event,
                 'headline' => $headline,
                 'severity' => trim((string)($a['severity'] ?? 'Moderate')),
+                'description' => trim((string)($a['description'] ?? '')),
             ];
         }
     }
@@ -147,7 +150,27 @@ function air_nws_aq_alerts(array $alerts): array
     return $out;
 }
 
-/** @param list<array{event:string,headline:string,severity:string}> $alerts */
+/** Map EPA category language in NWS alert text to a minimum AQI floor. */
+function air_nws_text_aqi_floor(string $text): ?int
+{
+    $t = strtolower($text);
+    if (preg_match('/\bhazardous\b/', $t)) {
+        return 301;
+    }
+    if (preg_match('/very\s+unhealthy/', $t)) {
+        return 201;
+    }
+    if (preg_match('/unhealthy\s+for\s+sensitive|sensitive\s+groups/', $t)) {
+        return 101;
+    }
+    if (preg_match('/\bunhealthy\b/', $t)) {
+        return 151;
+    }
+
+    return null;
+}
+
+/** @param list<array{event:string,headline:string,severity:string,description?:string}> $alerts */
 function air_nws_alert_floor(array $alerts): ?int
 {
     if ($alerts === []) {
@@ -155,6 +178,16 @@ function air_nws_alert_floor(array $alerts): ?int
     }
     $floor = null;
     foreach ($alerts as $a) {
+        $blob = implode(' ', array_filter([
+            (string)($a['event'] ?? ''),
+            (string)($a['headline'] ?? ''),
+            (string)($a['description'] ?? ''),
+        ]));
+        $textFloor = air_nws_text_aqi_floor($blob);
+        if ($textFloor !== null) {
+            $floor = max($floor ?? 0, $textFloor);
+            continue;
+        }
         $event = strtolower((string)($a['event'] ?? ''));
         $sev = strtolower((string)($a['severity'] ?? ''));
         if (str_contains($event, 'warning') || $sev === 'extreme') {
@@ -190,17 +223,127 @@ function air_smoke_floor(?float $aod, ?float $pm25): ?int
 }
 
 /**
- * Reconcile model AQI with PM2.5, smoke/haze, and active NWS alerts.
+ * Per-pollutant US AQI from an Open-Meteo current payload.
  *
- * @param list<array{event:string,headline:string,severity:string}> $nwsAlerts
- * @return array{effective:?int,model:?int,pm25_aqi:?int,floor:?int,note:string}
+ * @return array{pm25:?int,pm10:?int,ozone:?int,no2:?int}
  */
-function air_effective_aqi(?int $modelAqi, ?float $pm25, ?float $aod, array $nwsAlerts): array
+function air_openmeteo_pollutant_aqis(array $current): array
 {
-    $pm25Aqi = air_pm25_to_aqi($pm25);
+    $map = [
+        'pm25' => 'us_aqi_pm2_5',
+        'pm10' => 'us_aqi_pm10',
+        'ozone' => 'us_aqi_ozone',
+        'no2' => 'us_aqi_nitrogen_dioxide',
+    ];
+    $out = [];
+    foreach ($map as $key => $field) {
+        $out[$key] = isset($current[$field]) && $current[$field] !== null && $current[$field] !== ''
+            ? (int)round((float)$current[$field])
+            : null;
+    }
+
+    return $out;
+}
+
+/** @param list<array<string,mixed>>|null $rows */
+function air_parse_airnow(?array $rows): ?array
+{
+    if ($rows === null || $rows === []) {
+        return null;
+    }
+    $paramKeys = [
+        'PM2.5' => 'pm25',
+        'PM10' => 'pm10',
+        'O3' => 'ozone',
+        'NO2' => 'no2',
+    ];
+    $pollutants = [];
+    $reportingArea = '';
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $param = (string)($row['ParameterName'] ?? '');
+        if ($param === '' || !isset($row['AQI'])) {
+            continue;
+        }
+        $key = $paramKeys[$param] ?? null;
+        if ($key === null) {
+            continue;
+        }
+        $category = $row['Category'] ?? [];
+        $pollutants[$key] = [
+            'aqi' => (int)$row['AQI'],
+            'category' => is_array($category) ? (string)($category['Name'] ?? '') : '',
+            'param' => $param,
+        ];
+        if ($reportingArea === '') {
+            $reportingArea = (string)($row['ReportingArea'] ?? '');
+        }
+    }
+    if ($pollutants === []) {
+        return null;
+    }
+    $overall = max(array_map(static fn(array $p): int => $p['aqi'], $pollutants));
+
+    return [
+        'pollutants' => $pollutants,
+        'overall' => $overall,
+        'reporting_area' => $reportingArea,
+    ];
+}
+
+function air_fetch_airnow(): ?array
+{
+    $key = trim((string)AIRNOW_API_KEY);
+    if ($key === '') {
+        return null;
+    }
+    $cacheKey = 'airnow_' . md5(sprintf('%.4F_%.4F', LAT, LON));
+    $url = 'https://www.airnowapi.org/aq/observation/latLong/current/?' . http_build_query([
+        'format' => 'application/json',
+        'latitude' => LAT,
+        'longitude' => LON,
+        'distance' => 50,
+        'API_KEY' => $key,
+    ]);
+    $raw = air_cached_json($url, $cacheKey, 'airnow');
+
+    return air_parse_airnow($raw);
+}
+
+/** Max hourly US AQI across pollutant indices for one calendar day. */
+function air_day_max_combined_aqi(array $hourly, string $dayKey): ?int
+{
+    $fields = ['us_aqi', 'us_aqi_pm2_5', 'us_aqi_pm10', 'us_aqi_ozone', 'us_aqi_nitrogen_dioxide'];
+    $max = null;
+    foreach ($fields as $field) {
+        $v = air_day_max($hourly, $field, $dayKey);
+        if ($v !== null) {
+            $max = max($max ?? 0, (int)round($v));
+        }
+    }
+
+    return $max;
+}
+
+/**
+ * EPA overall AQI = max pollutant sub-index (+ NWS / smoke floors when higher).
+ *
+ * @param array{pm25:?int,pm10:?int,ozone:?int,no2:?int} $pollutantAqis
+ * @param list<array{event:string,headline:string,severity:string}> $nwsAlerts
+ * @return array{effective:?int,pollutant_max:?int,model:?int,floor:?int,note:string}
+ */
+function air_effective_aqi(array $pollutantAqis, ?int $modelAqi, ?float $pm25, ?float $aod, array $nwsAlerts): array
+{
+    $filtered = array_filter($pollutantAqis, static fn($v) => $v !== null);
+    $pollutantMax = $filtered !== [] ? max($filtered) : null;
+    if ($pollutantMax === null) {
+        $pollutantMax = $modelAqi ?? air_pm25_to_aqi($pm25);
+    }
     $nwsFloor = air_nws_alert_floor($nwsAlerts);
     $smokeFloor = air_smoke_floor($aod, $pm25);
-    $candidates = array_filter([$modelAqi, $pm25Aqi, $nwsFloor, $smokeFloor], static fn($v) => $v !== null);
+    $candidates = array_filter([$pollutantMax, $nwsFloor, $smokeFloor], static fn($v) => $v !== null);
     $effective = $candidates !== [] ? max($candidates) : null;
     $floor = null;
     foreach ([$nwsFloor, $smokeFloor] as $f) {
@@ -212,19 +355,21 @@ function air_effective_aqi(?int $modelAqi, ?float $pm25, ?float $aod, array $nws
     $note = '';
     if ($nwsAlerts !== []) {
         $note = (string)($nwsAlerts[0]['event'] ?? 'Air quality alert') . ' active';
-        if ($modelAqi !== null && $effective !== null && $effective > $modelAqi) {
-            $note .= ' — model AQI may lag official alerts';
+        if ($pollutantMax !== null && $effective !== null && $effective > $pollutantMax) {
+            $note .= ' — elevated by alert / smoke signals';
+        } elseif ($modelAqi !== null && $pollutantMax !== null && $pollutantMax > $modelAqi + 20) {
+            $note .= ' — ground monitors above model';
         }
-    } elseif ($pm25Aqi !== null && $modelAqi !== null && $pm25Aqi > $modelAqi + 15) {
-        $note = 'PM2.5 suggests worse air than the model AQI';
-    } elseif ($smokeFloor !== null && $modelAqi !== null && $smokeFloor > $modelAqi) {
+    } elseif ($modelAqi !== null && $pollutantMax !== null && $pollutantMax > $modelAqi + 20) {
+        $note = 'Per-pollutant AQI above consolidated model reading';
+    } elseif ($smokeFloor !== null && $pollutantMax !== null && $smokeFloor > $pollutantMax) {
         $note = 'Smoke / haze layer in the forecast';
     }
 
     return [
         'effective' => $effective,
+        'pollutant_max' => $pollutantMax,
         'model' => $modelAqi,
-        'pm25_aqi' => $pm25Aqi,
         'floor' => $floor,
         'note' => $note,
     ];
@@ -255,6 +400,7 @@ function air_fetch_nws_alerts(): array
             'event' => (string)($p['event'] ?? ''),
             'headline' => (string)($p['headline'] ?? ''),
             'severity' => (string)($p['severity'] ?? 'Moderate'),
+            'description' => (string)($p['description'] ?? ''),
         ];
     }
 
@@ -525,26 +671,30 @@ function air_verdict(
     return ['—', 'Forecast unavailable', 'var(--mist)'];
 }
 
-// ── Fetch Open-Meteo air quality + pollen ────────────────────────────────────
-$cacheKey = 'openmeteo_air_' . md5(sprintf('%.4F_%.4F_%s', LAT, LON, TIMEZONE));
+// ── Fetch air quality + pollen ─────────────────────────────────────────────────
+$cacheKey = 'openmeteo_air_v2_' . md5(sprintf('%.4F_%.4F_%s', LAT, LON, TIMEZONE));
 $query = http_build_query([
     'latitude' => LAT,
     'longitude' => LON,
     'timezone' => TIMEZONE,
     'forecast_days' => 3,
-    'current' => 'us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,aerosol_optical_depth',
-    'hourly' => 'us_aqi,pm2_5,aerosol_optical_depth,ragweed_pollen,grass_pollen,birch_pollen,alder_pollen',
+    'current' => 'us_aqi,us_aqi_pm2_5,us_aqi_pm10,us_aqi_ozone,us_aqi_nitrogen_dioxide,pm2_5,pm10,ozone,nitrogen_dioxide,aerosol_optical_depth',
+    'hourly' => 'us_aqi,us_aqi_pm2_5,us_aqi_pm10,us_aqi_ozone,us_aqi_nitrogen_dioxide,pm2_5,aerosol_optical_depth,ragweed_pollen,grass_pollen,birch_pollen,alder_pollen',
 ]);
 $data = air_cached_json('https://air-quality-api.open-meteo.com/v1/air-quality?' . $query, $cacheKey);
 
+$airnow = air_fetch_airnow();
 $nwsAlerts = air_nws_aq_alerts(air_fetch_nws_alerts());
 
 $current = is_array($data['current'] ?? null) ? $data['current'] : [];
 $hourly  = is_array($data['hourly'] ?? null) ? $data['hourly'] : [];
-$hasData = $current !== [] || $hourly !== [];
+$hasData = $airnow !== null || $current !== [] || $hourly !== [];
 
 $aqiModel = isset($current['us_aqi']) ? (int)round((float)$current['us_aqi']) : null;
 $pm25 = isset($current['pm2_5']) ? round((float)$current['pm2_5'], 1) : null;
+$pm10 = isset($current['pm10']) ? round((float)$current['pm10'], 1) : null;
+$ozoneUg = isset($current['ozone']) ? round((float)$current['ozone'], 0) : null;
+$no2Ug = isset($current['nitrogen_dioxide']) ? round((float)$current['nitrogen_dioxide'], 1) : null;
 $aod = isset($current['aerosol_optical_depth']) ? round((float)$current['aerosol_optical_depth'], 2) : null;
 if ($aod === null && $hourly !== []) {
     foreach (array_reverse($hourly['aerosol_optical_depth'] ?? []) as $v) {
@@ -554,15 +704,43 @@ if ($aod === null && $hourly !== []) {
         }
     }
 }
-$aqiInfo = air_effective_aqi($aqiModel, $pm25, $aod, $nwsAlerts);
+
+$omPollutants = air_openmeteo_pollutant_aqis($current);
+if ($airnow !== null) {
+    $aqSource = 'airnow';
+    $aqSourceLabel = 'EPA AirNow';
+    $reportingArea = trim((string)($airnow['reporting_area'] ?? ''));
+    $pollutantAqis = [
+        'pm25' => $airnow['pollutants']['pm25']['aqi'] ?? null,
+        'pm10' => $airnow['pollutants']['pm10']['aqi'] ?? null,
+        'ozone' => $airnow['pollutants']['ozone']['aqi'] ?? null,
+        'no2' => $airnow['pollutants']['no2']['aqi'] ?? null,
+    ];
+} else {
+    $aqSource = 'openmeteo';
+    $aqSourceLabel = 'Open-Meteo';
+    $reportingArea = '';
+    $pollutantAqis = $omPollutants;
+}
+
+$aqiInfo = air_effective_aqi($pollutantAqis, $aqiModel, $pm25, $aod, $nwsAlerts);
 $aqiNow = $aqiInfo['effective'];
 [$aqiLabel, $aqiColor, $aqiHint] = air_aqi_band($aqiNow);
 if (($aqiInfo['note'] ?? '') !== '') {
     $aqiHint = $aqiInfo['note'];
 }
-$pm10 = isset($current['pm10']) ? round((float)$current['pm10'], 1) : null;
-$ozone = isset($current['ozone']) ? round((float)$current['ozone'], 0) : null;
-$no2 = isset($current['nitrogen_dioxide']) ? round((float)$current['nitrogen_dioxide'], 1) : null;
+if ($aqSource === 'openmeteo' && trim((string)AIRNOW_API_KEY) === '' && $nwsAlerts !== []) {
+    $aqiHint = ($aqiHint !== '' ? $aqiHint . ' · ' : '') . 'Add EPA AirNow API key in admin for ground-monitor AQI';
+}
+
+$pm25Aqi = $pollutantAqis['pm25'];
+$pm10Aqi = $pollutantAqis['pm10'];
+$ozoneAqi = $pollutantAqis['ozone'];
+$no2Aqi = $pollutantAqis['no2'];
+[, $pm25Color] = air_aqi_band($pm25Aqi);
+[, $pm10Color] = air_aqi_band($pm10Aqi);
+[, $ozoneColor] = air_aqi_band($ozoneAqi);
+[, $no2Color] = air_aqi_band($no2Aqi);
 
 $todayKey = date('Y-m-d');
 $googlePollen = air_fetch_google_pollen();
@@ -579,8 +757,8 @@ $pollenNeedsKey = $pollenSource === 'none';
 $forecastDays = air_forecast_days($hourly, 3);
 $forecast = [];
 foreach ($forecastDays as $i => $dayKey) {
-    $dayAqi = air_day_max($hourly, 'us_aqi', $dayKey);
-    $dayPm = air_day_max($hourly, 'pm2_5', $dayKey);
+    $dayAqi = air_day_max_combined_aqi($hourly, $dayKey);
+    $dayPmAqi = air_day_max($hourly, 'us_aqi_pm2_5', $dayKey);
     $dayPollen = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, $i, $dayKey);
     $topRow = air_pollen_top_row($dayPollen);
     $topPollen = $topRow['name'] ?? '—';
@@ -589,8 +767,8 @@ foreach ($forecastDays as $i => $dayKey) {
         : ($dayKey === date('Y-m-d', strtotime('+1 day')) ? 'Tomorrow' : date('D', strtotime($dayKey . ' 12:00:00')));
     $forecast[] = [
         'label' => $label,
-        'aqi' => $dayAqi !== null ? (int)round($dayAqi) : null,
-        'pm25' => $dayPm !== null ? round($dayPm, 1) : null,
+        'aqi' => $dayAqi,
+        'pm25_aqi' => $dayPmAqi !== null ? (int)round($dayPmAqi) : null,
         'pollen' => $topPollen,
         'pollen_level' => $topLabel,
     ];
@@ -599,11 +777,10 @@ foreach ($forecastDays as $i => $dayKey) {
 [$verdictTitle, $verdictSub, $verdictColor] = air_verdict($aqiNow, $aqiModel, $pollenToday, $pollenSource, $nwsAlerts);
 
 $embedded = isset($_GET['noticker']);
-$heightCss = signage_viewport_height();
 $boardH = signage_frame_height();
-$rowHead = max(72, (int)round(88 * $boardH / 1080));
-$rowAqi  = max(300, (int)round(360 * $boardH / 1080));
-$rowMid  = max(260, (int)round(320 * $boardH / 1080));
+$compact = $boardH < 1008;
+$padY = $compact ? 16 : 20;
+$gap = $compact ? 12 : 16;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -618,12 +795,13 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347;
           --up:#39c46d; --down:#ff5d5d; }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
-              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
-           display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
+  html,body { width:1920px; overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
+              <?= signage_viewport_css() ?> }
+  .board { width:1920px; height:100%; min-height:0; padding:<?= $padY ?>px 28px;
+           display:grid; gap:<?= $gap ?>px;
            grid-template-columns: 1fr 1fr 1fr;
-           grid-template-rows: <?= $rowHead ?>px <?= $rowAqi ?>px <?= $rowMid ?>px auto auto;
+           grid-template-rows: auto minmax(0,1.15fr) minmax(0,1fr) auto minmax(0,auto);
            grid-template-areas:
              "head head head"
              "aqi aqi parts"
@@ -631,67 +809,70 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
              "verdict verdict verdict"
              "meta meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; min-height:0; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 48 : 56 ?>px; }
   .head h1 span { color:var(--beacon); }
-  .head .sub { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); margin-left:16px; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
+  .head .sub { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-left:16px; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 40 : 48 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; }
 
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:<?= $boardH < 1080 ? '20px 24px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
-  .panel .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:10px; }
+           padding:<?= $compact ? '16px 18px' : '20px 24px' ?>; min-height:0; overflow:hidden; }
+  .panel .k { font-size:16px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
 
-  .aqi-panel { grid-area:aqi; display:flex; flex-direction:column; justify-content:space-between; }
-  .aqi-panel .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 148 : 180 ?>px;
+  .aqi-panel { grid-area:aqi; display:flex; flex-direction:column; justify-content:flex-start; gap:6px; }
+  .aqi-panel .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 112 : 140 ?>px;
               line-height:1; font-variant-numeric:tabular-nums; color:<?= h($aqiColor) ?>; }
-  .aqi-panel .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 38 : 46 ?>px;
-               letter-spacing:2px; text-transform:uppercase; color:<?= h($aqiColor) ?>; margin-top:8px; }
-  .aqi-panel .hint { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:10px; line-height:1.4; max-width:920px; }
-  .aqi-panel .model { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; color:var(--mist); margin-top:8px; }
-  .advisories { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; }
-  .adv { font-size:15px; letter-spacing:1px; text-transform:uppercase; color:var(--beacon);
-         border:1px solid rgba(255,179,71,.45); padding:4px 10px; border-radius:8px; }
+  .aqi-panel .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 30 : 38 ?>px;
+               letter-spacing:2px; text-transform:uppercase; color:<?= h($aqiColor) ?>; margin-top:4px; }
+  .aqi-panel .hint { font-size:<?= $compact ? 17 : 20 ?>px; color:var(--mist); margin-top:4px; line-height:1.35; max-width:920px;
+                     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .aqi-panel .model { font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); margin-top:2px; }
+  .advisories { margin-top:6px; display:flex; flex-wrap:wrap; gap:6px; }
+  .adv { font-size:14px; letter-spacing:1px; text-transform:uppercase; color:var(--beacon);
+         border:1px solid rgba(255,179,71,.45); padding:3px 8px; border-radius:8px; }
 
-  .parts { grid-area:parts; display:grid; grid-template-columns:1fr 1fr; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; }
+  .parts { grid-area:parts; display:grid; grid-template-columns:1fr 1fr; gap:<?= $compact ? 10 : 12 ?>px; }
   .stat { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-          padding:<?= $boardH < 1080 ? '16px 18px' : '20px 22px' ?>; min-height:0; }
-  .stat .lab { font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
-  .stat .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 52 : 64 ?>px;
-               line-height:1; color:var(--snow); font-variant-numeric:tabular-nums; }
-  .stat .unit { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); font-weight:500; margin-left:6px; }
+          padding:<?= $compact ? '12px 14px' : '16px 18px' ?>; min-height:0; }
+  .stat .lab { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
+  .stat .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 40 : 52 ?>px;
+               line-height:1; font-variant-numeric:tabular-nums; }
+  .stat .unit { font-size:<?= $compact ? 18 : 22 ?>px; color:var(--mist); font-weight:500; margin-left:6px; }
+  .stat .conc { font-size:<?= $compact ? 14 : 16 ?>px; color:var(--mist); margin-top:4px; }
 
   .pollen { grid-area:pollen; }
-  .prow { display:grid; grid-template-columns:130px 1fr 110px 90px; align-items:center; gap:14px;
-          padding:<?= $boardH < 1080 ? '10px 0' : '13px 0' ?>; border-bottom:1px solid var(--hairline); }
+  .prow { display:grid; grid-template-columns:110px 1fr 90px 80px; align-items:center; gap:10px;
+          padding:<?= $compact ? '8px 0' : '10px 0' ?>; border-bottom:1px solid var(--hairline); }
   .prow:last-child { border-bottom:none; }
-  .prow .n { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; }
-  .prow .track { height:18px; background:var(--lake-night); border-radius:9px; overflow:hidden; }
+  .prow .n { font-size:<?= $compact ? 20 : 24 ?>px; }
+  .prow .track { height:16px; background:var(--lake-night); border-radius:9px; overflow:hidden; }
   .prow .fill { height:100%; border-radius:9px; background:var(--beacon); }
   .prow .fill.hot { background:var(--down); }
-  .prow .c { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 18 : 21 ?>px; color:var(--mist); text-align:right; }
-  .prow .lvl { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; font-weight:600; text-align:right; text-transform:uppercase; letter-spacing:1px; }
+  .prow .c { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 16 : 19 ?>px; color:var(--mist); text-align:right; }
+  .prow .lvl { font-size:<?= $compact ? 15 : 17 ?>px; font-weight:600; text-align:right; text-transform:uppercase; letter-spacing:1px; }
 
   .forecast { grid-area:forecast; display:flex; flex-direction:column; min-height:0; }
   .forecast .days { flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr);
-                   gap:<?= $boardH < 1080 ? 10 : 12 ?>px; align-items:stretch; }
+                   gap:<?= $compact ? 8 : 10 ?>px; align-items:stretch; }
   .fday { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-          padding:<?= $boardH < 1080 ? '12px 14px' : '16px 18px' ?>; min-height:0;
+          padding:<?= $compact ? '10px 12px' : '14px 16px' ?>; min-height:0;
           display:flex; flex-direction:column; justify-content:flex-start; }
-  .fday .d { font-size:15px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
-  .fday .aqi-num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 36 : 44 ?>px;
+  .fday .d { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
+  .fday .aqi-num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 30 : 38 ?>px;
                line-height:1.15; margin:0; }
-  .fday .line { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); margin-top:8px; line-height:1.35; }
+  .fday .line { font-size:<?= $compact ? 14 : 16 ?>px; color:var(--mist); margin-top:6px; line-height:1.3; }
 
-  .pollen-note { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; color:var(--mist); margin-top:12px; line-height:1.45; }
+  .pollen-note { font-size:<?= $compact ? 15 : 17 ?>px; color:var(--mist); margin-top:8px; line-height:1.4; }
   .pollen-note code { background:var(--lake-night); padding:2px 6px; border-radius:6px; }
 
   .verdict { grid-area:verdict; border-radius:14px; border:1px solid var(--hairline);
-             padding:<?= $boardH < 1080 ? '18px 24px' : '22px 32px' ?>; display:flex;
-             align-items:baseline; justify-content:space-between; gap:24px;
-             background:linear-gradient(90deg, rgba(20,31,51,.95), rgba(12,20,34,.95)); }
-  .verdict .t { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 40 : 48 ?>px;
+             padding:<?= $compact ? '14px 20px' : '18px 24px' ?>; display:flex;
+             align-items:baseline; justify-content:space-between; gap:20px;
+             background:linear-gradient(90deg, rgba(20,31,51,.95), rgba(12,20,34,.95)); min-height:0; }
+  .verdict .t { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 32 : 40 ?>px;
                 color:<?= h($verdictColor) ?>; letter-spacing:1px; }
-  .verdict .s { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); text-align:right; }
+  .verdict .s { font-size:<?= $compact ? 18 : 22 ?>px; color:var(--mist); text-align:right;
+                display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; }
   .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
@@ -712,8 +893,9 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
     <div>
       <div class="num"><?= $aqiNow ?? '—' ?></div>
       <div class="band"><?= h($aqiLabel) ?></div>
-      <?php if ($aqiModel !== null && $aqiNow !== null && $aqiNow > $aqiModel): ?>
-        <div class="model">Open-Meteo model AQI <?= (int)$aqiModel ?><?= $pm25 !== null ? ' · PM2.5 ' . h((string)$pm25) : '' ?><?= $aod !== null ? ' · AOD ' . h((string)$aod) : '' ?></div>
+      <div class="model"><?= h($aqSourceLabel) ?><?= $reportingArea !== '' ? ' · ' . h($reportingArea) : '' ?><?= $aqiModel !== null && $aqSource === 'airnow' ? ' · model ' . (int)$aqiModel : '' ?></div>
+      <?php if ($aqiModel !== null && $aqiNow !== null && $aqSource === 'openmeteo' && $aqiNow > $aqiModel): ?>
+        <div class="model">Model consolidated AQI <?= (int)$aqiModel ?><?= $aod !== null ? ' · AOD ' . h((string)$aod) : '' ?></div>
       <?php endif; ?>
       <div class="hint"><?= h($aqiHint) ?></div>
       <?php if ($nwsAlerts !== []): ?>
@@ -729,19 +911,23 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   <section class="panel parts">
     <div class="stat">
       <div class="lab">PM2.5</div>
-      <div><span class="val"><?= $pm25 ?? '—' ?></span><span class="unit">µg/m³</span></div>
+      <div><span class="val" style="color:<?= h($pm25Color) ?>"><?= $pm25Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
+      <?php if ($pm25 !== null): ?><div class="conc"><?= h((string)$pm25) ?> µg/m³</div><?php endif; ?>
     </div>
     <div class="stat">
       <div class="lab">PM10</div>
-      <div><span class="val"><?= $pm10 ?? '—' ?></span><span class="unit">µg/m³</span></div>
+      <div><span class="val" style="color:<?= h($pm10Color) ?>"><?= $pm10Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
+      <?php if ($pm10 !== null): ?><div class="conc"><?= h((string)$pm10) ?> µg/m³</div><?php endif; ?>
     </div>
     <div class="stat">
       <div class="lab">Ozone</div>
-      <div><span class="val"><?= $ozone ?? '—' ?></span><span class="unit">µg/m³</span></div>
+      <div><span class="val" style="color:<?= h($ozoneColor) ?>"><?= $ozoneAqi ?? '—' ?></span><span class="unit">AQI</span></div>
+      <?php if ($ozoneUg !== null): ?><div class="conc"><?= h((string)$ozoneUg) ?> µg/m³</div><?php endif; ?>
     </div>
     <div class="stat">
       <div class="lab">NO₂</div>
-      <div><span class="val"><?= $no2 ?? '—' ?></span><span class="unit">µg/m³</span></div>
+      <div><span class="val" style="color:<?= h($no2Color) ?>"><?= $no2Aqi ?? '—' ?></span><span class="unit">AQI</span></div>
+      <?php if ($no2Ug !== null): ?><div class="conc"><?= h((string)$no2Ug) ?> µg/m³</div><?php endif; ?>
     </div>
   </section>
 
@@ -789,7 +975,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
     <div class="fday">
       <div class="d"><?= h($fd['label']) ?></div>
       <div class="aqi-num" style="color:<?= h($fdColor) ?>">AQI <?= $fd['aqi'] ?? '—' ?></div>
-      <div class="line">PM2.5 <?= $fd['pm25'] ?? '—' ?> · <?= h($fd['pollen']) ?> <?= h($fd['pollen_level']) ?></div>
+      <div class="line">PM2.5 AQI <?= $fd['pm25_aqi'] ?? '—' ?> · <?= h($fd['pollen']) ?> <?= h($fd['pollen_level']) ?></div>
     </div>
     <?php endforeach; ?>
     </div>
@@ -807,7 +993,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   <?php endif; ?>
 
   <div class="stamp"><?= h(implode(' · ', array_filter([
-    'Open-Meteo Air Quality',
+    $aqSource === 'airnow' ? 'EPA AirNow' : 'Open-Meteo Air Quality',
     $nwsAlerts !== [] ? 'NWS alerts' : '',
     $pollenSource === 'google' ? 'Google Pollen' : '',
     $GLOBALS['diag'] ? implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag'])) : '',

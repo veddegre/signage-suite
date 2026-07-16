@@ -141,19 +141,28 @@ function signage_safe_bottom(): int
     return max(0, min(120, (int)($_GET['safebottom'] ?? 0)));
 }
 
-/** Usable board viewport height — 1080 minus any framed safe-bottom inset. */
+/** Usable board viewport height — 1080 minus ticker/safe-bottom inset when framed. */
 function signage_frame_height(): int
 {
+    $full = 1080;
+
     if (isset($_GET['noticker'])) {
         $sb = signage_safe_bottom();
         if ($sb > 0) {
-            return 1080 - $sb;
+            return max(720, $full - $sb);
+        }
+        if (signage_ticker_enabled()) {
+            return max(720, $full - SIGNAGE_TICKER_H);
         }
 
-        return 1080;
+        return $full;
     }
 
-    return 1080;
+    if (signage_ticker_enabled()) {
+        return max(720, $full - SIGNAGE_TICKER_H);
+    }
+
+    return $full;
 }
 
 /** True when loaded in the board.php rotation iframe (not admin preview). */

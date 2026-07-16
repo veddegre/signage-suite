@@ -173,6 +173,8 @@ function admin_schema(): array
             ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
             ['key' => 'GOOGLE_POLLEN_API_KEY', 'label' => 'Google Pollen API key', 'type' => 'password',
              'help' => 'Required for US pollen — Open-Meteo pollen is Europe-only. Enable Pollen API in Google Cloud; free tier is 5,000 calls/month.'],
+            ['key' => 'AIRNOW_API_KEY', 'label' => 'EPA AirNow API key', 'type' => 'password',
+             'help' => 'Recommended for US AQI — ground-monitor readings (PM2.5/PM10/ozone AQI). Free at docs.airnowapi.org. Without this, Open-Meteo CAMS model is used and can lag smoke events.'],
             ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
             $tz, $ttl('Open-Meteo + Google Pollen responses — default 900s (15 min)'),

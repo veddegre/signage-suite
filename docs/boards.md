@@ -101,13 +101,13 @@ Aurora panel highlights when Kp ≥ 6. The board shows both a **cloud cover** ba
 
 ### air.php — Air & Pollen
 
-US AQI, PM2.5/PM10, ozone, NO₂, pollen bars, three-day outlook.
+US AQI, per-pollutant AQI (PM2.5, PM10, ozone, NO₂), pollen bars, three-day outlook.
 
-**Data:** [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) — free, no key. US pollen uses **Google Pollen API** (optional); Open-Meteo pollen is Europe-only. **NWS active alerts** (Air Quality, smoke, ozone action) are factored into the displayed AQI and verdict — a moderate model reading will not override an official alert.
+**Data:** [EPA AirNow](https://docs.airnowapi.org/) observations when an API key is set (ground monitors — matches weather apps during smoke events). Fallback: [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api) per-pollutant US AQI — free, no key, but CAMS model can read much lower than real monitors. **NWS active alerts** (`api.weather.gov`) supply official wording (e.g. “Hazardous”) used as an AQI floor when monitor data is missing or low; NWS does not expose numeric PM2.5/ozone AQI via their REST API (they link to AirNow for current readings). US pollen uses **Google Pollen API** (optional).
 
-**Scoring:** effective AQI = highest of Open-Meteo `us_aqi`, PM2.5-derived EPA AQI, smoke/haze (AOD), and NWS alert floor (alerts typically elevate to Sensitive / 101+).
+**Scoring:** overall AQI = highest pollutant sub-index (EPA method), then raised if NWS alert category language (Hazardous → 301+, Very Unhealthy → 201+, etc.) or smoke/haze (AOD) floors are higher.
 
-**Setup:** admin → **Air & Pollen** — place name, lat/lon, timezone. For US pollen: enable Pollen API in Google Cloud, paste key (5,000 calls/month free tier; 15-minute cache keeps usage low).
+**Setup:** admin → **Air & Pollen** — place name, lat/lon, timezone. For accurate US AQI during wildfire smoke: register at [docs.airnowapi.org](https://docs.airnowapi.org/) and paste the **AirNow API key**. For US pollen: enable Pollen API in Google Cloud (5,000 calls/month free tier; 15-minute cache keeps usage low).
 
 Without Google key, air quality works; pollen shows a setup note. Default cache TTL 900s.
 

@@ -146,6 +146,8 @@ if (($_GET['api'] ?? '') === 'presence') {
   const WEIGHTED = <?= json_encode((bool)$runtime['weighted']) ?>;
   const ROTATION_TZ = <?= json_encode($runtime['timezone']) ?>;
   const SHOW_CLOCK = <?= json_encode((bool)$runtime['show_clock']) ?>;
+  const SHOW_TICKER = <?= json_encode($showTicker) ?>;
+  const TICKER_H = <?= (int)SIGNAGE_TICKER_H ?>;
   const BLANK_INIT = <?= json_encode($blankActive) ?>;
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
@@ -485,6 +487,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     let revealed = false;
     const sep = p.url.includes('?') ? '&' : '?';
     let qs = 'noticker=1&settle=' + SETTLE;
+    if (SHOW_TICKER) qs += '&safebottom=' + TICKER_H;
     if (SCREEN && SCREEN !== 'main' && boardNeedsScope(p.url)) qs += '&screen=' + encodeURIComponent(SCREEN);
     if (!SHOW_CLOCK) qs += '&clock=0';
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();
