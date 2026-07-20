@@ -78,6 +78,100 @@ function signage_ticker_event_kind(string $event): string
 
     return 'alert';
 }
+
+/** Collapse NWS whitespace for one-line ticker text. */
+function signage_ticker_clean_text(string $s): string
+{
+    $s = str_replace("\xc2\xa0", ' ', $s);
+    $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
+
+    return trim($s);
+}
+
+/** First useful sentence from NWS description (skips boilerplate). */
+function signage_ticker_description_snippet(string $description): string
+{
+    $description = signage_ticker_clean_text($description);
+    if ($description === '') {
+        return '';
+    }
+    foreach (preg_split('/(?<=[.!?])\s+/u', $description) ?: [] as $sentence) {
+        $sentence = trim($sentence, " \t\n\r\0\x0B*-");
+        if ($sentence === '' || strlen($sentence) < 16) {
+            continue;
+        }
+        if (stripos($sentence, 'National Weather Service') === 0) {
+            continue;
+        }
+        if (str_starts_with($sentence, '*')) {
+            continue;
+        }
+
+        return strlen($sentence) > 300 ? substr($sentence, 0, 297) . '…' : $sentence;
+    }
+
+    return strlen($description) > 300 ? substr($description, 0, 297) . '…' : $description;
+}
+
+/** Build scroll text: timing, areas, hazards, and instructions beyond the alert name. */
+function signage_ticker_alert_detail(array $props): string
+{
+    $event = trim((string)($props['event'] ?? 'Weather Alert'));
+    $headline = signage_ticker_clean_text((string)($props['headline'] ?? ''));
+    $area = signage_ticker_clean_text((string)($props['areaDesc'] ?? ''));
+    $instruction = signage_ticker_clean_text((string)($props['instruction'] ?? ''));
+    $description = (string)($props['description'] ?? '');
+    $kind = signage_ticker_event_kind($event);
+    $severity = (string)($props['severity'] ?? '');
+
+    $parts = [];
+
+    if ($headline !== '') {
+        $detail = $headline;
+        if (str_starts_with(strtolower($headline), strtolower($event))) {
+            $tail = trim(substr($headline, strlen($event)));
+            $tail = ltrim($tail, " \t-—:");
+            if ($tail !== '') {
+                $detail = $tail;
+            }
+        }
+        $parts[] = $detail;
+    }
+
+    if ($area !== '' && !signage_ticker_text_contains($parts, $area)) {
+        $parts[] = 'Areas: ' . $area;
+    }
+
+    $snippet = signage_ticker_description_snippet($description);
+    if ($snippet !== '' && !signage_ticker_text_contains($parts, $snippet)) {
+        $parts[] = $snippet;
+    }
+
+    if ($instruction !== ''
+        && ($kind === 'warning' || in_array($severity, ['Severe', 'Extreme'], true))
+        && !signage_ticker_text_contains($parts, $instruction)) {
+        $instr = strlen($instruction) > 220 ? substr($instruction, 0, 217) . '…' : $instruction;
+        $parts[] = $instr;
+    }
+
+    if ($parts === []) {
+        $parts[] = $event;
+    }
+
+    $text = signage_ticker_clean_text(implode(' — ', $parts));
+
+    return strlen($text) > 520 ? substr($text, 0, 517) . '…' : $text;
+}
+
+function signage_ticker_text_contains(array $parts, string $needle): bool
+{
+    if ($needle === '') {
+        return true;
+    }
+    $hay = strtolower(implode(' ', $parts));
+
+    return str_contains($hay, strtolower($needle));
+}
 }
 
 if (!function_exists('signage_weather_ticker_alerts')) {
@@ -91,12 +185,16 @@ function signage_weather_ticker_alerts(): array
             'headline' => 'Beach Hazards Statement issued until 10 PM EDT this evening — '
                         . 'dangerous swimming conditions and structural currents expected '
                         . 'along Lake Michigan beaches near Grand Haven and Holland.',
+            'text'     => 'until 10 PM EDT this evening — dangerous swimming conditions and structural currents expected '
+                        . 'along Lake Michigan beaches near Grand Haven and Holland — Areas: Mason; Oceana; Muskegon',
         ], [
             'event'    => 'Severe Thunderstorm Warning',
             'severity' => 'Severe',
             'kind'     => 'warning',
             'headline' => 'Severe Thunderstorm Warning for Ottawa County until 8:45 PM — '
                         . '60 mph wind gusts and quarter size hail possible.',
+            'text'     => 'for Ottawa County until 8:45 PM EDT — 60 mph wind gusts and quarter size hail possible '
+                        . '— Areas: Ottawa — For your protection move to an interior room on the lowest floor of a building.',
         ]];
     }
 
@@ -134,6 +232,7 @@ function signage_weather_ticker_alerts(): array
             'severity' => $sev,
             'kind'     => signage_ticker_event_kind((string)($p['event'] ?? '')),
             'headline' => (string)($p['headline'] ?? $p['event'] ?? ''),
+            'text'     => signage_ticker_alert_detail($p),
         ];
     }
     // Most severe first
@@ -228,9 +327,23 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
     return { kind: top, label: labels[top] || 'Advisory' };
   }
 
+  function alertDetail(a) {
+    var text = (a && (a.text || a.headline || '')).trim();
+    var event = (a && a.event) ? String(a.event).trim() : '';
+    if (!text) return event;
+    if (event && text.toLowerCase().indexOf(event.toLowerCase()) === 0) {
+      text = text.slice(event.length).replace(/^[\s\-—:]+/, '').trim();
+    }
+    return text || event;
+  }
+
   function itemHtml(a) {
+    var detail = alertDetail(a);
+    if (!detail || detail === a.event) {
+      return '<span class="tk-item"><b>' + esc(a.event) + '</b></span>';
+    }
     return '<span class="tk-item"><b>' + esc(a.event) + '</b><span class="tk-sep">&bull;</span>'
-         + esc(a.headline) + '</span>';
+         + esc(detail) + '</span>';
   }
 
   function stopAnim() {
@@ -295,8 +408,9 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
     var items = '';
     if (mode === 'static') {
       data.alerts.forEach(function (a) {
+        var detail = alertDetail(a);
         items += '<span class="tk-item" style="display:none"><b>' + esc(a.event)
-               + '</b><span class="tk-sep">&bull;</span>' + esc(a.headline) + '</span>';
+               + '</b><span class="tk-sep">&bull;</span>' + esc(detail) + '</span>';
       });
     } else {
       data.alerts.forEach(function (a) { items += itemHtml(a); });
