@@ -18,7 +18,8 @@ Accounts live in `config/users.json`, blocked from direct HTTP like `settings.js
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Operator** | **Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Zabbix**, **UniFi Network**, **Calendar**, **Rotation** (assigned display(s) and shared-editor displays); **Account**, **Status** |
+| **Infrastructure** | Same as **Operator**, plus **Homelab**, **UniFi Network**, and **SignalTrace** admin boards |
+| **Operator** | Content boards + **Rotation** for assigned display(s) and shared-editor displays; **Account**, **Status** — not Homelab / UniFi / SignalTrace |
 
 ### Sidebar layout
 
@@ -38,21 +39,21 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 | Admin page | Purpose |
 |------------|---------|
 | **Account** | Change local password (hidden for SSO-linked accounts) |
-| **Users** | Create users, assign roles, assign display(s) to operators |
+| **Users** | Create users, assign roles (super / infrastructure / operator), assign display(s) |
 | **Status** | Kiosk heartbeats, play log, slide/photo deploy sync |
 | **Security** | Idle timeout, outbound URL policy, SSO, multi-display policy, audit settings |
 | **Audit** | Sign-ins, saves, user changes (not cleared with API cache) |
 
 **Login:** local username/password and/or SSO, CSRF-protected sessions, configurable idle logout, lockout after repeated failures.
 
-### Display assignment (operators)
+### Display assignment (operators & infrastructure)
 
-Each physical display (rotation screen) has **one primary operator** — enforced on save so the same screen cannot be assigned to two people.
+Each physical display (rotation screen) has **one primary owner** — enforced on save so the same screen cannot be assigned to two people. **Infrastructure** users use the same display assignment rules as operators.
 
 | Mode | Setting | Behavior |
 |------|---------|----------|
-| **Single display** (legacy) | **Security → Operators may manage multiple displays** off | Each operator gets exactly one display via a dropdown |
-| **Multiple displays** (default) | Same setting **on** (also toggled on **Users** when saving) | Checkbox picker — assign one or more screens per operator |
+| **Single display** (legacy) | **Security → Operators may manage multiple displays** off | Each operator or infrastructure user gets exactly one display via a dropdown |
+| **Multiple displays** (default) | Same setting **on** (also toggled on **Users** when saving) | Checkbox picker — assign one or more screens per operator or infrastructure user |
 
 When assigning displays on **Users**, the picker lists only:
 
@@ -97,7 +98,7 @@ Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["
 - **Slides** deck toolbar — **All operators** bulk-adds the Operators role to selected slides; **All users** adds every account individually.
 - **Zabbix / Uptime Kuma / Splunk** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** to create their own walls (owned automatically).
 
-Homelab, SignalTrace, weather, and setup boards stay super-admin only. On operator boards, operators see and edit entries they **own**, that are **shared with them**, or that are **shared with their role**. Rows with **no owner** are super-admin only until shared. **Board settings** (API URLs, tokens, webhooks) stay super-admin only; operators configure pages/items on top of that connection.
+Homelab, UniFi, SignalTrace, and setup/security boards stay **super admin** or **Infrastructure** only. Other monitoring boards (Zabbix, Kuma, …) remain available to operators when shared or owned. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
 
 Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
 

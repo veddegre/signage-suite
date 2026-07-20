@@ -14,8 +14,11 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
-    'grafana', 'splunk', 'splunkdash', 'zabbix', 'unifi', 'kuma', 'announce', 'tailscale', 'ntfy', 'calendar', 'account',
+    'grafana', 'splunk', 'splunkdash', 'zabbix', 'kuma', 'announce', 'tailscale', 'ntfy', 'calendar', 'account',
 ];
+
+/** Homelab / UniFi / SignalTrace — super admin and Infrastructure role only. */
+const ADMIN_INFRA_BOARDS = ['homelab', 'unifi', 'signaltrace'];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
 const ADMIN_OPERATOR_SETTINGS_BOARDS = ['slides', 'rotator'];
@@ -121,12 +124,30 @@ function users_new_id(): string
 function users_normalize_role(string $role): string
 {
     $role = strtolower(trim($role));
-    return $role === 'super' ? 'super' : 'operator';
+    if ($role === 'super') {
+        return 'super';
+    }
+    if ($role === 'infra') {
+        return 'infra';
+    }
+
+    return 'operator';
+}
+
+/** @return array<string,string> */
+function users_role_options(): array
+{
+    return [
+        'super' => 'Super admin',
+        'infra' => 'Infrastructure',
+        'operator' => 'Operator',
+    ];
 }
 
 /** Roles that may be granted on shared content (super admins already see everything). */
 const ADMIN_SHARING_ROLES = [
     'operator' => 'Operators',
+    'infra' => 'Infrastructure',
 ];
 
 /** @return list<string> */
@@ -212,10 +233,13 @@ function users_screens_from_row(array $row): array
     return users_normalize_screens($row['screens'] ?? []);
 }
 
-/** Single assigned display when locked to one screen; null for super or multi-display operators. */
+/** Single assigned display when locked to one screen; null for super or multi-display screen operators. */
 function admin_operator_screen_key(): ?string
 {
     if (admin_is_super() || users_operator_multi_screen_enabled()) {
+        return null;
+    }
+    if (!admin_is_screen_operator()) {
         return null;
     }
     $keys = admin_allowed_screen_keys();
@@ -228,7 +252,7 @@ function admin_operator_screen_locked(): bool
         return false;
     }
 
-    return admin_operator_screen_key() !== null;
+    return admin_is_screen_operator() && admin_operator_screen_key() !== null;
 }
 
 /** @return list<string> */
@@ -524,6 +548,27 @@ function admin_is_super(): bool
 {
     $user = admin_current_user();
     return is_array($user) && ($user['role'] ?? '') === 'super';
+}
+
+function admin_is_infra(): bool
+{
+    $user = admin_current_user();
+    return is_array($user) && users_normalize_role((string)($user['role'] ?? '')) === 'infra';
+}
+
+/** Operator or Infrastructure — display-assigned roles (not super admin). */
+function admin_is_screen_operator(): bool
+{
+    if (admin_is_super()) {
+        return false;
+    }
+    $user = admin_current_user();
+    if (!is_array($user)) {
+        return false;
+    }
+    $role = users_normalize_role((string)($user['role'] ?? ''));
+
+    return $role === 'operator' || $role === 'infra';
 }
 
 function admin_can_tools(): bool
@@ -1934,6 +1979,10 @@ function admin_can_board(string $board): bool
     if (admin_is_super()) {
         return true;
     }
+    if (in_array($board, ADMIN_INFRA_BOARDS, true)) {
+        return admin_is_infra();
+    }
+
     return in_array($board, ADMIN_OPERATOR_BOARDS, true);
 }
 
@@ -2136,14 +2185,15 @@ function users_save_from_post(array $rows): array
             'disabled' => !empty($row['disabled']),
         ];
 
-        if ($role === 'operator') {
+        if ($role === 'operator' || $role === 'infra') {
             $screens = $entry['screens'];
             $maxScreens = users_operator_screen_max();
             if (count($screens) > $maxScreens) {
                 $limitLabel = users_operator_multi_screen_enabled()
                     ? 'too many displays (' . $maxScreens . ' max)'
                     : 'only one display';
-                return ['ok' => false, 'error' => 'Operator ' . $username . ' may have ' . $limitLabel . '.'];
+                $roleLabel = $role === 'infra' ? 'Infrastructure user' : 'Operator';
+                return ['ok' => false, 'error' => $roleLabel . ' ' . $username . ' may have ' . $limitLabel . '.'];
             }
             foreach ($screens as $sk) {
                 if (isset($screenOwners[$sk])) {

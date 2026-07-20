@@ -104,9 +104,10 @@ Prefer `pipx install yt-dlp` over apt for YouTube (repo builds go stale).
 | Role | What they can do |
 |------|------------------|
 | **Super admin** | Everything — users, security, all displays |
+| **Infrastructure** | Operator access plus Homelab, UniFi, and SignalTrace admin boards |
 | **Operator** | Own content boards + rotation for assigned display(s) — **one** by default, or **multiple** when **Security → Operators may manage multiple displays** is enabled |
 
-Operators can **own** content and grant access to **individual users** or **roles** (e.g. all **Operators**) on playlist rows — slides, photos, RSS feeds, Zabbix pages, Splunk pages, video entries, and more. Share with a role once instead of checking every user on every item. Weather, homelab, and setup boards stay super-admin only. API tokens stay super-admin only.
+Operators and infrastructure users can **own** content and grant access to **individual users** or **roles** (e.g. all **Operators** or **Infrastructure**) on playlist rows. Homelab, UniFi, and SignalTrace admin stay limited to super admins and infrastructure users. Other setup/security boards stay super-admin only. API tokens on most boards stay super-admin **Board settings**.
 
 The admin **sidebar groups** (Setup, Weather & home, Monitoring, …) are **collapsible** — click a category header to expand or collapse; your choices are remembered in the browser.
 

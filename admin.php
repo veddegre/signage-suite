@@ -2960,7 +2960,7 @@ function admin_field(array $f, $val, string $board): void
     <?php elseif ($accountBoard): ?>
       <h2>Account</h2>
       <div class="sub">Signed in as <strong><?= h(admin_username()) ?></strong>
-        — <?= admin_is_super() ? 'super admin (full access)' : 'screen operator' ?>.</div>
+        — <?= admin_is_super() ? 'super admin (full access)' : (admin_is_infra() ? 'infrastructure' : 'screen operator') ?>.</div>
       <?php if (!admin_is_super()):
         $allowed = admin_allowed_screen_keys();
       ?>
@@ -3028,7 +3028,7 @@ function admin_field(array $f, $val, string $board): void
             <?php foreach ($userAdminRows as $ui => $urow):
               $uAuth = ($urow['auth_provider'] ?? 'local') === 'sso' ? 'sso' : 'local';
               $uLinked = ($urow['external_id'] ?? '') !== '';
-              $uRole = ($urow['role'] ?? '') === 'super' ? 'super' : 'operator';
+              $uRole = users_normalize_role((string)($urow['role'] ?? 'operator'));
             ?>
             <article class="user-card" data-auth="<?= h($uAuth) ?>" data-role="<?= h($uRole) ?>">
               <input type="hidden" name="USERS[<?= (int)$ui ?>][id]" value="<?= h((string)$urow['id']) ?>">
@@ -3053,8 +3053,9 @@ function admin_field(array $f, $val, string $board): void
                 <div class="field user-field-role">
                   <label class="l">Role</label>
                   <select name="USERS[<?= (int)$ui ?>][role]" class="user-role-select">
-                    <option value="super" <?= $uRole === 'super' ? 'selected' : '' ?>>Super admin</option>
-                    <option value="operator" <?= $uRole === 'operator' ? 'selected' : '' ?>>Operator</option>
+                    <?php foreach (users_role_options() as $roleKey => $roleLabel): ?>
+                    <option value="<?= h($roleKey) ?>" <?= $uRole === $roleKey ? 'selected' : '' ?>><?= h($roleLabel) ?></option>
+                    <?php endforeach; ?>
                   </select>
                 </div>
                 <div class="field user-field-disabled">
@@ -3088,7 +3089,7 @@ function admin_field(array $f, $val, string $board): void
             <?php endforeach; ?>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. Each <strong>operator</strong> gets <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> and <strong>Infrastructure</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. Infrastructure adds Homelab, UniFi, and SignalTrace admin boards.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -3709,7 +3710,7 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
             <div class="help" style="margin-bottom:10px"><strong>Shared editing</strong> — primary owner is set under <a href="?board=users">Users</a><?php if ($screenOwner): ?> (<code><?= h($screenOwner) ?></code>)<?php else: ?> (unassigned)<?php endif; ?>. Shared editors manage the <strong>full display</strong>: playlist, display options, hero strip, and deploy targets (including the primary owner’s slides and quick-add boards).</div>
             <div class="field-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
               <?php foreach (users_by_id() as $ou):
-                if (!is_array($ou) || users_normalize_role((string)($ou['role'] ?? '')) !== 'operator') {
+                if (!is_array($ou) || !in_array(users_normalize_role((string)($ou['role'] ?? '')), ['operator', 'infra'], true)) {
                     continue;
                 }
                 $uid = (string)($ou['id'] ?? '');
@@ -7644,7 +7645,8 @@ function initOperatorMultiScreenToggle() {
   toggle.addEventListener('change', function () {
     window.OPERATOR_MULTI_SCREEN = toggle.checked;
     document.querySelectorAll('.user-card').forEach(function (card) {
-      if ((card.dataset.role || '') === 'operator') refreshUserDisplayCell(card);
+      const role = card.dataset.role || '';
+      if (role === 'operator' || role === 'infra') refreshUserDisplayCell(card);
     });
   });
 }
@@ -7697,7 +7699,7 @@ function addUserRow() {
       '<div class="field user-field-auth"><label class="l">Auth</label>' +
         '<select name="USERS[' + idx + '][auth_provider]" class="user-auth-select"><option value="local" selected>Local</option><option value="sso">SSO</option></select></div>' +
       '<div class="field user-field-role"><label class="l">Role</label>' +
-        '<select name="USERS[' + idx + '][role]" class="user-role-select"><option value="operator" selected>Operator</option><option value="super">Super admin</option></select></div>' +
+        '<select name="USERS[' + idx + '][role]" class="user-role-select"><option value="operator" selected>Operator</option><option value="infra">Infrastructure</option><option value="super">Super admin</option></select></div>' +
       '<div class="field user-field-disabled"><label class="check"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1"> Disabled</label></div>' +
       '<div class="field user-field-password"><label class="l">Password</label>' +
         '<input type="password" class="user-password-input" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user" data-new-user="1"></div>' +
