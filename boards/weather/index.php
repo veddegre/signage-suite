@@ -23,6 +23,9 @@ define('LOCATION', cfg('index.LOCATION', 'Allendale, Michigan'));
 define('UNITS', cfg('index.UNITS', 'imperial'));
 define('TIMEZONE', cfg('index.TIMEZONE', 'America/Detroit'));
 define('RADAR_URL', cfg('index.RADAR_URL', 'https://radar.weather.gov/ridge/standard/KGRR_loop.gif'));
+define('NWS_UA', cfg('index.NWS_UA', cfg('ticker.TICKER_UA', 'HomeSignage/1.0 (contact: you@example.com)')));
+define('NWS_ALERT_AREA', cfg('index.NWS_ALERT_AREA', 'MI'));
+define('NWS_ALERT_TTL', max(60, (int)cfg('index.NWS_ALERT_TTL', cfg('ticker.TICKER_TTL', 300))));
 const CACHE_DIR   = SIGNAGE_ROOT . '/cache';  // must be writable by the web server
 define('CACHE_TTL', cfg('index.CACHE_TTL', 600));
 
@@ -123,6 +126,118 @@ function h(?string $s): string
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
+/** NWS event name → warning | watch | advisory | statement | alert */
+function index_nws_event_kind(string $event): string
+{
+    $e = strtolower(trim($event));
+    if ($e === '' || $e === 'weather alert') {
+        return 'alert';
+    }
+    if (str_ends_with($e, ' warning') || $e === 'warning') {
+        return 'warning';
+    }
+    if (str_ends_with($e, ' watch') || $e === 'watch') {
+        return 'watch';
+    }
+    if (str_ends_with($e, ' advisory') || $e === 'advisory') {
+        return 'advisory';
+    }
+    if (str_ends_with($e, ' statement') || $e === 'statement') {
+        return 'statement';
+    }
+
+    return 'alert';
+}
+
+/** @return array{geojson:array<string,mixed>,warnings:int,watches:int,labels:list<string>} */
+function index_nws_map_alerts(): array
+{
+    $empty = ['geojson' => ['type' => 'FeatureCollection', 'features' => []], 'warnings' => 0, 'watches' => 0, 'labels' => []];
+    if (!is_dir(CACHE_DIR)) {
+        @mkdir(CACHE_DIR, 0775, true);
+    }
+    $area = preg_replace('/[^A-Z0-9\-]/i', '', (string)NWS_ALERT_AREA);
+    if ($area === '') {
+        $area = 'MI';
+    }
+    $cacheFile = CACHE_DIR . '/nws_map_alerts_' . strtolower($area) . '.json';
+    $maxAge = min(max((int)NWS_ALERT_TTL, 60), 600);
+    $raw = null;
+    if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $maxAge) {
+        $raw = (string)file_get_contents($cacheFile);
+    } elseif (function_exists('curl_init')) {
+        $url = 'https://api.weather.gov/alerts/active?area=' . rawurlencode($area);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_USERAGENT => NWS_UA,
+            CURLOPT_HTTPHEADER => ['Accept: application/geo+json'],
+        ]);
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+        if ($body !== false && $code === 200) {
+            @file_put_contents($cacheFile, $body, LOCK_EX);
+            $raw = $body;
+        } elseif (is_file($cacheFile)) {
+            $raw = (string)file_get_contents($cacheFile);
+        }
+    } elseif (is_file($cacheFile)) {
+        $raw = (string)file_get_contents($cacheFile);
+    }
+    if ($raw === null || trim($raw) === '') {
+        return $empty;
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return $empty;
+    }
+
+    $features = [];
+    $warnings = 0;
+    $watches = 0;
+    $labels = [];
+    foreach (($decoded['features'] ?? []) as $feat) {
+        if (!is_array($feat)) {
+            continue;
+        }
+        $geom = $feat['geometry'] ?? null;
+        if (!is_array($geom) || empty($geom['type']) || empty($geom['coordinates'])) {
+            continue;
+        }
+        $event = (string)(($feat['properties'] ?? [])['event'] ?? 'Weather Alert');
+        $kind = index_nws_event_kind($event);
+        if ($kind !== 'warning' && $kind !== 'watch') {
+            continue;
+        }
+        if ($kind === 'warning') {
+            $warnings++;
+        } else {
+            $watches++;
+        }
+        $labels[] = $event;
+        $features[] = [
+            'type' => 'Feature',
+            'geometry' => $geom,
+            'properties' => [
+                'event' => $event,
+                'kind' => $kind,
+                'headline' => (string)(($feat['properties'] ?? [])['headline'] ?? $event),
+            ],
+        ];
+    }
+    $labels = array_values(array_unique($labels));
+
+    return [
+        'geojson' => ['type' => 'FeatureCollection', 'features' => $features],
+        'warnings' => $warnings,
+        'watches' => $watches,
+        'labels' => $labels,
+    ];
+}
+
 // ── Pull data ────────────────────────────────────────────────────────────────
 $configured = OWM_API_KEY !== 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE' && OWM_API_KEY !== '';
 $owmCacheId = sprintf('%F_%F_%s', LAT, LON, UNITS);
@@ -186,6 +301,11 @@ if ($forecast && isset($forecast['list'])) {
 }
 
 $todayKey = date('Y-m-d');
+$nwsMapAlerts = index_nws_map_alerts();
+$nwsMapGeoJson = $nwsMapAlerts['geojson'];
+$nwsWarningCount = (int)$nwsMapAlerts['warnings'];
+$nwsWatchCount = (int)$nwsMapAlerts['watches'];
+$nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -373,6 +493,49 @@ $todayKey = date('Y-m-d');
     padding: 8px 14px;
   }
   .radar .tag span { color: var(--beacon); }
+  .radar .tag .alert-sev { color: #ff9d9d; }
+  .radar .tag .alert-watch { color: #ffd089; }
+
+  .radar-legend {
+    position: absolute;
+    bottom: 18px;
+    right: 22px;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 340px;
+    pointer-events: none;
+  }
+  .radar-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--snow);
+    background: rgba(12, 20, 34, 0.88);
+    border-radius: 8px;
+    padding: 8px 12px;
+    border: 2px solid var(--hairline);
+  }
+  .radar-legend-item .swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    flex: none;
+    border: 2px solid;
+  }
+  .radar-legend-item.warning .swatch {
+    border-color: #ff5d5d;
+    background: rgba(255, 93, 93, 0.35);
+  }
+  .radar-legend-item.watch .swatch {
+    border-color: #ffb347;
+    background: rgba(255, 179, 71, 0.28);
+  }
+  .radar-legend-item .label { line-height: 1.25; }
 
   /* ── Bottom strip: 5-day outlook ──────────────────────────────────────── */
   .week {
@@ -503,7 +666,23 @@ $todayKey = date('Y-m-d');
   <section class="radar" id="radarPanel">
     <div id="radarMap"></div>
     <div id="radarFallback"><img src="<?= h(RADAR_URL) ?>" alt="KGRR radar loop"></div>
-    <div class="tag">Radar <span>West Michigan</span> &middot; <span id="radarTime">&hellip;</span></div>
+    <div class="tag" id="radarTag">Radar <span>West Michigan</span> &middot; <span id="radarTime">&hellip;</span></div>
+    <?php if ($nwsHasMapAlerts): ?>
+    <div class="radar-legend" id="radarLegend" aria-label="Active NWS alerts">
+      <?php if ($nwsWarningCount > 0): ?>
+      <div class="radar-legend-item warning">
+        <span class="swatch" aria-hidden="true"></span>
+        <span class="label"><?= $nwsWarningCount === 1 ? '1 Warning' : $nwsWarningCount . ' Warnings' ?> in <?= h(NWS_ALERT_AREA) ?></span>
+      </div>
+      <?php endif; ?>
+      <?php if ($nwsWatchCount > 0): ?>
+      <div class="radar-legend-item watch">
+        <span class="swatch" aria-hidden="true"></span>
+        <span class="label"><?= $nwsWatchCount === 1 ? '1 Watch' : $nwsWatchCount . ' Watches' ?> in <?= h(NWS_ALERT_AREA) ?></span>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
   </section>
 
   <!-- 5-DAY -->
@@ -577,7 +756,50 @@ $todayKey = date('Y-m-d');
   // Falls back to the NWS RIDGE KGRR loop if tiles or the API are unavailable.
   const HOME = [<?= LAT ?>, <?= LON ?>];
   const RADAR_BASE = <?= json_encode(RADAR_URL) ?>;
+  const NWS_ALERT_GEOJSON = <?= json_encode($nwsMapGeoJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   let radarLayers = [], radarFrames = [], radarIdx = 0, radarTimer = null;
+
+  const NWS_ALERT_STYLE = {
+    warning: { color: '#ff5d5d', fillColor: '#ff5d5d', fillOpacity: 0.22, weight: 2.5, opacity: 0.95 },
+    watch:   { color: '#ffb347', fillColor: '#ffb347', fillOpacity: 0.18, weight: 2.5, opacity: 0.92 },
+  };
+
+  function nwsAlertStyle(props) {
+    const kind = (props && props.kind === 'watch') ? 'watch' : 'warning';
+    return NWS_ALERT_STYLE[kind] || NWS_ALERT_STYLE.warning;
+  }
+
+  function addNwsAlertLayer(map) {
+    if (!NWS_ALERT_GEOJSON || !NWS_ALERT_GEOJSON.features || !NWS_ALERT_GEOJSON.features.length) {
+      return null;
+    }
+    return L.geoJSON(NWS_ALERT_GEOJSON, {
+      style: function (feature) {
+        return nwsAlertStyle(feature && feature.properties);
+      },
+      interactive: false,
+    }).addTo(map);
+  }
+
+  function updateRadarTagAlertNote() {
+    const tag = document.getElementById('radarTag');
+    if (!tag || !NWS_ALERT_GEOJSON || !NWS_ALERT_GEOJSON.features || !NWS_ALERT_GEOJSON.features.length) {
+      return;
+    }
+    let warnings = 0;
+    let watches = 0;
+    NWS_ALERT_GEOJSON.features.forEach(function (f) {
+      const k = f.properties && f.properties.kind;
+      if (k === 'watch') watches++;
+      else warnings++;
+    });
+    const bits = [];
+    if (warnings) bits.push('<span class="alert-sev">' + warnings + ' warning' + (warnings === 1 ? '' : 's') + '</span>');
+    if (watches) bits.push('<span class="alert-watch">' + watches + ' watch' + (watches === 1 ? '' : 's') + '</span>');
+    if (bits.length) {
+      tag.innerHTML = 'Radar <span>West Michigan</span> &middot; ' + bits.join(' &middot; ') + ' &middot; <span id="radarTime">&hellip;</span>';
+    }
+  }
 
   function radarFallback() {
     document.getElementById('radarPanel').classList.add('fallback-active');
@@ -611,6 +833,9 @@ $todayKey = date('Y-m-d');
     L.circleMarker(HOME, {
       radius: 6, color: '#ffb347', weight: 2, fillColor: '#ffb347', fillOpacity: 0.9
     }).addTo(map);
+
+    addNwsAlertLayer(map);
+    updateRadarTagAlertNote();
 
     function showFrame(i) {
       radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.8 : 0));
