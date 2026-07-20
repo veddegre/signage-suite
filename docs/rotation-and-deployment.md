@@ -140,53 +140,20 @@ If webroot *is* the git checkout: `cd /var/www/html/boards && sudo git pull`
 
 ---
 
-## setup-kiosk.sh — dedicated display (optional)
+## Dedicated kiosk machines
 
-Turns Ubuntu Server 24.04+ or Raspberry Pi OS Lite into a fullscreen Chromium kiosk.
+Fullscreen Chromium on a Pi or mini PC is covered in a dedicated guide (install, CEC, cursor, freezes, re-running after updates):
 
-```bash
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage" [scale]
-```
+→ **[Kiosk machine setup](kiosk-setup.md)** (`setup-kiosk.sh`)
 
-Quote URLs with `?screen=`. Optional **scale** (e.g. `2`) fills 4K displays.
-
-**Includes:** cage + Chromium, systemd autostart, nightly 04:00 browser restart, optional HDMI-CEC sync from server schedule (`--no-cec` to skip). Set **Rotation → Timezone** on the server for CEC hours.
-
-After setup, manage content only through admin.php on the server.
-
-### Kiosk freezes or stops rotating
-
-**Built-in recovery (no reboot needed):**
-
-| Layer | What it does |
-|-------|----------------|
-| **board.php** | Unloads the hidden iframe after each crossfade (stops memory creep from Grafana, webcam, video, etc.) |
-| **board.php watchdog** | If a page stalls ~2× dwell (+ 90s), forces the next board; full shell reload on the second trip |
-| **board.php** | Automatic shell reload every 8 hours |
-| **signage-restart.timer** | Nightly `systemctl restart signage` at 04:00 |
-| **signage-watchdog.timer** | Every 5 min — restarts `signage.service` if `board.php` stops responding |
-
-**On the kiosk (SSH):**
+Short version:
 
 ```bash
-systemctl status signage.service signage-watchdog.timer signage-restart.timer
-journalctl -u signage -n 80 --no-pager
+sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage"   # add 2 for 4K
+sudo reboot
 ```
 
-**Quick checks:**
-
-1. **Enable Debug** on the display row in admin → Rotation — overlay shows loading vs on-screen and the current URL.
-2. **Heavy boards** — Grafana, Splunk published, webcam embeds, and long video dwells use the most GPU/RAM. Ensure `webcam.php` / `grafana.php` have sensible `RELOAD_SEC` (hourly is fine).
-3. **Hang timeout** — admin → Rotation → display **Hang (ms)** (default 20s). If a board never fires `onload`, rotation still advances after this.
-4. **Re-run kiosk setup** after pulling updates so `/usr/local/bin/signage-kiosk` picks up new Chromium flags (`--disable-dev-shm-usage` helps on Pi).
-
-**Manual recovery without reboot:**
-
-```bash
-sudo systemctl restart signage.service
-```
-
-Or from the wall: unplug USB mouse if one is attached (some devices wake the compositor cursor stack).
+CEC blank hours are configured per display under **Rotation → Display settings**; set **Rotation → Timezone** on the server. Content changes stay in **admin.php** on the server — the kiosk only needs OS updates and occasional re-runs of `setup-kiosk.sh` after Chromium-flag changes.
 
 ---
 

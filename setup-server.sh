@@ -642,6 +642,7 @@ Next steps:
 
 Kiosk displays (Pi / mini PC):
   sudo bash setup-kiosk.sh "$board"
+  Full guide: docs/kiosk-setup.md (CEC, cursor, freezes, re-run after updates)
 
 Security checklist:
   • config/settings.json holds API tokens — keep admin on HTTPS if exposed beyond LAN

@@ -9,6 +9,8 @@
 # Options:
 #   --no-cec     Skip HDMI-CEC power scheduling (TV on/off from admin)
 #
+# Full guide: docs/kiosk-setup.md
+#
 # The optional [scale] argument handles displays that aren't 1080p: the boards
 # are designed at 1920x1080, so on a 4K display pass 2 (everything renders
 # pixel-doubled and fills the screen). Omit it for a 1080p display.
@@ -295,5 +297,7 @@ CURSOR (if the mouse pointer is still visible after a server update):
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer
   journalctl -u signage-watchdog -f
+
+Docs: docs/kiosk-setup.md
 ============================================================
 NOTES

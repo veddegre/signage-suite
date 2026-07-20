@@ -30,6 +30,7 @@ flowchart LR
 | | |
 |---|---|
 | [Getting started](#getting-started) | Install, first login, manual requirements |
+| [Kiosk display](#3-point-a-display-at-rotation) | Dedicated TV/Pi — [full guide](docs/kiosk-setup.md) |
 | [Admin & security](#admin--security) | Roles, display assignment, sharing (users + roles) — [full guide](docs/admin-and-security.md) |
 | [Boards](#boards) | Overview — [per-board reference](docs/boards.md) |
 | [Rotation & deployment](#rotation--deployment) | Playlists, scripts — [full guide](docs/rotation-and-deployment.md) |
@@ -53,15 +54,24 @@ Browse to **admin.php**, create your super admin (one-time key in `config/setup.
 
 ### 3. Point a display at rotation
 
-```bash
-# Optional — dedicated Linux kiosk:
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php" [scale]
+**Dedicated kiosk** (Pi / mini PC → fullscreen Chromium + optional HDMI-CEC):
 
-# Or open in any browser:
-http://your-server/boards/board.php
+```bash
+sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage"
+# 4K: add scale 2 · skip CEC: --no-cec
+sudo reboot
 ```
 
-Add boards to the playlist under **Rotation**. Each screen has its own URL: `board.php?screen=garage`.
+→ **[Kiosk machine setup](docs/kiosk-setup.md)** — hardware, CEC, cursor, freezes, re-running after updates
+
+**Or** open any browser / smart TV:
+
+```
+http://your-server/boards/board.php
+http://your-server/boards/board.php?screen=garage
+```
+
+Add boards to the playlist under **Rotation**. Each screen has its own URL: `board.php?screen=<key>`.
 
 ### Manual install
 
@@ -184,7 +194,7 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 |-------|------|
 | **board.php** | Crossfades playlist; persistent weather ticker |
 | **setup-server.sh** | Web host + PHP + hardening |
-| **setup-kiosk.sh** | Optional fullscreen Chromium kiosk + CEC |
+| **setup-kiosk.sh** | Fullscreen Chromium kiosk + CEC — [guide](docs/kiosk-setup.md) |
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
@@ -192,7 +202,8 @@ Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weight
 
 Operators with **multiple displays** assigned (see [Admin & security](#admin--security)) see and edit every playlist they own; **shared editors** get the same control on displays they are invited to. Deploy pickers (slides, photos, RSS, video) target any display they may fully edit.
 
-→ **[Rotation & deployment guide](docs/rotation-and-deployment.md)** — weighted mode, hero strip, shared editing, CEC, Channels DVR, standalone board URLs
+→ **[Kiosk machine setup](docs/kiosk-setup.md)** — Pi / Ubuntu display box  
+→ **[Rotation & deployment guide](docs/rotation-and-deployment.md)** — weighted mode, hero strip, shared editing, CEC schedules, Channels DVR, standalone board URLs
 
 ---
 
@@ -200,9 +211,10 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 
 | Doc | Contents |
 |-----|----------|
+| [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, CEC, cursor, freezes, updates |
 | [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
-| [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, scripts, PWA, DVR |
+| [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, server scripts, PWA, DVR |
 | [docs/video-youtube.md](docs/video-youtube.md) | yt-dlp, cookies, headless YouTube |
 
 ---
