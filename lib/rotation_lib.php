@@ -1952,13 +1952,14 @@ function rotation_quick_add_board_key(string $url): ?string
     return preg_replace('/\.php$/', '', $base) ?: null;
 }
 
+/** Whether the current user may quick-add this rotation URL (infra boards excluded for operators). */
 function rotation_quick_add_url_allowed(string $url): bool
 {
     require_once __DIR__ . '/users_lib.php';
     if (!function_exists('admin_is_authenticated') || !admin_is_authenticated()) {
         return true;
     }
-    if (admin_is_super()) {
+    if (admin_is_super() || admin_is_infra()) {
         return true;
     }
     $board = rotation_quick_add_board_key($url);
@@ -1966,7 +1967,7 @@ function rotation_quick_add_url_allowed(string $url): bool
         return true;
     }
 
-    return admin_can_board($board);
+    return !in_array($board, ADMIN_INFRA_BOARDS, true);
 }
 
 /** @param array<string,mixed> $entry */

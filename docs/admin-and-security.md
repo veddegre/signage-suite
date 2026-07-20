@@ -98,7 +98,7 @@ Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["
 - **Slides** deck toolbar — **All operators** bulk-adds the Operators role to selected slides; **All users** adds every account individually.
 - **Zabbix / Uptime Kuma / Splunk** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** to create their own walls (owned automatically).
 
-Homelab, UniFi, SignalTrace, and setup/security boards stay **super admin** or **Infrastructure** only. Other monitoring boards (Zabbix, Kuma, …) remain available to operators when shared or owned. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
+Homelab, UniFi, and SignalTrace **admin configuration** stays **super admin** or **Infrastructure** only — operators do not see those sidebar entries or board settings, and those three boards are omitted from rotation **quick-add**. Other monitoring walls (Cloudflare Radar, outages, Zabbix pages when shared, etc.) stay selectable in playlists. Setup/security boards (Users, Security, …) stay super-admin only. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
 
 Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
 
