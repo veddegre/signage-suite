@@ -2236,6 +2236,127 @@ function admin_filter_deploy_status(array $status): array
     return array_intersect_key($status, $allowed);
 }
 
+/** Admin page editor: no phantom default row for operators (avoids conflicting with super-only keys). */
+function admin_registry_editor_pages(array $pages, callable $defaultMainFactory): array
+{
+    if ($pages !== []) {
+        return $pages;
+    }
+    if (admin_is_super()) {
+        return $defaultMainFactory();
+    }
+    if (admin_preview_session_ready() && admin_user_id() !== null) {
+        return [];
+    }
+
+    return $defaultMainFactory();
+}
+
+/**
+ * Add a role to every entry in a keyed registry (super admin bulk share).
+ * @param array<string,array<string,mixed>> $map
+ * @return array<string,array<string,mixed>>
+ */
+function admin_registry_share_all_with_role(array $map, string $role = 'operator'): array
+{
+    $role = users_normalize_role($role);
+    if ($role === 'super') {
+        return $map;
+    }
+    $out = [];
+    foreach ($map as $k => $entry) {
+        if (!is_array($entry)) {
+            $out[(string)$k] = $entry;
+            continue;
+        }
+        $roles = admin_entry_shared_roles($entry);
+        if (!in_array($role, $roles, true)) {
+            $roles[] = $role;
+            $entry['shared_roles'] = $roles;
+        }
+        $out[(string)$k] = $entry;
+    }
+
+    return $out;
+}
+
+/** Operator preamble on multi-page monitoring boards. */
+function admin_operator_board_preamble(string $board): void
+{
+    if (admin_is_super()) {
+        return;
+    }
+    $lines = [];
+    switch ($board) {
+        case 'zabbix':
+            require_once __DIR__ . '/zabbix_lib.php';
+            $lines = [
+                zabbix_configured()
+                    ? 'Zabbix connection is configured by your super admin.'
+                    : 'Zabbix URL and API token are not configured yet — ask a super admin to set them under Board settings.',
+                'Use <strong>+ Add page</strong> to create your own monitoring pages (host groups, severity). Quick-add them to rotation under <strong>Monitoring</strong>.',
+                'Pages you create are owned by you. To use pages a super admin built, they must set you as owner or share via <strong>Access</strong> (Operators role).',
+            ];
+            break;
+        case 'kuma':
+            require_once __DIR__ . '/kuma_lib.php';
+            $lines = [
+                kuma_configured()
+                    ? 'Uptime Kuma base URL is configured.'
+                    : 'Kuma base URL is not set yet — ask a super admin under Board settings.',
+                'Add pages with a <strong>status page slug</strong> per tab, then quick-add under <strong>Uptime Kuma</strong> in rotation.',
+            ];
+            break;
+        case 'splunk':
+            require_once __DIR__ . '/splunk_lib.php';
+            $lines = [
+                splunk_configured()
+                    ? 'Splunk connection is configured by your super admin.'
+                    : 'Splunk base URL and token are not configured — ask a super admin under Board settings.',
+                'Use <strong>+ Add page</strong> for your own panel walls; quick-add under <strong>Dashboards</strong> in rotation.',
+            ];
+            break;
+        case 'announce':
+            $lines = [
+                'Create announcements and countdowns here. Mark <strong>Strip only</strong> for the hero status bar (Rotation → Display options).',
+                'Quick-add non-strip items under <strong>Daily</strong> in rotation.',
+            ];
+            break;
+        case 'tailscale':
+            require_once __DIR__ . '/tailscale_lib.php';
+            $lines = [
+                tailscale_configured()
+                    ? 'Tailscale is configured — quick-add <code>tailscale.php</code> from Monitoring in rotation.'
+                    : 'Tailscale API is not configured — ask a super admin to set tailnet and API key under Board settings.',
+            ];
+            break;
+        case 'ntfy':
+            $lines = [
+                'Webhook and poll settings are managed by your super admin. Use <code>ntfy.php</code> in rotation or as a hero strip source once configured.',
+            ];
+            break;
+    }
+    if ($lines === []) {
+        return;
+    }
+    echo '<div class="help" style="margin:0 0 14px;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">';
+    foreach ($lines as $i => $line) {
+        echo '<div' . ($i === 0 ? '' : ' style="margin-top:6px"') . '>' . $line . '</div>';
+    }
+    echo '</div>';
+}
+
+/** Super-admin note on sharing multi-page boards with operators. */
+function admin_super_registry_share_hint(string $boardLabel): void
+{
+    if (!admin_is_super()) {
+        return;
+    }
+    echo '<div class="help" style="margin:0 0 12px">Entries without an owner are <strong>super-admin only</strong> on the wall and in rotation quick-add. '
+        . 'Set <strong>Access</strong> on each page, or use <strong>Share all with Operators</strong> so your team can quick-add '
+        . h($boardLabel) . ' pages.</div>';
+}
+
 /** Filter nav group keys to boards the current user may open. @return array<string,list<string>> */
 function admin_filter_nav_groups(array $navGroups, array $schema): array
 {

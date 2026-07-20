@@ -80,7 +80,7 @@ Super admins only — **Rotation → Emergency override**. Forces one of three m
 
 ## Content ownership & sharing
 
-On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
+On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Uptime Kuma**, **Announcements**, **Tailscale**, **ntfy**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
 
 | Layer | Purpose |
 |-------|---------|
@@ -95,8 +95,9 @@ Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["
 - Team slide deck — set owner to one person, check **Operators** under roles so the whole team can edit without listing every username.
 - One-off collaboration — add specific users under **Shared with users** only.
 - **Slides** deck toolbar — **All operators** bulk-adds the Operators role to selected slides; **All users** adds every account individually.
+- **Zabbix / Uptime Kuma / Splunk** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** to create their own walls (owned automatically).
 
-Homelab, SignalTrace, weather, and setup boards stay super-admin only. Operators only see and edit entries they **own**, that are **shared with them**, or that are **shared with their role**. Delete/reclaim rules still apply: operators may only delete rows they own; super admins can reclaim ownership.
+Homelab, SignalTrace, weather, and setup boards stay super-admin only. On operator boards, operators see and edit entries they **own**, that are **shared with them**, or that are **shared with their role**. Rows with **no owner** are super-admin only until shared. **Board settings** (API URLs, tokens, webhooks) stay super-admin only; operators configure pages/items on top of that connection.
 
 Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
 

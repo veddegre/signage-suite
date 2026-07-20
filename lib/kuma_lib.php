@@ -211,19 +211,21 @@ function kuma_pages_config(?array $rawConf = null): array
 /** @return array<string,array<string,mixed>> */
 function kuma_admin_pages(?array $rawConf = null): array
 {
-    $pages = kuma_pages_config($rawConf);
-    if ($pages === []) {
-        return [
-            'main' => kuma_normalize_page([
-                'title' => kuma_default_page_title(),
-                'sub' => kuma_default_page_sub(),
-                'status_slug' => '',
-                'tags' => '',
-            ], 'main') ?? [],
-        ];
-    }
+    require_once __DIR__ . '/users_lib.php';
 
-    return $pages;
+    return admin_registry_editor_pages(
+        kuma_pages_config($rawConf),
+        static function (): array {
+            return [
+                'main' => kuma_normalize_page([
+                    'title' => kuma_default_page_title(),
+                    'sub' => kuma_default_page_sub(),
+                    'status_slug' => '',
+                    'tags' => '',
+                ], 'main') ?? [],
+            ];
+        }
+    );
 }
 
 /** @return array<string,mixed> */

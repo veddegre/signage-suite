@@ -167,19 +167,21 @@ function zabbix_pages_config(?array $rawConf = null): array
 /** @return array<string,array<string,mixed>> */
 function zabbix_admin_pages(?array $rawConf = null): array
 {
-    $pages = zabbix_pages_config($rawConf);
-    if ($pages === []) {
-        return [
-            'main' => zabbix_normalize_page([
-                'title' => zabbix_default_page_title(),
-                'sub' => zabbix_default_page_sub(),
-                'host_groups' => '',
-                'min_severity' => 2,
-            ], 'main') ?? [],
-        ];
-    }
+    require_once __DIR__ . '/users_lib.php';
 
-    return $pages;
+    return admin_registry_editor_pages(
+        zabbix_pages_config($rawConf),
+        static function (): array {
+            return [
+                'main' => zabbix_normalize_page([
+                    'title' => zabbix_default_page_title(),
+                    'sub' => zabbix_default_page_sub(),
+                    'host_groups' => '',
+                    'min_severity' => 2,
+                ], 'main') ?? [],
+            ];
+        }
+    );
 }
 
 /** @return array<string,mixed> */

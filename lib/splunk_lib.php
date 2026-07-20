@@ -151,18 +151,20 @@ function splunk_pages_config(?array $rawConf = null): array
 /** Pages for admin — always at least one entry. */
 function splunk_admin_pages(?array $rawConf = null): array
 {
-    $pages = splunk_pages_config($rawConf);
-    if ($pages === []) {
-        return [
-            'main' => [
-                'title' => splunk_default_page_title(),
-                'sub' => splunk_default_page_sub(),
-                'panels' => splunk_default_panels(),
-            ],
-        ];
-    }
+    require_once __DIR__ . '/users_lib.php';
 
-    return $pages;
+    return admin_registry_editor_pages(
+        splunk_pages_config($rawConf),
+        static function (): array {
+            return [
+                'main' => [
+                    'title' => splunk_default_page_title(),
+                    'sub' => splunk_default_page_sub(),
+                    'panels' => splunk_default_panels(),
+                ],
+            ];
+        }
+    );
 }
 
 /** Resolve one page for display (splunk.php). */

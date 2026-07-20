@@ -316,6 +316,35 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'em
     exit;
 }
 
+if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'share_board_with_operators') {
+    $shareBoard = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_POST['share_board'] ?? ''));
+    $pagesKey = match ($shareBoard) {
+        'zabbix', 'kuma', 'splunk' => $shareBoard . '.PAGES',
+        default => '',
+    };
+    if ($pagesKey === '') {
+        $flash = 'Invalid board for sharing.';
+        $flashOk = false;
+    } elseif (cfg_update(static function (array $conf) use ($pagesKey): array {
+        $pages = is_array($conf[$pagesKey] ?? null) ? $conf[$pagesKey] : [];
+        if ($pages === []) {
+            return $conf;
+        }
+        $conf[$pagesKey] = admin_registry_share_all_with_role($pages);
+
+        return $conf;
+    })) {
+        $flash = 'All pages on that board are now shared with the Operators role. Save is not required.';
+        $flashOk = true;
+        cfg_reload();
+    } else {
+        $flash = 'Share failed — no pages to update.';
+        $flashOk = false;
+    }
+    header('Location: admin.php?board=' . rawurlencode($shareBoard !== '' ? $shareBoard : 'rotation'));
+    exit;
+}
+
 if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     if (!admin_can_board($board)) {
         $flash = 'You do not have access to that section.';
@@ -2945,6 +2974,12 @@ function admin_field(array $f, $val, string $board): void
           <?php endforeach; ?>
         <?php endif; ?>
       </div>
+      <div class="help" style="margin-bottom:18px;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
+        <strong>What you can manage:</strong> rotation playlists and display options (including the <strong>hero status strip</strong>),
+        slides, photos, RSS, video, announcements, and monitoring pages you own or that are shared with you
+        (Zabbix, Uptime Kuma, Splunk, Grafana, …). API URLs and tokens are set by your super admin under each board’s
+        <strong>Board settings</strong>. Use <strong>+ Add page</strong> on Zabbix/Kuma/Splunk to create your own walls.
+      </div>
       <?php endif; ?>
       <?php
       $acctUser = admin_current_user();
@@ -3081,6 +3116,9 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
+      <?php if (in_array($board, ['announce', 'tailscale', 'ntfy'], true)): ?>
+        <?php admin_operator_board_preamble($board); ?>
+      <?php endif; ?>
       <div class="sub">Changes save to <code>config/settings.json</code>.
         <?php if ($board === 'rotation'):
           $rotationHeaderScreen = admin_is_super()
@@ -4248,9 +4286,16 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
           </details>
 
         <?php elseif ($board === 'splunk'): ?>
+          <?php admin_operator_board_preamble('splunk'); ?>
+          <?php admin_super_registry_share_hint('Splunk'); ?>
           <div class="section-title">Splunk panel pages</div>
           <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
             <code>splunk.php?d=<em>key</em></code> (like Grafana). Drag panels to reorder within a page.</div>
+          <?php if ($splunkPages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No pages yet — click <strong>+ Add page</strong> below to create your first Splunk wall.
+          </div>
+          <?php endif; ?>
 
           <div class="splunk-pages-bar" id="splunkPagesBar">
             <?php foreach ($splunkPages as $pk => $pg): ?>
@@ -4260,7 +4305,15 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
             </button>
             <?php endforeach; ?>
             <button type="button" class="addrow" onclick="addSplunkPage()">+ Add page</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=splunk" formmethod="post"
+                    onclick="this.form.share_board.value='splunk'; return confirm('Share every Splunk page with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
           </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <?php endif; ?>
 
           <?php foreach ($splunkPages as $pk => $pg):
             $panelRows = is_array($pg['panels'] ?? null) ? $pg['panels'] : [];
@@ -4330,9 +4383,16 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
           </details>
 
         <?php elseif ($board === 'zabbix'): ?>
+          <?php admin_operator_board_preamble('zabbix'); ?>
+          <?php admin_super_registry_share_hint('Zabbix'); ?>
           <div class="section-title">Zabbix monitoring pages</div>
           <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
             <code>zabbix.php?d=<em>key</em></code>. Filter by one or more Zabbix host group names (comma-separated).</div>
+          <?php if ($zabbixPages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No pages yet — click <strong>+ Add page</strong> below to create your first Zabbix wall.
+          </div>
+          <?php endif; ?>
 
           <div class="splunk-pages-bar" id="zabbixPagesBar">
             <?php foreach ($zabbixPages as $pk => $pg): ?>
@@ -4342,7 +4402,15 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
             </button>
             <?php endforeach; ?>
             <button type="button" class="addrow" onclick="addZabbixPage()">+ Add page</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=zabbix" formmethod="post"
+                    onclick="this.form.share_board.value='zabbix'; return confirm('Share every Zabbix page with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
           </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <?php endif; ?>
 
           <?php foreach ($zabbixPages as $pk => $pg):
             $minSev = max(0, min(5, (int)($pg['min_severity'] ?? 2)));
@@ -4434,9 +4502,16 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
           </details>
 
         <?php elseif ($board === 'kuma'): ?>
+          <?php admin_operator_board_preamble('kuma'); ?>
+          <?php admin_super_registry_share_hint('Uptime Kuma'); ?>
           <div class="section-title">Uptime Kuma pages</div>
           <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
             <code>kuma.php?d=<em>key</em></code>. Set a status page slug per tab (works without an API key), or use the board API key with optional tag filters.</div>
+          <?php if ($kumaPages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No pages yet — click <strong>+ Add page</strong> below to create your first Kuma wall.
+          </div>
+          <?php endif; ?>
 
           <div class="splunk-pages-bar" id="kumaPagesBar">
             <?php foreach ($kumaPages as $pk => $pg): ?>
@@ -4446,7 +4521,15 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
             </button>
             <?php endforeach; ?>
             <button type="button" class="addrow" onclick="addKumaPage()">+ Add page</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=kuma" formmethod="post"
+                    onclick="this.form.share_board.value='kuma'; return confirm('Share every Kuma page with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
           </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <?php endif; ?>
 
           <?php foreach ($kumaPages as $pk => $pg): ?>
           <div class="splunk-page-editor" data-kuma-page-editor="<?= h($pk) ?>"
