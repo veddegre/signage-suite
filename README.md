@@ -104,10 +104,10 @@ Prefer `pipx install yt-dlp` over apt for YouTube (repo builds go stale).
 | Role | What they can do |
 |------|------------------|
 | **Super admin** | Everything — users, security, all displays |
-| **Infrastructure** | Operator access plus Homelab, UniFi, and SignalTrace admin boards |
+| **Infrastructure** | Operator access plus Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards |
 | **Operator** | Own content boards + rotation for assigned display(s) — **one** by default, or **multiple** when **Security → Operators may manage multiple displays** is enabled |
 
-Operators and infrastructure users can **own** content and grant access to **individual users** or **roles** (e.g. all **Operators** or **Infrastructure**) on playlist rows. Homelab, UniFi, and SignalTrace **admin** stay limited to super admins and infrastructure users; those three boards are also omitted from operator rotation quick-add (other monitoring walls such as Cloudflare Radar remain available). Other setup/security boards stay super-admin only. API tokens on most boards stay super-admin **Board settings**.
+Operators and infrastructure users can **own** content and grant access to **individual users** or **roles** (e.g. all **Operators** or **Infrastructure**) on playlist rows. Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin** stay limited to super admins and infrastructure users; those boards are also omitted from operator rotation quick-add and hero-strip sources (other monitoring walls such as Cloudflare Radar and shared Zabbix pages remain available). Other setup/security boards stay super-admin only. API tokens on most boards stay super-admin **Board settings**.
 
 The admin **sidebar groups** (Setup, Weather & home, Monitoring, …) are **collapsible** — click a category header to expand or collapse; your choices are remembered in the browser.
 
@@ -175,7 +175,7 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 **ntfy** (`ntfy.php`) — Recent alerts from webhook (`ntfy_webhook.php`) and/or **poll topic** mode. Use in rotation or wire into the hero strip.
 
-**Hero status strip** — Optional persistent bar above the weather ticker on `board.php` (per display under **Rotation → Display options**). Combine up to four sources (Kuma, Zabbix, announcement, ntfy) with dropdown page pickers. Polls every 30s with the rotation shell.
+**Hero status strip** — Optional persistent bar above the weather ticker on `board.php` (per display under **Rotation → Display options**). Combine up to four sources (Kuma, Zabbix, announcement, ntfy for super admin / Infrastructure; Zabbix and announcements for operators) with dropdown page pickers. Polls every 30s with the rotation shell.
 
 **Shared display editing** — Super admins assign **shared editors** on each display (Rotation). Shared editors manage the **full screen**: playlist, display options, hero strip, and deploy targets — including the primary owner’s slides and quick-add boards.
 

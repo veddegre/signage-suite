@@ -14,11 +14,11 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
-    'grafana', 'splunk', 'splunkdash', 'zabbix', 'kuma', 'announce', 'tailscale', 'ntfy', 'calendar', 'account',
+    'grafana', 'splunk', 'splunkdash', 'zabbix', 'announce', 'calendar', 'account',
 ];
 
-/** Homelab / UniFi / SignalTrace — super admin and Infrastructure role only. */
-const ADMIN_INFRA_BOARDS = ['homelab', 'unifi', 'signaltrace'];
+/** Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy — super admin and Infrastructure role only. */
+const ADMIN_INFRA_BOARDS = ['homelab', 'unifi', 'signaltrace', 'kuma', 'tailscale', 'ntfy'];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
 const ADMIN_OPERATOR_SETTINGS_BOARDS = ['slides', 'rotator'];
@@ -1984,6 +1984,39 @@ function admin_can_board(string $board): bool
     }
 
     return in_array($board, ADMIN_OPERATOR_BOARDS, true);
+}
+
+/** Hero strip sources limited like infra boards (Kuma, ntfy). Zabbix and announcements stay operator-accessible. */
+function admin_can_hero_strip_source(string $source): bool
+{
+    $source = strtolower(trim($source));
+    if (!in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)) {
+        return false;
+    }
+    if (admin_is_super() || admin_is_infra()) {
+        return true;
+    }
+    if (in_array($source, ['kuma', 'ntfy'], true)) {
+        return false;
+    }
+
+    return true;
+}
+
+/** @return array<string,string> source key => label for rotation display options */
+function admin_hero_strip_source_options(): array
+{
+    $all = [
+        'kuma' => 'Uptime Kuma',
+        'zabbix' => 'Zabbix',
+        'announce' => 'Announcement',
+        'ntfy' => 'ntfy alerts',
+    ];
+    if (admin_is_super() || admin_is_infra()) {
+        return $all;
+    }
+
+    return array_intersect_key($all, array_flip(['zabbix', 'announce']));
 }
 
 function admin_default_board(): string

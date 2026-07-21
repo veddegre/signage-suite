@@ -18,8 +18,8 @@ Accounts live in `config/users.json`, blocked from direct HTTP like `settings.js
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Infrastructure** | Same as **Operator**, plus **Homelab**, **UniFi Network**, and **SignalTrace** admin boards |
-| **Operator** | Content boards + **Rotation** for assigned display(s) and shared-editor displays; **Account**, **Status** — not Homelab / UniFi / SignalTrace |
+| **Infrastructure** | Same as **Operator**, plus **Homelab**, **UniFi Network**, **SignalTrace**, **Uptime Kuma**, **Tailscale**, and **ntfy** admin boards |
+| **Operator** | Content boards + **Rotation** for assigned display(s) and shared-editor displays; **Account**, **Status** — not the infrastructure-only monitoring boards above |
 
 ### Sidebar layout
 
@@ -29,7 +29,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 |-------|--------|
 | **Setup** | Security, Rotation, Ticker |
 | **Weather & home** | Weather, Lake, Webcam, Photo, Air, Sports, Calendar, Traffic |
-| **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy, Zabbix |
+| **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy (Infrastructure + super admin), Zabbix, cloud outages, … |
 | **Daily** | Word of the day, This day in history, Dad jokes, Announcements, XKCD |
 | **Media** | Slides, Photo Rotator, Video, RSS |
 | **Dashboards** | Grafana, Splunk Panels, Splunk Published, Websites |
@@ -81,7 +81,7 @@ Super admins only — **Rotation → Emergency override**. Forces one of three m
 
 ## Content ownership & sharing
 
-On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Uptime Kuma**, **Announcements**, **Tailscale**, **ntfy**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
+On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Announcements**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
 
 | Layer | Purpose |
 |-------|---------|
@@ -96,9 +96,10 @@ Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["
 - Team slide deck — set owner to one person, check **Operators** under roles so the whole team can edit without listing every username.
 - One-off collaboration — add specific users under **Shared with users** only.
 - **Slides** deck toolbar — **All operators** bulk-adds the Operators role to selected slides; **All users** adds every account individually.
-- **Zabbix / Uptime Kuma / Splunk** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** to create their own walls (owned automatically).
+- **Zabbix / Splunk** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** to create their own walls (owned automatically).
+- **Uptime Kuma** — Infrastructure-only admin; super admin **Share all with Infrastructure** on the page bar when multiple people need the same Kuma pages.
 
-Homelab, UniFi, and SignalTrace **admin configuration** stays **super admin** or **Infrastructure** only — operators do not see those sidebar entries or board settings, and those three boards are omitted from rotation **quick-add**. Other monitoring walls (Cloudflare Radar, outages, Zabbix pages when shared, etc.) stay selectable in playlists. Setup/security boards (Users, Security, …) stay super-admin only. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
+Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin configuration** stays **super admin** or **Infrastructure** only — operators do not see those sidebar entries or board settings, and those boards are omitted from rotation **quick-add** and hero-strip source pickers. Other monitoring walls (Cloudflare Radar, outages, Zabbix pages when shared, etc.) stay selectable in playlists. Setup/security boards (Users, Security, …) stay super-admin only. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
 
 Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
 

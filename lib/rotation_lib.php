@@ -515,7 +515,10 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
             } else {
                 unset($entry['hero_strip_slots']);
                 $source = strtolower(trim((string)($row['hero_strip_source'] ?? '')));
-                if (in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)) {
+                if (
+                    in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)
+                    && (!function_exists('admin_can_hero_strip_source') || admin_can_hero_strip_source($source))
+                ) {
                     $entry['hero_strip_source'] = $source;
                 } else {
                     unset($entry['hero_strip_source']);
@@ -634,6 +637,12 @@ function rotation_hero_strip_slots_from_post(array $row): array
         if (!in_array($source, $allowed, true)) {
             continue;
         }
+        if (!function_exists('admin_can_hero_strip_source')) {
+            require_once __DIR__ . '/users_lib.php';
+        }
+        if (!admin_can_hero_strip_source($source)) {
+            continue;
+        }
         $out[] = [
             'source' => $source,
             'key' => trim((string)($slot['key'] ?? '')),
@@ -657,6 +666,12 @@ function rotation_hero_strip_slots_from_config(array $rawSlots): array
         }
         $source = strtolower(trim((string)($slot['source'] ?? '')));
         if (!in_array($source, $allowed, true)) {
+            continue;
+        }
+        if (!function_exists('admin_can_hero_strip_source')) {
+            require_once __DIR__ . '/users_lib.php';
+        }
+        if (!admin_can_hero_strip_source($source)) {
             continue;
         }
         $out[] = [
@@ -1952,7 +1967,7 @@ function rotation_quick_add_board_key(string $url): ?string
     return preg_replace('/\.php$/', '', $base) ?: null;
 }
 
-/** Whether the current user may quick-add this rotation URL (infra boards excluded for operators). */
+/** Whether the current user may quick-add this rotation URL (infra-only boards excluded for operators). */
 function rotation_quick_add_url_allowed(string $url): bool
 {
     require_once __DIR__ . '/users_lib.php';

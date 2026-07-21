@@ -318,6 +318,13 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'em
 
 if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'share_board_with_operators') {
     $shareBoard = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_POST['share_board'] ?? ''));
+    $shareRole = (string)($_POST['share_role'] ?? 'operator');
+    if (!isset(ADMIN_SHARING_ROLES[$shareRole])) {
+        $shareRole = 'operator';
+    }
+    if (in_array($shareBoard, ADMIN_INFRA_BOARDS, true)) {
+        $shareRole = 'infra';
+    }
     $pagesKey = match ($shareBoard) {
         'zabbix', 'kuma', 'splunk' => $shareBoard . '.PAGES',
         default => '',
@@ -325,16 +332,16 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
     if ($pagesKey === '') {
         $flash = 'Invalid board for sharing.';
         $flashOk = false;
-    } elseif (cfg_update(static function (array $conf) use ($pagesKey): array {
+    } elseif (cfg_update(static function (array $conf) use ($pagesKey, $shareRole): array {
         $pages = is_array($conf[$pagesKey] ?? null) ? $conf[$pagesKey] : [];
         if ($pages === []) {
             return $conf;
         }
-        $conf[$pagesKey] = admin_registry_share_all_with_role($pages);
+        $conf[$pagesKey] = admin_registry_share_all_with_role($pages, $shareRole);
 
         return $conf;
     })) {
-        $flash = 'All pages on that board are now shared with the Operators role. Save is not required.';
+        $flash = 'All pages on that board are now shared with the ' . (ADMIN_SHARING_ROLES[$shareRole] ?? $shareRole) . ' role. Save is not required.';
         $flashOk = true;
         cfg_reload();
     } else {
@@ -1728,6 +1735,10 @@ $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIE
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
 $heroStripKeyOptions = hero_strip_key_options();
+if (!admin_is_super() && !admin_is_infra()) {
+    unset($heroStripKeyOptions['kuma'], $heroStripKeyOptions['ntfy']);
+}
+$heroStripSources = admin_hero_strip_source_options();
 $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
@@ -3089,7 +3100,7 @@ function admin_field(array $f, $val, string $board): void
             <?php endforeach; ?>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> and <strong>Infrastructure</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. Infrastructure adds Homelab, UniFi, and SignalTrace admin boards.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> and <strong>Infrastructure</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. Infrastructure adds Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -3113,7 +3124,8 @@ window.USER_SCREEN_ASSIGNMENTS = <?= json_encode($userScreenAssignmentsJs, JSON_
 window.ADMIN_OPERATOR_SCREEN = <?= json_encode(admin_operator_screen_key()) ?>;
 window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_locked()) ?>;
 window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabled()) ?>;
-window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESCAPED_UNICODE) ?>;</script>
+window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESCAPED_UNICODE) ?>;
+window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UNICODE) ?>;</script>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
@@ -3823,7 +3835,7 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
                       <label class="mini">Source</label>
                       <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][source]">
                         <option value="">—</option>
-                        <?php foreach (['kuma' => 'Uptime Kuma', 'zabbix' => 'Zabbix', 'announce' => 'Announcement', 'ntfy' => 'ntfy alerts'] as $hv => $hl): ?>
+                        <?php foreach ($heroStripSources as $hv => $hl): ?>
                         <option value="<?= h($hv) ?>" <?= $slotSource === $hv ? 'selected' : '' ?>><?= h($hl) ?></option>
                         <?php endforeach; ?>
                       </select>
@@ -4314,6 +4326,7 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
           </div>
           <?php if (admin_is_super()): ?>
           <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="operator">
           <?php endif; ?>
 
           <?php foreach ($splunkPages as $pk => $pg):
@@ -4411,6 +4424,7 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
           </div>
           <?php if (admin_is_super()): ?>
           <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="operator">
           <?php endif; ?>
 
           <?php foreach ($zabbixPages as $pk => $pg):
@@ -4525,11 +4539,12 @@ window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESC
             <?php if (admin_is_super()): ?>
             <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
                     formaction="?board=kuma" formmethod="post"
-                    onclick="this.form.share_board.value='kuma'; return confirm('Share every Kuma page with the Operators role?');">Share all with Operators</button>
+                    onclick="this.form.share_board.value='kuma'; this.form.share_role.value='infra'; return confirm('Share every Kuma page with the Infrastructure role?');">Share all with Infrastructure</button>
             <?php endif; ?>
           </div>
           <?php if (admin_is_super()): ?>
           <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="infra">
           <?php endif; ?>
 
           <?php foreach ($kumaPages as $pk => $pg): ?>
@@ -8784,17 +8799,19 @@ function addHeroStripSlot(screenKey) {
     return;
   }
   const idx = deck.querySelectorAll('.hero-strip-slot-row').length;
+  const sources = window.HERO_STRIP_SOURCES || {};
+  let sourceOptions = '<option value="">—</option>';
+  Object.keys(sources).forEach(function (key) {
+    sourceOptions += '<option value="' + key.replace(/"/g, '&quot;') + '">'
+      + String(sources[key]).replace(/</g, '&lt;') + '</option>';
+  });
   const row = document.createElement('div');
   row.className = 'hero-strip-slot-row field-grid';
   row.style.cssText = 'grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto;margin-top:8px';
   row.innerHTML =
     '<div class="field"><label class="mini">Source</label>' +
       '<select name="SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][source]">' +
-        '<option value="">—</option>' +
-        '<option value="kuma">Uptime Kuma</option>' +
-        '<option value="zabbix">Zabbix</option>' +
-        '<option value="announce">Announcement</option>' +
-        '<option value="ntfy">ntfy alerts</option>' +
+        sourceOptions +
       '</select></div>' +
     '<div class="field hero-strip-key-field"><label class="mini">Page / item</label>' +
       heroStripKeySelectHtml('SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][key]', '', '') +
