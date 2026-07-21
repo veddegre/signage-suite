@@ -2662,6 +2662,21 @@ function admin_field(array $f, $val, string $board): void
   .video-card-actions, .rotation-card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; align-items:center; }
   .quick-add-bar { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; align-items:center; }
   .quick-add-bar .group-label { font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--mist); margin-right:4px; }
+  .rotation-board-picker { margin-top:8px; border-top:1px solid var(--hairline); padding-top:12px; }
+  .rotation-board-picker > summary { cursor:pointer; color:var(--beacon); font-size:14px; font-weight:600; padding:4px 0; list-style:none; }
+  .rotation-board-picker > summary::-webkit-details-marker { display:none; }
+  .rotation-board-picker-body { margin-top:10px; display:flex; flex-direction:column; gap:10px; }
+  .rotation-board-picker-row { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:flex-end; }
+  .rotation-board-picker-row select { flex:1; min-width:240px; min-height:176px; max-height:240px; padding:6px 8px; font-size:14px;
+    background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .rotation-board-picker-row select option { padding:3px 6px; border-radius:4px; }
+  .rotation-board-picker-row select optgroup { color:var(--mist); font-style:normal; font-weight:600; letter-spacing:.04em; }
+  .rotation-board-picker-row select option:checked { background:rgba(255,179,71,.25); color:var(--snow); }
+  .rotation-display-options-panel { margin-top:18px; border:1px solid var(--line); border-radius:10px; background:var(--harbor); overflow:hidden; }
+  .rotation-display-options-panel > summary { cursor:pointer; padding:12px 14px; list-style:none; display:flex; flex-wrap:wrap; gap:8px; align-items:center; color:var(--snow); font-weight:600; }
+  .rotation-display-options-panel > summary::-webkit-details-marker { display:none; }
+  .rotation-display-options-panel > summary .help { margin:0; font-weight:400; flex:1; min-width:200px; }
+  .rotation-display-options-panel .rotation-display-options { margin:0; border:0; border-radius:0; border-top:1px solid var(--line); }
   @media (max-width: 900px) { .video-card-grid, .rotation-card-grid, .rotation-card-grid.cols-4 { grid-template-columns:1fr; } }
   .inline-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
   .video-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-top:14px; }
@@ -3640,15 +3655,25 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <button type="button" class="secondary" onclick="loadRotationStarter(document.getElementById('rotationTargetScreen').value)">Starter playlist</button>
               <button type="button" class="secondary" id="rotationCopyMainBtn" onclick="copyRotationFromMain(document.getElementById('rotationTargetScreen').value)">Copy from main</button>
             </div>
-            <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
-            <div class="quick-add-bar">
-              <span class="group-label"><?= h($groupName) ?></span>
-              <?php foreach ($groupItems as $qa): ?>
-              <button type="button" class="secondary quick-add-rotation" style="padding:6px 12px;font-size:13px"
-                      data-url="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>"><?= h($qa['label']) ?></button>
-              <?php endforeach; ?>
-            </div>
-            <?php endforeach; ?>
+            <details class="rotation-board-picker" id="rotationBoardPickerPanel">
+              <summary>Add board to playlist</summary>
+              <div class="rotation-board-picker-body">
+                <input type="search" class="deploy-filter" id="rotationBoardSearch" placeholder="Search weather, RSS, Zabbix, sports…" autocomplete="off" style="max-width:none;margin:0">
+                <div class="rotation-board-picker-row">
+                  <select id="rotationBoardSelect" size="10" aria-label="Boards to add to playlist">
+                    <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
+                    <optgroup label="<?= h($groupName) ?>">
+                      <?php foreach ($groupItems as $qa): ?>
+                      <option value="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>" data-group="<?= h(strtolower($groupName)) ?>"><?= h($qa['label']) ?></option>
+                      <?php endforeach; ?>
+                    </optgroup>
+                    <?php endforeach; ?>
+                  </select>
+                  <button type="button" class="addrow" id="rotationBoardAddBtn">Add to playlist</button>
+                </div>
+                <p class="help" style="margin:0">Browse or search, then double-click a row or click <strong>Add to playlist</strong>. For a custom URL, use <strong>+ Page</strong>.</p>
+              </div>
+            </details>
           </div>
 
           <?php if (count($rotationScreens) > 1): ?>
@@ -3786,189 +3811,29 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             $sportsSubtitle = trim((string)($scrRaw['sports_subtitle'] ?? ''));
             $tickerNewsFeed = trim((string)($scrRaw['ticker_news_feed'] ?? ''));
             $globalLoc = rotation_global_location();
+            $displayOptsHints = [];
+            if (!empty($screenSettings['weighted'])) {
+                $displayOptsHints[] = 'Weighted';
+            }
+            if (!empty($screenSettings['shuffle'])) {
+                $displayOptsHints[] = 'Shuffle';
+            }
+            if ($screenSettings['show_ticker']) {
+                $displayOptsHints[] = $tickerNewsFeed !== '' ? 'Ticker + news fallback' : 'Ticker';
+            } else {
+                $displayOptsHints[] = 'No ticker';
+            }
+            if (!empty($heroCfg['enabled'])) {
+                $displayOptsHints[] = 'Hero strip';
+            }
+            if (trim($locationFields['place']) !== '' || trim($locationFields['lat']) !== '') {
+                $displayOptsHints[] = 'Custom location';
+            }
+            if (array_filter($sportsTeamKeys)) {
+                $displayOptsHints[] = 'Sports teams';
+            }
+            $displayOptsSummary = implode(' · ', $displayOptsHints);
           ?>
-          <div class="rotation-display-options">
-            <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
-            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone. Unchecked weekdays stay dark all day. Location and sports overrides apply to weather boards and <code>sports.php</code> when this display runs in rotation.</div>
-            <div class="field-grid rotation-options-grid">
-              <div class="field">
-                <label class="check" title="<?= h(rotation_weighted_mode_tooltip()) ?>"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][weighted]" value="1"
-                  <?= !empty($screenSettings['weighted']) ? 'checked' : '' ?>> Weighted rotation</label>
-              </div>
-              <div class="field">
-                <label class="check" title="Randomize play order once per full pass; every page appears once per cycle"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][shuffle]" value="1"
-                  <?= !empty($screenSettings['shuffle']) ? 'checked' : '' ?>> Shuffle playlist</label>
-              </div>
-              <div class="field">
-                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
-                  <?= $screenSettings['show_ticker'] ? 'checked' : '' ?>> Bottom ticker (weather alerts + optional news fallback)</label>
-              </div>
-              <div class="field span-2 rotation-section" style="padding-top:0;border-top:0;margin-top:-4px">
-                <div class="field">
-                  <label class="mini">News ticker when no weather alerts</label>
-                  <select name="SCREEN_OPTS[<?= h($screenKey) ?>][ticker_news_feed]">
-                    <option value="">Off</option>
-                    <?php foreach ($rssTickerFeeds as $feedKey => $feed):
-                      if (!is_array($feed) || !empty($feed['off'])) {
-                          continue;
-                      }
-                      $feedLabel = trim((string)($feed['name'] ?? $feedKey));
-                    ?>
-                    <option value="<?= h((string)$feedKey) ?>" <?= $tickerNewsFeed === (string)$feedKey ? 'selected' : '' ?>><?= h($feedLabel) ?> (<?= h((string)$feedKey) ?>)</option>
-                    <?php endforeach; ?>
-                  </select>
-                  <div class="help" style="margin-top:6px">Pick an RSS feed you manage under <strong>RSS Stories</strong>. Headlines scroll in the bottom bar only when there are no NWS weather alerts (weather always takes priority).</div>
-                </div>
-              </div>
-              <div class="field">
-                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_debug]" value="1"
-                  <?= $screenSettings['show_debug'] ? 'checked' : '' ?>> Debug overlay</label>
-              </div>
-              <div class="field">
-                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][schedule_enabled]" value="1"
-                  <?= !empty($schedOpt['enabled']) ? 'checked' : '' ?>> Blank screen overnight</label>
-              </div>
-              <div class="field rotation-weekdays-field">
-                <span class="l">Active on</span>
-                <?php rotation_admin_weekdays_html(
-                    'SCREEN_OPTS[' . $screenKey . ']',
-                    array_key_exists('weekdays', $schedOpt) ? $schedOpt['weekdays'] : null
-                ); ?>
-              </div>
-              <div class="field">
-                <label class="l" for="screenOff-<?= h($screenKey) ?>">Blank from (hour 0–23)</label>
-                <input type="number" min="0" max="23" step="1" id="screenOff-<?= h($screenKey) ?>"
-                       name="SCREEN_OPTS[<?= h($screenKey) ?>][cec_off]" value="<?= h((string)(int)$schedOpt['off']) ?>"
-                       placeholder="23">
-              </div>
-              <div class="field">
-                <label class="l" for="screenOn-<?= h($screenKey) ?>">Blank until (hour 0–23)</label>
-                <input type="number" min="0" max="23" step="1" id="screenOn-<?= h($screenKey) ?>"
-                       name="SCREEN_OPTS[<?= h($screenKey) ?>][cec_on]" value="<?= h((string)(int)$schedOpt['on']) ?>"
-                       placeholder="6">
-              </div>
-              <div class="field">
-                <label class="l" for="screenFade-<?= h($screenKey) ?>">Crossfade (ms)</label>
-                <input type="number" min="0" step="1" id="screenFade-<?= h($screenKey) ?>"
-                       name="SCREEN_OPTS[<?= h($screenKey) ?>][fade_ms]" value="<?= h($fadeOpt) ?>"
-                       placeholder="<?= (int)rotation_global_fade_ms() ?>">
-              </div>
-              <div class="field">
-                <label class="l" for="screenSettle-<?= h($screenKey) ?>">Settle after load (ms)</label>
-                <input type="number" min="0" step="1" id="screenSettle-<?= h($screenKey) ?>"
-                       name="SCREEN_OPTS[<?= h($screenKey) ?>][settle_ms]" value="<?= h($settleOpt) ?>"
-                       placeholder="<?= (int)rotation_global_settle_ms() ?>">
-              </div>
-              <div class="field">
-                <label class="l" for="screenHang-<?= h($screenKey) ?>">Hung-page timeout (ms)</label>
-                <input type="number" min="0" step="1" id="screenHang-<?= h($screenKey) ?>"
-                       name="SCREEN_OPTS[<?= h($screenKey) ?>][hang_ms]" value="<?= h($hangOpt) ?>"
-                       placeholder="<?= (int)rotation_global_hang_ms() ?>">
-              </div>
-              <div class="field span-2 rotation-section">
-                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip]" value="1"
-                  <?= !empty($heroCfg['enabled']) ? 'checked' : '' ?>> Status strip (persistent bar above ticker)</label>
-              </div>
-              <div class="field span-2 rotation-section" style="padding-top:0;border-top:0;margin-top:0">
-                <span class="mini">Strip sources</span>
-                <div class="hero-strip-slots" data-hero-strip-slots="<?= h($screenKey) ?>">
-                  <?php foreach ($heroSlots as $si => $slot):
-                    $slotSource = (string)($slot['source'] ?? '');
-                    $slotKey = (string)($slot['key'] ?? '');
-                  ?>
-                  <div class="hero-strip-slot-row">
-                    <div class="field">
-                      <label class="mini">Source</label>
-                      <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][source]">
-                        <option value="">—</option>
-                        <?php foreach ($heroStripSources as $hv => $hl): ?>
-                        <option value="<?= h($hv) ?>" <?= $slotSource === $hv ? 'selected' : '' ?>><?= h($hl) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-                    <div class="field hero-strip-key-field">
-                      <label class="mini">Page / item</label>
-                      <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][key]">
-                        <?php
-                          $opts = $heroStripKeyOptions[$slotSource] ?? [['value' => '', 'label' => 'Default']];
-                          if ($slotSource === 'announce' && !array_filter($opts, static fn($o) => ($o['value'] ?? '') === 'strip')) {
-                              array_unshift($opts, ['value' => 'strip', 'label' => 'All active strip-only items']);
-                          }
-                          foreach ($opts as $opt):
-                        ?>
-                        <option value="<?= h((string)($opt['value'] ?? '')) ?>" <?= $slotKey === (string)($opt['value'] ?? '') ? 'selected' : '' ?>><?= h((string)($opt['label'] ?? '')) ?></option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-                    <div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px">
-                      <button type="button" class="rowdel" style="width:auto;padding:6px 10px;font-size:12px" onclick="removeHeroStripSlot(this)" title="Remove source">×</button>
-                    </div>
-                  </div>
-                  <?php endforeach; ?>
-                </div>
-                <button type="button" class="secondary" style="margin-top:8px;padding:4px 10px;font-size:12px"
-                        onclick="addHeroStripSlot('<?= h($screenKey) ?>')">+ Add strip source</button>
-                <div class="help">Combine up to four sources (e.g. Kuma summary + ntfy alert + countdown). Announcements marked <em>strip only</em> are for the hero bar — pick them here or choose “All active strip-only items”.</div>
-                <div class="field strip-height-field">
-                  <label class="mini">Strip height (px)</label>
-                  <input type="number" min="60" max="240" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_height]"
-                         value="<?= !empty($heroCfg['enabled']) ? (int)($heroCfg['height'] ?? 120) : '' ?>" placeholder="120">
-                </div>
-              </div>
-              <div class="field span-2 rotation-section">
-                <span class="mini">Location for this display</span>
-                <div class="help" style="margin:6px 0 10px">Optional override for weather, air, UV, photo, traffic map center, and the weather alert ticker on this kiosk. Leave blank to use the global Weather board (<?= h($globalLoc['place']) ?>).</div>
-                <div class="rotation-subgrid location-subgrid">
-                  <div class="field">
-                    <label class="mini">Place name</label>
-                    <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_place]"
-                           value="<?= h($locationFields['place']) ?>" placeholder="<?= h($globalLoc['place']) ?>">
-                  </div>
-                  <div class="field">
-                    <label class="mini">Latitude</label>
-                    <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lat]"
-                           value="<?= h($locationFields['lat']) ?>" placeholder="<?= h((string)$globalLoc['lat']) ?>">
-                  </div>
-                  <div class="field">
-                    <label class="mini">Longitude</label>
-                    <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lon]"
-                           value="<?= h($locationFields['lon']) ?>" placeholder="<?= h((string)$globalLoc['lon']) ?>">
-                  </div>
-                </div>
-              </div>
-              <div class="field span-2 rotation-section">
-                <span class="mini">Sports teams for this display</span>
-                <div class="help" style="margin:6px 0 10px">Up to four ESPN teams on <code>sports.php</code>. Leave all blank for the site default (<?= h(implode(' · ', array_map(static fn(array $t): string => (string)($t['name'] ?? ''), sports_default_teams()))) ?>).</div>
-                <div class="rotation-subgrid sports-subgrid">
-                  <?php foreach ($sportsSlots as $si => $picked): ?>
-                  <div class="field">
-                    <label class="mini">Team <?= (int)$si + 1 ?></label>
-                    <select name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_team_slots][<?= (int)$si ?>]">
-                      <option value="">— site default —</option>
-                      <?php foreach ($sportsCatalogGroups as $groupLabel => $groupTeams): ?>
-                      <optgroup label="<?= h($groupLabel) ?>">
-                        <?php foreach ($groupTeams as $opt): ?>
-                        <option value="<?= h($opt['key']) ?>" <?= $picked === $opt['key'] ? 'selected' : '' ?>><?= h($opt['label']) ?></option>
-                        <?php endforeach; ?>
-                      </optgroup>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
-                  <?php endforeach; ?>
-                </div>
-                <div class="field" style="margin-top:10px">
-                  <label class="mini">Sports board title (optional)</label>
-                  <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_title]"
-                         value="<?= h($sportsTitle) ?>" placeholder="<?= h((string)cfg('sports.TITLE', 'Sports')) ?>">
-                </div>
-                <div class="field" style="margin-top:10px">
-                  <label class="mini">Sports board subtitle (optional)</label>
-                  <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_subtitle]"
-                         value="<?= h($sportsSubtitle) ?>" placeholder="Auto from selected team names when blank">
-                </div>
-              </div>
-            </div>
-          </div>
 
           <?php if ($effectivePages !== [] && $mirrorsMain): ?>
           <div class="rotation-effective-list mirror-note">Mirrors main — <?= (int)$activeEffective ?> page<?= $activeEffective === 1 ? '' : 's' ?> on wall</div>
@@ -3982,7 +3847,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
             <?php if ($storedRows === [] && $pageRows === []): ?>
-            <div class="rotation-playlist-empty" data-rotation-empty>No pages yet — quick-add a board above, load the starter playlist, or add a blank page.</div>
+            <div class="rotation-playlist-empty" data-rotation-empty>No pages yet — expand <strong>Add board to playlist</strong> above, load the starter playlist, or click <strong>+ Page</strong>.</div>
             <?php endif; ?>
             <?php $pri = 0;
             $playlistSegments = rotation_playlist_segments($pageRows);
@@ -4233,6 +4098,196 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             </div>
             <?php $pri++; endforeach; ?>
           </div>
+
+          <details class="rotation-display-options-panel">
+            <summary>
+              <span>Display options</span>
+              <span class="help"><?= h($displayOptsSummary) ?></span>
+            </summary>
+          <div class="rotation-display-options">
+            <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
+            <div class="help" style="margin-bottom:10px">Kiosk behavior for this display. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Location and sports apply to weather boards and <code>sports.php</code> in rotation.</div>
+            <div class="field-grid rotation-options-grid">
+              <div class="field">
+                <label class="check" title="<?= h(rotation_weighted_mode_tooltip()) ?>"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][weighted]" value="1"
+                  <?= !empty($screenSettings['weighted']) ? 'checked' : '' ?>> Weighted rotation</label>
+              </div>
+              <div class="field">
+                <label class="check" title="Randomize play order once per full pass; every page appears once per cycle"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][shuffle]" value="1"
+                  <?= !empty($screenSettings['shuffle']) ? 'checked' : '' ?>> Shuffle playlist</label>
+              </div>
+              <div class="field">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
+                  <?= $screenSettings['show_ticker'] ? 'checked' : '' ?>> Bottom ticker (weather alerts + optional news fallback)</label>
+              </div>
+              <div class="field span-2 rotation-section" style="padding-top:0;border-top:0;margin-top:-4px">
+                <div class="field">
+                  <label class="mini">News ticker when no weather alerts</label>
+                  <select name="SCREEN_OPTS[<?= h($screenKey) ?>][ticker_news_feed]">
+                    <option value="">Off</option>
+                    <?php foreach ($rssTickerFeeds as $feedKey => $feed):
+                      if (!is_array($feed) || !empty($feed['off'])) {
+                          continue;
+                      }
+                      $feedLabel = trim((string)($feed['name'] ?? $feedKey));
+                    ?>
+                    <option value="<?= h((string)$feedKey) ?>" <?= $tickerNewsFeed === (string)$feedKey ? 'selected' : '' ?>><?= h($feedLabel) ?> (<?= h((string)$feedKey) ?>)</option>
+                    <?php endforeach; ?>
+                  </select>
+                  <div class="help" style="margin-top:6px">Pick an RSS feed you manage under <strong>RSS Stories</strong>. Headlines scroll in the bottom bar only when there are no NWS weather alerts (weather always takes priority).</div>
+                </div>
+              </div>
+              <div class="field">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_debug]" value="1"
+                  <?= $screenSettings['show_debug'] ? 'checked' : '' ?>> Debug overlay</label>
+              </div>
+              <div class="field">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][schedule_enabled]" value="1"
+                  <?= !empty($schedOpt['enabled']) ? 'checked' : '' ?>> Blank screen overnight</label>
+              </div>
+              <div class="field rotation-weekdays-field">
+                <span class="l">Active on</span>
+                <?php rotation_admin_weekdays_html(
+                    'SCREEN_OPTS[' . $screenKey . ']',
+                    array_key_exists('weekdays', $schedOpt) ? $schedOpt['weekdays'] : null
+                ); ?>
+              </div>
+              <div class="field">
+                <label class="l" for="screenOff-<?= h($screenKey) ?>">Blank from (hour 0–23)</label>
+                <input type="number" min="0" max="23" step="1" id="screenOff-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][cec_off]" value="<?= h((string)(int)$schedOpt['off']) ?>"
+                       placeholder="23">
+              </div>
+              <div class="field">
+                <label class="l" for="screenOn-<?= h($screenKey) ?>">Blank until (hour 0–23)</label>
+                <input type="number" min="0" max="23" step="1" id="screenOn-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][cec_on]" value="<?= h((string)(int)$schedOpt['on']) ?>"
+                       placeholder="6">
+              </div>
+              <div class="field">
+                <label class="l" for="screenFade-<?= h($screenKey) ?>">Crossfade (ms)</label>
+                <input type="number" min="0" step="1" id="screenFade-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][fade_ms]" value="<?= h($fadeOpt) ?>"
+                       placeholder="<?= (int)rotation_global_fade_ms() ?>">
+              </div>
+              <div class="field">
+                <label class="l" for="screenSettle-<?= h($screenKey) ?>">Settle after load (ms)</label>
+                <input type="number" min="0" step="1" id="screenSettle-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][settle_ms]" value="<?= h($settleOpt) ?>"
+                       placeholder="<?= (int)rotation_global_settle_ms() ?>">
+              </div>
+              <div class="field">
+                <label class="l" for="screenHang-<?= h($screenKey) ?>">Hung-page timeout (ms)</label>
+                <input type="number" min="0" step="1" id="screenHang-<?= h($screenKey) ?>"
+                       name="SCREEN_OPTS[<?= h($screenKey) ?>][hang_ms]" value="<?= h($hangOpt) ?>"
+                       placeholder="<?= (int)rotation_global_hang_ms() ?>">
+              </div>
+              <div class="field span-2 rotation-section">
+                <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip]" value="1"
+                  <?= !empty($heroCfg['enabled']) ? 'checked' : '' ?>> Status strip (persistent bar above ticker)</label>
+              </div>
+              <div class="field span-2 rotation-section" style="padding-top:0;border-top:0;margin-top:0">
+                <span class="mini">Strip sources</span>
+                <div class="hero-strip-slots" data-hero-strip-slots="<?= h($screenKey) ?>">
+                  <?php foreach ($heroSlots as $si => $slot):
+                    $slotSource = (string)($slot['source'] ?? '');
+                    $slotKey = (string)($slot['key'] ?? '');
+                  ?>
+                  <div class="hero-strip-slot-row">
+                    <div class="field">
+                      <label class="mini">Source</label>
+                      <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][source]">
+                        <option value="">—</option>
+                        <?php foreach ($heroStripSources as $hv => $hl): ?>
+                        <option value="<?= h($hv) ?>" <?= $slotSource === $hv ? 'selected' : '' ?>><?= h($hl) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="field hero-strip-key-field">
+                      <label class="mini">Page / item</label>
+                      <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][key]">
+                        <?php
+                          $opts = $heroStripKeyOptions[$slotSource] ?? [['value' => '', 'label' => 'Default']];
+                          if ($slotSource === 'announce' && !array_filter($opts, static fn($o) => ($o['value'] ?? '') === 'strip')) {
+                              array_unshift($opts, ['value' => 'strip', 'label' => 'All active strip-only items']);
+                          }
+                          foreach ($opts as $opt):
+                        ?>
+                        <option value="<?= h((string)($opt['value'] ?? '')) ?>" <?= $slotKey === (string)($opt['value'] ?? '') ? 'selected' : '' ?>><?= h((string)($opt['label'] ?? '')) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px">
+                      <button type="button" class="rowdel" style="width:auto;padding:6px 10px;font-size:12px" onclick="removeHeroStripSlot(this)" title="Remove source">×</button>
+                    </div>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+                <button type="button" class="secondary" style="margin-top:8px;padding:4px 10px;font-size:12px"
+                        onclick="addHeroStripSlot('<?= h($screenKey) ?>')">+ Add strip source</button>
+                <div class="help">Combine up to four sources (e.g. Kuma summary + ntfy alert + countdown). Announcements marked <em>strip only</em> are for the hero bar — pick them here or choose “All active strip-only items”.</div>
+                <div class="field strip-height-field">
+                  <label class="mini">Strip height (px)</label>
+                  <input type="number" min="60" max="240" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_height]"
+                         value="<?= !empty($heroCfg['enabled']) ? (int)($heroCfg['height'] ?? 120) : '' ?>" placeholder="120">
+                </div>
+              </div>
+              <div class="field span-2 rotation-section">
+                <span class="mini">Location for this display</span>
+                <div class="help" style="margin:6px 0 10px">Optional override for weather, air, UV, photo, traffic map center, and the weather alert ticker on this kiosk. Leave blank to use the global Weather board (<?= h($globalLoc['place']) ?>).</div>
+                <div class="rotation-subgrid location-subgrid">
+                  <div class="field">
+                    <label class="mini">Place name</label>
+                    <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_place]"
+                           value="<?= h($locationFields['place']) ?>" placeholder="<?= h($globalLoc['place']) ?>">
+                  </div>
+                  <div class="field">
+                    <label class="mini">Latitude</label>
+                    <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lat]"
+                           value="<?= h($locationFields['lat']) ?>" placeholder="<?= h((string)$globalLoc['lat']) ?>">
+                  </div>
+                  <div class="field">
+                    <label class="mini">Longitude</label>
+                    <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lon]"
+                           value="<?= h($locationFields['lon']) ?>" placeholder="<?= h((string)$globalLoc['lon']) ?>">
+                  </div>
+                </div>
+              </div>
+              <div class="field span-2 rotation-section">
+                <span class="mini">Sports teams for this display</span>
+                <div class="help" style="margin:6px 0 10px">Up to four ESPN teams on <code>sports.php</code>. Leave all blank for the site default (<?= h(implode(' · ', array_map(static fn(array $t): string => (string)($t['name'] ?? ''), sports_default_teams()))) ?>).</div>
+                <div class="rotation-subgrid sports-subgrid">
+                  <?php foreach ($sportsSlots as $si => $picked): ?>
+                  <div class="field">
+                    <label class="mini">Team <?= (int)$si + 1 ?></label>
+                    <select name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_team_slots][<?= (int)$si ?>]">
+                      <option value="">— site default —</option>
+                      <?php foreach ($sportsCatalogGroups as $groupLabel => $groupTeams): ?>
+                      <optgroup label="<?= h($groupLabel) ?>">
+                        <?php foreach ($groupTeams as $opt): ?>
+                        <option value="<?= h($opt['key']) ?>" <?= $picked === $opt['key'] ? 'selected' : '' ?>><?= h($opt['label']) ?></option>
+                        <?php endforeach; ?>
+                      </optgroup>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+                <div class="field" style="margin-top:10px">
+                  <label class="mini">Sports board title (optional)</label>
+                  <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_title]"
+                         value="<?= h($sportsTitle) ?>" placeholder="<?= h((string)cfg('sports.TITLE', 'Sports')) ?>">
+                </div>
+                <div class="field" style="margin-top:10px">
+                  <label class="mini">Sports board subtitle (optional)</label>
+                  <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_subtitle]"
+                         value="<?= h($sportsSubtitle) ?>" placeholder="Auto from selected team names when blank">
+                </div>
+              </div>
+            </div>
+          </div>
+          </details>
+
             </div>
           </details>
           <?php endforeach; ?>
@@ -6250,7 +6305,7 @@ function initSlideDeck() {
 }
 
 function initAdminDetailsScrollFix(root) {
-  (root || document).querySelectorAll('details.panel, details.slide-card-edit, details.rotation-playlist-panel').forEach(function (d) {
+  (root || document).querySelectorAll('details.panel, details.slide-card-edit, details.rotation-playlist-panel, details.rotation-display-options-panel, details.rotation-board-picker').forEach(function (d) {
     if (d.dataset.scrollFixBound) return;
     d.dataset.scrollFixBound = '1';
     function preserveScroll() {
@@ -7931,6 +7986,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initKeyedBoardPreviews();
   initRotationDecks();
   initRotationGlobalAdd();
+  initRotationBoardPicker();
   initAdminDetailsScrollFix(document);
   document.addEventListener('click', function (e) {
     if (e.target.closest('[data-entry-sharing-menu], [data-entry-sharing-trigger]')) return;
@@ -7946,18 +8002,57 @@ document.addEventListener('DOMContentLoaded', function () {
       if (menu && !menu.hidden) positionEntrySharingMenu(menu, trigger);
     });
   });
-  document.querySelectorAll('.quick-add-rotation').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const sel = document.getElementById('rotationTargetScreen');
-      const deckId = sel ? sel.value : '';
-      const deck = deckId ? document.getElementById(deckId) : null;
-      if (!deck) return;
-      addRotationPage(deck.id, btn.dataset.url || '', btn.dataset.dwell || '60');
-      const panel = deck.closest('.rotation-playlist-panel');
-      if (panel) panel.open = true;
-    });
-  });
 });
+
+function initRotationBoardPicker() {
+  const search = document.getElementById('rotationBoardSearch');
+  const select = document.getElementById('rotationBoardSelect');
+  const addBtn = document.getElementById('rotationBoardAddBtn');
+  if (!select) return;
+
+  function filterBoardPicker() {
+    const q = (search && search.value || '').trim().toLowerCase();
+    Array.from(select.options).forEach(function (opt) {
+      if (!opt.value) return;
+      const hay = ((opt.textContent || '') + ' ' + (opt.dataset.group || '') + ' ' + opt.value).toLowerCase();
+      opt.hidden = q !== '' && hay.indexOf(q) === -1;
+    });
+    Array.from(select.querySelectorAll('optgroup')).forEach(function (og) {
+      const visible = Array.from(og.querySelectorAll('option')).some(function (o) { return !o.hidden; });
+      og.hidden = !visible;
+    });
+    if (q !== '') {
+      const first = Array.from(select.options).find(function (o) { return o.value && !o.hidden; });
+      if (first) select.value = first.value;
+    }
+  }
+
+  function addSelectedBoard() {
+    const opt = select.options[select.selectedIndex];
+    if (!opt || !opt.value || opt.hidden) return;
+    const sel = document.getElementById('rotationTargetScreen');
+    const deckId = sel ? sel.value : '';
+    const deck = deckId ? document.getElementById(deckId) : null;
+    if (!deck) return;
+    addRotationPage(deck.id, opt.value, opt.dataset.dwell || '60');
+    const panel = deck.closest('.rotation-playlist-panel');
+    if (panel) panel.open = true;
+    const picker = document.getElementById('rotationBoardPickerPanel');
+    if (picker) picker.open = false;
+  }
+
+  if (search) {
+    search.addEventListener('input', filterBoardPicker);
+    search.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addSelectedBoard();
+      }
+    });
+  }
+  if (addBtn) addBtn.addEventListener('click', addSelectedBoard);
+  select.addEventListener('dblclick', addSelectedBoard);
+}
 
 function initRotationGlobalAdd() {
   const sel = document.getElementById('rotationTargetScreen');
