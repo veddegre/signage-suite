@@ -62,6 +62,9 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 $weather = SHOW_WEATHER ? weather_glance_summary($lat, $lon) : null;
 
 $sun = date_sun_info(time(), $lat, $lon);
+$sunriseTs = (int)($sun['sunrise'] ?: 0);
+$sunsetTs = (int)($sun['sunset'] ?: 0);
+$hasSunArc = $sunriseTs > 0 && $sunsetTs > $sunriseTs;
 $synodic = 29.530588853;
 $daysSinceNew = fmod((time() - 947182440) / 86400, $synodic);
 if ($daysSinceNew < 0) {
@@ -167,11 +170,14 @@ $compact = $boardH < 1080;
   .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 34 : 40 ?>px; color:var(--beacon); line-height:1.1; }
   .weather-meta .val small { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); font-weight:500; }
   .weather-empty { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); line-height:1.5; display:flex; align-items:center; justify-content:center; min-height:0; }
-  .suntimes { display:flex; flex-direction:column; }
-  .suntimes-grid { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:<?= $compact ? 14 : 18 ?>px; margin-top:<?= $compact ? 14 : 18 ?>px; align-content:center; }
-  .suntimes .cell .lab { font-size:<?= $compact ? 14 : 15 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
-  .suntimes .cell .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 40 : 48 ?>px; color:var(--beacon); }
-  .suntimes .cell .note { font-size:<?= $compact ? 16 : 17 ?>px; color:var(--mist); margin-top:6px; line-height:1.35; }
+  .suntimes { display:flex; flex-direction:column; min-height:0; }
+  .sun-arc { flex:1; display:flex; flex-direction:column; justify-content:center; min-height:0; margin-top:<?= $compact ? 8 : 12 ?>px; }
+  .sun-arc svg { width:100%; height:auto; flex:1; min-height:<?= $compact ? 72 : 88 ?>px; max-height:<?= $compact ? 120 : 140 ?>px; display:block; }
+  .sun-times { display:flex; justify-content:space-between; gap:12px; font-size:<?= $compact ? 17 : 19 ?>px; color:var(--mist);
+               margin-top:<?= $compact ? 2 : 4 ?>px; font-variant-numeric:tabular-nums; }
+  .sun-times b { color:var(--snow); font-weight:600; }
+  .sun-twilight { display:flex; justify-content:space-between; gap:12px; font-size:<?= $compact ? 14 : 15 ?>px; color:var(--mist);
+                  margin-top:<?= $compact ? 6 : 8 ?>px; line-height:1.3; font-variant-numeric:tabular-nums; }
   .moon { display:flex; flex-direction:column; align-items:center; text-align:center; }
   .moon .k { align-self:flex-start; width:100%; }
   .moon-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:0; width:100%; }
@@ -323,18 +329,27 @@ $compact = $boardH < 1080;
 
     <section class="suntimes">
       <div class="k">Sun</div>
-      <div class="suntimes-grid">
-        <div class="cell">
-          <div class="lab">Sunrise</div>
-          <div class="val"><?= $sun['sunrise'] ? date('g:i A', $sun['sunrise']) : '—' ?></div>
-          <div class="note">Civil twilight <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></div>
+      <?php if ($hasSunArc): ?>
+      <div class="sun-arc">
+        <svg viewBox="0 0 640 170" aria-hidden="true">
+          <line x1="20" y1="150" x2="620" y2="150" stroke="var(--hairline)" stroke-width="2"/>
+          <path d="M 60 150 A 260 130 0 0 1 580 150"
+                fill="none" stroke="var(--hairline)" stroke-width="3" stroke-dasharray="2 8"/>
+          <path id="sunTrail" d="" fill="none" stroke="var(--beacon)" stroke-width="3"/>
+          <circle id="sunDot" cx="60" cy="150" r="11" fill="var(--beacon)"/>
+        </svg>
+        <div class="sun-times">
+          <span>Sunrise <b><?= date('g:i A', $sunriseTs) ?></b></span>
+          <span>Sunset <b><?= date('g:i A', $sunsetTs) ?></b></span>
         </div>
-        <div class="cell">
-          <div class="lab">Sunset</div>
-          <div class="val"><?= $sun['sunset'] ? date('g:i A', $sun['sunset']) : '—' ?></div>
-          <div class="note">Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></div>
+        <div class="sun-twilight">
+          <span>Civil <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></span>
+          <span>Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></span>
         </div>
       </div>
+      <?php else: ?>
+      <div class="sun-twilight" style="margin-top:18px;font-size:18px">Sun times unavailable for this location.</div>
+      <?php endif; ?>
     </section>
 
     <section class="moon">
@@ -379,6 +394,30 @@ $compact = $boardH < 1080;
     document.getElementById('clock').innerHTML = h + ':' + String(n.getMinutes()).padStart(2, '0') + '<span> ' + ap + '</span>';
   }
   tick(); setInterval(tick, 1000);
+  <?php endif; ?>
+  <?php if ($hasSunArc): ?>
+  (function () {
+    const SUNRISE = <?= $sunriseTs ?> * 1000;
+    const SUNSET = <?= $sunsetTs ?> * 1000;
+    function placeSun() {
+      const t = Math.min(1, Math.max(0, (Date.now() - SUNRISE) / (SUNSET - SUNRISE)));
+      const a = Math.PI * (1 - t);
+      const x = 320 + 260 * Math.cos(a);
+      const y = 150 - 130 * Math.sin(a);
+      const dot = document.getElementById('sunDot');
+      const trail = document.getElementById('sunTrail');
+      if (!dot || !trail) return;
+      dot.setAttribute('cx', x.toFixed(1));
+      dot.setAttribute('cy', y.toFixed(1));
+      if (t > 0.01) {
+        trail.setAttribute('d', 'M 60 150 A 260 130 0 0 1 ' + x.toFixed(1) + ' ' + y.toFixed(1));
+      }
+      const night = Date.now() < SUNRISE || Date.now() > SUNSET;
+      dot.setAttribute('opacity', night ? '0.25' : '1');
+    }
+    placeSun();
+    setInterval(placeSun, 60000);
+  })();
   <?php endif; ?>
   setTimeout(function () { location.reload(); }, <?= (int)RELOAD_SEC ?> * 1000);
 </script>
