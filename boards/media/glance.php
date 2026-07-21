@@ -113,7 +113,7 @@ $compact = $boardH < 1080;
                   letter-spacing:2px; text-transform:uppercase; color:var(--beacon); margin-top:10px; }
   .board-sub { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); margin-top:4px; }
 
-  .agenda { grid-area:agenda; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+  .agenda { grid-area:agenda; height:100%; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
             padding:<?= $compact ? 28 : 38 ?>px <?= $compact ? 32 : 42 ?>px; min-height:0; overflow:hidden;
             display:flex; flex-direction:column; }
   .agenda > .k { font-size:<?= $compact ? 18 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);
@@ -137,29 +137,37 @@ $compact = $boardH < 1080;
   .tomorrow .tev { padding:7px 0; border-bottom:none; }
   .tomorrow .tev .s { font-size:<?= $compact ? 20 : 22 ?>px; }
 
-  .sky { grid-area:sky; display:flex; flex-direction:column; gap:<?= $compact ? 14 : 18 ?>px; min-height:0; }
+  .sky { grid-area:sky; height:100%; min-height:0; display:grid; gap:<?= $compact ? 14 : 18 ?>px;
+         grid-template-columns:1fr 1fr; grid-template-rows:minmax(0,1.15fr) minmax(0,1fr); }
+  .sky.no-weather { grid-template-rows:minmax(0,1fr); }
   .weather, .moon, .suntimes { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-                      padding:<?= $compact ? 22 : 28 ?>px; }
+                      padding:<?= $compact ? 22 : 28 ?>px; min-height:0; overflow:hidden; }
+  .weather { grid-column:1 / -1; display:flex; flex-direction:column; }
   .weather .k, .moon .k, .suntimes .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .weather .place { font-size:17px; color:var(--mist); margin-top:4px; }
-  .weather-main { display:flex; align-items:center; gap:16px; margin-top:14px; }
-  .weather-main img { width:<?= $compact ? 72 : 84 ?>px; height:<?= $compact ? 72 : 84 ?>px; }
-  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 64 : 72 ?>px; line-height:1; }
-  .weather-desc { font-size:<?= $compact ? 22 : 24 ?>px; color:var(--snow); margin-top:4px; text-transform:capitalize; }
-  .weather-meta { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin-top:16px; }
-  .weather-meta .lab { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
-  .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px; color:var(--beacon); }
-  .weather-meta .val small { font-size:18px; color:var(--mist); font-weight:500; }
-  .weather-empty { font-size:18px; color:var(--mist); line-height:1.5; margin-top:12px; }
-  .moon { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
-  .moon .k { align-self:flex-start; }
-  .moon svg { width:<?= $compact ? 160 : 200 ?>px; height:<?= $compact ? 160 : 200 ?>px; margin:<?= $compact ? 10 : 16 ?>px 0 8px; }
-  .moon .name { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 40 : 46 ?>px; }
-  .moon .pct { font-size:20px; color:var(--mist); margin-top:4px; }
-  .suntimes { display:grid; grid-template-columns:1fr 1fr; gap:14px 18px; }
-  .suntimes .cell .lab { font-size:15px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
-  .suntimes .cell .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 36 : 42 ?>px; color:var(--beacon); }
-  .suntimes .cell .note { font-size:17px; color:var(--mist); margin-top:4px; }
+  .weather-head { display:flex; align-items:baseline; justify-content:space-between; gap:16px; }
+  .weather .place { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); letter-spacing:1px; }
+  .weather-body { flex:1; display:flex; align-items:center; gap:<?= $compact ? 24 : 36 ?>px; min-height:0; margin-top:<?= $compact ? 12 : 16 ?>px; }
+  .weather-main { display:flex; align-items:center; gap:<?= $compact ? 16 : 20 ?>px; flex-shrink:0; }
+  .weather-main img { width:<?= $compact ? 96 : 120 ?>px; height:<?= $compact ? 96 : 120 ?>px; }
+  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 88 : 104 ?>px; line-height:1; }
+  .weather-desc { font-size:<?= $compact ? 24 : 28 ?>px; color:var(--snow); margin-top:6px; text-transform:capitalize; }
+  .weather-meta { flex:1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:<?= $compact ? 12 : 16 ?>px; align-self:stretch; }
+  .weather-meta.cols-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .weather-meta .lab { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
+  .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 32 : 38 ?>px; color:var(--beacon); line-height:1.1; }
+  .weather-meta .val small { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); font-weight:500; }
+  .weather-empty { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); line-height:1.5; margin-top:auto; }
+  .suntimes { display:flex; flex-direction:column; }
+  .suntimes-grid { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:<?= $compact ? 14 : 18 ?>px; margin-top:<?= $compact ? 14 : 18 ?>px; align-content:center; }
+  .suntimes .cell .lab { font-size:<?= $compact ? 14 : 15 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
+  .suntimes .cell .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 40 : 48 ?>px; color:var(--beacon); }
+  .suntimes .cell .note { font-size:<?= $compact ? 16 : 17 ?>px; color:var(--mist); margin-top:6px; line-height:1.35; }
+  .moon { display:flex; flex-direction:column; align-items:center; text-align:center; }
+  .moon .k { align-self:flex-start; width:100%; }
+  .moon-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:0; width:100%; }
+  .moon svg { width:min(100%, <?= $compact ? 200 : 260 ?>px); height:auto; aspect-ratio:1; margin:<?= $compact ? 8 : 12 ?>px 0; }
+  .moon .name { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 36 : 44 ?>px; }
+  .moon .pct { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); margin-top:4px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>
@@ -218,38 +226,42 @@ $compact = $boardH < 1080;
     <?php endif; ?>
   </section>
 
-  <div class="sky">
+  <div class="sky<?= SHOW_WEATHER ? '' : ' no-weather' ?>">
     <?php if (SHOW_WEATHER): ?>
     <section class="weather">
-      <div class="k">Weather</div>
-      <?php if ($weather): ?>
-      <div class="place"><?= h($LOC['place'] ?? 'Local') ?></div>
-      <div class="weather-main">
-        <img src="<?= h(weather_icon_url($weather['icon'], 2)) ?>" alt="">
-        <div>
-          <div class="weather-temp"><?= (int)$weather['temp'] ?>°</div>
-          <div class="weather-desc"><?= h($weather['desc']) ?></div>
-        </div>
+      <div class="weather-head">
+        <div class="k">Weather</div>
+        <div class="place"><?= h($LOC['place'] ?? 'Local') ?></div>
       </div>
-      <div class="weather-meta">
-        <div>
-          <div class="lab">Today</div>
-          <div class="val"><?= $weather['hi'] !== null ? 'Hi ' . (int)$weather['hi'] . '°' : '—' ?><?= $weather['lo'] !== null ? ' · Lo ' . (int)$weather['lo'] . '°' : '' ?></div>
+      <?php if ($weather): ?>
+      <div class="weather-body">
+        <div class="weather-main">
+          <img src="<?= h(weather_icon_url($weather['icon'], 2)) ?>" alt="">
+          <div>
+            <div class="weather-temp"><?= (int)$weather['temp'] ?>°</div>
+            <div class="weather-desc"><?= h($weather['desc']) ?></div>
+          </div>
         </div>
-        <div>
-          <div class="lab">Precip chance</div>
-          <div class="val"><?= $weather['pop'] !== null ? (int)$weather['pop'] . '%' : '—' ?></div>
+        <div class="weather-meta<?= $weather['tomorrow_hi'] !== null ? '' : ' cols-3' ?>">
+          <div>
+            <div class="lab">Today</div>
+            <div class="val"><?= $weather['hi'] !== null ? 'Hi ' . (int)$weather['hi'] . '°' : '—' ?><?= $weather['lo'] !== null ? ' · Lo ' . (int)$weather['lo'] . '°' : '' ?></div>
+          </div>
+          <div>
+            <div class="lab">Precip chance</div>
+            <div class="val"><?= $weather['pop'] !== null ? (int)$weather['pop'] . '%' : '—' ?></div>
+          </div>
+          <div>
+            <div class="lab">Wind</div>
+            <div class="val"><?= (int)$weather['wind_mph'] ?> <small><?= h($weather['wind_dir']) ?></small></div>
+          </div>
+          <?php if ($weather['tomorrow_hi'] !== null): ?>
+          <div>
+            <div class="lab">Tomorrow</div>
+            <div class="val"><?= (int)$weather['tomorrow_hi'] ?>°<?= $weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0 ? ' · ' . (int)$weather['tomorrow_pop'] . '% precip' : '' ?></div>
+          </div>
+          <?php endif; ?>
         </div>
-        <div>
-          <div class="lab">Wind</div>
-          <div class="val"><?= (int)$weather['wind_mph'] ?> <small><?= h($weather['wind_dir']) ?></small></div>
-        </div>
-        <?php if ($weather['tomorrow_hi'] !== null): ?>
-        <div>
-          <div class="lab">Tomorrow</div>
-          <div class="val"><?= (int)$weather['tomorrow_hi'] ?>°<?= $weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0 ? ' · ' . (int)$weather['tomorrow_pop'] . '% precip' : '' ?></div>
-        </div>
-        <?php endif; ?>
       </div>
       <?php else: ?>
       <div class="weather-empty">Set your OpenWeatherMap key on the <strong>Weather</strong> board to show conditions here.</div>
@@ -258,38 +270,42 @@ $compact = $boardH < 1080;
     <?php endif; ?>
 
     <section class="suntimes">
-      <div class="k" style="grid-column:1/-1">Sun</div>
-      <div class="cell">
-        <div class="lab">Sunrise</div>
-        <div class="val"><?= $sun['sunrise'] ? date('g:i A', $sun['sunrise']) : '—' ?></div>
-        <div class="note">Civil twilight <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></div>
-      </div>
-      <div class="cell">
-        <div class="lab">Sunset</div>
-        <div class="val"><?= $sun['sunset'] ? date('g:i A', $sun['sunset']) : '—' ?></div>
-        <div class="note">Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></div>
+      <div class="k">Sun</div>
+      <div class="suntimes-grid">
+        <div class="cell">
+          <div class="lab">Sunrise</div>
+          <div class="val"><?= $sun['sunrise'] ? date('g:i A', $sun['sunrise']) : '—' ?></div>
+          <div class="note">Civil twilight <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></div>
+        </div>
+        <div class="cell">
+          <div class="lab">Sunset</div>
+          <div class="val"><?= $sun['sunset'] ? date('g:i A', $sun['sunset']) : '—' ?></div>
+          <div class="note">Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></div>
+        </div>
       </div>
     </section>
 
     <section class="moon">
       <div class="k">Moon</div>
-      <svg viewBox="0 0 100 100" aria-hidden="true">
-        <?php
-          $r = 46;
-          $k = cos(2 * M_PI * $phaseFrac);
-          $waxing = $phaseFrac < 0.5;
-          $lit = 'var(--snow)';
-          $dark = '#1b2840';
-        ?>
-        <circle cx="50" cy="50" r="<?= $r ?>" fill="<?= $dark ?>"/>
-        <path d="M 50 4
-                 A <?= $r ?> <?= $r ?> 0 0 <?= $waxing ? 1 : 0 ?> 50 96
-                 A <?= abs($k) * $r ?> <?= $r ?> 0 0 <?= ($k < 0 ? ($waxing ? 1 : 0) : ($waxing ? 0 : 1)) ?> 50 4 Z"
-              fill="<?= $lit ?>"/>
-        <circle cx="50" cy="50" r="<?= $r ?>" fill="none" stroke="var(--hairline)" stroke-width="1.5"/>
-      </svg>
-      <div class="name"><?= h($phaseName) ?></div>
-      <div class="pct"><?= (int)round($illum * 100) ?>% illuminated</div>
+      <div class="moon-body">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <?php
+            $r = 46;
+            $k = cos(2 * M_PI * $phaseFrac);
+            $waxing = $phaseFrac < 0.5;
+            $lit = 'var(--snow)';
+            $dark = '#1b2840';
+          ?>
+          <circle cx="50" cy="50" r="<?= $r ?>" fill="<?= $dark ?>"/>
+          <path d="M 50 4
+                   A <?= $r ?> <?= $r ?> 0 0 <?= $waxing ? 1 : 0 ?> 50 96
+                   A <?= abs($k) * $r ?> <?= $r ?> 0 0 <?= ($k < 0 ? ($waxing ? 1 : 0) : ($waxing ? 0 : 1)) ?> 50 4 Z"
+                fill="<?= $lit ?>"/>
+          <circle cx="50" cy="50" r="<?= $r ?>" fill="none" stroke="var(--hairline)" stroke-width="1.5"/>
+        </svg>
+        <div class="name"><?= h($phaseName) ?></div>
+        <div class="pct"><?= (int)round($illum * 100) ?>% illuminated</div>
+      </div>
     </section>
   </div>
 
