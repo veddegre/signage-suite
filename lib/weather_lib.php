@@ -158,14 +158,31 @@ function weather_glance_summary(float $lat, float $lon): ?array
     $today = $outlook[0] ?? null;
     $tomorrow = $outlook[1] ?? null;
 
+    $curTemp = (int)round((float)$current['main']['temp']);
+    $hi = $today ? (int)$today['max'] : null;
+    $lo = $today ? (int)$today['min'] : null;
+    if ($hi !== null) {
+        $hi = max($hi, $curTemp);
+    }
+    if ($lo !== null) {
+        $lo = min($lo, $curTemp);
+    }
+    if (isset($current['main']['temp_max'])) {
+        $hi = max($hi ?? $curTemp, (int)round((float)$current['main']['temp_max']));
+    }
+    if (isset($current['main']['temp_min'])) {
+        $lo = min($lo ?? $curTemp, (int)round((float)$current['main']['temp_min']));
+    }
+
     return [
-        'temp' => (int)round((float)$current['main']['temp']),
+        'temp' => $curTemp,
         'feels' => (int)round((float)$current['main']['feels_like']),
         'desc' => ucfirst((string)($current['weather'][0]['description'] ?? '—')),
         'icon' => (string)($current['weather'][0]['icon'] ?? '01d'),
-        'hi' => $today ? (int)$today['max'] : null,
-        'lo' => $today ? (int)$today['min'] : null,
+        'hi' => $hi,
+        'lo' => $lo,
         'pop' => $today ? (int)$today['pop'] : null,
+        'humidity' => (int)($current['main']['humidity'] ?? 0),
         'wind_mph' => (int)round((float)($current['wind']['speed'] ?? 0)),
         'wind_dir' => weather_compass((float)($current['wind']['deg'] ?? 0)),
         'tomorrow_label' => $tomorrow ? ($tomorrow['label'] . ' ' . $tomorrow['date']) : '',

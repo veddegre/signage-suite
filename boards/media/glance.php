@@ -155,11 +155,17 @@ $compact = $boardH < 1080;
   .weather-meta { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:<?= $compact ? 10 : 12 ?>px; min-height:0; }
   .weather-stat { background:rgba(12,20,34,.55); border:1px solid rgba(38,52,77,.85); border-radius:12px;
                   padding:<?= $compact ? 14 : 18 ?>px <?= $compact ? 16 : 22 ?>px; display:flex; flex-direction:column;
-                  justify-content:center; min-height:0; }
-  .weather-meta .lab { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:<?= $compact ? 6 : 8 ?>px; }
+                  justify-content:space-between; min-height:0; }
+  .weather-meta .lab { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
+  .stat-body { flex:1; display:flex; flex-direction:column; justify-content:space-evenly; min-height:0; margin-top:<?= $compact ? 8 : 10 ?>px; }
+  .stat-row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .stat-row .stat-k { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mist); }
+  .stat-row .stat-v { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 36 : 42 ?>px; color:var(--beacon); line-height:1; }
+  .stat-row .stat-v small { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); font-weight:500; }
+  .stat-solo { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 52 : 60 ?>px; color:var(--beacon); line-height:1; }
+  .weather-meta .sub { font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); margin-top:<?= $compact ? 4 : 6 ?>px; }
   .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 34 : 40 ?>px; color:var(--beacon); line-height:1.1; }
   .weather-meta .val small { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); font-weight:500; }
-  .weather-meta .sub { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); margin-top:4px; }
   .weather-empty { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); line-height:1.5; display:flex; align-items:center; justify-content:center; min-height:0; }
   .suntimes { display:flex; flex-direction:column; }
   .suntimes-grid { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:<?= $compact ? 14 : 18 ?>px; margin-top:<?= $compact ? 14 : 18 ?>px; align-content:center; }
@@ -250,37 +256,61 @@ $compact = $boardH < 1080;
         <div class="weather-meta">
           <div class="weather-stat">
             <div class="lab">Today</div>
-            <div class="val"><?php
-              if ($weather['hi'] !== null && $weather['lo'] !== null && (int)$weather['hi'] === (int)$weather['lo']) {
-                  echo (int)$weather['hi'] . '°';
-              } elseif ($weather['hi'] !== null || $weather['lo'] !== null) {
-                  echo ($weather['hi'] !== null ? (int)$weather['hi'] . '°' : '—')
-                     . ($weather['lo'] !== null ? ' / ' . (int)$weather['lo'] . '°' : '');
-              } else {
-                  echo '—';
-              }
-            ?></div>
+            <div class="stat-body">
+              <div class="stat-row">
+                <span class="stat-k">Hi</span>
+                <span class="stat-v"><?= $weather['hi'] !== null ? (int)$weather['hi'] . '°' : '—' ?></span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-k">Lo</span>
+                <span class="stat-v"><?= $weather['lo'] !== null ? (int)$weather['lo'] . '°' : '—' ?></span>
+              </div>
+            </div>
           </div>
           <div class="weather-stat">
             <div class="lab">Precip chance</div>
-            <div class="val"><?= $weather['pop'] !== null ? (int)$weather['pop'] . '%' : '—' ?></div>
+            <div class="stat-body">
+              <div class="stat-solo"><?= $weather['pop'] !== null ? (int)$weather['pop'] . '%' : '—' ?></div>
+              <div class="sub"><?= $weather['humidity'] > 0 ? 'Humidity ' . (int)$weather['humidity'] . '%' : 'Today outlook' ?></div>
+            </div>
           </div>
           <div class="weather-stat">
             <div class="lab">Wind</div>
-            <div class="val"><?= (int)$weather['wind_mph'] ?> <small>mph <?= h($weather['wind_dir']) ?></small></div>
+            <div class="stat-body">
+              <div class="stat-row">
+                <span class="stat-k">Speed</span>
+                <span class="stat-v"><?= (int)$weather['wind_mph'] ?> <small>mph</small></span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-k">From</span>
+                <span class="stat-v"><?= h($weather['wind_dir']) ?></span>
+              </div>
+            </div>
           </div>
           <?php if ($weather['tomorrow_hi'] !== null): ?>
           <div class="weather-stat">
             <div class="lab">Tomorrow</div>
-            <div class="val"><?= (int)$weather['tomorrow_hi'] ?>°<?= $weather['tomorrow_lo'] !== null ? ' / ' . (int)$weather['tomorrow_lo'] . '°' : '' ?></div>
-            <?php if ($weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0): ?>
-            <div class="sub"><?= (int)$weather['tomorrow_pop'] ?>% precip</div>
-            <?php endif; ?>
+            <div class="stat-body">
+              <div class="stat-row">
+                <span class="stat-k">Hi</span>
+                <span class="stat-v"><?= (int)$weather['tomorrow_hi'] ?>°</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-k">Lo</span>
+                <span class="stat-v"><?= $weather['tomorrow_lo'] !== null ? (int)$weather['tomorrow_lo'] . '°' : '—' ?></span>
+              </div>
+              <?php if ($weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0): ?>
+              <div class="sub"><?= (int)$weather['tomorrow_pop'] ?>% precip</div>
+              <?php endif; ?>
+            </div>
           </div>
           <?php else: ?>
           <div class="weather-stat">
-            <div class="lab">Feels like</div>
-            <div class="val"><?= (int)$weather['feels'] ?>°</div>
+            <div class="lab">Humidity</div>
+            <div class="stat-body">
+              <div class="stat-solo"><?= (int)$weather['humidity'] ?>%</div>
+              <div class="sub">Right now</div>
+            </div>
           </div>
           <?php endif; ?>
         </div>
