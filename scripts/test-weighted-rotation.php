@@ -111,6 +111,51 @@ if ($counts[0] / $trials < 0.75) {
 }
 echo "Weighted checks: OK\n";
 
+// ── Shuffle deck (in-window pages only, no repeat before cycle completes) ─────
+function test_shuffle_next(array &$deck, int &$pos, string &$fp, array $eligible, int $lastShown): int
+{
+    $newFp = implode(',', $eligible);
+    if ($fp !== $newFp || $pos >= count($deck)) {
+        $deck = $eligible;
+        $n = count($deck);
+        for ($i = $n - 1; $i > 0; $i--) {
+            $j = random_int(0, $i);
+            [$deck[$i], $deck[$j]] = [$deck[$j], $deck[$i]];
+        }
+        if ($n > 1 && $deck[0] === $lastShown) {
+            [$deck[0], $deck[$n - 1]] = [$deck[$n - 1], $deck[0]];
+        }
+        $pos = 0;
+        $fp = $newFp;
+    }
+    return $deck[$pos++];
+}
+
+$pages = 10;
+$inWindow = static fn(int $i): bool => $i % 2 === 0;
+$failShuffle = 0;
+for ($trial = 0; $trial < 3000; $trial++) {
+    $eligible = array_values(array_filter(range(0, $pages - 1), $inWindow));
+    $deck = [];
+    $pos = 0;
+    $fp = '';
+    $last = -1;
+    $seen = [];
+    foreach ($eligible as $_) {
+        $last = test_shuffle_next($deck, $pos, $fp, $eligible, $last);
+        if (isset($seen[$last])) {
+            $failShuffle++;
+            break 2;
+        }
+        $seen[$last] = true;
+    }
+}
+if ($failShuffle > 0) {
+    fwrite(STDERR, "FAIL: shuffle deck repeated before full cycle\n");
+    exit(1);
+}
+echo "Shuffle deck checks: OK\n";
+
 // ── Deploy sync must preserve weight/from/to/off ──────────────────────────────
 $prev = ['url' => 'slides.php?slide=a.png', 'dwell' => 30, 'weight' => 20, 'from' => 8, 'to' => 18, 'off' => true];
 $merged = rotation_merge_page_meta(['url' => 'slides.php?slide=a.png', 'dwell' => 45], $prev);

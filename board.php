@@ -143,7 +143,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const SETTLE  = <?= (int)$runtime['settle_ms'] ?>;
   const HANG    = <?= (int)$runtime['hang_ms'] ?>;
   const FADE    = <?= (int)$runtime['fade_ms'] ?>;
-  const SHUFFLE = <?= json_encode((bool)$runtime['shuffle']) ?>;
+  const SHUFFLE = <?= json_encode((bool)$runtime['shuffle'] && !(bool)$runtime['weighted']) ?>;
   const WEIGHTED = <?= json_encode((bool)$runtime['weighted']) ?>;
   const ROTATION_TZ = <?= json_encode($runtime['timezone']) ?>;
   const SHOW_CLOCK = <?= json_encode((bool)$runtime['show_clock']) ?>;
@@ -356,21 +356,54 @@ if (($_GET['api'] ?? '') === 'presence') {
     return pool[pool.length - 1].i;
   }
 
-  // Play order: weighted random, shuffled deck, or sequential list.
+  // Play order: weighted random, shuffled deck (in-window pages only), or sequential list.
   let order = PAGES.map((_, i) => i), pos = -1;
-  function reshuffle(lastShown) {
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    if (order.length > 1 && order[0] === lastShown) {
-      [order[0], order[order.length - 1]] = [order[order.length - 1], order[0]];
-    }
+  let shuffleDeck = [];
+  let shufflePos = 0;
+  let shuffleEligibleKey = '';
+
+  function shuffleEligibleIndices() {
+    const eligible = pagesInWindow();
+    return eligible.length ? eligible : order.slice();
   }
+
+  function shuffleEligibleFingerprint() {
+    return shuffleEligibleIndices().join(',');
+  }
+
+  function rebuildShuffleDeck(lastShown) {
+    shuffleDeck = shuffleEligibleIndices();
+    if (shuffleDeck.length === 0) {
+      shufflePos = 0;
+      return;
+    }
+    for (let i = shuffleDeck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffleDeck[i], shuffleDeck[j]] = [shuffleDeck[j], shuffleDeck[i]];
+    }
+    if (shuffleDeck.length > 1 && shuffleDeck[0] === lastShown) {
+      const last = shuffleDeck.length - 1;
+      [shuffleDeck[0], shuffleDeck[last]] = [shuffleDeck[last], shuffleDeck[0]];
+    }
+    shufflePos = 0;
+    shuffleEligibleKey = shuffleEligibleFingerprint();
+  }
+
+  function nextShufflePage() {
+    const fp = shuffleEligibleFingerprint();
+    if (fp !== shuffleEligibleKey || shufflePos >= shuffleDeck.length) {
+      rebuildShuffleDeck(idx);
+    }
+    if (!shuffleDeck.length) {
+      return 0;
+    }
+    return shuffleDeck[shufflePos++];
+  }
+
   if (WEIGHTED) {
     pos = -1;
   } else if (SHUFFLE) {
-    reshuffle(-1);
+    rebuildShuffleDeck(-1);
     pos = -1;
   } else if (order.length > 1) {
     // Sequential mode: random starting slot so kiosks don't all boot on playlist item 1.
@@ -381,16 +414,19 @@ if (($_GET['api'] ?? '') === 'presence') {
     if (WEIGHTED) {
       return pickWeightedPage(idx);
     }
+    if (SHUFFLE) {
+      return nextShufflePage();
+    }
     for (let n = 0; n < order.length; n++) {
       pos++;
       if (pos >= order.length) {
-        if (SHUFFLE) reshuffle(idx);
         pos = 0;
       }
       const cand = order[pos];
       if (inWindow(PAGES[cand])) return cand;
     }
-    return order[0] ?? 0;
+    const fallback = shuffleEligibleIndices();
+    return fallback.length ? fallback[0] : (order[0] ?? 0);
   }
 
   if (PAGES.length === 0 && !blankActive) {
@@ -429,6 +465,7 @@ if (($_GET['api'] ?? '') === 'presence') {
         document.getElementById('empty').style.display = 'flex';
         sendPresence('empty');
       } else {
+        if (SHUFFLE) rebuildShuffleDeck(-1);
         rotate();
       }
     }

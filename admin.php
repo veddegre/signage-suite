@@ -2324,9 +2324,8 @@ function admin_rotation_kiosk_settings_panel(
     $globalLoc = rotation_global_location();
     $hints = [];
     if (!empty($screenSettings['weighted'])) {
-        $hints[] = 'Random picks by weight';
-    }
-    if (!empty($screenSettings['shuffle'])) {
+        $hints[] = 'Random picks by weight (overrides shuffle)';
+    } elseif (!empty($screenSettings['shuffle'])) {
         $hints[] = 'Shuffled each cycle';
     } else {
         $hints[] = 'Plays in order';
@@ -4226,8 +4225,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <span class="pill rotation-wall-offline" title="<?= h($wallNowTitle) ?>">Offline</span>
               <?php endif; ?>
               <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
-              <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
-              <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok" title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</span><?php endif; ?>
+              <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok" title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</span><?php elseif ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
               <?php if ($screenSettings['show_debug']): ?><span class="pill">Debug</span><?php endif; ?>
               <?php if (!empty($screenSettings['keyboard_nav'])): ?><span class="pill">Keys</span><?php endif; ?>
               <?php if (!$screenSettings['show_ticker']): ?><span class="pill warn">No ticker</span><?php endif; ?>
