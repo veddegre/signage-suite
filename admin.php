@@ -2308,14 +2308,18 @@ function admin_rotation_kiosk_settings_panel(
     $hintSummary = implode(' · ', $hints);
     ?>
 <div class="rotation-display-options-wrap" data-display-options-screen="<?= h($screenKey) ?>"<?= $visible ? '' : ' hidden' ?>>
-  <details class="rotation-display-options-panel">
-    <summary>
-      <span>Kiosk settings</span>
+  <div class="rotation-display-options">
+    <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
+    <?php if (count(rotation_screens()) > 1): ?>
+    <div class="rotation-kiosk-settings-head">
+      <strong><?= h(rotation_screen_display_name($screenKey, rotation_screens())) ?></strong>
+      <code><?= h($screenKey) ?></code>
       <span class="help"><?= h($hintSummary) ?></span>
-    </summary>
-    <div class="rotation-display-options">
-      <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
-      <div class="help" style="margin-bottom:10px">Applies to the whole TV running <code>board.php?screen=<?= h($screenKey) ?></code> — not to individual playlist pages. Controls how pages rotate, the persistent bottom bar, optional hero status bar, and per-display weather/sports overrides.</div>
+    </div>
+    <?php elseif ($hintSummary !== ''): ?>
+    <p class="help rotation-kiosk-summary"><?= h($hintSummary) ?></p>
+    <?php endif; ?>
+    <div class="help" style="margin-bottom:10px">Applies to the whole TV running <code>board.php?screen=<?= h($screenKey) ?></code> — not to individual playlist pages. Controls how pages rotate, the persistent bottom bar, optional hero status bar, and per-display weather/sports overrides.</div>
       <div class="field-grid rotation-options-grid">
         <div class="field span-2 rotation-section" style="border-top:0;padding-top:0;margin-top:0">
           <span class="mini">Rotation behavior</span>
@@ -2508,8 +2512,7 @@ function admin_rotation_kiosk_settings_panel(
           </div>
         </div>
       </div>
-    </div>
-  </details>
+  </div>
 </div>
     <?php
 }
@@ -2969,8 +2972,11 @@ function admin_field(array $f, $val, string $board): void
   .quick-add-bar { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 4px; align-items:center; }
   .quick-add-bar .group-label { font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--mist); margin-right:4px; }
   .rotation-board-picker { margin-top:8px; border-top:1px solid var(--hairline); padding-top:12px; }
-  .rotation-display-options-wrap { margin-top:12px; border-top:1px solid var(--hairline); padding-top:12px; }
   .rotation-display-options-wrap[hidden] { display:none !important; }
+  .rotation-kiosk-settings-head { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:baseline; margin-bottom:10px; }
+  .rotation-kiosk-settings-head strong { font-size:15px; }
+  .rotation-kiosk-settings-head .help { margin:0; flex:1; min-width:200px; }
+  .rotation-kiosk-summary { margin:0 0 10px; }
   .rotation-board-picker > summary { cursor:pointer; color:var(--beacon); font-size:14px; font-weight:600; padding:4px 0; list-style:none; }
   .rotation-board-picker > summary::-webkit-details-marker { display:none; }
   .rotation-board-picker-body { margin-top:10px; display:flex; flex-direction:column; gap:10px; }
@@ -2993,11 +2999,6 @@ function admin_field(array $f, $val, string $board): void
     color:var(--snow); border:1px solid var(--line); border-radius:8px; }
   .rotation-playlist-panel.rotation-playlist-active > summary { background:rgba(255,179,71,.08); }
   .rotation-playlist-empty { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
-  .rotation-display-options-panel { margin-top:18px; border:1px solid var(--line); border-radius:10px; background:var(--harbor); overflow:hidden; }
-  .rotation-display-options-panel > summary { cursor:pointer; padding:12px 14px; list-style:none; display:flex; flex-wrap:wrap; gap:8px; align-items:center; color:var(--snow); font-weight:600; }
-  .rotation-display-options-panel > summary::-webkit-details-marker { display:none; }
-  .rotation-display-options-panel > summary .help { margin:0; font-weight:400; flex:1; min-width:200px; }
-  .rotation-display-options-panel .rotation-display-options { margin:0; border:0; border-radius:0; border-top:1px solid var(--line); }
   @media (max-width: 900px) { .video-card-grid, .rotation-card-grid, .rotation-card-grid.cols-4 { grid-template-columns:1fr; } }
   .inline-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
   .video-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-top:14px; }
@@ -6464,7 +6465,7 @@ function initSlideDeck() {
 }
 
 function initAdminDetailsScrollFix(root) {
-  (root || document).querySelectorAll('details.panel, details.slide-card-edit, details.rotation-playlist-panel, details.rotation-display-options-panel, details.rotation-board-picker').forEach(function (d) {
+  (root || document).querySelectorAll('details.panel, details.slide-card-edit, details.rotation-playlist-panel, details.rotation-board-picker').forEach(function (d) {
     if (d.dataset.scrollFixBound) return;
     d.dataset.scrollFixBound = '1';
     function preserveScroll() {
