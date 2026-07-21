@@ -178,18 +178,3 @@ function lake_buoy_skip_rotation(?string $station = null): bool
 {
     return lake_buoy_status($station)['skip_rotation'];
 }
-
-/** Whether a rotation playlist URL targets lake.php. */
-function rotation_page_url_is_lake(string $url): bool
-{
-    $url = trim($url);
-    if ($url === '' || strcasecmp($url, 'lake.php') === 0) {
-        return true;
-    }
-    if (preg_match('~^lake\.php(?:[?#]|$)~i', $url) === 1) {
-        return true;
-    }
-    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
-
-    return preg_match('~(?:^|/)lake\.php$~i', $path) === 1;
-}

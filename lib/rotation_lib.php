@@ -1151,15 +1151,99 @@ function rotation_screen_kiosk_url(string $screen = 'main'): string
     return 'board.php?screen=' . rawurlencode($screen);
 }
 
+/** Whether a rotation playlist URL targets lake.php. */
+function rotation_page_url_is_lake(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || strcasecmp($url, 'lake.php') === 0) {
+        return true;
+    }
+    if (preg_match('~^lake\.php(?:[?#]|$)~i', $url) === 1) {
+        return true;
+    }
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+
+    return preg_match('~(?:^|/)lake\.php$~i', $path) === 1;
+}
+
+/** Whether a rotation playlist URL targets sports.php. */
+function rotation_page_url_is_sports(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || strcasecmp($url, 'sports.php') === 0) {
+        return true;
+    }
+    if (preg_match('~^sports\.php(?:[?#]|$)~i', $url) === 1) {
+        return true;
+    }
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+
+    return preg_match('~(?:^|/)sports\.php$~i', $path) === 1;
+}
+
+/** Whether a rotation playlist URL targets webcam.php. */
+function rotation_page_url_is_webcam(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || strcasecmp($url, 'webcam.php') === 0) {
+        return true;
+    }
+    if (preg_match('~^webcam\.php(?:[?#]|$)~i', $url) === 1) {
+        return true;
+    }
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+
+    return preg_match('~(?:^|/)webcam\.php$~i', $path) === 1;
+}
+
+/** Whether a playlist URL is omitted from rotation for seasonal/offline auto-skip (lake, sports, webcam). */
+function rotation_page_seasonal_skip(string $url, string $screen = 'main'): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+    if (rotation_page_url_is_lake($url)) {
+        $lib = __DIR__ . '/lake_lib.php';
+        if (!is_file($lib)) {
+            return false;
+        }
+        require_once $lib;
+
+        return lake_buoy_skip_rotation();
+    }
+    if (rotation_page_url_is_sports($url)) {
+        $lib = __DIR__ . '/sports_lib.php';
+        if (!is_file($lib)) {
+            return false;
+        }
+        require_once $lib;
+
+        return sports_skip_rotation($screen);
+    }
+    if (rotation_page_url_is_webcam($url)) {
+        $lib = __DIR__ . '/webcam_lib.php';
+        if (!is_file($lib)) {
+            return false;
+        }
+        require_once $lib;
+
+        return webcam_skip_rotation();
+    }
+
+    return false;
+}
+
 /** @return list<array<string,mixed>> Active pages for the rotation shell (url set, dwell > 0, not skipped). */
-function rotation_screen_active_pages(string $screen = 'main'): array
+function rotation_screen_active_pages(string $screen = 'main', bool $applySeasonalSkip = true): array
 {
     static $cache = [];
 
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    if (array_key_exists($screen, $cache)) {
-        return $cache[$screen];
+    $cacheKey = $screen . "\0" . ($applySeasonalSkip ? '1' : '0');
+    if (array_key_exists($cacheKey, $cache)) {
+        return $cache[$cacheKey];
     }
     $scopeUid = null;
     if ($screen !== 'main') {
@@ -1195,9 +1279,9 @@ function rotation_screen_active_pages(string $screen = 'main'): array
         }
     }
 
-    $cache[$screen] = array_values(array_filter(
+    $cache[$cacheKey] = array_values(array_filter(
         $effective,
-        static function ($p) use ($activeFiles, $hasSlideEntries, $screen) {
+        static function ($p) use ($activeFiles, $hasSlideEntries, $screen, $applySeasonalSkip) {
             if (!is_array($p)
                 || trim((string)($p['url'] ?? '')) === ''
                 || rotation_page_dwell($p) <= 0
@@ -1210,23 +1294,8 @@ function rotation_screen_active_pages(string $screen = 'main'): array
             }
             $file = slide_rotation_parse_file($url);
             if ($file === null) {
-                if (rotation_page_url_is_lake($url)) {
-                    require_once __DIR__ . '/lake_lib.php';
-                    if (lake_buoy_skip_rotation()) {
-                        return false;
-                    }
-                }
-                if (rotation_page_url_is_sports($url)) {
-                    require_once __DIR__ . '/sports_lib.php';
-                    if (sports_skip_rotation($screen)) {
-                        return false;
-                    }
-                }
-                if (rotation_page_url_is_webcam($url)) {
-                    require_once __DIR__ . '/webcam_lib.php';
-                    if (webcam_skip_rotation()) {
-                        return false;
-                    }
+                if ($applySeasonalSkip && rotation_page_seasonal_skip($url, $screen)) {
+                    return false;
                 }
 
                 return true;
@@ -1236,7 +1305,7 @@ function rotation_screen_active_pages(string $screen = 'main'): array
         }
     ));
 
-    return $cache[$screen];
+    return $cache[$cacheKey];
 }
 
 /** @return list<array<string,mixed>> */
@@ -2558,7 +2627,7 @@ function rotator_deploy_status(?array $deck = null): array
         $wallPhotos = 0;
         $wallPos = null;
         $pos = 0;
-        foreach (rotation_screen_active_pages($key) as $page) {
+        foreach (rotation_screen_active_pages($key, false) as $page) {
             if (!is_array($page) || empty($page['url'])) {
                 continue;
             }
@@ -2879,7 +2948,7 @@ function slides_deploy_status(?array $deck = null): array
         $wallSlides = 0;
         $wallPos = null;
         $pos = 0;
-        foreach (rotation_screen_active_pages($key) as $page) {
+        foreach (rotation_screen_active_pages($key, false) as $page) {
             if (!is_array($page) || empty($page['url'])) {
                 continue;
             }

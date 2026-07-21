@@ -149,18 +149,3 @@ function webcam_skip_rotation(): bool
 {
     return webcam_embed_status()['skip_rotation'];
 }
-
-/** Whether a rotation playlist URL targets webcam.php. */
-function rotation_page_url_is_webcam(string $url): bool
-{
-    $url = trim($url);
-    if ($url === '' || strcasecmp($url, 'webcam.php') === 0) {
-        return true;
-    }
-    if (preg_match('~^webcam\.php(?:[?#]|$)~i', $url) === 1) {
-        return true;
-    }
-    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
-
-    return preg_match('~(?:^|/)webcam\.php$~i', $path) === 1;
-}

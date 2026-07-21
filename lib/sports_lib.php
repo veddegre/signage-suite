@@ -1252,21 +1252,6 @@ function sports_skip_rotation(string $screen = 'main'): bool
     return true;
 }
 
-/** Whether a rotation playlist URL targets sports.php. */
-function rotation_page_url_is_sports(string $url): bool
-{
-    $url = trim($url);
-    if ($url === '' || strcasecmp($url, 'sports.php') === 0) {
-        return true;
-    }
-    if (preg_match('~^sports\.php(?:[?#]|$)~i', $url) === 1) {
-        return true;
-    }
-    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
-
-    return preg_match('~(?:^|/)sports\.php$~i', $path) === 1;
-}
-
 /** Render one team card (shared by page + optional server-side reuse). */
 function sports_render_card(array $c, bool $focus = false): string
 {
