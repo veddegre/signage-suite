@@ -160,7 +160,8 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
 </script>
 <?php signage_kiosk_hide_pointer_script(); ?>
 <?php if ($showTicker):
-    signage_prime_ticker_location($SCREEN);
+    $signageTickerScreen = $SCREEN;
+    signage_ticker_bootstrap($SCREEN);
     include __DIR__ . '/ticker.php';
 endif; ?>
 </body>

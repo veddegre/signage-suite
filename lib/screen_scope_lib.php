@@ -179,13 +179,45 @@ function rotation_screen_sports_labels(string $screen): array
     return ['title' => $title, 'subtitle' => $subtitle];
 }
 
-/** Define TICKER_LAT / TICKER_LON from a rotation screen before including ticker.php. */
-function signage_prime_ticker_location(string $screen): void
+/** Load ticker constants — per-display lat/lon when set, otherwise global Weather / ticker settings. */
+function signage_ticker_bootstrap(?string $screen = null): void
 {
+    if (!defined('TICKER_UA')) {
+        define('TICKER_UA', (string)cfg('ticker.TICKER_UA', 'HomeSignage/1.0 (contact: you@example.com)'));
+        define('TICKER_TTL', max(30, (int)cfg('ticker.TICKER_TTL', 300)));
+        define('TICKER_MODE', (string)cfg('ticker.TICKER_MODE', 'scroll'));
+        define('TICKER_MIN_SEVERITY', (string)cfg('ticker.TICKER_MIN_SEVERITY', 'Minor'));
+        define('TICKER_DEMO', (bool)cfg('ticker.TICKER_DEMO', false));
+    }
     if (defined('TICKER_LAT') && defined('TICKER_LON')) {
         return;
     }
+    if ($screen === null) {
+        $screen = signage_request_screen();
+    }
     $loc = rotation_screen_location($screen);
-    define('TICKER_LAT', $loc['lat']);
-    define('TICKER_LON', $loc['lon']);
+    if (!defined('TICKER_LAT')) {
+        define('TICKER_LAT', $loc['lat']);
+    }
+    if (!defined('TICKER_LON')) {
+        define('TICKER_LON', $loc['lon']);
+    }
+}
+
+/** @deprecated Use signage_ticker_bootstrap() */
+function signage_prime_ticker_location(string $screen): void
+{
+    signage_ticker_bootstrap($screen);
+}
+
+/** ticker.php poll URL for a rotation display (includes ?screen= for per-display location). */
+function signage_ticker_api_url(?string $screen = null): string
+{
+    if ($screen === null) {
+        $screen = signage_request_screen();
+    } else {
+        $screen = rotation_normalize_screen_key($screen);
+    }
+
+    return 'ticker.php?api=1&screen=' . rawurlencode($screen);
 }

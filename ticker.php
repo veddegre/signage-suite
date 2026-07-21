@@ -27,6 +27,7 @@ if (isset($_GET['noticker'])) return;
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/emergency_lib.php';
+require_once __DIR__ . '/lib/screen_scope_lib.php';
 
 $emergencyTicker = emergency_ticker_forces_display();
 
@@ -45,15 +46,7 @@ if (!signage_ticker_enabled() && !$emergencyTicker) {
     return;
 }
 
-if (!defined('TICKER_LAT')) {
-    define('TICKER_LAT', cfg('ticker.TICKER_LAT', 42.9720));              // Allendale / home point
-    define('TICKER_LON', cfg('ticker.TICKER_LON', -85.9536));
-    define('TICKER_UA', cfg('ticker.TICKER_UA', 'HomeSignage/1.0 (contact: you@example.com)'));
-    define('TICKER_TTL', cfg('ticker.TICKER_TTL', 300));                  // seconds between NWS fetches
-    define('TICKER_MODE', cfg('ticker.TICKER_MODE', 'scroll'));            // 'scroll' or 'static'
-    define('TICKER_MIN_SEVERITY', cfg('ticker.TICKER_MIN_SEVERITY', 'Minor'));     // Minor | Moderate | Severe — hide anything below
-    define('TICKER_DEMO', cfg('ticker.TICKER_DEMO', false));               // true = render a sample alert for layout testing
-}
+signage_ticker_bootstrap(signage_request_screen());
 
 if (!function_exists('signage_ticker_event_kind')) {
 /** NWS event name → banner kind (warning/watch/advisory/statement). */
@@ -273,6 +266,7 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
 }
 
 $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
+$tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
 ?>
 <style>
   <?= signage_kiosk_cursor_css() ?>
@@ -304,7 +298,7 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
 <div id="signage-ticker-root"></div>
 <script>
 (function () {
-  var API = 'ticker.php?api=1';
+  var API = <?= json_encode($tickerApiUrl) ?>;
   var POLL = <?= (int)$tickerPollMs ?>;
   var scrollRAF = null;
   var staticTimer = null;
