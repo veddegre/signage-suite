@@ -57,10 +57,37 @@ function video_path(string $key, array $v, ?string $dir = null): ?string
 
 function video_duration(string $path): ?float
 {
+    static $mem = [];
+    if (isset($mem[$path])) {
+        return $mem[$path];
+    }
+    if (!is_file($path)) {
+        return $mem[$path] = null;
+    }
+    $mtime = (int)@filemtime($path);
+    $cacheDir = SIGNAGE_ROOT . '/cache';
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0775, true);
+    }
+    $cacheFile = $cacheDir . '/video_dur_' . md5($path) . '.json';
+    if ($mtime > 0 && is_file($cacheFile)) {
+        $cached = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($cached)
+            && (int)($cached['mtime'] ?? 0) === $mtime
+            && array_key_exists('duration', $cached)) {
+            $dur = (float)$cached['duration'];
+
+            return $mem[$path] = ($dur > 0 ? $dur : null);
+        }
+    }
     $out = @shell_exec('ffprobe -v error -show_entries format=duration -of csv=p=0 '
         . escapeshellarg($path) . ' 2>/dev/null');
-    $d = is_string($out) ? (float)trim($out) : 0;
-    return $d > 0 ? $d : null;
+    $d = is_string($out) ? (float)trim($out) : 0.0;
+    if ($mtime > 0) {
+        @file_put_contents($cacheFile, json_encode(['mtime' => $mtime, 'duration' => $d > 0 ? $d : 0], JSON_UNESCAPED_SLASHES), LOCK_EX);
+    }
+
+    return $mem[$path] = ($d > 0 ? $d : null);
 }
 
 /** Max local video upload size enforced by admin (bytes). Matches setup-server.sh upload_max_filesize. */

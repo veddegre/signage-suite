@@ -806,17 +806,37 @@ function admin_default_deploy_screens(): array
 /** Whether a video appears on any display the current user may manage. */
 function admin_video_in_rotation_any(string $key): bool
 {
-    require_once __DIR__ . '/video_lib.php';
-    if (admin_is_super()) {
-        return video_in_rotation($key, 'main');
+    return isset(admin_video_rotation_keys()[$key]);
+}
+
+/** @return array<string,true> Video registry keys present on allowed display playlists. */
+function admin_video_rotation_keys(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
     }
-    foreach (admin_allowed_screen_keys() as $screen) {
-        if (video_in_rotation($key, $screen)) {
-            return true;
+    require_once __DIR__ . '/video_lib.php';
+    require_once __DIR__ . '/rotation_lib.php';
+    $cache = [];
+    $screens = admin_is_super() ? array_keys(rotation_screens()) : admin_allowed_screen_keys();
+    foreach ($screens as $screen) {
+        foreach (video_rotation_screen_pages($screen) as $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+            $url = trim((string)($page['url'] ?? ''));
+            if (preg_match('~^video\.php\?v=([^&]+)~i', $url, $m) !== 1) {
+                continue;
+            }
+            $vk = video_normalize_key(rawurldecode($m[1]));
+            if ($vk !== null) {
+                $cache[$vk] = true;
+            }
         }
     }
 
-    return false;
+    return $cache;
 }
 
 function admin_deploy_screens_session_key(string $board): string

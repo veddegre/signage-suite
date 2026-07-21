@@ -2624,35 +2624,14 @@ function rotator_deploy_status(?array $deck = null): array
         $sync = rotator_rotation_sync_info($key, $deck);
         $deckTargeted = count(rotator_rotation_pages($deck, $key));
 
-        $wallPhotos = 0;
-        $wallPos = null;
-        $pos = 0;
-        foreach (rotation_screen_active_pages($key, false) as $page) {
-            if (!is_array($page) || empty($page['url'])) {
-                continue;
-            }
-            $pos++;
-            $url = trim((string)$page['url']);
-            if (rotation_is_any_rotator_url($url)) {
-                if ($wallPos === null) {
-                    $wallPos = $pos;
-                }
-                if (rotation_is_photo_url($url)) {
-                    $wallPhotos++;
-                } else {
-                    $wallPhotos = max($wallPhotos, 1);
-                }
-            }
-        }
-
         $out[$key] = [
             'name' => (string)($scr['name'] ?? $key),
             'mirrors_main' => $mirrorsMain,
             'on_playlist' => $sync['on_playlist'],
             'partial' => $sync['partial'],
-            'on_wall' => $wallPhotos > 0,
+            'on_wall' => false,
             'sync' => $sync,
-            'wall' => $wallPhotos > 0 ? ['position' => $wallPos, 'photo_count' => $wallPhotos] : null,
+            'wall' => null,
             'deck_targeted' => $deckTargeted,
             'expected' => (int)$sync['expected'],
             'dwell_mismatch' => (int)$sync['dwell_mismatch'],
@@ -2945,32 +2924,15 @@ function slides_deploy_status(?array $deck = null): array
         $deckTargeted = count(slides_rotation_pages($deck, $key));
         $playlistSlides = rotation_playlist_slide_count($own);
 
-        $wallSlides = 0;
-        $wallPos = null;
-        $pos = 0;
-        foreach (rotation_screen_active_pages($key, false) as $page) {
-            if (!is_array($page) || empty($page['url'])) {
-                continue;
-            }
-            $pos++;
-            $url = trim((string)$page['url']);
-            if (rotation_is_slide_url($url) || rotation_is_legacy_slides_url($url)) {
-                if ($wallPos === null) {
-                    $wallPos = $pos;
-                }
-                $wallSlides++;
-            }
-        }
-
         $out[$key] = [
             'name' => (string)($scr['name'] ?? $key),
             'mirrors_main' => $mirrorsMain,
             'on_playlist' => $sync['on_playlist'],
             'partial' => $sync['partial'],
-            'on_wall' => $wallSlides > 0,
+            'on_wall' => false,
             'entry' => slides_rotation_entry($key),
             'sync' => $sync,
-            'wall' => $wallSlides > 0 ? ['position' => $wallPos, 'slide_count' => $wallSlides] : null,
+            'wall' => null,
             'deck_targeted' => $deckTargeted,
             'playlist_slides' => $playlistSlides,
             'stale_on_playlist' => $playlistSlides > (int)$sync['expected']

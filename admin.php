@@ -1744,6 +1744,7 @@ if ($authed && $board === 'video') {
         $videoDenoStatus = video_deno_status();
         $videoYtdlpSupport = video_ytdlp_support_status();
     }
+    $videoRotationKeys = admin_video_rotation_keys();
     foreach (video_registry() as $k => $v) {
         if (!is_array($v)) {
             continue;
@@ -1752,7 +1753,7 @@ if ($authed && $board === 'video') {
             continue;
         }
         $st = video_entry_status($k, $v);
-        $st['in_rotation'] = admin_video_in_rotation_any($k);
+        $st['in_rotation'] = isset($videoRotationKeys[$k]);
         $videoStatuses[] = $st;
         $videoStatusByKey[$k] = $st;
     }
@@ -1773,7 +1774,7 @@ $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TI
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
-$rotationQuickAdd = rotation_quick_add_items();
+$rotationQuickAdd = ($authed && $board === 'rotation') ? rotation_quick_add_items() : [];
 $heroStripKeyOptions = [];
 $heroStripSources = [];
 if ($authed && $board === 'rotation') {
@@ -1799,6 +1800,28 @@ if ($authed && $board === 'rotation') {
     }
     $rotationTemplates = rotation_playlist_templates();
 }
+$slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
+$slidesTab = 'deck';
+if ($board === 'slides') {
+    $slidesTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
+    if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
+        $slidesTab = 'deck';
+    }
+    if ($slideHighlight !== null && $slidesTab !== 'create') {
+        $slidesTab = 'deck';
+    }
+}
+$photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
+$rotatorTab = 'deck';
+if ($board === 'rotator') {
+    $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
+    if (!in_array($rotatorTab, ['deck', 'library', 'upload', 'deploy'], true)) {
+        $rotatorTab = 'deck';
+    }
+    if ($photoHighlight !== null && $rotatorTab !== 'upload') {
+        $rotatorTab = 'deck';
+    }
+}
 $slidesDeckForUser = [];
 $slidesDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
 $slidesDeployStatus = [];
@@ -1806,11 +1829,12 @@ if ($authed && in_array($board, ['slides', 'status'], true)) {
     $slidesDeckFullConf = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
     $slidesDeckForUser = admin_filter_list_for_deploy_scope($slidesDeckFullConf);
     $slidesDeckStats = slides_deck_stats($slidesDeckForUser);
-    $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status(
-        admin_is_super() ? $slidesDeckFullConf : $slidesDeckForUser
-    ));
+    if ($board === 'status' || ($board === 'slides' && $slidesTab === 'deploy')) {
+        $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status(
+            admin_is_super() ? $slidesDeckFullConf : $slidesDeckForUser
+        ));
+    }
 }
-$slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesOrphanFiles = ($board === 'slides')
     ? slides_orphan_files($rawConf['slides.SLIDES'] ?? null)
     : [];
@@ -1830,11 +1854,12 @@ $rotatorDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' 
 $rotatorDeployStatus = [];
 if ($authed && in_array($board, ['rotator', 'status'], true)) {
     $rotatorDeckStats = rotator_deck_stats($rotatorDeckForUser);
-    $rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser));
+    if ($board === 'status' || ($board === 'rotator' && $rotatorTab === 'deploy')) {
+        $rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser));
+    }
 }
 $userAdminRows = admin_is_super() ? users_admin_rows() : [];
 $navGroupsFiltered = $authed ? admin_filter_nav_groups($navGroups, $schema) : $navGroups;
-$photoHighlight = rotator_safe_filename((string)($_GET['highlight'] ?? ''));
 $rotatorLibrary = ($board === 'rotator')
     ? admin_filter_library_entries(
         rotator_library_entries($rawConf['rotator.PHOTOS'] ?? null),
@@ -4945,13 +4970,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           $photoRows = admin_filter_owned_list(is_array($photoVal) ? $photoVal : []);
           $photosDeckFull = is_array($rawConf['rotator.PHOTOS'] ?? null) ? $rawConf['rotator.PHOTOS'] : [];
           $photoFileFromEntry = static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''));
-          $rotatorTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
-          if (!in_array($rotatorTab, ['deck', 'library', 'upload', 'deploy'], true)) {
-              $rotatorTab = 'deck';
-          }
-          if ($photoHighlight !== null && $rotatorTab !== 'upload') {
-              $rotatorTab = 'deck';
-          }
           $deployMode = rotator_deploy_mode();
         ?>
           <div class="admin-tabs" id="photosTabs" role="tablist">
@@ -5128,7 +5146,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             ?>
             <div class="deploy-checks" data-deploy-board="rotator" data-deploy-remembered="<?= $rotatorDeployRemembered ? '1' : '0' ?>">
               <span class="help" style="margin:0;width:100%">Optional: also update rotation when you Save (use the <strong>Deploy</strong> tab to push to TVs).</span>
-              <?php admin_deploy_picker_from_status($rotatorDeployStatus, $rotatorDeployPickerChecked); ?>
+              <?php admin_deploy_picker_from_screens(admin_filter_screens(rotation_screens()), $rotatorDeployPickerChecked); ?>
             </div>
           </div>
 
@@ -5150,8 +5168,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           </details>
 
         <?php elseif ($board === 'slides'):
-          slide_background_ensure_assets();
-          slide_background_ensure_photos();
+          if ($slidesTab === 'create') {
+              slide_background_ensure_assets();
+              slide_background_ensure_photos();
+          }
           $rotationScreens = admin_filter_screens(rotation_screens());
           $slideVal = current_val($rawConf, $board, 'SLIDES');
           $slideRows = admin_filter_owned_list(is_array($slideVal) ? $slideVal : []);
@@ -5159,13 +5179,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           $slideFileFromEntry = static fn($e) => slide_safe_filename((string)($e['file'] ?? ''));
           $slideNow = new DateTime('now', new DateTimeZone(slides_timezone()));
           $sharingUserOptions = admin_is_super() ? admin_sharing_user_options() : [];
-          $slidesTab = preg_replace('/[^a-z]/', '', (string)($_POST['tab'] ?? $_GET['tab'] ?? 'deck'));
-          if (!in_array($slidesTab, ['deck', 'library', 'deploy', 'create'], true)) {
-              $slidesTab = 'deck';
-          }
-          if ($slideHighlight !== null && $slidesTab !== 'create') {
-              $slidesTab = 'deck';
-          }
         ?>
           <div class="admin-tabs" id="slidesTabs" role="tablist">
             <button type="button" class="admin-tab<?= $slidesTab === 'deck' ? ' active' : '' ?>" data-tab="deck">Deck<span class="tab-count"><?= count($slideRows) ?></span></button>
