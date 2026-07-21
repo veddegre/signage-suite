@@ -183,7 +183,7 @@ function rotation_screen_sports_labels(string $screen): array
     $scr = rotation_screen_raw_entry($screen);
     $title = is_array($scr) ? trim((string)($scr['sports_title'] ?? '')) : '';
     if ($title === '') {
-        $title = (string)cfg('sports.TITLE', 'Local Sports');
+        $title = (string)cfg('sports.TITLE', 'Sports');
     }
     $subtitle = is_array($scr) ? trim((string)($scr['sports_subtitle'] ?? '')) : '';
     if ($subtitle === '') {

@@ -1,6 +1,6 @@
 <?php
 /**
- * Detroit sports board — ESPN site API helpers.
+ * Sports board — ESPN site API helpers.
  * Unofficial public endpoints; cached server-side in sports.php.
  */
 

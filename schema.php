@@ -243,7 +243,7 @@ function admin_schema(): array
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
             $tz, $ttl('Latest comic from xkcd.com — default 86400s (24 h)'),
         ]],
-        'sports' => ['title' => 'Detroit Sports', 'file' => 'sports.php', 'fields' => [
+        'sports' => ['title' => 'Sports', 'file' => 'sports.php', 'fields' => [
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text',
              'help' => 'Shown beside the title — default lists all four teams'],
