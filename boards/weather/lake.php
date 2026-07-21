@@ -6,109 +6,44 @@
  * No API keys required.
  *
  * Note: nearshore buoys are seasonal (roughly Apr–Oct). When the buoy is out of
- * the water the board says so and leans on NWS alerts + sun data.
+ * the water the board says so and leans on NWS alerts + sun data. Rotation auto-
+ * skips lake.php after 24h with no fresh buoy data and restores it when live again.
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/lake_lib.php';
 
-define('NDBC_STATION', cfg('lake.NDBC_STATION', '45029'));
+define('NDBC_STATION', lake_ndbc_station());
 define('STATION_NAME', cfg('lake.STATION_NAME', 'Holland Buoy 45029'));
 define('BEACH_NAME', cfg('lake.BEACH_NAME', 'Grand Haven'));
 define('LAT', cfg('lake.LAT', 43.0631));
 define('LON', cfg('lake.LON', -86.2470));
 define('TIMEZONE', cfg('lake.TIMEZONE', 'America/Detroit'));
-define('NWS_UA', cfg('lake.NWS_UA', 'HomeSignage/1.0 (contact: you@example.com)'));
-const CACHE_DIR    = SIGNAGE_ROOT . '/cache';
-define('CACHE_TTL', cfg('lake.CACHE_TTL', 600));
+define('NWS_UA', lake_nws_ua());
 
 date_default_timezone_set(TIMEZONE);
 $showClock = signage_show_clock();
 $frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
-function cached_get(string $url, string $key, array $headers = []): ?string
-{
-    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
-    $f = CACHE_DIR . "/$key.dat";
-    if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
-        return (string)file_get_contents($f);
-    }
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 10,
-        CURLOPT_USERAGENT => NWS_UA, CURLOPT_HTTPHEADER => $headers, CURLOPT_FOLLOWLOCATION => true,
-    ]);
-    $body = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-    if ($body !== false && $code === 200) { @file_put_contents($f, $body, LOCK_EX); return $body; }
-    $GLOBALS['diag'][$key] = $err !== '' ? "curl: $err" : "HTTP $code";
-    return is_file($f) ? (string)file_get_contents($f) : null;   // stale fallback
-}
-
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-function m_to_ft(float $m): float   { return $m * 3.28084; }
-function ms_to_mph(float $m): float { return $m * 2.23694; }
-function c_to_f(float $c): float    { return $c * 9 / 5 + 32; }
 function compass(float $deg): string {
     $d = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
     return $d[(int)round($deg / 22.5) % 16];
 }
 
-// ── NDBC buoy: realtime2 text format ────────────────────────────────────────
-$obs = null;
-$raw = cached_get('https://www.ndbc.noaa.gov/data/realtime2/' . NDBC_STATION . '.txt', 'ndbc_' . NDBC_STATION);
-if ($raw !== null) {
-    $lines = preg_split('/\R/', trim($raw));
-    // line0 = column names, line1 = units, line2+ = newest-first observations.
-    // Buoys report met data (wind/temps) more often than wave spectra, so the
-    // newest row frequently has MM in WVHT/DPD while a slightly older row has
-    // them. Take each field's freshest non-MM value within a 4-hour window.
-    if (count($lines) >= 3) {
-        $cols   = preg_split('/\s+/', ltrim($lines[0], "# "));
-        $want   = ['WVHT','DPD','WTMP','ATMP','WSPD','GST','WDIR','PRES'];
-        $vals   = [];           // field => freshest numeric value
-        $vtimes = [];           // field => timestamp of that value
-        $newest = null;
-        for ($i = 2; $i < min(count($lines), 40); $i++) {
-            $parts = preg_split('/\s+/', trim($lines[$i]));
-            if (count($parts) < count($cols)) continue;
-            $row = array_combine($cols, array_slice($parts, 0, count($cols)));
-            $ts  = gmmktime((int)$row['hh'], (int)$row['mm'], 0, (int)$row['MM'], (int)$row['DD'], (int)$row['YY']);
-            if ($newest === null) $newest = $ts;
-            if ($newest - $ts > 4 * 3600) break;                    // too old to substitute
-            foreach ($want as $f) {
-                if (!isset($vals[$f]) && isset($row[$f]) && $row[$f] !== 'MM') {
-                    $vals[$f] = (float)$row[$f];
-                    $vtimes[$f] = $ts;
-                }
-            }
-            if (count($vals) === count($want)) break;
-        }
-        if ($newest !== null) {
-            $obs = [
-                'time'      => $newest,
-                'wvht'      => isset($vals['WVHT']) ? m_to_ft($vals['WVHT']) : null,
-                'wvht_time' => $vtimes['WVHT'] ?? null,
-                'dpd'       => $vals['DPD'] ?? null,
-                'wtmp'      => isset($vals['WTMP']) ? c_to_f($vals['WTMP']) : null,
-                'atmp'      => isset($vals['ATMP']) ? c_to_f($vals['ATMP']) : null,
-                'wspd'      => isset($vals['WSPD']) ? ms_to_mph($vals['WSPD']) : null,
-                'gst'       => isset($vals['GST'])  ? ms_to_mph($vals['GST'])  : null,
-                'wdir'      => $vals['WDIR'] ?? null,
-                'pres'      => isset($vals['PRES']) ? $vals['PRES'] * 0.02953 : null,
-            ];
-        }
-    }
-}
-$obsAgeMin  = $obs ? (int)round((time() - $obs['time']) / 60) : null;
-$buoyOnline = $obs && $obsAgeMin !== null && $obsAgeMin < 240;   // >4h old = likely offline/seasonal
+// ── NDBC buoy ────────────────────────────────────────────────────────────────
+$obs = lake_fetch_obs(NDBC_STATION);
+$obsAgeMin = $obs ? (int)round((time() - (int)$obs['time']) / 60) : null;
+$buoyOnline = $obs && $obsAgeMin !== null && $obsAgeMin < LAKE_BUOY_ONLINE_MAX_AGE_MIN;
 
 // ── NWS active alerts for the beach point ───────────────────────────────────
 $alerts = [];
-$aRaw = cached_get(sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', LAT, LON),
-                   'nws_alerts_' . sprintf('%.4F_%.4F', LAT, LON), ['Accept: application/geo+json']);
+$aRaw = lake_cached_get(
+    sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', LAT, LON),
+    'nws_alerts_' . sprintf('%.4F_%.4F', LAT, LON),
+    ['Accept: application/geo+json']
+);
 if ($aRaw !== null) {
     $aj = json_decode($aRaw, true);
     foreach (($aj['features'] ?? []) as $f) {

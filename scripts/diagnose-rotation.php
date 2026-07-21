@@ -59,7 +59,12 @@ foreach ($effective as $i => $page) {
             $reasons[] = 'Skip checked';
         }
         if (!$onWall) {
-            $reasons[] = 'not on wall (slide off/schedule, missing file, or filtered)';
+            require_once $root . '/lib/lake_lib.php';
+            if (rotation_page_url_is_lake($url) && lake_buoy_skip_rotation()) {
+                $reasons[] = 'lake buoy offline 24h+ (seasonal auto-skip)';
+            } else {
+                $reasons[] = 'not on wall (slide off/schedule, missing file, or filtered)';
+            }
         }
         if (!$inWindow) {
             $from = $page['from'] ?? '—';

@@ -175,7 +175,15 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 **ntfy** (`ntfy.php`) — Recent alerts from webhook (`ntfy_webhook.php`) and/or **poll topic** mode. Use in rotation or wire into the hero strip.
 
-**Hero status strip** — Optional persistent bar above the weather ticker on `board.php` (per display under **Rotation → Display options**). Combine up to four sources (Kuma, Zabbix, announcement, ntfy for super admin / Infrastructure; Zabbix and announcements for operators) with dropdown page pickers. Polls every 30s with the rotation shell.
+**Hero status strip** — Optional persistent bar above the weather ticker on `board.php` (per display under **Rotation → Display options**). Combine up to four sources (Kuma, Zabbix, announcement, ntfy for super admin / Infrastructure; Zabbix and announcements for operators). Each slot has a **Source** dropdown and a **Page / item** picker that lists every configured Kuma status page, Zabbix page, or announcement — not just “Default”. Polls every 30s with the rotation shell.
+
+**Lake Michigan** (`lake.php`) — NDBC buoy + NWS shoreline alerts + sunset. Nearshore buoys are seasonal (~Apr–Oct). When data goes stale the board still renders (offline message, alerts, sun times). **Rotation auto-skips** `lake.php` after **24 hours** with no fresh buoy observations and puts it back when the buoy is live again — no manual Skip toggle each winter. Open `lake.php` directly any time to see the offline layout.
+
+**Sports** (`sports.php`) — ESPN scoreboards for up to **four teams per display** (NFL/MLB/NBA/NHL plus NCAAF, NCAAM, NCAAW, WNBA, MLS). Set teams, optional title, and subtitle under **Rotation → Display options**; global defaults under **Sports** in admin. Standalone views poll for live score updates; in rotation the board reloads with the shell. Adaptive layout (1–4 teams), live clock, streaks, and opponent logos on game days.
+
+**Weather ticker** — Lives in the rotation shell (`board.php`), not inside each iframe. Polls NWS every 30s (15s in demo mode) so alerts appear without a full page reload. Per display: enable **Bottom ticker** under **Rotation → Display options**, and optionally pick an **RSS feed for when there are no weather alerts** (headlines from a feed you manage under **RSS Stories**; weather always wins when NWS has alerts).
+
+**Per-display overrides** — Under **Rotation → Display options** for each kiosk: transition timings, blank hours, **location** (weather, air, UV, photo, traffic map, alert ticker), **sports teams** / title / subtitle, **hero strip** slots, and **news ticker fallback** (above). Leave location blank to use the global Weather board coordinates.
 
 **Shared display editing** — Super admins assign **shared editors** on each display (Rotation). Shared editors manage the **full screen**: playlist, display options, hero strip, and deploy targets — including the primary owner’s slides and quick-add boards.
 
@@ -193,13 +201,13 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 | Piece | Role |
 |-------|------|
-| **board.php** | Crossfades playlist; persistent weather ticker |
+| **board.php** | Crossfades playlist; persistent weather ticker (+ optional RSS headlines when no NWS alerts) |
 | **setup-server.sh** | Web host + PHP + hardening |
 | **setup-kiosk.sh** | Fullscreen Chromium kiosk + CEC — [guide](docs/kiosk-setup.md) |
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
-Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weighted** rotation (weight 1–20), multiple displays (`?screen=`). Under **Rotation**, use **Add to display** before quick-adding a board so it lands on the right playlist (e.g. `veddersg`, not `main`).
+Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle**, **Weighted** rotation (weight 1–20), multiple displays (`?screen=`). **`lake.php` is omitted automatically** when its buoy has been offline 24h+ (seasonal); it returns when fresh data is back. Under **Rotation**, use **Add to display** before quick-adding a board so it lands on the right playlist (e.g. `veddersg`, not `main`). **Display options** (inside each playlist panel) set location, sports teams, hero strip, ticker, and news fallback per kiosk.
 
 Operators with **multiple displays** assigned (see [Admin & security](#admin--security)) see and edit every playlist they own; **shared editors** get the same control on displays they are invited to. Deploy pickers (slides, photos, RSS, video) target any display they may fully edit.
 
@@ -258,7 +266,7 @@ Run from the boards install root on the server (the directory with `config/setti
 php scripts/diagnose-zabbix.php network --needle=signaltrace
 # from a clone: SIGNAGE_ROOT=/var/www/html/boards php ~/signage-suite/scripts/diagnose-zabbix.php main
 
-# Rotation: weighted mode, eligible pages, per-slide weights
+# Rotation: weighted mode, eligible pages, per-slide weights, lake seasonal skip
 php scripts/diagnose-rotation.php veddersg
 
 # Air & Pollen: AirNow key, EPA monitor AQI, NWS alerts, Open-Meteo model

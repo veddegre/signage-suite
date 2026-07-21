@@ -1210,8 +1210,16 @@ function rotation_screen_active_pages(string $screen = 'main'): array
             }
             $file = slide_rotation_parse_file($url);
             if ($file === null) {
+                if (rotation_page_url_is_lake($url)) {
+                    require_once __DIR__ . '/lake_lib.php';
+                    if (lake_buoy_skip_rotation()) {
+                        return false;
+                    }
+                }
+
                 return true;
             }
+
             return isset($activeFiles[$file]);
         }
     ));
