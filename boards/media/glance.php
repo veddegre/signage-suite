@@ -138,25 +138,29 @@ $compact = $boardH < 1080;
   .tomorrow .tev .s { font-size:<?= $compact ? 20 : 22 ?>px; }
 
   .sky { grid-area:sky; height:100%; min-height:0; display:grid; gap:<?= $compact ? 14 : 18 ?>px;
-         grid-template-columns:1fr 1fr; grid-template-rows:minmax(0,1.15fr) minmax(0,1fr); }
+         grid-template-columns:1fr 1fr; grid-template-rows:minmax(0,1fr) minmax(0,1fr); }
   .sky.no-weather { grid-template-rows:minmax(0,1fr); }
   .weather, .moon, .suntimes { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
                       padding:<?= $compact ? 22 : 28 ?>px; min-height:0; overflow:hidden; }
-  .weather { grid-column:1 / -1; display:flex; flex-direction:column; }
+  .weather { grid-column:1 / -1; display:grid; grid-template-rows:auto minmax(0,1fr); gap:<?= $compact ? 12 : 16 ?>px; }
   .weather .k, .moon .k, .suntimes .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
   .weather-head { display:flex; align-items:baseline; justify-content:space-between; gap:16px; }
   .weather .place { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); letter-spacing:1px; }
-  .weather-body { flex:1; display:flex; align-items:center; gap:<?= $compact ? 24 : 36 ?>px; min-height:0; margin-top:<?= $compact ? 12 : 16 ?>px; }
-  .weather-main { display:flex; align-items:center; gap:<?= $compact ? 16 : 20 ?>px; flex-shrink:0; }
-  .weather-main img { width:<?= $compact ? 96 : 120 ?>px; height:<?= $compact ? 96 : 120 ?>px; }
-  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 88 : 104 ?>px; line-height:1; }
+  .weather-body { min-height:0; display:grid; grid-template-columns:minmax(240px,42%) 1fr; gap:<?= $compact ? 16 : 20 ?>px; }
+  .weather-main { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; min-height:0; }
+  .weather-main img { width:<?= $compact ? 120 : 150 ?>px; height:<?= $compact ? 120 : 150 ?>px; margin-bottom:<?= $compact ? 6 : 10 ?>px; }
+  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 96 : 118 ?>px; line-height:1; color:var(--beacon); }
   .weather-desc { font-size:<?= $compact ? 24 : 28 ?>px; color:var(--snow); margin-top:6px; text-transform:capitalize; }
-  .weather-meta { flex:1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:<?= $compact ? 12 : 16 ?>px; align-self:stretch; }
-  .weather-meta.cols-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
-  .weather-meta .lab { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
-  .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 32 : 38 ?>px; color:var(--beacon); line-height:1.1; }
+  .weather-feels { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); margin-top:6px; }
+  .weather-meta { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:<?= $compact ? 10 : 12 ?>px; min-height:0; }
+  .weather-stat { background:rgba(12,20,34,.55); border:1px solid rgba(38,52,77,.85); border-radius:12px;
+                  padding:<?= $compact ? 14 : 18 ?>px <?= $compact ? 16 : 22 ?>px; display:flex; flex-direction:column;
+                  justify-content:center; min-height:0; }
+  .weather-meta .lab { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:<?= $compact ? 6 : 8 ?>px; }
+  .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 34 : 40 ?>px; color:var(--beacon); line-height:1.1; }
   .weather-meta .val small { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); font-weight:500; }
-  .weather-empty { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); line-height:1.5; margin-top:auto; }
+  .weather-meta .sub { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); margin-top:4px; }
+  .weather-empty { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); line-height:1.5; display:flex; align-items:center; justify-content:center; min-height:0; }
   .suntimes { display:flex; flex-direction:column; }
   .suntimes-grid { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:<?= $compact ? 14 : 18 ?>px; margin-top:<?= $compact ? 14 : 18 ?>px; align-content:center; }
   .suntimes .cell .lab { font-size:<?= $compact ? 14 : 15 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
@@ -236,29 +240,47 @@ $compact = $boardH < 1080;
       <?php if ($weather): ?>
       <div class="weather-body">
         <div class="weather-main">
-          <img src="<?= h(weather_icon_url($weather['icon'], 2)) ?>" alt="">
-          <div>
-            <div class="weather-temp"><?= (int)$weather['temp'] ?>°</div>
-            <div class="weather-desc"><?= h($weather['desc']) ?></div>
-          </div>
+          <img src="<?= h(weather_icon_url($weather['icon'], 4)) ?>" alt="">
+          <div class="weather-temp"><?= (int)$weather['temp'] ?>°</div>
+          <div class="weather-desc"><?= h($weather['desc']) ?></div>
+          <?php if ($weather['feels'] !== (int)$weather['temp']): ?>
+          <div class="weather-feels">Feels like <?= (int)$weather['feels'] ?>°</div>
+          <?php endif; ?>
         </div>
-        <div class="weather-meta<?= $weather['tomorrow_hi'] !== null ? '' : ' cols-3' ?>">
-          <div>
+        <div class="weather-meta">
+          <div class="weather-stat">
             <div class="lab">Today</div>
-            <div class="val"><?= $weather['hi'] !== null ? 'Hi ' . (int)$weather['hi'] . '°' : '—' ?><?= $weather['lo'] !== null ? ' · Lo ' . (int)$weather['lo'] . '°' : '' ?></div>
+            <div class="val"><?php
+              if ($weather['hi'] !== null && $weather['lo'] !== null && (int)$weather['hi'] === (int)$weather['lo']) {
+                  echo (int)$weather['hi'] . '°';
+              } elseif ($weather['hi'] !== null || $weather['lo'] !== null) {
+                  echo ($weather['hi'] !== null ? (int)$weather['hi'] . '°' : '—')
+                     . ($weather['lo'] !== null ? ' / ' . (int)$weather['lo'] . '°' : '');
+              } else {
+                  echo '—';
+              }
+            ?></div>
           </div>
-          <div>
+          <div class="weather-stat">
             <div class="lab">Precip chance</div>
             <div class="val"><?= $weather['pop'] !== null ? (int)$weather['pop'] . '%' : '—' ?></div>
           </div>
-          <div>
+          <div class="weather-stat">
             <div class="lab">Wind</div>
-            <div class="val"><?= (int)$weather['wind_mph'] ?> <small><?= h($weather['wind_dir']) ?></small></div>
+            <div class="val"><?= (int)$weather['wind_mph'] ?> <small>mph <?= h($weather['wind_dir']) ?></small></div>
           </div>
           <?php if ($weather['tomorrow_hi'] !== null): ?>
-          <div>
+          <div class="weather-stat">
             <div class="lab">Tomorrow</div>
-            <div class="val"><?= (int)$weather['tomorrow_hi'] ?>°<?= $weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0 ? ' · ' . (int)$weather['tomorrow_pop'] . '% precip' : '' ?></div>
+            <div class="val"><?= (int)$weather['tomorrow_hi'] ?>°<?= $weather['tomorrow_lo'] !== null ? ' / ' . (int)$weather['tomorrow_lo'] . '°' : '' ?></div>
+            <?php if ($weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0): ?>
+            <div class="sub"><?= (int)$weather['tomorrow_pop'] ?>% precip</div>
+            <?php endif; ?>
+          </div>
+          <?php else: ?>
+          <div class="weather-stat">
+            <div class="lab">Feels like</div>
+            <div class="val"><?= (int)$weather['feels'] ?>°</div>
           </div>
           <?php endif; ?>
         </div>
