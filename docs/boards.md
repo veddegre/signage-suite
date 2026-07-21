@@ -233,11 +233,11 @@ RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEAR
 
 Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with a **weather summary** (OpenWeatherMap via the Weather board) and two **headline panels** below it.
 
-**Admin:** **Today at a Glance** — title, event count, tomorrow preview, weather on/off, headline panels. Calendar feeds live on the **Calendar** board (`calendar.ICS_FEEDS`). Weather uses `index.OWM_API_KEY` and the display location from Rotation.
+**Admin:** **Today at a Glance** — site-wide defaults for title, event count, tomorrow preview, weather, and headline columns. Per-display overrides live under **Rotation → Kiosk settings** (same pattern as sports teams and ticker RSS). Calendar feeds on the **Calendar** board (`calendar.ICS_FEEDS`).
 
-**Headlines (left):** defaults to **[GVNext](https://www.gvsu.edu/gvnext/)** — scrapes `preview-title` story headlines from the homepage (no public RSS on that page). Change the URL in admin for another source.
+**Headlines (left, site default):** [GVNext](https://www.gvsu.edu/gvnext/) homepage — scrapes `preview-title` story headlines. Override page URL, title, or RSS fallback per display in Rotation.
 
-**Headlines (right):** **RSS feed key** from **RSS Stories** (`rss.FEEDS`). Add feeds there first, then enter the key (e.g. `krebs`).
+**Headlines (right, site default):** RSS feed key from **RSS Stories** (`rss.FEEDS`). Override per display in Rotation kiosk settings.
 
 **Rotation presets:** built-in **Weekly planner** template includes `glance.php` alongside the full calendar and weather boards.
 

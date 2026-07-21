@@ -2309,6 +2309,18 @@ function admin_rotation_kiosk_settings_panel(
     $sportsTitle = trim((string)($scrRaw['sports_title'] ?? ''));
     $sportsSubtitle = trim((string)($scrRaw['sports_subtitle'] ?? ''));
     $tickerNewsFeed = trim((string)($scrRaw['ticker_news_feed'] ?? ''));
+    $glanceH1Off = !empty($scrRaw['glance_h1_off']);
+    $glanceH1Title = trim((string)($scrRaw['glance_h1_title'] ?? ''));
+    $glanceH1PageUrl = trim((string)($scrRaw['glance_h1_page_url'] ?? ''));
+    $glanceH1Rss = trim((string)($scrRaw['glance_h1_rss'] ?? ''));
+    $glanceH2Off = !empty($scrRaw['glance_h2_off']);
+    $glanceH2Title = trim((string)($scrRaw['glance_h2_title'] ?? ''));
+    $glanceH2Rss = trim((string)($scrRaw['glance_h2_rss'] ?? ''));
+    $globalGlanceH1Title = trim((string)cfg('glance.HEADLINES_1_TITLE', 'GVNext'));
+    $globalGlanceH1Page = trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/'));
+    $globalGlanceH1Rss = trim((string)cfg('glance.HEADLINES_1_RSS', ''));
+    $globalGlanceH2Title = trim((string)cfg('glance.HEADLINES_2_TITLE', 'News'));
+    $globalGlanceH2Rss = trim((string)cfg('glance.HEADLINES_2_RSS', ''));
     $globalLoc = rotation_global_location();
     $hints = [];
     if (!empty($screenSettings['weighted'])) {
@@ -2332,6 +2344,10 @@ function admin_rotation_kiosk_settings_panel(
     }
     if (array_filter($sportsTeamKeys)) {
         $hints[] = 'Custom sports teams';
+    }
+    if ($glanceH1Off || $glanceH1Title !== '' || $glanceH1PageUrl !== '' || $glanceH1Rss !== ''
+        || $glanceH2Off || $glanceH2Title !== '' || $glanceH2Rss !== '') {
+        $hints[] = 'Custom glance headlines';
     }
     if ($screenSettings['schedule']['enabled']) {
         $hints[] = 'TV off ' . (int)$screenSettings['schedule']['off'] . '→' . (int)$screenSettings['schedule']['on'];
@@ -2540,6 +2556,66 @@ function admin_rotation_kiosk_settings_panel(
             <label class="mini">Board subtitle (optional)</label>
             <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_subtitle]"
                    value="<?= h($sportsSubtitle) ?>" placeholder="Auto from team names when blank">
+          </div>
+        </div>
+        <div class="field span-2 rotation-section">
+          <span class="mini">Today at a glance — headline columns</span>
+          <div class="help" style="margin:6px 0 10px">Left and right headline boxes on <code>glance.php</code> for this display. Blank fields use site defaults from <strong>Today at a Glance</strong> in admin. RSS keys come from <strong>RSS Stories</strong>.</div>
+          <div class="rotation-subgrid location-subgrid">
+            <div class="field span-2">
+              <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h1_off]" value="1"
+                <?= $glanceH1Off ? 'checked' : '' ?>> Hide left headline column on this display</label>
+            </div>
+            <div class="field">
+              <label class="mini">Left column title</label>
+              <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h1_title]"
+                     value="<?= h($glanceH1Title) ?>" placeholder="<?= h($globalGlanceH1Title !== '' ? $globalGlanceH1Title : 'GVNext') ?>">
+            </div>
+            <div class="field span-2">
+              <label class="mini">Left column page URL</label>
+              <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h1_page_url]"
+                     value="<?= h($glanceH1PageUrl) ?>" placeholder="<?= h($globalGlanceH1Page !== '' ? $globalGlanceH1Page : 'https://www.gvsu.edu/gvnext/') ?>">
+              <div class="help" style="margin-top:4px">Scrapes story titles (GVNext uses <code>preview-title</code>). Autodiscovers RSS when the page links a feed.</div>
+            </div>
+            <div class="field span-2">
+              <label class="mini">Left column RSS fallback</label>
+              <select name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h1_rss]">
+                <option value="">— site default<?= $globalGlanceH1Rss !== '' ? ' (' . h($globalGlanceH1Rss) . ')' : '' ?> —</option>
+                <option value="_off" <?= $glanceH1Rss === '_off' ? 'selected' : '' ?>>Off — page scrape only</option>
+                <?php foreach ($rssTickerFeeds as $feedKey => $feed):
+                  if (!is_array($feed) || !empty($feed['off'])) {
+                      continue;
+                  }
+                  $feedLabel = trim((string)($feed['name'] ?? $feedKey));
+                ?>
+                <option value="<?= h((string)$feedKey) ?>" <?= $glanceH1Rss === (string)$feedKey ? 'selected' : '' ?>><?= h($feedLabel) ?> (<?= h((string)$feedKey) ?>)</option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="field span-2" style="margin-top:6px">
+              <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h2_off]" value="1"
+                <?= $glanceH2Off ? 'checked' : '' ?>> Hide right headline column on this display</label>
+            </div>
+            <div class="field">
+              <label class="mini">Right column title</label>
+              <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h2_title]"
+                     value="<?= h($glanceH2Title) ?>" placeholder="<?= h($globalGlanceH2Title !== '' ? $globalGlanceH2Title : 'News') ?>">
+            </div>
+            <div class="field span-2">
+              <label class="mini">Right column RSS feed</label>
+              <select name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h2_rss]">
+                <option value="">— site default<?= $globalGlanceH2Rss !== '' ? ' (' . h($globalGlanceH2Rss) . ')' : ' — off' ?> —</option>
+                <option value="_off" <?= $glanceH2Rss === '_off' ? 'selected' : '' ?>>Off — hide right column</option>
+                <?php foreach ($rssTickerFeeds as $feedKey => $feed):
+                  if (!is_array($feed) || !empty($feed['off'])) {
+                      continue;
+                  }
+                  $feedLabel = trim((string)($feed['name'] ?? $feedKey));
+                ?>
+                <option value="<?= h((string)$feedKey) ?>" <?= $glanceH2Rss === (string)$feedKey ? 'selected' : '' ?>><?= h($feedLabel) ?> (<?= h((string)$feedKey) ?>)</option>
+                <?php endforeach; ?>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -4036,7 +4112,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <p class="help" style="margin:0">Double-click a row or click <strong>Add to playlist</strong>. Need a one-off URL? Use <strong>+ Custom URL</strong>.</p>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="kiosk" role="tabpanel" hidden>
-                <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, and sports. Matches the display chosen above.</p>
+                <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, sports, and glance headline columns. Matches the display chosen above.</p>
                 <?php foreach ($rotationScreens as $screenKey => $screenMeta):
                   admin_rotation_kiosk_settings_panel(
                       (string)$screenKey,

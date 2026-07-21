@@ -1394,6 +1394,7 @@ function rotation_starter_pages(): array
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
         ['url' => 'air.php',     'dwell' => 60,  'from' => 6,  'to' => 22],
         ['url' => 'sports.php',  'dwell' => 75,  'from' => 8,  'to' => 23],
+        ['url' => 'glance.php',  'dwell' => 90,  'from' => 6,  'to' => 21],
         ['url' => 'calendar.php',  'dwell' => 90,  'from' => 6,  'to' => 21],
         ['url' => 'homelab.php', 'dwell' => 45],
         ['url' => 'traffic.php', 'dwell' => 90,  'from' => 6,  'to' => 20],

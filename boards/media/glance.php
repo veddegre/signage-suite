@@ -4,8 +4,7 @@
  * Today's calendar (from Calendar board feeds), weather summary, and headline panels.
  *
  * Setup: configure ICS feeds on the Calendar board (calendar.ICS_FEEDS).
- * Headlines: left panel from a web page (RSS autodiscover or HTML scrape) or RSS feed key;
- * right panel from an RSS Stories feed key (rss.FEEDS).
+ * Headlines: per-display under Rotation → Kiosk settings (site defaults on Today at a Glance in admin).
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
@@ -21,15 +20,6 @@ define('SUBTITLE', cfg('glance.SUBTITLE', ''));
 define('MAX_TODAY', max(3, min(16, (int)cfg('glance.MAX_TODAY', 8))));
 define('SHOW_TOMORROW', (bool)cfg('glance.SHOW_TOMORROW', true));
 define('SHOW_WEATHER', (bool)cfg('glance.SHOW_WEATHER', true));
-define('SHOW_HEADLINES_1', (bool)cfg('glance.SHOW_HEADLINES_1', true));
-define('HEADLINES_1_TITLE', cfg('glance.HEADLINES_1_TITLE', 'GVNext'));
-define('HEADLINES_1_PAGE_URL', trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/')));
-define('HEADLINES_1_RSS', trim((string)cfg('glance.HEADLINES_1_RSS', '')));
-define('HEADLINES_1_MAX', max(3, min(8, (int)cfg('glance.HEADLINES_1_MAX', 5))));
-define('SHOW_HEADLINES_2', (bool)cfg('glance.SHOW_HEADLINES_2', true));
-define('HEADLINES_2_TITLE', cfg('glance.HEADLINES_2_TITLE', 'News'));
-define('HEADLINES_2_RSS', trim((string)cfg('glance.HEADLINES_2_RSS', '')));
-define('HEADLINES_2_MAX', max(3, min(8, (int)cfg('glance.HEADLINES_2_MAX', 5))));
 define('RELOAD_SEC', max(60, (int)cfg('glance.RELOAD_SEC', 300)));
 define('TIMEZONE', cfg('glance.TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit')));
 
@@ -72,16 +62,31 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 
 $weather = SHOW_WEATHER ? weather_glance_summary($lat, $lon) : null;
 
-$headlinesTtl = max(60, (int)cfg('glance.HEADLINES_CACHE_TTL', cfg('rss.CACHE_TTL', 600)));
+$glanceHeadlines = rotation_screen_glance_headlines($SCREEN);
+$headlinePanel1 = $glanceHeadlines['panel1'];
+$headlinePanel2 = $glanceHeadlines['panel2'];
+$headlinesTtl = (int)$glanceHeadlines['ttl'];
 $headlines1 = ['items' => [], 'source' => ''];
 $headlines2 = ['items' => [], 'source' => ''];
-$headlines1Active = SHOW_HEADLINES_1 && (HEADLINES_1_PAGE_URL !== '' || HEADLINES_1_RSS !== '');
-$headlines2Active = SHOW_HEADLINES_2 && HEADLINES_2_RSS !== '';
+$headlines1Active = (bool)$headlinePanel1['active'];
+$headlines2Active = (bool)$headlinePanel2['active'];
 if ($headlines1Active) {
-    $headlines1 = glance_headlines_panel('page', HEADLINES_1_PAGE_URL, HEADLINES_1_RSS, HEADLINES_1_MAX, $headlinesTtl);
+    $headlines1 = glance_headlines_panel(
+        'page',
+        (string)$headlinePanel1['page_url'],
+        (string)$headlinePanel1['rss'],
+        (int)$headlinePanel1['max'],
+        $headlinesTtl
+    );
 }
 if ($headlines2Active) {
-    $headlines2 = glance_headlines_panel('rss', '', HEADLINES_2_RSS, HEADLINES_2_MAX, $headlinesTtl);
+    $headlines2 = glance_headlines_panel(
+        'rss',
+        '',
+        (string)$headlinePanel2['rss'],
+        (int)$headlinePanel2['max'],
+        $headlinesTtl
+    );
 }
 $skyBottomPanels = (int)$headlines1Active + (int)$headlines2Active;
 
@@ -344,20 +349,20 @@ $compact = $boardH < 1080;
 
     <?php if ($headlines1Active):
         glance_render_headlines(
-            HEADLINES_1_TITLE,
+            (string)$headlinePanel1['title'],
             $headlines1,
             !$headlines2Active,
-            HEADLINES_1_PAGE_URL !== ''
-                ? 'No headlines from that page yet — check the URL or add an RSS fallback key.'
-                : 'Set a <strong>Headlines page URL</strong> or RSS feed key in admin → Today at a Glance.'
+            (string)$headlinePanel1['page_url'] !== ''
+                ? 'No headlines from that page yet — check the URL or RSS fallback in Rotation kiosk settings.'
+                : 'Set a page URL or RSS feed under <strong>Rotation → Kiosk settings</strong> or Today at a Glance defaults.'
         );
     endif; ?>
     <?php if ($headlines2Active):
         glance_render_headlines(
-            HEADLINES_2_TITLE,
+            (string)$headlinePanel2['title'],
             $headlines2,
             !$headlines1Active,
-            'Pick an RSS feed key from <strong>RSS Stories</strong> in admin.'
+            'Pick an RSS feed key in <strong>Rotation → Kiosk settings</strong> (or Today at a Glance defaults).'
         );
     endif; ?>
   </div>

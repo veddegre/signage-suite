@@ -81,7 +81,7 @@ function rotation_screen_location_fields(string $screen): array
     ];
 }
 
-/** Apply location + sports fields from SCREEN_OPTS POST onto a screen registry entry. */
+/** Apply location, sports, ticker, and glance headline fields from SCREEN_OPTS POST onto a screen registry entry. */
 function rotation_apply_screen_scope_post_row(array $entry, array $row): array
 {
     $place = trim((string)($row['location_place'] ?? ''));
@@ -150,6 +150,52 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row): array
         unset($entry['ticker_news_feed']);
     }
 
+    if (!empty($row['glance_h1_off'])) {
+        $entry['glance_h1_off'] = true;
+    } else {
+        unset($entry['glance_h1_off']);
+    }
+    $h1Title = trim((string)($row['glance_h1_title'] ?? ''));
+    if ($h1Title !== '') {
+        $entry['glance_h1_title'] = $h1Title;
+    } else {
+        unset($entry['glance_h1_title']);
+    }
+    $h1Page = trim((string)($row['glance_h1_page_url'] ?? ''));
+    if ($h1Page !== '') {
+        $entry['glance_h1_page_url'] = $h1Page;
+    } else {
+        unset($entry['glance_h1_page_url']);
+    }
+    $h1Rss = trim((string)($row['glance_h1_rss'] ?? ''));
+    if ($h1Rss === '_off') {
+        $entry['glance_h1_rss'] = '_off';
+    } elseif ($h1Rss !== '' && rss_ticker_resolve_feed($h1Rss) !== null) {
+        $entry['glance_h1_rss'] = admin_normalize_registry_key($h1Rss) ?? $h1Rss;
+    } else {
+        unset($entry['glance_h1_rss']);
+    }
+
+    if (!empty($row['glance_h2_off'])) {
+        $entry['glance_h2_off'] = true;
+    } else {
+        unset($entry['glance_h2_off']);
+    }
+    $h2Title = trim((string)($row['glance_h2_title'] ?? ''));
+    if ($h2Title !== '') {
+        $entry['glance_h2_title'] = $h2Title;
+    } else {
+        unset($entry['glance_h2_title']);
+    }
+    $h2Rss = trim((string)($row['glance_h2_rss'] ?? ''));
+    if ($h2Rss === '_off') {
+        $entry['glance_h2_rss'] = '_off';
+    } elseif ($h2Rss !== '' && rss_ticker_resolve_feed($h2Rss) !== null) {
+        $entry['glance_h2_rss'] = admin_normalize_registry_key($h2Rss) ?? $h2Rss;
+    } else {
+        unset($entry['glance_h2_rss']);
+    }
+
     return $entry;
 }
 
@@ -211,6 +257,101 @@ function rotation_screen_ticker_news_feed(string $screen): string
     $feed = rss_ticker_resolve_feed($key);
 
     return $feed !== null ? (string)$feed['key'] : '';
+}
+
+function rotation_glance_resolve_rss_key(string $key): string
+{
+    $key = trim($key);
+    if ($key === '' || $key === '_off') {
+        return $key;
+    }
+    require_once __DIR__ . '/rss_ticker_lib.php';
+    $feed = rss_ticker_resolve_feed($key);
+
+    return $feed !== null ? (string)$feed['key'] : '';
+}
+
+/**
+ * Resolved headline panels for glance.php — per-display overrides with glance board defaults.
+ *
+ * @return array{panel1:array{active:bool,title:string,page_url:string,rss:string,max:int},panel2:array{active:bool,title:string,rss:string,max:int},ttl:int}
+ */
+function rotation_screen_glance_headlines(string $screen): array
+{
+    $panel1 = [
+        'active' => (bool)cfg('glance.SHOW_HEADLINES_1', true),
+        'title' => trim((string)cfg('glance.HEADLINES_1_TITLE', 'GVNext')),
+        'page_url' => trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/')),
+        'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_1_RSS', '')),
+        'max' => max(3, min(8, (int)cfg('glance.HEADLINES_1_MAX', 5))),
+    ];
+    $panel2 = [
+        'active' => (bool)cfg('glance.SHOW_HEADLINES_2', true),
+        'title' => trim((string)cfg('glance.HEADLINES_2_TITLE', 'News')),
+        'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_2_RSS', '')),
+        'max' => max(3, min(8, (int)cfg('glance.HEADLINES_2_MAX', 5))),
+    ];
+    if ($panel1['rss'] === '_off') {
+        $panel1['rss'] = '';
+    }
+    if ($panel2['rss'] === '_off') {
+        $panel2['rss'] = '';
+    }
+
+    $scr = rotation_screen_raw_entry($screen);
+    if (is_array($scr)) {
+        if (!empty($scr['glance_h1_off'])) {
+            $panel1['active'] = false;
+        }
+        $h1Title = trim((string)($scr['glance_h1_title'] ?? ''));
+        if ($h1Title !== '') {
+            $panel1['title'] = $h1Title;
+        }
+        $h1Page = trim((string)($scr['glance_h1_page_url'] ?? ''));
+        if ($h1Page !== '') {
+            $panel1['page_url'] = $h1Page;
+        }
+        if (array_key_exists('glance_h1_rss', $scr)) {
+            $h1Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h1_rss']);
+            if ($h1Rss === '_off') {
+                $panel1['rss'] = '';
+            } elseif ($h1Rss !== '') {
+                $panel1['rss'] = $h1Rss;
+            }
+        }
+
+        if (!empty($scr['glance_h2_off'])) {
+            $panel2['active'] = false;
+        }
+        $h2Title = trim((string)($scr['glance_h2_title'] ?? ''));
+        if ($h2Title !== '') {
+            $panel2['title'] = $h2Title;
+        }
+        if (array_key_exists('glance_h2_rss', $scr)) {
+            $h2Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h2_rss']);
+            if ($h2Rss === '_off') {
+                $panel2['rss'] = '';
+                $panel2['active'] = false;
+            } elseif ($h2Rss !== '') {
+                $panel2['rss'] = $h2Rss;
+            }
+        }
+    }
+
+    $panel1['active'] = $panel1['active'] && ($panel1['page_url'] !== '' || $panel1['rss'] !== '');
+    $panel2['active'] = $panel2['active'] && $panel2['rss'] !== '';
+    if ($panel1['title'] === '') {
+        $panel1['title'] = 'Headlines';
+    }
+    if ($panel2['title'] === '') {
+        $panel2['title'] = 'News';
+    }
+
+    return [
+        'panel1' => $panel1,
+        'panel2' => $panel2,
+        'ttl' => max(60, (int)cfg('glance.HEADLINES_CACHE_TTL', cfg('rss.CACHE_TTL', 600))),
+    ];
 }
 
 /** Load ticker constants — per-display lat/lon when set, otherwise global Weather / ticker settings. */
