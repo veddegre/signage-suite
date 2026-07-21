@@ -116,8 +116,10 @@ function admin_schema(): array
         'index' => ['title' => 'Weather', 'file' => 'index.php', 'fields' => [
             ['key' => 'OWM_API_KEY', 'label' => 'OpenWeatherMap API key', 'type' => 'password'],
             ['key' => 'LOCATION', 'label' => 'Location name', 'type' => 'text'],
-            ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
-            ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
+            ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any',
+             'help' => 'Default for weather boards and the NWS alert ticker; override per display under Rotation → Kiosk settings'],
+            ['key' => 'LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any',
+             'help' => 'Default for weather boards and the NWS alert ticker; override per display under Rotation → Kiosk settings'],
             ['key' => 'UNITS', 'label' => 'Units', 'type' => 'select', 'options' => ['imperial', 'metric']],
             ['key' => 'RADAR_URL', 'label' => 'Fallback radar GIF URL', 'type' => 'text',
              'help' => 'NWS RIDGE loop used if RainViewer fails'],
@@ -779,9 +781,8 @@ function admin_schema(): array
         ]],
         'ticker' => ['title' => 'Alert Ticker', 'file' => 'ticker.php', 'fields' => [
             ['key' => 'TICKER_ENABLED', 'label' => 'Enable weather alert ticker', 'type' => 'bool', 'default' => true,
-             'help' => 'Master switch — off hides the ticker everywhere. Per-display on/off is under Rotation → Displays'],
-            ['key' => 'TICKER_LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any'],
-            ['key' => 'TICKER_LON', 'label' => 'Longitude', 'type' => 'number', 'step' => 'any'],
+             'help' => 'Master switch — off hides the ticker everywhere. Per-display on/off is under Rotation → Displays. '
+                     . 'Alert location uses the Weather board lat/lon (or each display\'s kiosk location override).'],
             ['key' => 'TICKER_UA', 'label' => 'NWS User-Agent', 'type' => 'text'],
             ['key' => 'TICKER_TTL', 'label' => 'NWS poll interval (s)', 'type' => 'number'],
             ['key' => 'TICKER_MODE', 'label' => 'Mode', 'type' => 'select', 'options' => ['scroll', 'static']],

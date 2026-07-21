@@ -46,7 +46,8 @@ if (!signage_ticker_enabled() && !$emergencyTicker) {
     return;
 }
 
-signage_ticker_bootstrap(signage_request_screen());
+$tickerScreen = signage_request_screen();
+signage_ticker_bootstrap($tickerScreen);
 
 if (!function_exists('signage_ticker_event_kind')) {
 /** NWS event name → banner kind (warning/watch/advisory/statement). */
@@ -106,12 +107,11 @@ function signage_ticker_description_snippet(string $description): string
     return strlen($description) > 300 ? substr($description, 0, 297) . '…' : $description;
 }
 
-/** Build scroll text: timing, areas, hazards, and instructions beyond the alert name. */
+/** Build scroll text: timing, hazards, and instructions beyond the alert name. */
 function signage_ticker_alert_detail(array $props): string
 {
     $event = trim((string)($props['event'] ?? 'Weather Alert'));
     $headline = signage_ticker_clean_text((string)($props['headline'] ?? ''));
-    $area = signage_ticker_clean_text((string)($props['areaDesc'] ?? ''));
     $instruction = signage_ticker_clean_text((string)($props['instruction'] ?? ''));
     $description = (string)($props['description'] ?? '');
     $kind = signage_ticker_event_kind($event);
@@ -129,10 +129,6 @@ function signage_ticker_alert_detail(array $props): string
             }
         }
         $parts[] = $detail;
-    }
-
-    if ($area !== '' && !signage_ticker_text_contains($parts, $area)) {
-        $parts[] = 'Areas: ' . $area;
     }
 
     $snippet = signage_ticker_description_snippet($description);
@@ -168,7 +164,7 @@ function signage_ticker_text_contains(array $parts, string $needle): bool
 }
 
 if (!function_exists('signage_weather_ticker_alerts')) {
-function signage_weather_ticker_alerts(): array
+function signage_weather_ticker_alerts(?string $screen = null): array
 {
     if (TICKER_DEMO) {
         return [[
@@ -179,7 +175,7 @@ function signage_weather_ticker_alerts(): array
                         . 'dangerous swimming conditions and structural currents expected '
                         . 'along Lake Michigan beaches near Grand Haven and Holland.',
             'text'     => 'until 10 PM EDT this evening — dangerous swimming conditions and structural currents expected '
-                        . 'along Lake Michigan beaches near Grand Haven and Holland — Areas: Mason; Oceana; Muskegon',
+                        . 'along Lake Michigan beaches near Grand Haven and Holland.',
         ], [
             'event'    => 'Severe Thunderstorm Warning',
             'severity' => 'Severe',
@@ -187,20 +183,26 @@ function signage_weather_ticker_alerts(): array
             'headline' => 'Severe Thunderstorm Warning for Ottawa County until 8:45 PM — '
                         . '60 mph wind gusts and quarter size hail possible.',
             'text'     => 'for Ottawa County until 8:45 PM EDT — 60 mph wind gusts and quarter size hail possible '
-                        . '— Areas: Ottawa — For your protection move to an interior room on the lowest floor of a building.',
+                        . '— For your protection move to an interior room on the lowest floor of a building.',
         ]];
     }
 
+    if ($screen === null) {
+        $screen = signage_request_screen();
+    }
+    $loc = rotation_screen_location($screen);
+    $lat = (float)$loc['lat'];
+    $lon = (float)$loc['lon'];
+
     $dir = SIGNAGE_ROOT . '/cache';
     if (!is_dir($dir)) @mkdir($dir, 0775, true);
-    $f = $dir . '/ticker_alerts_' . sprintf('%.4F_%.4F', TICKER_LAT, TICKER_LON) . '.dat';
+    $f = $dir . '/ticker_alerts_' . sprintf('%.4F_%.4F', $lat, $lon) . '.dat';
     $maxAge = min(max((int)TICKER_TTL, 30), 90);   // cap so new alerts show within ~90s
     $raw = null;
     if (is_file($f) && (time() - filemtime($f)) < $maxAge) {
         $raw = (string)file_get_contents($f);
     } else {
-        $ch = curl_init(sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F',
-            TICKER_LAT, TICKER_LON));
+        $ch = curl_init(sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', $lat, $lon));
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>4,
             CURLOPT_TIMEOUT=>8, CURLOPT_USERAGENT=>TICKER_UA,
             CURLOPT_HTTPHEADER=>['Accept: application/geo+json']]);
@@ -235,19 +237,19 @@ function signage_weather_ticker_alerts(): array
 }
 
 if (!function_exists('signage_ticker_alerts')) {
-function signage_ticker_alerts(): array
+function signage_ticker_alerts(?string $screen = null): array
 {
     require_once __DIR__ . '/lib/emergency_lib.php';
     $emergency = emergency_ticker_alert();
     if ($emergency !== null) {
         if (emergency_ticker_show_weather()) {
-            return array_merge([$emergency], signage_weather_ticker_alerts());
+            return array_merge([$emergency], signage_weather_ticker_alerts($screen));
         }
 
         return [$emergency];
     }
 
-    return signage_weather_ticker_alerts();
+    return signage_weather_ticker_alerts($screen);
 }
 }
 
@@ -284,7 +286,7 @@ function signage_ticker_news_label(): string
 if (isset($_GET['api']) && $_GET['api'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    $alerts = signage_ticker_alerts();
+    $alerts = signage_ticker_alerts($tickerScreen);
     $news = [];
     $newsLabel = '';
     if ($alerts === [] && !$emergencyTicker) {

@@ -354,7 +354,7 @@ function rotation_screen_glance_headlines(string $screen): array
     ];
 }
 
-/** Load ticker constants — per-display lat/lon when set, otherwise global Weather / ticker settings. */
+/** Load ticker constants — per-display lat/lon when set, otherwise global Weather board settings. */
 function signage_ticker_bootstrap(?string $screen = null): void
 {
     if (!defined('TICKER_UA')) {
@@ -369,19 +369,6 @@ function signage_ticker_bootstrap(?string $screen = null): void
             $screen = signage_request_screen();
         }
         define('TICKER_NEWS_FEED', rotation_screen_ticker_news_feed($screen));
-    }
-    if (defined('TICKER_LAT') && defined('TICKER_LON')) {
-        return;
-    }
-    if ($screen === null) {
-        $screen = signage_request_screen();
-    }
-    $loc = rotation_screen_location($screen);
-    if (!defined('TICKER_LAT')) {
-        define('TICKER_LAT', $loc['lat']);
-    }
-    if (!defined('TICKER_LON')) {
-        define('TICKER_LON', $loc['lon']);
     }
 }
 
