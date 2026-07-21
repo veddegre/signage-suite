@@ -141,6 +141,25 @@ if ($gotOff !== []) {
     $fail++;
 }
 
+// Outlook O365 export — INTERVAL=2 across US DST (America/Detroit)
+$start = strtotime('2026-01-12 11:00:00');
+$ev['start'] = $start;
+$ev['summary'] = 'TeamDynamix Review Team Meeting (Every 2 Weeks)';
+$ev['rrule'] = parse_rrule('FREQ=WEEKLY;UNTIL=20261214T160000Z;INTERVAL=2;BYDAY=MO;WKST=SU');
+$ev['exdate_ts'] = [];
+foreach (['2026-07-13' => true, '2026-07-27' => true, '2026-07-20' => false] as $ymd => $want) {
+    $got = test_expand($ev, strtotime($ymd), strtotime($ymd) + 86399);
+    $has = $got !== [];
+    if ($has !== $want) {
+        echo 'FAIL Outlook DST biweekly: ' . $ymd . ' should ' . ($want ? 'appear' : 'not appear');
+        if ($got !== []) {
+            echo ' in ' . implode(', ', $got);
+        }
+        echo PHP_EOL;
+        $fail++;
+    }
+}
+
 if ($fail === 0) {
     echo "OK — all RRULE checks passed\n";
     exit(0);

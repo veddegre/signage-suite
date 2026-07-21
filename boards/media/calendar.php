@@ -492,7 +492,7 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
         $match = false;
         switch ($freq) {
             case 'DAILY':
-                $match = ((int)floor(($day - strtotime('today', $start)) / 86400)) % $interval === 0;
+                $match = ics_calendar_days_between(strtotime('today', $start), $day) % $interval === 0;
                 break;
             case 'WEEKLY':
                 $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));

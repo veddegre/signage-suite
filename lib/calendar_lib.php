@@ -79,12 +79,33 @@ function ics_week_period_start(int $dayMidnight, int $wkstIso): int
     return strtotime("-{$back} days", $dayMidnight);
 }
 
+/** Calendar-day difference (DST-safe) between two local midnights. */
+function ics_calendar_days_between(int $fromMidnight, int $toMidnight): int
+{
+    if ($toMidnight === $fromMidnight) {
+        return 0;
+    }
+    try {
+        $tz = new DateTimeZone(date_default_timezone_get() ?: 'UTC');
+    } catch (Throwable $e) {
+        $tz = new DateTimeZone('UTC');
+    }
+    $from = (new DateTime('@' . $fromMidnight))->setTimezone($tz);
+    $to = (new DateTime('@' . $toMidnight))->setTimezone($tz);
+    if ($to < $from) {
+        return -(int)$to->diff($from)->format('%a');
+    }
+
+    return (int)$from->diff($to)->format('%a');
+}
+
 /** Whole weeks from the anchor week (contains DTSTART) to the week that contains $dayMidnight. */
 function ics_weeks_since_start(int $dayMidnight, int $startMidnight, int $wkstIso): int
 {
     $anchor = ics_week_period_start($startMidnight, $wkstIso);
     $here = ics_week_period_start($dayMidnight, $wkstIso);
-    return (int)(($here - $anchor) / 86400 / 7);
+
+    return (int)floor(ics_calendar_days_between($anchor, $here) / 7);
 }
 
 /**
@@ -103,7 +124,7 @@ function ics_rrule_interval(array $ev): int
     }
 
     $summary = (string)($ev['summary'] ?? '');
-    if (preg_match('/(?:every\s*2\s*weeks|every\s*other\s*week|\(\s*every\s*2\s*weeks\s*\))/i', $summary)) {
+    if (preg_match('/(?:every\s*2[\-\s]*weeks|every\s*other\s*week|\(\s*every\s*2[\-\s]*weeks\s*\))/i', $summary)) {
         return 2;
     }
 
