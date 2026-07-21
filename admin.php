@@ -2574,10 +2574,23 @@ function admin_field(array $f, $val, string $board): void
   .rotation-playlist-empty { border:1px dashed var(--line); border-radius:12px; padding:18px; color:var(--mist); font-size:14px; text-align:center; }
   .rotation-screen-tools { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:10px 0 6px; }
   .rotation-display-options { margin:12px 0 14px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--harbor); }
-  .rotation-display-options .field-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px 14px; }
-  .rotation-display-options .field { margin:0; }
+  .rotation-display-options .rotation-options-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px 14px; align-items:start; }
+  .rotation-display-options .rotation-options-grid > .field.span-2 { grid-column:1 / -1; }
+  .rotation-display-options .field { margin:0; min-width:0; }
   .rotation-display-options .l { font-size:12px; margin-bottom:4px; }
-  .rotation-display-options input[type="number"] { width:100%; max-width:120px; }
+  .rotation-display-options .rotation-options-grid > .field input[type="number"] { width:100%; max-width:120px; }
+  .rotation-display-options .rotation-section { margin-top:8px; padding-top:12px; border-top:1px solid var(--hairline); }
+  .rotation-display-options .rotation-subgrid { display:grid; gap:10px 14px; width:100%; }
+  .rotation-display-options .location-subgrid { grid-template-columns:minmax(200px,1.5fr) repeat(2,minmax(140px,1fr)); }
+  .rotation-display-options .sports-subgrid { grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); }
+  .rotation-display-options .hero-strip-slots { width:100%; }
+  .rotation-display-options .hero-strip-slot-row { display:grid; grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto; gap:10px 14px; margin-top:8px; width:100%; align-items:end; }
+  .rotation-display-options .hero-strip-slot-row .field { min-width:0; }
+  .rotation-display-options .hero-strip-slot-row select { width:100%; max-width:none; }
+  .rotation-display-options .rotation-section select,
+  .rotation-display-options .rotation-section input[type="text"] { width:100%; max-width:none; }
+  .rotation-display-options .strip-height-field { max-width:140px; margin-top:10px; }
+  .rotation-display-options .strip-height-field input[type="number"] { max-width:120px; }
   .rotation-weekdays { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; }
   .rotation-weekday { display:flex; align-items:center; gap:3px; margin:0; font-size:11px; color:var(--mist); white-space:nowrap; }
   .rotation-weekday input { width:14px; height:14px; margin:0; accent-color:var(--beacon); }
@@ -3772,7 +3785,7 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
           <div class="rotation-display-options">
             <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
             <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone. Unchecked weekdays stay dark all day. Location and sports overrides apply to weather boards and <code>sports.php</code> when this display runs in rotation.</div>
-            <div class="field-grid">
+            <div class="field-grid rotation-options-grid">
               <div class="field">
                 <label class="check" title="<?= h(rotation_weighted_mode_tooltip()) ?>"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][weighted]" value="1"
                   <?= !empty($screenSettings['weighted']) ? 'checked' : '' ?>> Weighted rotation</label>
@@ -3830,18 +3843,18 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                        name="SCREEN_OPTS[<?= h($screenKey) ?>][hang_ms]" value="<?= h($hangOpt) ?>"
                        placeholder="<?= (int)rotation_global_hang_ms() ?>">
               </div>
-              <div class="field span-2" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--hairline)">
+              <div class="field span-2 rotation-section">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip]" value="1"
                   <?= !empty($heroCfg['enabled']) ? 'checked' : '' ?>> Status strip (persistent bar above ticker)</label>
               </div>
-              <div class="field span-2">
+              <div class="field span-2 rotation-section" style="padding-top:0;border-top:0;margin-top:0">
                 <span class="mini">Strip sources</span>
                 <div class="hero-strip-slots" data-hero-strip-slots="<?= h($screenKey) ?>">
                   <?php foreach ($heroSlots as $si => $slot):
                     $slotSource = (string)($slot['source'] ?? '');
                     $slotKey = (string)($slot['key'] ?? '');
                   ?>
-                  <div class="hero-strip-slot-row field-grid" style="grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto;margin-top:8px">
+                  <div class="hero-strip-slot-row">
                     <div class="field">
                       <label class="mini">Source</label>
                       <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][source]">
@@ -3851,7 +3864,7 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                         <?php endforeach; ?>
                       </select>
                     </div>
-                    <div class="field">
+                    <div class="field hero-strip-key-field">
                       <label class="mini">Page / item</label>
                       <select name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_slots][<?= (int)$si ?>][key]">
                         <?php
@@ -3874,16 +3887,16 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                 <button type="button" class="secondary" style="margin-top:8px;padding:4px 10px;font-size:12px"
                         onclick="addHeroStripSlot('<?= h($screenKey) ?>')">+ Add strip source</button>
                 <div class="help">Combine up to four sources (e.g. Kuma summary + ntfy alert + countdown). Announcements marked <em>strip only</em> are for the hero bar — pick them here or choose “All active strip-only items”.</div>
+                <div class="field strip-height-field">
+                  <label class="mini">Strip height (px)</label>
+                  <input type="number" min="60" max="240" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_height]"
+                         value="<?= !empty($heroCfg['enabled']) ? (int)($heroCfg['height'] ?? 120) : '' ?>" placeholder="120">
+                </div>
               </div>
-              <div class="field">
-                <label class="mini">Strip height (px)</label>
-                <input type="number" min="60" max="240" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_height]"
-                       value="<?= !empty($heroCfg['enabled']) ? (int)($heroCfg['height'] ?? 120) : '' ?>" placeholder="120">
-              </div>
-              <div class="field span-2" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--hairline)">
+              <div class="field span-2 rotation-section">
                 <span class="mini">Location for this display</span>
                 <div class="help" style="margin:6px 0 10px">Optional override for weather, air, UV, photo, traffic map center, and the weather alert ticker on this kiosk. Leave blank to use the global Weather board (<?= h($globalLoc['place']) ?>).</div>
-                <div class="field-grid" style="grid-template-columns:minmax(180px,1.4fr) repeat(2,minmax(120px,1fr));gap:10px">
+                <div class="rotation-subgrid location-subgrid">
                   <div class="field">
                     <label class="mini">Place name</label>
                     <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_place]"
@@ -3901,10 +3914,10 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                   </div>
                 </div>
               </div>
-              <div class="field span-2" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--hairline)">
+              <div class="field span-2 rotation-section">
                 <span class="mini">Sports teams for this display</span>
                 <div class="help" style="margin:6px 0 10px">Up to four ESPN teams on <code>sports.php</code>. Leave all blank for the site default (<?= h(implode(' · ', array_map(static fn(array $t): string => (string)($t['name'] ?? ''), sports_default_teams()))) ?>).</div>
-                <div class="field-grid" style="grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px">
+                <div class="rotation-subgrid sports-subgrid">
                   <?php foreach ($sportsSlots as $si => $picked): ?>
                   <div class="field">
                     <label class="mini">Team <?= (int)$si + 1 ?></label>
@@ -8864,8 +8877,8 @@ function addHeroStripSlot(screenKey) {
       + String(sources[key]).replace(/</g, '&lt;') + '</option>';
   });
   const row = document.createElement('div');
-  row.className = 'hero-strip-slot-row field-grid';
-  row.style.cssText = 'grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto;margin-top:8px';
+  row.className = 'hero-strip-slot-row';
+  row.style.cssText = 'margin-top:8px';
   row.innerHTML =
     '<div class="field"><label class="mini">Source</label>' +
       '<select name="SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][source]">' +
