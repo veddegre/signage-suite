@@ -292,6 +292,111 @@ function sports_score_str(mixed $score): ?string
     return $s !== '' ? $s : null;
 }
 
+/**
+ * Where-to-watch labels from ESPN competition.broadcasts (national TV preferred, then home/away regional).
+ * @return list<string>
+ */
+function sports_broadcast_labels(?array $comp, ?bool $teamIsHome = null, int $limit = 2): array
+{
+    if (!is_array($comp) || $limit < 1) {
+        return [];
+    }
+    $nationalTv = [];
+    $nationalOther = [];
+    $homeTv = [];
+    $homeOther = [];
+    $awayTv = [];
+    $awayOther = [];
+    foreach ($comp['broadcasts'] ?? [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $name = trim((string)($row['media']['shortName'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        $market = strtolower(trim((string)($row['market']['type'] ?? '')));
+        $type = strtolower(trim((string)($row['type']['shortName'] ?? '')));
+        $isTv = $type === 'tv';
+        if ($market === 'national') {
+            if ($isTv) {
+                $nationalTv[] = $name;
+            } else {
+                $nationalOther[] = $name;
+            }
+        } elseif ($market === 'home') {
+            if ($isTv) {
+                $homeTv[] = $name;
+            } else {
+                $homeOther[] = $name;
+            }
+        } elseif ($market === 'away') {
+            if ($isTv) {
+                $awayTv[] = $name;
+            } else {
+                $awayOther[] = $name;
+            }
+        }
+    }
+    foreach ($comp['geoBroadcasts'] ?? [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $name = trim((string)($row['media']['shortName'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        $market = strtolower(trim((string)($row['market']['type'] ?? '')));
+        if ($market === 'home') {
+            $homeTv[] = $name;
+        } elseif ($market === 'away') {
+            $awayTv[] = $name;
+        } else {
+            $nationalTv[] = $name;
+        }
+    }
+
+    $pick = static function (array ...$groups): array {
+        foreach ($groups as $group) {
+            if ($group !== []) {
+                return array_values(array_unique($group));
+            }
+        }
+
+        return [];
+    };
+
+    $ordered = $pick(
+        $nationalTv,
+        $teamIsHome === true ? $homeTv : [],
+        $teamIsHome === false ? $awayTv : [],
+        $homeTv,
+        $awayTv,
+        $nationalOther,
+        $teamIsHome === true ? $homeOther : [],
+        $teamIsHome === false ? $awayOther : [],
+        $homeOther,
+        $awayOther,
+    );
+
+    return array_slice($ordered, 0, $limit);
+}
+
+function sports_broadcast_line(?array $comp, ?bool $teamIsHome = null, int $limit = 2): string
+{
+    return implode(' · ', sports_broadcast_labels($comp, $teamIsHome, $limit));
+}
+
+function sports_append_game_broadcast(string $detail, array $game): string
+{
+    $watch = trim((string)($game['broadcast'] ?? ''));
+    if ($watch === '') {
+        return $detail;
+    }
+
+    return $detail !== '' ? ($detail . ' · ' . $watch) : $watch;
+}
+
 /** @param array<string,mixed> $event @param array<string,mixed> $teamCfg */
 function sports_parse_event(array $event, array $teamCfg): ?array
 {
@@ -333,6 +438,7 @@ function sports_parse_event(array $event, array $teamCfg): ?array
     $oppAbbr = (string)($them['team']['abbreviation'] ?? '?');
     $oppName = (string)($them['team']['displayName'] ?? $oppAbbr);
     $seasonType = (string)($event['seasonType']['name'] ?? $comp['seasonType']['name'] ?? '');
+    $broadcast = sports_broadcast_line($comp, $home);
 
     return [
         'state' => $state,
@@ -347,6 +453,7 @@ function sports_parse_event(array $event, array $teamCfg): ?array
         'won' => $won,
         'short_name' => (string)($event['shortName'] ?? $event['name'] ?? ''),
         'season_type' => $seasonType,
+        'broadcast' => $broadcast,
     ];
 }
 
@@ -523,6 +630,10 @@ function sports_next_game_strip(array $cards, DateTimeZone $tz): array
             if (empty($card['active_season'])) {
                 $text = sports_future_game_label($next) . ' · ' . $text;
             }
+            $broadcast = trim((string)($next['broadcast'] ?? ''));
+            if ($broadcast !== '') {
+                $when = $when !== '' && $when !== '—' ? ($when . ' · ' . $broadcast) : $broadcast;
+            }
         } else {
             $when = '';
             $text = sports_league_opens_label((string)($card['league_key'] ?? ''));
@@ -610,7 +721,7 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
         if ($game['state'] === 'in') {
             $mode = 'live';
             $headline = ($game['us_score'] ?? '0') . ' – ' . ($game['them_score'] ?? '0');
-            $detail = $game['status'] !== '' ? $game['status'] : 'Live';
+            $detail = sports_append_game_broadcast($game['status'] !== '' ? $game['status'] : 'Live', $game);
         } elseif ($game['state'] === 'post') {
             $mode = 'final';
             $headline = ($game['us_score'] ?? '—') . ' – ' . ($game['them_score'] ?? '—');
@@ -627,7 +738,7 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
                 $when = sports_format_game_time($game['date'], $tz);
                 $label = sports_future_game_label($game);
                 $headline = $label . ' · ' . $game['matchup'];
-                $detail = $when;
+                $detail = sports_append_game_broadcast($when, $game);
                 if ($standing !== '') {
                     $detail .= ' · ' . $standing;
                 } elseif ($record !== '') {
@@ -636,7 +747,7 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
             } else {
                 $mode = 'next';
                 $headline = $game['matchup'];
-                $detail = sports_format_game_time($game['date'], $tz);
+                $detail = sports_append_game_broadcast(sports_format_game_time($game['date'], $tz), $game);
             }
         }
     } elseif ($record !== '') {

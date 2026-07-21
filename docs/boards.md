@@ -187,9 +187,9 @@ Latest comic from [xkcd.com](https://xkcd.com/) — title, image, and hover text
 
 Lions, Tigers, Pistons, Red Wings — 2×2 cards plus **Next games** strip.
 
-**Data:** ESPN public API — no key. Server-side cache (default 300s; scoreboards refresh sooner).
+**Data:** ESPN public API — no key. Server-side cache (default 300s; scoreboards refresh sooner). Upcoming and live games show **local start time** and **where to watch** (national TV first, then home/away regional networks from ESPN’s schedule feed).
 
-**Setup:** admin → **Detroit Sports** — title, subtitle, timezone. ~75s dwell is a reasonable rotation default.
+**Setup:** admin → **Detroit Sports** — title, subtitle, timezone. Per-display team picks under **Rotation → Display options**. ~75s dwell is a reasonable rotation default.
 
 Season logic uses calendar windows plus nearby games. Live games show score + period; direct view auto-refreshes ~2 minutes while any team is live.
 
