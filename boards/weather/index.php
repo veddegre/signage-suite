@@ -15,11 +15,15 @@
 
 // ── Config ──────────────────────────────────────────────────────────────────
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+
+$SCREEN = signage_request_screen();
+$LOC = rotation_screen_location($SCREEN);
 
 define('OWM_API_KEY', cfg('index.OWM_API_KEY', 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE'));
-define('LAT', cfg('index.LAT', 42.9720));
-define('LON', cfg('index.LON', -85.9536));
-define('LOCATION', cfg('index.LOCATION', 'Allendale, Michigan'));
+define('LAT', $LOC['lat']);
+define('LON', $LOC['lon']);
+define('LOCATION', $LOC['place']);
 define('UNITS', cfg('index.UNITS', 'imperial'));
 define('TIMEZONE', cfg('index.TIMEZONE', 'America/Detroit'));
 define('RADAR_URL', cfg('index.RADAR_URL', 'https://radar.weather.gov/ridge/standard/KGRR_loop.gif'));

@@ -10,11 +10,15 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+
+$SCREEN = signage_request_screen();
+$LOC = rotation_screen_location($SCREEN);
 
 define('OWM_API_KEY', cfg('photo.OWM_API_KEY', 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE'));
-define('LAT', cfg('photo.LAT', 42.9720));
-define('LON', cfg('photo.LON', -85.9536));
-define('PLACE', cfg('photo.PLACE', 'West Michigan'));
+define('LAT', $LOC['lat']);
+define('LON', $LOC['lon']);
+define('PLACE', $LOC['place']);
 define('TIMEZONE', cfg('photo.TIMEZONE', 'America/Detroit'));
 const CACHE_DIR = SIGNAGE_ROOT . '/cache';
 define('CACHE_TTL', cfg('photo.CACHE_TTL', 900));

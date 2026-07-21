@@ -22,6 +22,7 @@ require_once __DIR__ . '/lib/rotation_lib.php';
 require_once __DIR__ . '/lib/presence_lib.php';
 require_once __DIR__ . '/lib/hero_strip_lib.php';
 require_once __DIR__ . '/lib/emergency_lib.php';
+require_once __DIR__ . '/lib/screen_scope_lib.php';
 
 // Which screen is this device? board.php?screen=garage etc.; default 'main'.
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
@@ -469,7 +470,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   }
 
   function boardNeedsScope(url) {
-    return /(?:^|[?&/])(calendar|family|rss|video|grafana|splunkdash|splunk|zabbix|web|slides|rotator)\.php(?:[?&#]|$)/i.test(String(url));
+    return /(?:^|[?&/])(calendar|family|rss|video|grafana|splunkdash|splunk|zabbix|web|slides|rotator|index|air|uv|photo|traffic|sports)\.php(?:[?&#]|$)/i.test(String(url));
   }
 
   function rotateToIndex(targetIdx) {
@@ -653,6 +654,9 @@ if (($_GET['api'] ?? '') === 'presence') {
   setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
 </script>
 <?php signage_kiosk_hide_pointer_script(); ?>
-<?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>
+<?php if ($showTicker):
+    signage_prime_ticker_location($SCREEN);
+    include __DIR__ . '/ticker.php';
+endif; ?>
 </body>
 </html>

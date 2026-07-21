@@ -11,12 +11,16 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+
+$SCREEN = signage_request_screen();
+$LOC = rotation_screen_location($SCREEN);
 
 define('TOMTOM_API_KEY', cfg('traffic.TOMTOM_API_KEY', 'PUT-YOUR-TOMTOM-KEY-HERE'));
 define('TITLE', cfg('traffic.TITLE', 'Commute Traffic'));
 define('SUBTITLE', cfg('traffic.SUBTITLE', 'I-96 · Allendale ↔ Grand Rapids'));
-define('LAT', cfg('traffic.LAT', 42.967));
-define('LON', cfg('traffic.LON', -85.78));
+define('LAT', $LOC['lat']);
+define('LON', $LOC['lon']);
 define('ZOOM', cfg('traffic.ZOOM', 11));
 define('FLOW_STYLE', cfg('traffic.FLOW_STYLE', 'relative0-dark'));
 define('TIMEZONE', cfg('traffic.TIMEZONE', 'America/Detroit'));

@@ -9,9 +9,13 @@
 
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/sports_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 
-define('TITLE', cfg('sports.TITLE', 'Detroit Sports'));
-define('SUBTITLE', cfg('sports.SUBTITLE', 'Lions · Tigers · Pistons · Red Wings'));
+$SCREEN = signage_request_screen();
+$sportsLabels = rotation_screen_sports_labels($SCREEN);
+
+define('TITLE', $sportsLabels['title']);
+define('SUBTITLE', $sportsLabels['subtitle']);
 define('TIMEZONE', cfg('sports.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('sports.RELOAD_SEC', 120));
 const SPORTS_CACHE_DIR = SIGNAGE_ROOT . '/cache';
@@ -22,7 +26,7 @@ $showClock = signage_show_clock();
 $tz = new DateTimeZone(TIMEZONE);
 $GLOBALS['diag'] = [];
 
-$teams = sports_default_teams();
+$teams = sports_teams_for_screen($SCREEN);
 $baseTtl = max(60, (int)CACHE_TTL);
 
 $scoreboardsByLeague = [];

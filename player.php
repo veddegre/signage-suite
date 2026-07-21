@@ -19,6 +19,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/lib/rotation_lib.php';
+require_once __DIR__ . '/lib/screen_scope_lib.php';
 
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 $blankActive = rotation_screen_blank_active($SCREEN);
@@ -158,6 +159,9 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
   })();
 </script>
 <?php signage_kiosk_hide_pointer_script(); ?>
-<?php if ($showTicker): include __DIR__ . '/ticker.php'; endif; ?>
+<?php if ($showTicker):
+    signage_prime_ticker_location($SCREEN);
+    include __DIR__ . '/ticker.php';
+endif; ?>
 </body>
 </html>

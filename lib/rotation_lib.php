@@ -547,6 +547,11 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         }
     }
 
+    if ($includeIdentity || !empty($row['_screen_opts_form'])) {
+        require_once __DIR__ . '/screen_scope_lib.php';
+        $entry = rotation_apply_screen_scope_post_row($entry, $row);
+    }
+
     unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on'], $entry['_screen_opts_form']);
 
     return $entry;

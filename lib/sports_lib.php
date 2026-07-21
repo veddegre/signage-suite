@@ -15,6 +15,140 @@ function sports_default_teams(): array
     ];
 }
 
+/** @return array<string,array<string,mixed>> Catalog key => team config (cached ESPN + legacy aliases). */
+function sports_team_catalog(bool $refresh = false): array
+{
+    $cacheFile = SIGNAGE_ROOT . '/cache/sports_team_catalog.json';
+    $ttl = 86400 * 7;
+    if (!$refresh && is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
+        $cached = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($cached) && $cached !== []) {
+            return $cached;
+        }
+    }
+
+    $catalog = [];
+    foreach (sports_default_teams() as $team) {
+        $catalog[(string)$team['key']] = $team;
+    }
+
+    foreach ([
+        ['football', 'nfl', 'NFL', 'football'],
+        ['baseball', 'mlb', 'MLB', 'baseball'],
+        ['basketball', 'nba', 'NBA', 'basketball'],
+        ['hockey', 'nhl', 'NHL', 'hockey'],
+    ] as [$sport, $league, $label, $icon]) {
+        $url = sports_espn_url($sport, $league, 'teams');
+        $data = sports_cached_json($url, 'espn_catalog_' . $league, 3600);
+        $rows = $data['sports'][0]['leagues'][0]['teams'] ?? [];
+        if (!is_array($rows)) {
+            continue;
+        }
+        foreach ($rows as $wrap) {
+            if (!is_array($wrap)) {
+                continue;
+            }
+            $team = is_array($wrap['team'] ?? null) ? $wrap['team'] : $wrap;
+            $teamId = trim((string)($team['id'] ?? ''));
+            if ($teamId === '') {
+                continue;
+            }
+            $slug = trim((string)($team['slug'] ?? ''));
+            $abbrev = strtoupper(trim((string)($team['abbreviation'] ?? '')));
+            $display = trim((string)($team['displayName'] ?? $team['name'] ?? $abbrev));
+            if ($display === '') {
+                continue;
+            }
+            $key = $league . '_' . ($slug !== '' ? $slug : strtolower($abbrev));
+            $color = trim((string)($team['color'] ?? ''));
+            $accent = $color !== '' ? ('#' . ltrim($color, '#')) : '#ffb347';
+            $shortName = trim((string)($team['shortDisplayName'] ?? $team['name'] ?? $display));
+            $catalog[$key] = [
+                'key' => $key,
+                'name' => $shortName !== '' ? $shortName : $display,
+                'abbrev' => $abbrev !== '' ? $abbrev : strtoupper(substr($key, 0, 3)),
+                'sport' => $sport,
+                'league' => $league,
+                'team_id' => $teamId,
+                'accent' => $accent,
+                'label' => $label,
+                'icon' => $icon,
+            ];
+        }
+    }
+
+    if ($catalog !== []) {
+        $dir = dirname($cacheFile);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        @file_put_contents($cacheFile, json_encode($catalog, JSON_UNESCAPED_SLASHES), LOCK_EX);
+    }
+
+    return $catalog;
+}
+
+/** @return array<string,list<array{key:string,label:string}>> Grouped for admin selects. */
+function sports_team_catalog_groups(): array
+{
+    $groups = [
+        'NFL' => [],
+        'MLB' => [],
+        'NBA' => [],
+        'NHL' => [],
+    ];
+    foreach (sports_team_catalog() as $key => $team) {
+        $label = (string)($team['label'] ?? strtoupper((string)($team['league'] ?? '')));
+        if (!isset($groups[$label])) {
+            $groups[$label] = [];
+        }
+        $name = trim((string)($team['name'] ?? $key));
+        $abbr = trim((string)($team['abbrev'] ?? ''));
+        $groups[$label][] = [
+            'key' => (string)$key,
+            'label' => $abbr !== '' ? ($name . ' (' . $abbr . ')') : $name,
+        ];
+    }
+    foreach ($groups as $label => $items) {
+        usort($items, static fn(array $a, array $b): int => strcasecmp($a['label'], $b['label']));
+        $groups[$label] = $items;
+    }
+
+    return $groups;
+}
+
+/** @param list<string> $keys @return list<array<string,mixed>> */
+function sports_teams_from_keys(array $keys): array
+{
+    $catalog = sports_team_catalog();
+    $out = [];
+    foreach ($keys as $key) {
+        $key = trim((string)$key);
+        if ($key === '' || !isset($catalog[$key])) {
+            continue;
+        }
+        $out[] = $catalog[$key];
+        if (count($out) >= 4) {
+            break;
+        }
+    }
+
+    return $out;
+}
+
+/** Teams for a rotation display — site default when no override. @return list<array<string,mixed>> */
+function sports_teams_for_screen(string $screen): array
+{
+    require_once __DIR__ . '/screen_scope_lib.php';
+    $keys = rotation_screen_sports_team_keys($screen);
+    if ($keys === []) {
+        return sports_default_teams();
+    }
+    $teams = sports_teams_from_keys($keys);
+
+    return $teams !== [] ? $teams : sports_default_teams();
+}
+
 /** Approximate in-season months (1–12) for each league path. Includes preseason/playoffs. */
 function sports_league_season_months(string $league): array
 {

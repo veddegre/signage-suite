@@ -10,11 +10,15 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+
+$SCREEN = signage_request_screen();
+$LOC = rotation_screen_location($SCREEN);
 
 define('TITLE', cfg('uv.TITLE', 'UV Index'));
-define('PLACE', cfg('uv.PLACE', 'West Michigan'));
-define('LAT', cfg('uv.LAT', 42.9720));
-define('LON', cfg('uv.LON', -85.9536));
+define('PLACE', $LOC['place']);
+define('LAT', $LOC['lat']);
+define('LON', $LOC['lon']);
 define('TIMEZONE', cfg('uv.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('uv.RELOAD_SEC', 900));
 const CACHE_DIR = SIGNAGE_ROOT . '/cache';

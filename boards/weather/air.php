@@ -12,11 +12,15 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+
+$SCREEN = signage_request_screen();
+$LOC = rotation_screen_location($SCREEN);
 
 define('TITLE', cfg('air.TITLE', 'Air & Pollen'));
-define('PLACE', cfg('air.PLACE', 'West Michigan'));
-define('LAT', cfg('air.LAT', 42.9720));
-define('LON', cfg('air.LON', -85.9536));
+define('PLACE', $LOC['place']);
+define('LAT', $LOC['lat']);
+define('LON', $LOC['lon']);
 define('TIMEZONE', cfg('air.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('air.RELOAD_SEC', 3600));
 define('GOOGLE_POLLEN_API_KEY', cfg('air.GOOGLE_POLLEN_API_KEY', ''));

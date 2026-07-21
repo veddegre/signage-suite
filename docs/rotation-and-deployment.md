@@ -23,11 +23,13 @@ Open **Display settings** on the Rotation page (screen list, names, shared edito
 | Crossfade / settle / hang | Timings in ms (blank = global default) |
 | Weighted / Shuffle | Rotation mode (see below) |
 | Hero status strip | Persistent Kuma / Zabbix / announce / ntfy bar above ticker |
+| Location | Optional lat/lon + place name for this kiosk — weather, air, UV, photo, traffic map, and NWS ticker (blank = global **Weather** board) |
+| Sports teams | Up to four ESPN teams for `sports.php` on this display (blank = site default) |
 | Blank hours / CEC | HDMI-CEC power schedule |
 
 Operators with **multiple displays** assigned, or **shared editors** on a display, see a playlist panel per screen (or a combined view where the UI groups their displays). Deploy pickers on **Slides**, **Photo Rotator**, **RSS**, and **Video** target any display they may fully edit.
 
-Operators see display options (including hero strip) inside their assigned or shared playlist panel(s).
+Operators see display options (including hero strip, **location**, and **sports teams**) inside their assigned or shared playlist panel(s).
 
 ### Emergency override (super admin)
 

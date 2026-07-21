@@ -31,6 +31,8 @@ require_once __DIR__ . '/lib/web_lib.php';
 require_once __DIR__ . '/lib/users_lib.php';
 require_once __DIR__ . '/lib/sso_lib.php';
 require_once __DIR__ . '/lib/audit_lib.php';
+require_once __DIR__ . '/lib/screen_scope_lib.php';
+require_once __DIR__ . '/lib/sports_lib.php';
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json'; // legacy; migrated to users.json
 
@@ -1739,6 +1741,7 @@ if (!admin_is_super() && !admin_is_infra()) {
     unset($heroStripKeyOptions['kuma'], $heroStripKeyOptions['ntfy']);
 }
 $heroStripSources = admin_hero_strip_source_options();
+$sportsCatalogGroups = ($authed && $board === 'rotation') ? sports_team_catalog_groups() : [];
 $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
@@ -2986,7 +2989,7 @@ function admin_field(array $f, $val, string $board): void
         <?php endif; ?>
       </div>
       <div class="help" style="margin-bottom:18px;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
-        <strong>What you can manage:</strong> rotation playlists and display options (including the <strong>hero status strip</strong>),
+        <strong>What you can manage:</strong> rotation playlists and display options (including the <strong>hero status strip</strong>, <strong>location</strong>, and <strong>sports teams</strong> per display),
         slides, photos, RSS, video, announcements, and monitoring pages you own or that are shared with you
         (Zabbix, Uptime Kuma, Splunk, Grafana, …). API URLs and tokens are set by your super admin under each board’s
         <strong>Board settings</strong>. Use <strong>+ Add page</strong> on Zabbix/Kuma/Splunk to create your own walls.
@@ -3535,7 +3538,7 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
           <details class="panel rotation-display-settings-panel" style="margin-bottom:16px">
             <summary>Display settings (<?= count($scrRows) ?> screen<?= count($scrRows) === 1 ? '' : 's' ?>)</summary>
             <div class="panel-body rotation-display-settings-body" style="padding-top:8px">
-          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, active weekdays, and rotation mode. <strong>Weighted</strong> picks the next page at random using each entry's <strong>Weight</strong> (see playlist cards). Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
+          <div class="help" style="margin-bottom:12px">Per-display weather ticker, transitions, debug, arrow-key navigation, blank hours, active weekdays, rotation mode, <strong>location</strong>, and <strong>sports teams</strong>. <strong>Weighted</strong> picks the next page at random using each entry's <strong>Weight</strong> (see playlist cards). Kiosk URL: <code>board.php?screen=KEY</code> (plain <code>board.php</code> = main). Leave transition fields blank to use the global defaults below.</div>
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
@@ -3757,10 +3760,18 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
             $heroCfg = is_array($screenSettings['hero_strip'] ?? null) ? $screenSettings['hero_strip'] : rotation_hero_strip_from_screen($scrRaw);
             $heroSlots = is_array($heroCfg['slots'] ?? null) && $heroCfg['slots'] !== []
                 ? $heroCfg['slots'] : [['source' => (string)($heroCfg['source'] ?? ''), 'key' => (string)($heroCfg['key'] ?? '')]];
+            $locationFields = rotation_screen_location_fields($screenKey);
+            $sportsTeamKeys = rotation_screen_sports_team_keys($screenKey);
+            $sportsSlots = $sportsTeamKeys;
+            while (count($sportsSlots) < 4) {
+                $sportsSlots[] = '';
+            }
+            $sportsTitle = trim((string)($scrRaw['sports_title'] ?? ''));
+            $globalLoc = rotation_global_location();
           ?>
           <div class="rotation-display-options">
             <input type="hidden" name="SCREEN_OPTS[<?= h($screenKey) ?>][_screen_opts_form]" value="1">
-            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone. Unchecked weekdays stay dark all day.</div>
+            <div class="help" style="margin-bottom:10px">Display options for this kiosk. Transition fields blank = site defaults (<?= (int)rotation_global_fade_ms() ?> / <?= (int)rotation_global_settle_ms() ?> / <?= (int)rotation_global_hang_ms() ?> ms). Blank hours use the rotation timezone. Unchecked weekdays stay dark all day. Location and sports overrides apply to weather boards and <code>sports.php</code> when this display runs in rotation.</div>
             <div class="field-grid">
               <div class="field">
                 <label class="check" title="<?= h(rotation_weighted_mode_tooltip()) ?>"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][weighted]" value="1"
@@ -3868,6 +3879,53 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                 <label class="mini">Strip height (px)</label>
                 <input type="number" min="60" max="240" name="SCREEN_OPTS[<?= h($screenKey) ?>][hero_strip_height]"
                        value="<?= !empty($heroCfg['enabled']) ? (int)($heroCfg['height'] ?? 120) : '' ?>" placeholder="120">
+              </div>
+              <div class="field span-2" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--hairline)">
+                <span class="mini">Location for this display</span>
+                <div class="help" style="margin:6px 0 10px">Optional override for weather, air, UV, photo, traffic map center, and the weather alert ticker on this kiosk. Leave blank to use the global Weather board (<?= h($globalLoc['place']) ?>).</div>
+                <div class="field-grid" style="grid-template-columns:minmax(180px,1.4fr) repeat(2,minmax(120px,1fr));gap:10px">
+                  <div class="field">
+                    <label class="mini">Place name</label>
+                    <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_place]"
+                           value="<?= h($locationFields['place']) ?>" placeholder="<?= h($globalLoc['place']) ?>">
+                  </div>
+                  <div class="field">
+                    <label class="mini">Latitude</label>
+                    <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lat]"
+                           value="<?= h($locationFields['lat']) ?>" placeholder="<?= h((string)$globalLoc['lat']) ?>">
+                  </div>
+                  <div class="field">
+                    <label class="mini">Longitude</label>
+                    <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lon]"
+                           value="<?= h($locationFields['lon']) ?>" placeholder="<?= h((string)$globalLoc['lon']) ?>">
+                  </div>
+                </div>
+              </div>
+              <div class="field span-2" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--hairline)">
+                <span class="mini">Sports teams for this display</span>
+                <div class="help" style="margin:6px 0 10px">Up to four ESPN teams on <code>sports.php</code>. Leave all blank for the site default (<?= h(implode(' · ', array_map(static fn(array $t): string => (string)($t['name'] ?? ''), sports_default_teams()))) ?>).</div>
+                <div class="field-grid" style="grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px">
+                  <?php foreach ($sportsSlots as $si => $picked): ?>
+                  <div class="field">
+                    <label class="mini">Team <?= (int)$si + 1 ?></label>
+                    <select name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_team_slots][<?= (int)$si ?>]">
+                      <option value="">— site default —</option>
+                      <?php foreach ($sportsCatalogGroups as $groupLabel => $groupTeams): ?>
+                      <optgroup label="<?= h($groupLabel) ?>">
+                        <?php foreach ($groupTeams as $opt): ?>
+                        <option value="<?= h($opt['key']) ?>" <?= $picked === $opt['key'] ? 'selected' : '' ?>><?= h($opt['label']) ?></option>
+                        <?php endforeach; ?>
+                      </optgroup>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+                <div class="field" style="margin-top:10px">
+                  <label class="mini">Sports board title (optional)</label>
+                  <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_title]"
+                         value="<?= h($sportsTitle) ?>" placeholder="<?= h((string)cfg('sports.TITLE', 'Local Sports')) ?>">
+                </div>
               </div>
             </div>
           </div>
