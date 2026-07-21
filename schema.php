@@ -609,6 +609,8 @@ function admin_schema(): array
             ['key' => 'MAX_TODAY', 'label' => 'Today events shown', 'type' => 'number',
              'help' => 'How many of today\'s events to list (3–16, default 8)'],
             ['key' => 'SHOW_TOMORROW', 'label' => 'Show tomorrow preview', 'type' => 'bool', 'default' => true],
+            ['key' => 'SHOW_WEATHER', 'label' => 'Show weather summary', 'type' => 'bool', 'default' => true,
+             'help' => 'Current conditions from the Weather board OWM key and this display\'s rotation location'],
             ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
              'help' => 'Direct view only — rotation iframe reloads with the shell'],
             $tz,

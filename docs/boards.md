@@ -231,9 +231,9 @@ RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEAR
 
 ### glance.php — Today at a glance
 
-Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with **moon phase** and **sunrise/sunset** for the display’s rotation location (same as Weather).
+Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with a **weather summary** (OpenWeatherMap via the Weather board), **moon phase**, and **sunrise/sunset** for the display’s rotation location.
 
-**Admin:** **Today at a Glance** — title, event count, tomorrow preview toggle. Feeds are configured on the **Calendar** board (`calendar.ICS_FEEDS`).
+**Admin:** **Today at a Glance** — title, event count, tomorrow preview toggle, weather on/off. Feeds are configured on the **Calendar** board (`calendar.ICS_FEEDS`). Weather uses `index.OWM_API_KEY` and the display location from Rotation.
 
 **Rotation presets:** built-in **Weekly planner** template includes `glance.php` alongside the full calendar and weather boards.
 

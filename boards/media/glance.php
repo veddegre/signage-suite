@@ -12,11 +12,13 @@ require_once dirname(__DIR__, 2) . '/lib/security_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/weather_lib.php';
 
 define('TITLE', cfg('glance.TITLE', 'Today at a glance'));
 define('SUBTITLE', cfg('glance.SUBTITLE', ''));
 define('MAX_TODAY', max(3, min(16, (int)cfg('glance.MAX_TODAY', 8))));
 define('SHOW_TOMORROW', (bool)cfg('glance.SHOW_TOMORROW', true));
+define('SHOW_WEATHER', (bool)cfg('glance.SHOW_WEATHER', true));
 define('RELOAD_SEC', max(60, (int)cfg('glance.RELOAD_SEC', 300)));
 define('TIMEZONE', cfg('glance.TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit')));
 
@@ -56,6 +58,8 @@ foreach ($events as $e) {
 }
 
 $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
+
+$weather = SHOW_WEATHER ? weather_glance_summary($lat, $lon) : null;
 
 $sun = date_sun_info(time(), $lat, $lon);
 $synodic = 29.530588853;
@@ -133,10 +137,21 @@ $compact = $boardH < 1080;
   .tomorrow .tev .s { font-size:<?= $compact ? 20 : 22 ?>px; }
 
   .sky { grid-area:sky; display:flex; flex-direction:column; gap:<?= $compact ? 14 : 18 ?>px; min-height:0; }
-  .moon, .suntimes { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+  .weather, .moon, .suntimes { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
                       padding:<?= $compact ? 22 : 28 ?>px; }
-  .moon { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
-  .moon .k, .suntimes .k { align-self:flex-start; font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .weather .k, .moon .k, .suntimes .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .weather .place { font-size:17px; color:var(--mist); margin-top:4px; }
+  .weather-main { display:flex; align-items:center; gap:16px; margin-top:14px; }
+  .weather-main img { width:<?= $compact ? 72 : 84 ?>px; height:<?= $compact ? 72 : 84 ?>px; }
+  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 64 : 72 ?>px; line-height:1; }
+  .weather-desc { font-size:<?= $compact ? 22 : 24 ?>px; color:var(--snow); margin-top:4px; text-transform:capitalize; }
+  .weather-meta { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin-top:16px; }
+  .weather-meta .lab { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
+  .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px; color:var(--beacon); }
+  .weather-meta .val small { font-size:18px; color:var(--mist); font-weight:500; }
+  .weather-empty { font-size:18px; color:var(--mist); line-height:1.5; margin-top:12px; }
+  .moon { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .moon .k { align-self:flex-start; }
   .moon svg { width:<?= $compact ? 160 : 200 ?>px; height:<?= $compact ? 160 : 200 ?>px; margin:<?= $compact ? 10 : 16 ?>px 0 8px; }
   .moon .name { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 40 : 46 ?>px; }
   .moon .pct { font-size:20px; color:var(--mist); margin-top:4px; }
@@ -210,8 +225,60 @@ $compact = $boardH < 1080;
   </section>
 
   <div class="sky">
+    <?php if (SHOW_WEATHER): ?>
+    <section class="weather">
+      <div class="k">Weather</div>
+      <?php if ($weather): ?>
+      <div class="place"><?= h($LOC['place'] ?? 'Local') ?></div>
+      <div class="weather-main">
+        <img src="<?= h(weather_icon_url($weather['icon'], 2)) ?>" alt="">
+        <div>
+          <div class="weather-temp"><?= (int)$weather['temp'] ?>°</div>
+          <div class="weather-desc"><?= h($weather['desc']) ?></div>
+        </div>
+      </div>
+      <div class="weather-meta">
+        <div>
+          <div class="lab">Today</div>
+          <div class="val"><?= $weather['hi'] !== null ? 'Hi ' . (int)$weather['hi'] . '°' : '—' ?><?= $weather['lo'] !== null ? ' · Lo ' . (int)$weather['lo'] . '°' : '' ?></div>
+        </div>
+        <div>
+          <div class="lab">Precip chance</div>
+          <div class="val"><?= $weather['pop'] !== null ? (int)$weather['pop'] . '%' : '—' ?></div>
+        </div>
+        <div>
+          <div class="lab">Wind</div>
+          <div class="val"><?= (int)$weather['wind_mph'] ?> <small><?= h($weather['wind_dir']) ?></small></div>
+        </div>
+        <?php if ($weather['tomorrow_hi'] !== null): ?>
+        <div>
+          <div class="lab">Tomorrow</div>
+          <div class="val"><?= (int)$weather['tomorrow_hi'] ?>°<?= $weather['tomorrow_pop'] !== null && $weather['tomorrow_pop'] > 0 ? ' · ' . (int)$weather['tomorrow_pop'] . '% precip' : '' ?></div>
+        </div>
+        <?php endif; ?>
+      </div>
+      <?php else: ?>
+      <div class="weather-empty">Set your OpenWeatherMap key on the <strong>Weather</strong> board to show conditions here.</div>
+      <?php endif; ?>
+    </section>
+    <?php endif; ?>
+
+    <section class="suntimes">
+      <div class="k" style="grid-column:1/-1">Sun</div>
+      <div class="cell">
+        <div class="lab">Sunrise</div>
+        <div class="val"><?= $sun['sunrise'] ? date('g:i A', $sun['sunrise']) : '—' ?></div>
+        <div class="note">Civil twilight <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></div>
+      </div>
+      <div class="cell">
+        <div class="lab">Sunset</div>
+        <div class="val"><?= $sun['sunset'] ? date('g:i A', $sun['sunset']) : '—' ?></div>
+        <div class="note">Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></div>
+      </div>
+    </section>
+
     <section class="moon">
-      <div class="k">Moon &amp; sky</div>
+      <div class="k">Moon</div>
       <svg viewBox="0 0 100 100" aria-hidden="true">
         <?php
           $r = 46;
@@ -230,23 +297,9 @@ $compact = $boardH < 1080;
       <div class="name"><?= h($phaseName) ?></div>
       <div class="pct"><?= (int)round($illum * 100) ?>% illuminated</div>
     </section>
-
-    <section class="suntimes">
-      <div class="k" style="grid-column:1/-1">Sun</div>
-      <div class="cell">
-        <div class="lab">Sunrise</div>
-        <div class="val"><?= $sun['sunrise'] ? date('g:i A', $sun['sunrise']) : '—' ?></div>
-        <div class="note">Civil twilight <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></div>
-      </div>
-      <div class="cell">
-        <div class="lab">Sunset</div>
-        <div class="val"><?= $sun['sunset'] ? date('g:i A', $sun['sunset']) : '—' ?></div>
-        <div class="note">Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></div>
-      </div>
-    </section>
   </div>
 
-  <div class="stamp">Calendar feeds · <?= h($LOC['place'] ?? 'local sun') ?><?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
+  <div class="stamp">Calendar · <?= SHOW_WEATHER ? 'Weather · ' : '' ?><?= h($LOC['place'] ?? 'local') ?><?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
   function fmtDate() {
