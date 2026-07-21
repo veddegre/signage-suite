@@ -78,7 +78,8 @@ function hero_strip_key_options(): array
         'ntfy' => [['value' => '', 'label' => 'All recent alerts']],
     ];
     require_once __DIR__ . '/kuma_lib.php';
-    foreach (kuma_pages_config() as $key => $page) {
+    require_once __DIR__ . '/users_lib.php';
+    foreach (admin_filter_owned_map(kuma_admin_pages()) as $key => $page) {
         if (!is_array($page) || !empty($page['off'])) {
             continue;
         }
@@ -86,7 +87,7 @@ function hero_strip_key_options(): array
         $out['kuma'][] = ['value' => (string)$key, 'label' => $title . ' (' . $key . ')'];
     }
     require_once __DIR__ . '/zabbix_lib.php';
-    foreach (zabbix_pages_config() as $key => $page) {
+    foreach (admin_filter_owned_map(zabbix_admin_pages()) as $key => $page) {
         if (!is_array($page) || !empty($page['off'])) {
             continue;
         }
@@ -116,7 +117,7 @@ function hero_strip_key_options(): array
 function hero_strip_kuma_lines(string $pageKey): array
 {
     require_once __DIR__ . '/kuma_lib.php';
-    $page = kuma_resolve_page($pageKey !== '' ? $pageKey : null);
+    $page = kuma_resolve_page_registry($pageKey !== '' ? $pageKey : null);
     if (empty($page['status_slug']) && !kuma_api_key_valid()) {
         return [['text' => 'Kuma strip — configure page slug or API key', 'class' => 'warn']];
     }
@@ -152,7 +153,7 @@ function hero_strip_kuma_lines(string $pageKey): array
 function hero_strip_zabbix_lines(string $pageKey): array
 {
     require_once __DIR__ . '/zabbix_lib.php';
-    $page = zabbix_resolve_page($pageKey !== '' ? $pageKey : null);
+    $page = zabbix_resolve_page_registry($pageKey !== '' ? $pageKey : null);
     if (!zabbix_configured()) {
         return [['text' => 'Zabbix strip — configure URL and token', 'class' => 'warn']];
     }

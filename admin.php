@@ -1742,6 +1742,7 @@ if (!admin_is_super() && !admin_is_infra()) {
 }
 $heroStripSources = admin_hero_strip_source_options();
 $sportsCatalogGroups = ($authed && $board === 'rotation') ? sports_team_catalog_groups() : [];
+$rssTickerFeeds = ($authed && $board === 'rotation') ? admin_filter_owned_map(rss_feed_registry()) : [];
 $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
@@ -3780,6 +3781,7 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                 $sportsSlots[] = '';
             }
             $sportsTitle = trim((string)($scrRaw['sports_title'] ?? ''));
+            $tickerNewsFeed = trim((string)($scrRaw['ticker_news_feed'] ?? ''));
             $globalLoc = rotation_global_location();
           ?>
           <div class="rotation-display-options">
@@ -3796,7 +3798,24 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
               </div>
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_ticker]" value="1"
-                  <?= $screenSettings['show_ticker'] ? 'checked' : '' ?>> Weather alert ticker</label>
+                  <?= $screenSettings['show_ticker'] ? 'checked' : '' ?>> Bottom ticker (weather alerts + optional news fallback)</label>
+              </div>
+              <div class="field span-2 rotation-section" style="padding-top:0;border-top:0;margin-top:-4px">
+                <div class="field">
+                  <label class="mini">News ticker when no weather alerts</label>
+                  <select name="SCREEN_OPTS[<?= h($screenKey) ?>][ticker_news_feed]">
+                    <option value="">Off</option>
+                    <?php foreach ($rssTickerFeeds as $feedKey => $feed):
+                      if (!is_array($feed) || !empty($feed['off'])) {
+                          continue;
+                      }
+                      $feedLabel = trim((string)($feed['name'] ?? $feedKey));
+                    ?>
+                    <option value="<?= h((string)$feedKey) ?>" <?= $tickerNewsFeed === (string)$feedKey ? 'selected' : '' ?>><?= h($feedLabel) ?> (<?= h((string)$feedKey) ?>)</option>
+                    <?php endforeach; ?>
+                  </select>
+                  <div class="help" style="margin-top:6px">Pick an RSS feed you manage under <strong>RSS Stories</strong>. Headlines scroll in the bottom bar only when there are no NWS weather alerts (weather always takes priority).</div>
+                </div>
               </div>
               <div class="field">
                 <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][show_debug]" value="1"
@@ -8854,7 +8873,8 @@ function bindHeroStripSlotRow(row) {
     const idxMatch = sourceSel.name.match(/\[hero_strip_slots\]\[(\d+)\]/);
     const idx = idxMatch ? idxMatch[1] : '0';
     const keyName = 'SCREEN_OPTS[' + screenKey + '][hero_strip_slots][' + idx + '][key]';
-    keyField.innerHTML = heroStripKeySelectHtml(keyName, sourceSel.value, '');
+    const prevKey = keyField.querySelector('select')?.value || '';
+    keyField.innerHTML = heroStripKeySelectHtml(keyName, sourceSel.value, prevKey);
   });
 }
 

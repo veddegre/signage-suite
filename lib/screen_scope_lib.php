@@ -133,6 +133,16 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row): array
         unset($entry['sports_title']);
     }
 
+    require_once __DIR__ . '/rss_ticker_lib.php';
+    require_once __DIR__ . '/users_lib.php';
+    $newsFeed = trim((string)($row['ticker_news_feed'] ?? ''));
+    if ($newsFeed !== '' && rss_ticker_resolve_feed($newsFeed) !== null) {
+        $resolved = admin_normalize_registry_key($newsFeed);
+        $entry['ticker_news_feed'] = $resolved ?? $newsFeed;
+    } else {
+        unset($entry['ticker_news_feed']);
+    }
+
     return $entry;
 }
 
@@ -179,6 +189,23 @@ function rotation_screen_sports_labels(string $screen): array
     return ['title' => $title, 'subtitle' => $subtitle];
 }
 
+/** Configured RSS feed key for news ticker fallback, or empty when off. */
+function rotation_screen_ticker_news_feed(string $screen): string
+{
+    $scr = rotation_screen_raw_entry($screen);
+    if (!is_array($scr)) {
+        return '';
+    }
+    $key = trim((string)($scr['ticker_news_feed'] ?? ''));
+    if ($key === '') {
+        return '';
+    }
+    require_once __DIR__ . '/rss_ticker_lib.php';
+    $feed = rss_ticker_resolve_feed($key);
+
+    return $feed !== null ? (string)$feed['key'] : '';
+}
+
 /** Load ticker constants — per-display lat/lon when set, otherwise global Weather / ticker settings. */
 function signage_ticker_bootstrap(?string $screen = null): void
 {
@@ -188,6 +215,12 @@ function signage_ticker_bootstrap(?string $screen = null): void
         define('TICKER_MODE', (string)cfg('ticker.TICKER_MODE', 'scroll'));
         define('TICKER_MIN_SEVERITY', (string)cfg('ticker.TICKER_MIN_SEVERITY', 'Minor'));
         define('TICKER_DEMO', (bool)cfg('ticker.TICKER_DEMO', false));
+    }
+    if (!defined('TICKER_NEWS_FEED')) {
+        if ($screen === null) {
+            $screen = signage_request_screen();
+        }
+        define('TICKER_NEWS_FEED', rotation_screen_ticker_news_feed($screen));
     }
     if (defined('TICKER_LAT') && defined('TICKER_LON')) {
         return;

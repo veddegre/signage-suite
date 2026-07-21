@@ -251,12 +251,52 @@ function signage_ticker_alerts(): array
 }
 }
 
+if (!function_exists('signage_ticker_news_items')) {
+function signage_ticker_news_items(): array
+{
+    if (!defined('TICKER_NEWS_FEED') || TICKER_NEWS_FEED === '') {
+        return [];
+    }
+    require_once __DIR__ . '/lib/rss_ticker_lib.php';
+
+    return rss_ticker_headlines(TICKER_NEWS_FEED);
+}
+}
+
+if (!function_exists('signage_ticker_news_label')) {
+function signage_ticker_news_label(): string
+{
+    if (!defined('TICKER_NEWS_FEED') || TICKER_NEWS_FEED === '') {
+        return 'News';
+    }
+    require_once __DIR__ . '/lib/rss_ticker_lib.php';
+    $feed = rss_ticker_resolve_feed(TICKER_NEWS_FEED);
+    if ($feed === null) {
+        return 'News';
+    }
+    $name = trim((string)($feed['name'] ?? ''));
+
+    return $name !== '' ? $name : 'News';
+}
+}
+
 // JSON feed for client-side polling (board.php shell, direct board views).
 if (isset($_GET['api']) && $_GET['api'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    $alerts = signage_ticker_alerts();
+    $news = [];
+    $newsLabel = '';
+    if ($alerts === [] && !$emergencyTicker) {
+        $news = signage_ticker_news_items();
+        if ($news !== []) {
+            $newsLabel = signage_ticker_news_label();
+        }
+    }
     echo json_encode([
-        'alerts' => signage_ticker_alerts(),
+        'alerts' => $alerts,
+        'news' => $news,
+        'news_label' => $newsLabel,
         'mode'   => TICKER_MODE,
         'demo'   => (bool)TICKER_DEMO,
         'emergency' => $emergencyTicker,
@@ -276,6 +316,8 @@ $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
     background:#33260e; border-top:2px solid #ffb347;
     box-shadow:0 -8px 30px rgba(0,0,0,.45); }
   #signage-ticker.tk-severe { background:#3a1016; border-top-color:#ff5d5d; }
+  #signage-ticker.tk-news { background:#0e1a2e; border-top-color:#4da3ff; }
+  #signage-ticker.tk-news .tk-tag { color:#0c1422; background:#4da3ff; }
   #signage-ticker .tk-tag { flex:0 0 auto; display:flex; align-items:center; gap:14px;
     padding:0 28px; font-weight:700; font-size:26px; letter-spacing:2px;
     color:#0c1422; background:#ffb347; text-transform:uppercase; white-space:nowrap; }
@@ -372,6 +414,10 @@ $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
     staticTimer = setInterval(flip, 500);
   }
 
+  function newsItemHtml(item) {
+    return '<span class="tk-item">' + esc(item.title) + '</span>';
+  }
+
   function apply(data) {
     var emergency = !!(data && data.emergency);
     if (document.body.classList.contains('signage-blank') && !emergency) {
@@ -383,16 +429,42 @@ $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
       return;
     }
 
-    var key = JSON.stringify(data.alerts || []) + '|' + (data.mode || 'scroll');
+    var hasAlerts = !!(data.alerts && data.alerts.length);
+    var hasNews = !hasAlerts && !!(data.news && data.news.length);
+    var key = JSON.stringify(data.alerts || []) + '|' + JSON.stringify(data.news || [])
+      + '|' + (data.news_label || '') + '|' + (data.mode || 'scroll');
     if (key === lastKey) return;
     lastKey = key;
 
     var root = document.getElementById('signage-ticker-root');
     stopAnim();
 
-    if (!data.alerts || !data.alerts.length) {
+    if (!hasAlerts && !hasNews) {
       root.innerHTML = '';
       document.documentElement.style.setProperty('--signage-ticker-inset', '0px');
+      return;
+    }
+
+    if (hasNews) {
+      var newsLabel = (data.news_label || 'News').trim() || 'News';
+      var newsMode = data.mode === 'static' ? 'static' : 'scroll';
+      var newsItems = '';
+      if (newsMode === 'static') {
+        data.news.forEach(function (item) {
+          newsItems += '<span class="tk-item" style="display:none">' + esc(item.title) + '</span>';
+        });
+      } else {
+        data.news.forEach(function (item) { newsItems += newsItemHtml(item); });
+        newsItems += newsItems;
+      }
+      root.innerHTML =
+        '<div id="signage-ticker" class="tk-news' + (newsMode === 'static' ? ' tk-static' : '') + '">'
+        + '<div class="tk-tag">' + esc(newsLabel) + '</div>'
+        + '<div class="tk-scroll"><div class="tk-track" id="tk-track">' + newsItems + '</div></div></div>';
+      document.documentElement.style.setProperty('--signage-ticker-inset', '<?= SIGNAGE_TICKER_H ?>px');
+      var newsTrack = document.getElementById('tk-track');
+      if (newsMode === 'static') startStatic(newsTrack);
+      else startScroll(newsTrack);
       return;
     }
 

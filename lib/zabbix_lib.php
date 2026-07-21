@@ -131,6 +131,56 @@ function zabbix_normalize_page(array $page, string $key): ?array
  * @param array<string,mixed>|null $rawConf
  * @return array<string,array<string,mixed>>
  */
+/** Full Zabbix page registry (no kiosk display filter). Used for hero strip resolution and admin pickers. */
+function zabbix_pages_registry(?array $rawConf = null): array
+{
+    if ($rawConf === null) {
+        $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    }
+
+    if (isset($rawConf['zabbix.PAGES']) && is_array($rawConf['zabbix.PAGES']) && $rawConf['zabbix.PAGES'] !== []) {
+        $pages = zabbix_normalize_pages_registry($rawConf['zabbix.PAGES']);
+        if ($pages !== []) {
+            return $pages;
+        }
+    }
+
+    return [
+        'main' => zabbix_normalize_page([
+            'title' => zabbix_default_page_title(),
+            'sub' => zabbix_default_page_sub(),
+            'host_groups' => '',
+            'min_severity' => 2,
+        ], 'main') ?? [],
+    ];
+}
+
+/** Resolve a page key against the full registry (hero strip, admin). */
+function zabbix_resolve_page_registry(?string $pageKey = null, ?array $rawConf = null): array
+{
+    $pages = zabbix_pages_registry($rawConf);
+    require_once __DIR__ . '/users_lib.php';
+    $normalize = static fn($k) => zabbix_normalize_page_key((string)$k);
+    $resolved = admin_registry_resolve_key($pages, (string)($pageKey ?? ''), $normalize);
+    if ($resolved === null || !isset($pages[$resolved])) {
+        if (trim((string)($pageKey ?? '')) === '') {
+            $first = array_key_first($pages);
+            if ($first !== null && isset($pages[$first])) {
+                return ['key' => (string)$first] + $pages[$first];
+            }
+        }
+
+        return [
+            'key' => zabbix_normalize_page_key((string)($pageKey ?? '')),
+            'title' => 'Not available',
+            'sub' => '',
+            'host_groups' => '',
+        ];
+    }
+
+    return ['key' => $resolved] + $pages[$resolved];
+}
+
 function zabbix_pages_config(?array $rawConf = null): array
 {
     if ($rawConf === null) {
@@ -170,7 +220,7 @@ function zabbix_admin_pages(?array $rawConf = null): array
     require_once __DIR__ . '/users_lib.php';
 
     return admin_registry_editor_pages(
-        zabbix_pages_config($rawConf),
+        zabbix_pages_registry($rawConf),
         static function (): array {
             return [
                 'main' => zabbix_normalize_page([

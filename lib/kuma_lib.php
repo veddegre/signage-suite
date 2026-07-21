@@ -157,6 +157,69 @@ function kuma_normalize_page(array $page, string $key): ?array
  * @param array<string,mixed>|null $rawConf
  * @return array<string,array<string,mixed>>
  */
+/** Full Kuma page registry (no kiosk display filter). Used for hero strip resolution and admin pickers. */
+function kuma_pages_registry(?array $rawConf = null): array
+{
+    if ($rawConf === null) {
+        $rawConf = is_file(cfg_path()) ? (json_decode((string)file_get_contents(cfg_path()), true) ?: []) : [];
+    }
+
+    if (isset($rawConf['kuma.PAGES']) && is_array($rawConf['kuma.PAGES']) && $rawConf['kuma.PAGES'] !== []) {
+        $pages = kuma_normalize_pages_registry($rawConf['kuma.PAGES']);
+        if ($pages !== []) {
+            return $pages;
+        }
+    }
+
+    $legacySlug = trim((string)($rawConf['kuma.KUMA_STATUS_SLUG'] ?? ''));
+    $legacyTags = trim((string)($rawConf['kuma.KUMA_TAGS'] ?? ''));
+    if ($legacySlug !== '' || $legacyTags !== '') {
+        return [
+            'main' => kuma_normalize_page([
+                'status_slug' => $legacySlug,
+                'tags' => $legacyTags,
+                'title' => kuma_default_page_title(),
+                'sub' => kuma_default_page_sub(),
+            ], 'main') ?? [],
+        ];
+    }
+
+    return [
+        'main' => kuma_normalize_page([
+            'title' => kuma_default_page_title(),
+            'sub' => kuma_default_page_sub(),
+            'status_slug' => '',
+            'tags' => '',
+        ], 'main') ?? [],
+    ];
+}
+
+/** Resolve a page key against the full registry (hero strip, admin). */
+function kuma_resolve_page_registry(?string $pageKey = null, ?array $rawConf = null): array
+{
+    $pages = kuma_pages_registry($rawConf);
+    require_once __DIR__ . '/users_lib.php';
+    $normalize = static fn($k) => kuma_normalize_page_key((string)$k);
+    $resolved = admin_registry_resolve_key($pages, (string)($pageKey ?? ''), $normalize);
+    if ($resolved === null || !isset($pages[$resolved])) {
+        if (trim((string)($pageKey ?? '')) === '') {
+            $first = array_key_first($pages);
+            if ($first !== null && isset($pages[$first])) {
+                return ['key' => (string)$first] + $pages[$first];
+            }
+        }
+
+        return [
+            'key' => kuma_normalize_page_key((string)($pageKey ?? '')),
+            'title' => 'Not available',
+            'sub' => '',
+            'status_slug' => '',
+        ];
+    }
+
+    return ['key' => $resolved] + $pages[$resolved];
+}
+
 function kuma_pages_config(?array $rawConf = null): array
 {
     if ($rawConf === null) {
@@ -214,7 +277,7 @@ function kuma_admin_pages(?array $rawConf = null): array
     require_once __DIR__ . '/users_lib.php';
 
     return admin_registry_editor_pages(
-        kuma_pages_config($rawConf),
+        kuma_pages_registry($rawConf),
         static function (): array {
             return [
                 'main' => kuma_normalize_page([
