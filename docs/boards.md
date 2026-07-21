@@ -15,7 +15,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Photo conditions | `photo.php` | `photo.php` | OpenWeatherMap |
 | | Air & pollen | `air.php` | `air.php` | Google Pollen (optional) |
 | | UV index | `uv.php` | `uv.php` | — |
-| | Detroit sports | `sports.php` | `sports.php` | — |
+| | Sports | `sports.php` | `sports.php` | — |
 | | Calendar | `calendar.php` | `calendar.php` | — |
 | | Traffic map | `traffic.php` | `traffic.php` | TomTom |
 | **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
@@ -69,6 +69,8 @@ Allendale weather, RainViewer animated radar, sunrise arc.
 
 Nearshore buoys run in winter (~Nov–Apr); the board notes when they are offline and keeps NWS alerts live. Swim risk uses a wave-height heuristic, escalated to HIGH when a Beach Hazards Statement or Rip Current alert is active.
 
+**Rotation:** if the buoy has reported no fresh data for **24 hours**, `lake.php` is automatically skipped in rotation until readings return (saved playlist unchanged).
+
 ### webcam.php — Grand Haven Beach Webcam
 
 Full-screen EarthCam embed from [Surf Grand Haven](https://surfgrandhaven.com) (MACkite).
@@ -76,6 +78,8 @@ Full-screen EarthCam embed from [Surf Grand Haven](https://surfgrandhaven.com) (
 **Setup:** admin → **Webcam** — paste iframe `src` if the default breaks. Optional title + clock overlay.
 
 **Rotation:** long dwell (120s+). Default hourly iframe reload (`RELOAD_SEC`) clears memory on long kiosk sessions — set `0` to disable.
+
+If the embed URL is missing or fails probe checks for **24 hours**, `webcam.php` is auto-skipped in rotation until the stream responds again.
 
 ### bridgecam.php — Mackinac Bridge Cam
 
@@ -183,15 +187,17 @@ Latest comic from [xkcd.com](https://xkcd.com/) — title, image, and hover text
 
 **Setup:** admin → **XKCD Comic** — title/subtitle, show hover text, timezone. Cache TTL defaults to 24 hours (new comic when Randall publishes, usually Mon/Wed/Fri).
 
-### sports.php — Detroit Sports
+### sports.php — Sports
 
-Lions, Tigers, Pistons, Red Wings — 2×2 cards plus **Next games** strip.
+ESPN team cards (up to four per display) plus **Next games** strip.
 
 **Data:** ESPN public API — no key. Server-side cache (default 300s; scoreboards refresh sooner). Upcoming and live games show **local start time** and **where to watch** (national TV first, then home/away regional networks from ESPN’s schedule feed).
 
-**Setup:** admin → **Detroit Sports** — title, subtitle, timezone. Per-display team picks under **Rotation → Display options**. ~75s dwell is a reasonable rotation default.
+**Setup:** admin → **Sports** — title, subtitle, timezone. Per-display team picks under **Rotation → Kiosk settings**. ~75s dwell is a reasonable rotation default.
 
 Season logic uses calendar windows plus nearby games. Live games show score + period; direct view auto-refreshes ~2 minutes while any team is live.
+
+**Rotation:** when **every** configured team is off-season (and none are live), `sports.php` is auto-skipped until a team enters season or a game goes live.
 
 ### traffic.php — Traffic Map
 

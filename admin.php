@@ -354,6 +354,44 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
     exit;
 }
 
+if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()) {
+    $tplAct = (string)($_POST['action'] ?? '');
+    if ($tplAct === 'rotation_template_save') {
+        $name = trim((string)($_POST['template_name'] ?? ''));
+        $pagesJson = (string)($_POST['template_pages'] ?? '');
+        $pages = json_decode($pagesJson, true);
+        if ($name === '' || !is_array($pages)) {
+            $flash = 'Template not saved — enter a name and at least one playlist page.';
+            $flashOk = false;
+        } elseif (rotation_playlist_template_save($name, $pages)) {
+            audit_log('rotation.template.save', 'Saved playlist template', ['name' => $name]);
+            $flash = 'Saved playlist template “' . $name . '”.';
+            $flashOk = true;
+        } else {
+            $flash = 'Template not saved — check the name and playlist pages.';
+            $flashOk = false;
+        }
+        header('Location: admin.php?board=rotation');
+        exit;
+    }
+    if ($tplAct === 'rotation_template_delete') {
+        $name = trim((string)($_POST['template_name'] ?? ''));
+        if ($name === '' || !array_key_exists($name, rotation_playlist_templates())) {
+            $flash = 'Template not found.';
+            $flashOk = false;
+        } elseif (rotation_playlist_template_delete($name)) {
+            audit_log('rotation.template.delete', 'Deleted playlist template', ['name' => $name]);
+            $flash = 'Deleted playlist template “' . $name . '”.';
+            $flashOk = true;
+        } else {
+            $flash = 'Could not delete template.';
+            $flashOk = false;
+        }
+        header('Location: admin.php?board=rotation');
+        exit;
+    }
+}
+
 if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     if (!admin_can_board($board)) {
         $flash = 'You do not have access to that section.';
@@ -1753,11 +1791,13 @@ foreach ($rotationQuickAdd as $item) {
 }
 $rotationStarterPages = rotation_starter_pages();
 $rotationMainPages = [];
+$rotationTemplates = [];
 if ($authed && $board === 'rotation') {
     $rotationMainPages = rotation_screen_pages('main');
     if ($rotationMainPages === []) {
         $rotationMainPages = $rotationStarterPages;
     }
+    $rotationTemplates = rotation_playlist_templates();
 }
 $slidesDeckForUser = [];
 $slidesDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' => 0, 'playlist_entries' => 0];
@@ -2241,24 +2281,29 @@ function admin_rotation_kiosk_settings_panel(
     $globalLoc = rotation_global_location();
     $hints = [];
     if (!empty($screenSettings['weighted'])) {
-        $hints[] = 'Weighted picks';
+        $hints[] = 'Random picks by weight';
     }
     if (!empty($screenSettings['shuffle'])) {
-        $hints[] = 'Shuffled';
+        $hints[] = 'Shuffled each cycle';
+    } else {
+        $hints[] = 'Plays in order';
     }
     if ($screenSettings['show_ticker']) {
-        $hints[] = $tickerNewsFeed !== '' ? 'Ticker + RSS fallback' : 'Weather ticker';
+        $hints[] = $tickerNewsFeed !== '' ? 'Alert ticker + news fallback' : 'Weather alert ticker';
     } else {
-        $hints[] = 'No ticker';
+        $hints[] = 'No bottom ticker';
     }
     if (!empty($heroCfg['enabled'])) {
-        $hints[] = 'Hero bar';
+        $hints[] = 'Status bar above ticker';
     }
     if (trim($locationFields['place']) !== '' || trim($locationFields['lat']) !== '') {
-        $hints[] = 'Custom location';
+        $hints[] = 'Custom weather location';
     }
     if (array_filter($sportsTeamKeys)) {
-        $hints[] = 'Custom sports';
+        $hints[] = 'Custom sports teams';
+    }
+    if ($screenSettings['schedule']['enabled']) {
+        $hints[] = 'TV off ' . (int)$screenSettings['schedule']['off'] . '→' . (int)$screenSettings['schedule']['on'];
     }
     $hintSummary = implode(' · ', $hints);
     ?>
@@ -2935,6 +2980,19 @@ function admin_field(array $f, $val, string $board): void
   .rotation-board-picker-row select option { padding:3px 6px; border-radius:4px; }
   .rotation-board-picker-row select optgroup { color:var(--mist); font-style:normal; font-weight:600; letter-spacing:.04em; }
   .rotation-board-picker-row select option:checked { background:rgba(255,179,71,.25); color:var(--snow); }
+  .rotation-board-picker-row select option.in-playlist { color:var(--mist); font-style:italic; }
+  .rotation-setup-tabs { margin-top:4px; }
+  .rotation-setup-tabbar { display:flex; flex-wrap:wrap; gap:4px 12px; border-bottom:1px solid var(--hairline); margin-bottom:12px; }
+  .rotation-setup-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--mist);
+    cursor:pointer; font:inherit; font-size:14px; font-weight:600; padding:8px 4px 10px; margin-bottom:-1px; }
+  .rotation-setup-tab:hover { color:var(--snow); }
+  .rotation-setup-tab.is-active { color:var(--beacon); border-bottom-color:var(--beacon); }
+  .rotation-setup-panel { padding-top:2px; }
+  .rotation-template-row { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:flex-end; }
+  .rotation-template-row select { min-width:220px; padding:8px 10px; font-size:14px; background:var(--harbor);
+    color:var(--snow); border:1px solid var(--line); border-radius:8px; }
+  .rotation-playlist-panel.rotation-playlist-active > summary { background:rgba(255,179,71,.08); }
+  .rotation-playlist-empty { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
   .rotation-display-options-panel { margin-top:18px; border:1px solid var(--line); border-radius:10px; background:var(--harbor); overflow:hidden; }
   .rotation-display-options-panel > summary { cursor:pointer; padding:12px 14px; list-style:none; display:flex; flex-wrap:wrap; gap:8px; align-items:center; color:var(--snow); font-weight:600; }
   .rotation-display-options-panel > summary::-webkit-details-marker { display:none; }
@@ -3890,7 +3948,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <?php endif; ?>
 
           <div class="section-title">Playlists</div>
-          <p class="help" style="margin:-8px 0 14px">Choose a display, add boards to its rotation, tune kiosk-wide settings, then reorder pages in the playlist below.</p>
+          <p class="help" style="margin:-8px 0 14px">Pick a display, use the tabs to add boards and tune kiosk settings, then reorder pages in the playlist below. Opening a playlist syncs the display picker.</p>
           <div class="rotation-global-add" id="rotationGlobalAdd">
             <div class="rotation-global-add-row">
               <?php if (count($rotationScreens) > 1): ?>
@@ -3922,17 +3980,21 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <button type="button" class="secondary" onclick="loadRotationStarter(document.getElementById('rotationTargetScreen').value)" title="Replace playlist with the default starter set">Starter playlist</button>
               <button type="button" class="secondary" id="rotationCopyMainBtn" onclick="copyRotationFromMain(document.getElementById('rotationTargetScreen').value)" title="Copy main display’s playlist here">Copy from main</button>
             </div>
-            <details class="rotation-board-picker" id="rotationBoardPickerPanel">
-              <summary>Browse boards to add</summary>
-              <div class="rotation-board-picker-body">
-                <p class="help" style="margin:0 0 8px">Adds a board to the playlist for the display selected above — Weather, RSS, Zabbix, Sports, and the rest.</p>
-                <input type="search" class="deploy-filter" id="rotationBoardSearch" placeholder="Search boards, RSS feeds, monitoring…" autocomplete="off" style="max-width:none;margin:0">
+            <div class="rotation-setup-tabs" id="rotationSetupTabs">
+              <div class="rotation-setup-tabbar" role="tablist">
+                <button type="button" class="rotation-setup-tab is-active" data-rotation-tab="boards" role="tab" aria-selected="true">Add boards</button>
+                <button type="button" class="rotation-setup-tab" data-rotation-tab="kiosk" role="tab" aria-selected="false">Kiosk settings</button>
+                <button type="button" class="rotation-setup-tab" data-rotation-tab="templates" role="tab" aria-selected="false">Templates</button>
+              </div>
+              <div class="rotation-setup-panel is-active" data-rotation-tab-panel="boards" role="tabpanel">
+                <p class="help" style="margin:0 0 8px">Adds a board to the playlist for the display selected above — Weather, RSS, Zabbix, Sports, and the rest. Rows already on that playlist are dimmed.</p>
+                <input type="search" class="deploy-filter" id="rotationBoardSearch" placeholder="Search boards, RSS feeds, monitoring…" autocomplete="off" style="max-width:none;margin:0 0 10px">
                 <div class="rotation-board-picker-row">
                   <select id="rotationBoardSelect" size="10" aria-label="Boards to add to playlist">
                     <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
                     <optgroup label="<?= h($groupName) ?>">
                       <?php foreach ($groupItems as $qa): ?>
-                      <option value="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>" data-group="<?= h(strtolower($groupName)) ?>"><?= h($qa['label']) ?></option>
+                      <option value="<?= h($qa['url']) ?>" data-dwell="<?= (int)$qa['dwell'] ?>" data-group="<?= h(strtolower($groupName)) ?>" data-label="<?= h($qa['label']) ?>"><?= h($qa['label']) ?></option>
                       <?php endforeach; ?>
                     </optgroup>
                     <?php endforeach; ?>
@@ -3941,19 +4003,42 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 </div>
                 <p class="help" style="margin:0">Double-click a row or click <strong>Add to playlist</strong>. Need a one-off URL? Use <strong>+ Custom URL</strong>.</p>
               </div>
-            </details>
-            <?php foreach ($rotationScreens as $screenKey => $screenMeta):
-              admin_rotation_kiosk_settings_panel(
-                  (string)$screenKey,
-                  $rawConf,
-                  $board,
-                  $rssTickerFeeds,
-                  $heroStripSources,
-                  $heroStripKeyOptions,
-                  $sportsCatalogGroups,
-                  (string)$screenKey === $rotationDefaultScreenKey
-              );
-            endforeach; ?>
+              <div class="rotation-setup-panel" data-rotation-tab-panel="kiosk" role="tabpanel" hidden>
+                <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, and sports. Matches the display chosen above.</p>
+                <?php foreach ($rotationScreens as $screenKey => $screenMeta):
+                  admin_rotation_kiosk_settings_panel(
+                      (string)$screenKey,
+                      $rawConf,
+                      $board,
+                      $rssTickerFeeds,
+                      $heroStripSources,
+                      $heroStripKeyOptions,
+                      $sportsCatalogGroups,
+                      (string)$screenKey === $rotationDefaultScreenKey
+                  );
+                endforeach; ?>
+              </div>
+              <div class="rotation-setup-panel" data-rotation-tab-panel="templates" role="tabpanel" hidden>
+                <p class="help" style="margin:0 0 10px">Save the selected display’s playlist as a named preset, or load a preset onto that display (replaces current pages).</p>
+                <div class="rotation-template-row">
+                  <div>
+                    <label class="mini" for="rotationTemplateSelect">Saved templates</label>
+                    <select id="rotationTemplateSelect">
+                      <option value="">Choose a template…</option>
+                      <?php foreach ($rotationTemplates as $tplName => $tplPages): ?>
+                      <option value="<?= h($tplName) ?>"><?= h($tplName) ?> (<?= count($tplPages) ?> page<?= count($tplPages) === 1 ? '' : 's' ?>)</option>
+                      <?php endforeach; ?>
+                    </select>
+                  </div>
+                  <button type="button" class="addrow" onclick="loadRotationTemplate(document.getElementById('rotationTargetScreen').value)">Load onto display</button>
+                  <button type="button" class="secondary" onclick="saveRotationTemplate()">Save current playlist</button>
+                  <button type="button" class="secondary" onclick="deleteRotationTemplate()">Delete template</button>
+                </div>
+                <?php if ($rotationTemplates === []): ?>
+                <p class="help" style="margin:10px 0 0">No templates yet — build a playlist, pick a display, then click <strong>Save current playlist</strong>.</p>
+                <?php endif; ?>
+              </div>
+            </div>
           </div>
 
           <?php if (count($rotationScreens) > 1): ?>
@@ -3977,6 +4062,23 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             $mirrorsMain = $storedRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
             $screenSettings = rotation_screen_settings($screenKey);
             $screenPresence = is_array($presenceAll[$screenKey] ?? null) ? $presenceAll[$screenKey] : null;
+            $wallNowLabel = '';
+            $wallNowTitle = '';
+            if ($screenPresence && signage_presence_online($screenPresence)) {
+                if (!empty($screenPresence['blank'])) {
+                    $wallNowLabel = 'Blank (scheduled off)';
+                    $wallNowTitle = 'Kiosk is online but in scheduled blank hours';
+                } else {
+                    $wallNowLabel = trim((string)($screenPresence['page_label'] ?? ''));
+                    if ($wallNowLabel === '') {
+                        $purlNow = trim((string)($screenPresence['page_url'] ?? ''));
+                        $wallNowLabel = $purlNow !== '' ? rotation_page_label($purlNow) : 'Starting…';
+                    }
+                    $wallNowTitle = 'Live from kiosk heartbeat';
+                }
+            } elseif ($screenPresence) {
+                $wallNowTitle = 'Last seen ' . signage_presence_format_ago((int)($screenPresence['last_seen'] ?? 0));
+            }
             $pageCount = rotation_playlist_counts($pageRows)['total'];
             $slideEntryCount = rotation_playlist_counts($pageRows)['slide_entries'];
             $activeEffective = count(rotation_effective_playlist_lines(
@@ -4010,6 +4112,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <summary>
               <span>Playlist — <?= h($screenName) ?></span>
               <code><?= h($screenKey) ?></code>
+              <?php if ($wallNowLabel !== ''): ?>
+              <span class="pill ok rotation-wall-now" title="<?= h($wallNowTitle) ?>">On wall: <?= h($wallNowLabel) ?></span>
+              <?php elseif ($wallNowTitle !== ''): ?>
+              <span class="pill rotation-wall-offline" title="<?= h($wallNowTitle) ?>">Offline</span>
+              <?php endif; ?>
               <span class="rotation-summary-note"><?= h($summaryNote) ?></span>
               <?php if ($screenSettings['shuffle']): ?><span class="pill ok">Shuffle</span><?php else: ?><span class="pill">Sequential</span><?php endif; ?>
               <?php if (!empty($screenSettings['weighted'])): ?><span class="pill ok" title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</span><?php endif; ?>
@@ -4083,7 +4190,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <div class="rotation-playlist" id="<?= h($deckId) ?>" data-field="<?= h($fieldKey) ?>">
             <?php if ($storedRows === [] && $pageRows === []): ?>
-            <div class="rotation-playlist-empty" data-rotation-empty>No pages yet — use <strong>Browse boards to add</strong> above, load the starter playlist, or add a <strong>Custom URL</strong>.</div>
+            <div class="rotation-playlist-empty" data-rotation-empty>
+              <span>No pages yet.</span>
+              <button type="button" class="secondary" onclick="loadRotationStarter('<?= h($deckId) ?>')">Load starter playlist</button>
+              <span class="help" style="margin:0">or add boards in <strong>Add boards</strong> above</span>
+            </div>
             <?php endif; ?>
             <?php $pri = 0;
             $playlistSegments = rotation_playlist_segments($pageRows);
@@ -8035,6 +8146,9 @@ document.addEventListener('DOMContentLoaded', function () {
   initRotationDecks();
   initRotationGlobalAdd();
   initRotationBoardPicker();
+  initRotationSetupTabs();
+  initRotationPlaylistSync();
+  refreshBoardPickerInPlaylistMarks();
   initAdminDetailsScrollFix(document);
   document.addEventListener('click', function (e) {
     if (e.target.closest('[data-entry-sharing-menu], [data-entry-sharing-trigger]')) return;
@@ -8052,6 +8166,108 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 
+function normalizeRotationUrl(url) {
+  return (url || '').trim().split('#')[0];
+}
+
+function deckUrlsForPicker(deckId) {
+  const deck = document.getElementById(deckId);
+  const urls = new Set();
+  if (!deck) return urls;
+  deck.querySelectorAll('[data-rotation-card] input[name*="[url]"]').forEach(function (inp) {
+    const u = normalizeRotationUrl(inp.value);
+    if (u) urls.add(u);
+  });
+  return urls;
+}
+
+function refreshBoardPickerInPlaylistMarks() {
+  const sel = document.getElementById('rotationTargetScreen');
+  const select = document.getElementById('rotationBoardSelect');
+  if (!sel || !select) return;
+  const inDeck = deckUrlsForPicker(sel.value);
+  Array.from(select.options).forEach(function (opt) {
+    if (!opt.value) return;
+    let baseLabel = opt.dataset.label || '';
+    if (!baseLabel) {
+      baseLabel = (opt.textContent || '').replace(/^✓\s*/, '').replace(/\s*\(on playlist\)\s*$/, '').trim();
+      opt.dataset.label = baseLabel;
+    }
+    const dup = inDeck.has(normalizeRotationUrl(opt.value));
+    opt.disabled = dup;
+    opt.classList.toggle('in-playlist', dup);
+    opt.textContent = dup ? '✓ ' + baseLabel + ' (on playlist)' : baseLabel;
+  });
+}
+
+function highlightActiveRotationPlaylist() {
+  const sel = document.getElementById('rotationTargetScreen');
+  const opt = sel && sel.options[sel.selectedIndex];
+  const sk = opt ? (opt.getAttribute('data-screen-key') || '') : '';
+  document.querySelectorAll('.rotation-playlist-panel[data-rotation-screen]').forEach(function (panel) {
+    panel.classList.toggle('rotation-playlist-active', panel.getAttribute('data-rotation-screen') === sk);
+  });
+}
+
+function selectRotationTargetByScreenKey(screenKey) {
+  const sel = document.getElementById('rotationTargetScreen');
+  if (!sel || !screenKey) return;
+  const opt = Array.from(sel.options).find(function (o) {
+    return o.getAttribute('data-screen-key') === screenKey;
+  });
+  if (!opt) return;
+  if (sel.value !== opt.value) {
+    sel.value = opt.value;
+    sel.dispatchEvent(new Event('change'));
+  } else {
+    highlightActiveRotationPlaylist();
+    refreshBoardPickerInPlaylistMarks();
+  }
+  const panel = document.querySelector('.rotation-playlist-panel[data-rotation-screen="' + screenKey + '"]');
+  if (panel && !panel.open) panel.open = true;
+}
+
+function initRotationSetupTabs() {
+  const root = document.getElementById('rotationSetupTabs');
+  if (!root) return;
+  const tabs = root.querySelectorAll('.rotation-setup-tab');
+  const panels = root.querySelectorAll('[data-rotation-tab-panel]');
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      const name = tab.getAttribute('data-rotation-tab') || '';
+      tabs.forEach(function (t) {
+        const on = t === tab;
+        t.classList.toggle('is-active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      panels.forEach(function (p) {
+        const on = p.getAttribute('data-rotation-tab-panel') === name;
+        p.hidden = !on;
+        p.classList.toggle('is-active', on);
+      });
+    });
+  });
+}
+
+function initRotationPlaylistSync() {
+  document.querySelectorAll('.rotation-playlist-panel[data-rotation-screen]').forEach(function (panel) {
+    const sk = panel.getAttribute('data-rotation-screen') || '';
+    const summary = panel.querySelector('summary');
+    if (summary && !summary.dataset.targetSyncBound) {
+      summary.dataset.targetSyncBound = '1';
+      summary.addEventListener('click', function () {
+        setTimeout(function () { selectRotationTargetByScreenKey(sk); }, 0);
+      });
+    }
+    if (!panel.dataset.targetToggleBound) {
+      panel.dataset.targetToggleBound = '1';
+      panel.addEventListener('toggle', function () {
+        if (panel.open) selectRotationTargetByScreenKey(sk);
+      });
+    }
+  });
+}
+
 function initRotationBoardPicker() {
   const search = document.getElementById('rotationBoardSearch');
   const select = document.getElementById('rotationBoardSelect');
@@ -8062,7 +8278,7 @@ function initRotationBoardPicker() {
     const q = (search && search.value || '').trim().toLowerCase();
     Array.from(select.options).forEach(function (opt) {
       if (!opt.value) return;
-      const hay = ((opt.textContent || '') + ' ' + (opt.dataset.group || '') + ' ' + opt.value).toLowerCase();
+      const hay = ((opt.dataset.label || opt.textContent || '') + ' ' + (opt.dataset.group || '') + ' ' + opt.value).toLowerCase();
       opt.hidden = q !== '' && hay.indexOf(q) === -1;
     });
     Array.from(select.querySelectorAll('optgroup')).forEach(function (og) {
@@ -8070,14 +8286,15 @@ function initRotationBoardPicker() {
       og.hidden = !visible;
     });
     if (q !== '') {
-      const first = Array.from(select.options).find(function (o) { return o.value && !o.hidden; });
+      const first = Array.from(select.options).find(function (o) { return o.value && !o.hidden && !o.disabled; });
       if (first) select.value = first.value;
     }
+    refreshBoardPickerInPlaylistMarks();
   }
 
   function addSelectedBoard() {
     const opt = select.options[select.selectedIndex];
-    if (!opt || !opt.value || opt.hidden) return;
+    if (!opt || !opt.value || opt.hidden || opt.disabled) return;
     const sel = document.getElementById('rotationTargetScreen');
     const deckId = sel ? sel.value : '';
     const deck = deckId ? document.getElementById(deckId) : null;
@@ -8085,8 +8302,6 @@ function initRotationBoardPicker() {
     addRotationPage(deck.id, opt.value, opt.dataset.dwell || '60');
     const panel = deck.closest('.rotation-playlist-panel');
     if (panel) panel.open = true;
-    const picker = document.getElementById('rotationBoardPickerPanel');
-    if (picker) picker.open = false;
   }
 
   if (search) {
@@ -8116,16 +8331,94 @@ function initRotationGlobalAdd() {
       el.hidden = el.getAttribute('data-display-options-screen') !== sk;
     });
   }
-  sel.addEventListener('change', function () {
+  function syncTargetDisplay() {
     syncCopyBtn();
     syncKioskSettingsPanel();
-  });
-  syncCopyBtn();
-  syncKioskSettingsPanel();
+    highlightActiveRotationPlaylist();
+    refreshBoardPickerInPlaylistMarks();
+  }
+  sel.addEventListener('change', syncTargetDisplay);
+  syncTargetDisplay();
 }
 
 const ROTATION_STARTER = <?= json_encode($rotationStarterPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_MAIN_PAGES = <?= json_encode($rotationMainPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
+const ROTATION_TEMPLATES = <?= json_encode($rotationTemplates, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
+
+function serializeRotationDeckPages(deck) {
+  if (!deck) return [];
+  reindexRotationDeck(deck);
+  const rows = [];
+  deck.querySelectorAll('[data-rotation-card]').forEach(function (card) {
+    const row = collectRotationCardRow(card);
+    if ((row.url || '') !== '') rows.push(row);
+  });
+  return rows;
+}
+
+function rotationTemplatePost(action, fields) {
+  const form = document.getElementById('boardform');
+  if (!form) return Promise.reject(new Error('form missing'));
+  const fd = new FormData();
+  fd.append('action', action);
+  fd.append('board', 'rotation');
+  fd.append('csrf', form.querySelector('[name="csrf"]').value);
+  Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
+  return fetch('admin.php?board=rotation', { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function () { window.location.href = 'admin.php?board=rotation'; });
+}
+
+function loadRotationTemplate(deckId) {
+  const sel = document.getElementById('rotationTemplateSelect');
+  const name = sel ? sel.value : '';
+  if (!name || !ROTATION_TEMPLATES || !ROTATION_TEMPLATES[name]) {
+    alert('Choose a saved template first.');
+    return;
+  }
+  const deck = document.getElementById(deckId);
+  if (!deck) return;
+  const pages = ROTATION_TEMPLATES[name];
+  if (deck.querySelector('[data-rotation-card]') && !confirm('Replace the current playlist with template “' + name + '”?')) return;
+  deck.querySelectorAll('[data-rotation-card]').forEach(function (c) { c.remove(); });
+  pages.forEach(function (p) {
+    addRotationPage(deckId, p.url || '', String(p.dwell || 60), false);
+    fillRotationCardTimes(deck.querySelector('[data-rotation-card]:last-child'), p);
+  });
+  reindexRotationDeck(deck);
+  syncRotationEmptyState(deck);
+  refreshBoardPickerInPlaylistMarks();
+  const panel = deck.closest('.rotation-playlist-panel');
+  if (panel) panel.open = true;
+}
+
+function saveRotationTemplate() {
+  const sel = document.getElementById('rotationTargetScreen');
+  const deckId = sel ? sel.value : '';
+  const deck = deckId ? document.getElementById(deckId) : null;
+  if (!deck) return;
+  const pages = serializeRotationDeckPages(deck);
+  if (!pages.length) {
+    alert('Add at least one page to the playlist before saving a template.');
+    return;
+  }
+  const name = prompt('Template name (e.g. Living room default):');
+  if (!name || !name.trim()) return;
+  rotationTemplatePost('rotation_template_save', {
+    template_name: name.trim(),
+    template_pages: JSON.stringify(pages)
+  });
+}
+
+function deleteRotationTemplate() {
+  const sel = document.getElementById('rotationTemplateSelect');
+  const name = sel ? sel.value : '';
+  if (!name) {
+    alert('Choose a template to delete.');
+    return;
+  }
+  if (!confirm('Delete playlist template “' + name + '”?\n\nThis cannot be undone.')) return;
+  rotationTemplatePost('rotation_template_delete', { template_name: name });
+}
 
 function bindPlaylistDeckDrag(deck, cardSelector, handleSelector, reindexFn, bindCardFn) {
   if (deck.dataset.dragDeckBound) {
@@ -8234,6 +8527,7 @@ function removeRotationCard(btn, deckId) {
   if (deck) {
     reindexRotationDeck(deck);
     syncRotationEmptyState(deck);
+    refreshBoardPickerInPlaylistMarks();
   }
 }
 
@@ -8264,6 +8558,7 @@ function loadRotationStarter(deckId) {
   });
   reindexRotationDeck(deck);
   syncRotationEmptyState(deck);
+  refreshBoardPickerInPlaylistMarks();
 }
 
 function copyRotationFromMain(deckId) {
@@ -8282,6 +8577,7 @@ function copyRotationFromMain(deckId) {
   });
   reindexRotationDeck(deck);
   syncRotationEmptyState(deck);
+  refreshBoardPickerInPlaylistMarks();
 }
 
 function bindRotationCard(card, deck) {
@@ -8369,6 +8665,7 @@ function addRotationPage(deckId, url, dwell, scroll) {
   bindRotationCardDrag(card, deck);
   reindexRotationDeck(deck);
   syncRotationEmptyState(deck);
+  refreshBoardPickerInPlaylistMarks();
   if (scroll) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   return card;
 }

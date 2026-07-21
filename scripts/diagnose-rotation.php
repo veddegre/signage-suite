@@ -60,8 +60,14 @@ foreach ($effective as $i => $page) {
         }
         if (!$onWall) {
             require_once $root . '/lib/lake_lib.php';
+            require_once $root . '/lib/sports_lib.php';
+            require_once $root . '/lib/webcam_lib.php';
             if (rotation_page_url_is_lake($url) && lake_buoy_skip_rotation()) {
                 $reasons[] = 'lake buoy offline 24h+ (seasonal auto-skip)';
+            } elseif (rotation_page_url_is_sports($url) && sports_skip_rotation($screen)) {
+                $reasons[] = 'all sports teams off-season (auto-skip)';
+            } elseif (rotation_page_url_is_webcam($url) && webcam_skip_rotation()) {
+                $reasons[] = 'webcam embed unreachable 24h+ (auto-skip)';
             } else {
                 $reasons[] = 'not on wall (slide off/schedule, missing file, or filtered)';
             }

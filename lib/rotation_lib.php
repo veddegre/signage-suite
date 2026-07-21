@@ -1197,7 +1197,7 @@ function rotation_screen_active_pages(string $screen = 'main'): array
 
     $cache[$screen] = array_values(array_filter(
         $effective,
-        static function ($p) use ($activeFiles, $hasSlideEntries) {
+        static function ($p) use ($activeFiles, $hasSlideEntries, $screen) {
             if (!is_array($p)
                 || trim((string)($p['url'] ?? '')) === ''
                 || rotation_page_dwell($p) <= 0
@@ -1213,6 +1213,18 @@ function rotation_screen_active_pages(string $screen = 'main'): array
                 if (rotation_page_url_is_lake($url)) {
                     require_once __DIR__ . '/lake_lib.php';
                     if (lake_buoy_skip_rotation()) {
+                        return false;
+                    }
+                }
+                if (rotation_page_url_is_sports($url)) {
+                    require_once __DIR__ . '/sports_lib.php';
+                    if (sports_skip_rotation($screen)) {
+                        return false;
+                    }
+                }
+                if (rotation_page_url_is_webcam($url)) {
+                    require_once __DIR__ . '/webcam_lib.php';
+                    if (webcam_skip_rotation()) {
                         return false;
                     }
                 }
@@ -3155,4 +3167,73 @@ function rotation_sync_rss(string $screen = 'main'): array
         }
     }
     return ['pages' => $pages, 'added' => $added, 'updated' => $updated, 'screen' => $screen];
+}
+
+/** @return array<string,list<array<string,mixed>>> */
+function rotation_playlist_templates(): array
+{
+    $raw = cfg('rotation.PLAYLIST_TEMPLATES', []);
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $name => $pages) {
+        if (!is_string($name) || trim($name) === '' || !is_array($pages)) {
+            continue;
+        }
+        $parsed = rotation_parse_pages_rows($pages);
+        if ($parsed === []) {
+            continue;
+        }
+        $out[trim($name)] = $parsed;
+    }
+    ksort($out, SORT_NATURAL | SORT_FLAG_CASE);
+
+    return $out;
+}
+
+/** @param list<array<string,mixed>> $pages */
+function rotation_playlist_template_save(string $name, array $pages): bool
+{
+    $name = trim($name);
+    if ($name === '' || strlen($name) > 80) {
+        return false;
+    }
+    $pages = rotation_parse_pages_rows($pages);
+    if ($pages === []) {
+        return false;
+    }
+
+    return cfg_update(static function (array $conf) use ($name, $pages): array {
+        $templates = is_array($conf['rotation.PLAYLIST_TEMPLATES'] ?? null)
+            ? $conf['rotation.PLAYLIST_TEMPLATES'] : [];
+        $templates[$name] = $pages;
+        $conf['rotation.PLAYLIST_TEMPLATES'] = $templates;
+
+        return $conf;
+    });
+}
+
+function rotation_playlist_template_delete(string $name): bool
+{
+    $name = trim($name);
+    if ($name === '') {
+        return false;
+    }
+
+    return cfg_update(static function (array $conf) use ($name): array {
+        $templates = is_array($conf['rotation.PLAYLIST_TEMPLATES'] ?? null)
+            ? $conf['rotation.PLAYLIST_TEMPLATES'] : [];
+        if (!array_key_exists($name, $templates)) {
+            return $conf;
+        }
+        unset($templates[$name]);
+        if ($templates === []) {
+            unset($conf['rotation.PLAYLIST_TEMPLATES']);
+        } else {
+            $conf['rotation.PLAYLIST_TEMPLATES'] = $templates;
+        }
+
+        return $conf;
+    });
 }

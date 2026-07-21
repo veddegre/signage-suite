@@ -1226,6 +1226,47 @@ function sports_card_badge_class(string $badge): string
     };
 }
 
+/** Drop sports.php from rotation when every configured team is off-season (no live games). */
+function sports_skip_rotation(string $screen = 'main'): bool
+{
+    $data = sports_board_data($screen);
+    $cards = is_array($data['cards'] ?? null) ? $data['cards'] : [];
+    if ($cards === []) {
+        return false;
+    }
+    foreach ($cards as $card) {
+        if (!is_array($card)) {
+            continue;
+        }
+        if (!empty($card['data_error'])) {
+            return false;
+        }
+        if (($card['mode'] ?? '') === 'live') {
+            return false;
+        }
+        if (!empty($card['active_season'])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** Whether a rotation playlist URL targets sports.php. */
+function rotation_page_url_is_sports(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || strcasecmp($url, 'sports.php') === 0) {
+        return true;
+    }
+    if (preg_match('~^sports\.php(?:[?#]|$)~i', $url) === 1) {
+        return true;
+    }
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+
+    return preg_match('~(?:^|/)sports\.php$~i', $path) === 1;
+}
+
 /** Render one team card (shared by page + optional server-side reuse). */
 function sports_render_card(array $c, bool $focus = false): string
 {

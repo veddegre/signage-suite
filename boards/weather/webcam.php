@@ -11,6 +11,7 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/webcam_lib.php';
 
 define('TITLE', cfg('webcam.TITLE', 'Grand Haven Beach'));
 define('EMBED_URL', cfg('webcam.EMBED_URL', 'https://share.earthcam.net/tJ90CoLmq7TzrY396Yd88KTssi7iV3ZNicDEymFXa2k!'));
@@ -23,26 +24,6 @@ date_default_timezone_set(TIMEZONE);
 $showClock = signage_show_clock();
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-function webcam_embed_url(): ?string
-{
-    $url = trim((string)EMBED_URL);
-    if ($url === '') {
-        return null;
-    }
-    $parts = parse_url($url);
-    if (!is_array($parts)) {
-        return null;
-    }
-    $scheme = strtolower((string)($parts['scheme'] ?? ''));
-    if (!in_array($scheme, ['http', 'https'], true)) {
-        return null;
-    }
-    if (trim((string)($parts['host'] ?? '')) === '') {
-        return null;
-    }
-    return $url;
-}
 
 $embed = webcam_embed_url();
 $embedded = isset($_GET['noticker']);

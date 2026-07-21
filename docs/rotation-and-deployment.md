@@ -6,9 +6,21 @@ Point each kiosk at `board.php?screen=<key>`. Plain `board.php` = **main** scree
 
 Screens, playlists, dwell times, and hour windows (0–23, overnight 22→6 supported) are edited in **admin.php → Rotation** — no file edits.
 
+The **Playlists** section uses a **Which display** picker at the top. Three tabs organize setup:
+
+| Tab | Purpose |
+|-----|---------|
+| **Add boards** | Searchable board list — adds to the selected display’s playlist (rows already on that playlist are dimmed) |
+| **Kiosk settings** | Whole-TV options: rotation mode, weather ticker + RSS fallback, hero status bar, location, sports teams, blank hours |
+| **Templates** | Save/load named playlist presets (`rotation.PLAYLIST_TEMPLATES` in settings) |
+
+Opening a playlist panel below syncs the **Which display** picker and highlights that panel. Playlist headers show **On wall: …** from live kiosk heartbeats when online.
+
+Some boards auto-skip from rotation when off-season or unreachable for 24h+: **lake.php** (NDBC buoy), **sports.php** (all teams off-season), **webcam.php** (embed probe fails). They stay on the saved playlist and return when data is back.
+
 Two stacked iframes preload each board before crossfade. Hang timeout skips pages that fail to load. Weather ticker lives in the shell (persistent across transitions).
 
-Optional **hero status strip** — a bar above the ticker showing live Kuma/Zabbix/announcement/ntfy snippets without burning rotation airtime. Configure per display under **Rotation → Display options** (enable strip, add up to four sources, height). The shell polls `board.php?api=hero` every 30s.
+Optional **hero status strip** — a bar above the ticker showing live Kuma/Zabbix/announcement/ntfy snippets without burning rotation airtime. Configure per display under **Rotation → Playlists → Kiosk settings** (enable strip, add up to four sources, height). The shell polls `board.php?api=hero` every 30s.
 
 ### Display settings (super admin)
 
@@ -25,11 +37,12 @@ Open **Display settings** on the Rotation page (screen list, names, shared edito
 | Hero status strip | Persistent Kuma / Zabbix / announce / ntfy bar above ticker |
 | Location | Optional lat/lon + place name for this kiosk — weather, air, UV, photo, traffic map, and NWS ticker (blank = global **Weather** board) |
 | Sports teams | Up to four ESPN teams for `sports.php` on this display (blank = site default) |
+| Ticker news fallback | RSS feed key for headlines when there are no NWS weather alerts (blank = ticker hidden when no alerts) |
 | Blank hours / CEC | HDMI-CEC power schedule |
 
 Operators with **multiple displays** assigned, or **shared editors** on a display, see a playlist panel per screen (or a combined view where the UI groups their displays). Deploy pickers on **Slides**, **Photo Rotator**, **RSS**, and **Video** target any display they may fully edit.
 
-Operators see display options (including hero strip, **location**, and **sports teams**) inside their assigned or shared playlist panel(s).
+Operators see **Kiosk settings** (rotation mode, ticker, hero strip, **location**, **sports teams**, news fallback) in the **Playlists** setup area for each display they manage.
 
 ### Emergency override (super admin)
 
