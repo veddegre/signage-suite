@@ -58,12 +58,70 @@ function sports_team_catalog_groups(): array
     return $groups;
 }
 
+/** Admin-safe catalog: use cached teams only — never block admin on live ESPN fetches. */
+function sports_team_catalog_for_admin(): array
+{
+    $catalog = [];
+    foreach (sports_default_teams() as $team) {
+        $catalog[(string)$team['key']] = $team;
+    }
+    $cacheFile = SIGNAGE_ROOT . '/cache/sports_team_catalog.json';
+    if (!is_file($cacheFile)) {
+        return $catalog;
+    }
+    $cached = json_decode((string)file_get_contents($cacheFile), true);
+    if (!is_array($cached)) {
+        return $catalog;
+    }
+    foreach ($cached as $key => $team) {
+        if (!is_array($team)) {
+            continue;
+        }
+        $catalog[(string)$key] = $team;
+    }
+
+    return $catalog;
+}
+
+/** @return array<string,list<array{key:string,label:string}>> Grouped for admin selects (cache only). */
+function sports_team_catalog_groups_for_admin(): array
+{
+    $groups = [];
+    foreach (sports_league_definitions() as $def) {
+        $groups[(string)$def['label']] = [];
+    }
+    foreach (sports_team_catalog_for_admin() as $key => $team) {
+        $label = (string)($team['label'] ?? strtoupper((string)($team['league'] ?? '')));
+        if (!isset($groups[$label])) {
+            $groups[$label] = [];
+        }
+        $name = trim((string)($team['name'] ?? $key));
+        $abbr = trim((string)($team['abbrev'] ?? ''));
+        $groups[$label][] = [
+            'key' => (string)$key,
+            'label' => $abbr !== '' ? ($name . ' (' . $abbr . ')') : $name,
+        ];
+    }
+    foreach ($groups as $label => $items) {
+        usort($items, static fn(array $a, array $b): int => strcasecmp($a['label'], $b['label']));
+        $groups[$label] = $items;
+    }
+
+    return $groups;
+}
+
 /** @return array<string,array<string,mixed>> Catalog key => team config (cached ESPN + legacy aliases). */
 function sports_team_catalog(bool $refresh = false): array
 {
     $cacheFile = SIGNAGE_ROOT . '/cache/sports_team_catalog.json';
     $ttl = 86400 * 7;
     if (!$refresh && is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
+        $cached = json_decode((string)file_get_contents($cacheFile), true);
+        if (is_array($cached) && $cached !== []) {
+            return $cached;
+        }
+    }
+    if (!$refresh && is_file($cacheFile)) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
         if (is_array($cached) && $cached !== []) {
             return $cached;

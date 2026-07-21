@@ -1736,12 +1736,16 @@ $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = rotation_quick_add_items();
-$heroStripKeyOptions = hero_strip_key_options();
-if (!admin_is_super() && !admin_is_infra()) {
-    unset($heroStripKeyOptions['kuma'], $heroStripKeyOptions['ntfy']);
+$heroStripKeyOptions = [];
+$heroStripSources = [];
+if ($authed && $board === 'rotation') {
+    $heroStripKeyOptions = hero_strip_key_options();
+    if (!admin_is_super() && !admin_is_infra()) {
+        unset($heroStripKeyOptions['kuma'], $heroStripKeyOptions['ntfy']);
+    }
+    $heroStripSources = admin_hero_strip_source_options();
 }
-$heroStripSources = admin_hero_strip_source_options();
-$sportsCatalogGroups = ($authed && $board === 'rotation') ? sports_team_catalog_groups() : [];
+$sportsCatalogGroups = ($authed && $board === 'rotation') ? sports_team_catalog_groups_for_admin() : [];
 $rssTickerFeeds = ($authed && $board === 'rotation') ? admin_filter_owned_map(rss_feed_registry()) : [];
 $rotationQuickGroups = [];
 foreach ($rotationQuickAdd as $item) {
@@ -3140,9 +3144,7 @@ function admin_field(array $f, $val, string $board): void
 window.USER_SCREEN_ASSIGNMENTS = <?= json_encode($userScreenAssignmentsJs, JSON_UNESCAPED_UNICODE) ?>;
 window.ADMIN_OPERATOR_SCREEN = <?= json_encode(admin_operator_screen_key()) ?>;
 window.ADMIN_OPERATOR_SCREEN_LOCKED = <?= json_encode(admin_operator_screen_locked()) ?>;
-window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabled()) ?>;
-window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESCAPED_UNICODE) ?>;
-window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UNICODE) ?>;</script>
+window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabled()) ?>;</script>
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
@@ -5723,6 +5725,8 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
 <?php if ($authed && $board === 'rotation'): ?>
 window.ROTATION_WEIGHT_TOOLTIP = <?= json_encode(rotation_weight_tooltip()) ?>;
 window.ROTATION_WEIGHTED_MODE_TOOLTIP = <?= json_encode(rotation_weighted_mode_tooltip()) ?>;
+window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESCAPED_UNICODE) ?>;
+window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UNICODE) ?>;
 <?php endif; ?>
 <?php if ($authed && admin_is_super()): ?>
 window.SHARING_USER_OPTIONS = <?= json_encode(admin_sharing_user_options(), JSON_UNESCAPED_UNICODE) ?>;
