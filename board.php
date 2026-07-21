@@ -470,7 +470,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   }
 
   function boardNeedsScope(url) {
-    return /(?:^|[?&/])(calendar|family|rss|video|grafana|splunkdash|splunk|zabbix|web|slides|rotator|index|air|uv|photo|traffic|sports)\.php(?:[?&#]|$)/i.test(String(url));
+    return /(?:^|[?&/])(calendar|family|glance|rss|video|grafana|splunkdash|splunk|zabbix|web|slides|rotator|index|air|uv|photo|traffic|sports)\.php(?:[?&#]|$)/i.test(String(url));
   }
 
   function rotateToIndex(targetIdx) {
