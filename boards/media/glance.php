@@ -102,22 +102,23 @@ $compact = $boardH < 1080;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:<?= $compact ? 22 : 28 ?>px <?= $compact ? 26 : 32 ?>px;
            display:grid; gap:<?= $compact ? 18 : 24 ?>px;
-           grid-template-columns: 1fr <?= $compact ? 520 : 580 ?>px;
-           grid-template-rows: auto minmax(0,1fr) auto;
-           grid-template-areas: "head sky" "agenda sky" "meta meta"; }
+           grid-template-columns: <?= $compact ? 560 : 600 ?>px 1fr;
+           grid-template-rows: minmax(0,1fr) auto;
+           grid-template-areas: "agenda sky" "meta meta"; }
 
-  .head { grid-area:head; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 56 : 64 ?>px; line-height:1; }
-  .head .sub { font-size:<?= $compact ? 22 : 24 ?>px; color:var(--mist); margin-top:6px; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 72 : 88 ?>px; line-height:1; text-align:right; }
-  #clock span { font-size:<?= $compact ? 30 : 36 ?>px; color:var(--mist); }
-  .dateline { font-size:<?= $compact ? 22 : 26 ?>px; color:var(--mist); text-align:right; margin-top:4px; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 88 : 110 ?>px; line-height:1; }
+  #clock span { font-size:<?= $compact ? 36 : 44 ?>px; color:var(--mist); }
+  .dateline { font-size:<?= $compact ? 24 : 30 ?>px; color:var(--mist); margin-top:6px; }
+  .board-title { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px;
+                  letter-spacing:2px; text-transform:uppercase; color:var(--beacon); margin-top:10px; }
+  .board-sub { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); margin-top:4px; }
 
   .agenda { grid-area:agenda; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-            padding:<?= $compact ? 24 : 32 ?>px <?= $compact ? 28 : 36 ?>px; min-height:0; overflow:hidden;
+            padding:<?= $compact ? 28 : 38 ?>px <?= $compact ? 32 : 42 ?>px; min-height:0; overflow:hidden;
             display:flex; flex-direction:column; }
-  .agenda .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:14px; }
-  .cal-legend { display:flex; flex-wrap:wrap; gap:14px 22px; margin-bottom:18px; }
+  .agenda > .k { font-size:<?= $compact ? 18 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);
+                  margin:<?= $compact ? 22 : 30 ?>px 0 8px; border-top:1px solid var(--hairline); padding-top:<?= $compact ? 18 : 24 ?>px; }
+  .cal-legend { display:flex; flex-wrap:wrap; gap:<?= $compact ? 14 : 18 ?>px <?= $compact ? 22 : 28 ?>px; margin-top:<?= $compact ? 18 : 22 ?>px; }
   .cal-legend .leg { display:flex; align-items:center; gap:8px; font-size:17px; color:var(--snow); }
   .cal-legend .dot { width:12px; height:12px; border-radius:50%; flex-shrink:0;
                      box-shadow:0 0 0 2px rgba(255,255,255,.12); }
@@ -132,7 +133,7 @@ $compact = $boardH < 1080;
   .setup { font-size:22px; color:var(--mist); line-height:1.55; }
   .setup code { background:var(--lake-night); padding:2px 8px; border-radius:6px; color:var(--snow); }
   .tomorrow { margin-top:auto; padding-top:18px; border-top:1px solid var(--hairline); }
-  .tomorrow .k { margin-bottom:10px; }
+  .tomorrow .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:10px; }
   .tomorrow .tev { padding:7px 0; border-bottom:none; }
   .tomorrow .tev .s { font-size:<?= $compact ? 20 : 22 ?>px; }
 
@@ -165,18 +166,11 @@ $compact = $boardH < 1080;
 </head>
 <body>
 <div class="board">
-  <header class="head">
-    <div>
-      <h1><?= h(TITLE) ?></h1>
-      <?php if (SUBTITLE !== ''): ?><div class="sub"><?= h(SUBTITLE) ?></div><?php endif; ?>
-    </div>
-    <div>
-      <?php if ($showClock): ?><div id="clock">--:--<span> --</span></div><?php endif; ?>
-      <div class="dateline" id="dateline">&nbsp;</div>
-    </div>
-  </header>
-
   <section class="agenda">
+    <?php if ($showClock): ?><div id="clock">--:--<span> --</span></div><?php endif; ?>
+    <div class="dateline" id="dateline">&nbsp;</div>
+    <?php if (TITLE !== ''): ?><div class="board-title"><?= h(TITLE) ?></div><?php endif; ?>
+    <?php if (SUBTITLE !== ''): ?><div class="board-sub"><?= h(SUBTITLE) ?></div><?php endif; ?>
     <?php if ($calLegend !== []): ?>
     <div class="cal-legend" aria-label="Calendar key">
       <?php foreach ($calLegend as $leg): ?>
