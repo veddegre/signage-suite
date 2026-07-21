@@ -87,6 +87,29 @@ function ics_weeks_since_start(int $dayMidnight, int $startMidnight, int $wkstIs
     return (int)(($here - $anchor) / 86400 / 7);
 }
 
+/**
+ * Effective WEEKLY INTERVAL — Outlook often omits INTERVAL=2 and uses EXDATE skips or
+ * puts cadence in the summary (e.g. "Meeting (Every 2 Weeks)").
+ */
+function ics_rrule_interval(array $ev): int
+{
+    $r = $ev['rrule'] ?? null;
+    if (!is_array($r)) {
+        return 1;
+    }
+    $explicit = max(1, (int)($r['INTERVAL'] ?? 1));
+    if (($r['FREQ'] ?? '') !== 'WEEKLY' || $explicit > 1) {
+        return $explicit;
+    }
+
+    $summary = (string)($ev['summary'] ?? '');
+    if (preg_match('/(?:every\s*2\s*weeks|every\s*other\s*week|\(\s*every\s*2\s*weeks\s*\))/i', $summary)) {
+        return 2;
+    }
+
+    return 1;
+}
+
 /** @return list<array{key:string,hex:string}> */
 function calendar_legend(array $feeds): array
 {

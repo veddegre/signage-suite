@@ -1767,7 +1767,7 @@ if ($authed && $board === 'video') {
 
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
-    'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'traffic'],
+    'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'meals', 'traffic'],
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
     'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
@@ -4068,7 +4068,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <button type="button" class="secondary" onclick="saveRotationTemplate()">Save current playlist</button>
                   <button type="button" class="secondary" onclick="deleteRotationTemplate()">Delete template</button>
                 </div>
-                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. Create the dinner slide from Slides → Create → Dinner menu template.</p>
+                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — meal calendar, weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. Create the dinner slide from Slides → Create → Dinner menu template; plan the week on <strong>Meal calendar</strong>.</p>
               </div>
             </div>
           </div>
@@ -8524,7 +8524,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
-    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
+    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
     'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'

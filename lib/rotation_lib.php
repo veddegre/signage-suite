@@ -1623,6 +1623,7 @@ function rotation_page_label(string $url): string
         'sports.php' => 'Sports',
         'calendar.php' => 'Calendar',
         'glance.php' => 'Today at a glance',
+        'meals.php' => 'Meal calendar',
         'family.php' => 'Calendar',
         'traffic.php' => 'Traffic map',
         'homelab.php' => 'Homelab status',
@@ -1830,6 +1831,7 @@ function rotation_quick_add_items(): array
         ['label' => 'Sports', 'url' => 'sports.php', 'dwell' => 75, 'group' => 'Boards'],
         ['label' => 'Calendar', 'url' => 'calendar.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Today at a glance', 'url' => 'glance.php', 'dwell' => 75, 'group' => 'Boards'],
+        ['label' => 'Meal calendar', 'url' => 'meals.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Traffic map', 'url' => 'traffic.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Homelab', 'url' => 'homelab.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'UniFi network', 'url' => 'unifi.php', 'dwell' => 45, 'group' => 'Boards'],
@@ -3207,6 +3209,7 @@ function rotation_playlist_builtin_templates(): array
 {
     return [
         'Kitchen weeknight' => [
+            ['url' => 'meals.php', 'dwell' => 60, 'from' => 16, 'to' => 21],
             ['url' => 'index.php', 'dwell' => 90, 'from' => 16, 'to' => 21],
             ['url' => 'slides.php?slide=dinner-menu.png', 'dwell' => 45, 'from' => 16, 'to' => 21],
             ['url' => 'traffic.php', 'dwell' => 75, 'from' => 16, 'to' => 20],

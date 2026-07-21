@@ -38,64 +38,9 @@ $LOC = rotation_screen_location($SCREEN);
 $lat = (float)$LOC['lat'];
 $lon = (float)$LOC['lon'];
 
-/** @return list<array<string,mixed>> */
-function glance_gather_events(int $winStart, int $winEnd): array
-{
-    $events = [];
-    foreach (ICS_FEEDS as $i => $feed) {
-        if (!is_array($feed)) {
-            continue;
-        }
-        $raw = fetch_calendar_feed($feed, $i, $winStart, $winEnd);
-        if ($raw === null) {
-            continue;
-        }
-        $meta = calendar_feed_meta($feed, $i);
-        $vevents = parse_ics_vevents($raw, $meta);
-        $overrides = [];
-        $masters = [];
-        foreach ($vevents as $ev) {
-            if ($ev['recurrence_id'] !== null && ($ev['uid'] ?? '') !== '') {
-                $overrides[$ev['uid']][$ev['recurrence_id']] = true;
-                if ($ev['all_day']) {
-                    foreach (ics_all_day_instances($ev, $winStart, $winEnd) as $ts) {
-                        $events[] = [
-                            'ts' => $ts,
-                            'all_day' => true,
-                            'summary' => $ev['summary'],
-                            'cal' => $ev['cal'],
-                            'color' => $ev['color'],
-                            'hex' => $ev['hex'],
-                        ];
-                    }
-                } elseif ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
-                    $events[] = [
-                        'ts' => $ev['start'],
-                        'all_day' => $ev['all_day'],
-                        'summary' => $ev['summary'],
-                        'cal' => $ev['cal'],
-                        'color' => $ev['color'],
-                        'hex' => $ev['hex'],
-                    ];
-                }
-                continue;
-            }
-            $masters[] = $ev;
-        }
-        foreach ($masters as $ev) {
-            foreach (expand_event($ev, $winStart, $winEnd, $overrides) as $inst) {
-                $events[] = $inst;
-            }
-        }
-    }
-    usort($events, fn($a, $b) => $a['ts'] <=> $b['ts']);
-
-    return $events;
-}
-
 $winStart = strtotime('today');
 $winEnd = strtotime('today +2 days') - 1;
-$events = glance_gather_events($winStart, $winEnd);
+$events = calendar_collect_events($winStart, $winEnd);
 
 $todayKey = date('Y-m-d');
 $tomorrowKey = date('Y-m-d', strtotime('+1 day'));

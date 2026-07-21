@@ -82,6 +82,7 @@ foreach ($got as $line) {
 // Outlook-style: weekly RRULE + EXDATE on skipped weeks (alternate pattern when INTERVAL omitted)
 $start = strtotime('2025-01-08 10:00:00'); // Wed
 $ev['start'] = $start;
+$ev['summary'] = 'Wednesday standup';
 $ev['rrule'] = parse_rrule('FREQ=WEEKLY;BYDAY=WE');
 $ev['exdate_ts'] = [
     strtotime('2025-01-22 10:00:00'),
@@ -106,6 +107,7 @@ foreach (['2025-01-22', '2025-02-05'] as $ymd) {
 // Simple INTERVAL=2 BYDAY=WE WKST=SU
 $start = strtotime('2025-01-15 10:00:00');
 $ev['start'] = $start;
+$ev['summary'] = 'Biweekly WE';
 $ev['rrule'] = parse_rrule('FREQ=WEEKLY;INTERVAL=2;BYDAY=WE;WKST=SU');
 $ev['exdate_ts'] = [];
 $win = [strtotime('2025-01-01'), strtotime('2025-03-01')];
@@ -119,6 +121,23 @@ foreach ($expectWe as $ymd) {
 }
 if (preg_grep('/2025-01-22/', $got)) {
     echo 'FAIL biweekly WE: 2025-01-22 should not appear' . PHP_EOL;
+    $fail++;
+}
+
+// Outlook-style: weekly RRULE without INTERVAL, cadence only in summary
+$start = strtotime('2025-01-15 11:00:00'); // Wed — on week
+$ev['start'] = $start;
+$ev['rrule'] = parse_rrule('FREQ=WEEKLY;BYDAY=WE');
+$ev['exdate_ts'] = [];
+$ev['summary'] = 'TeamDynamix Review Team Meeting (Every 2 Weeks)';
+$got = test_expand($ev, strtotime('2025-01-15'), strtotime('2025-01-15') + 86399);
+if ($got === []) {
+    echo 'FAIL Outlook summary biweekly: missing 2025-01-15' . PHP_EOL;
+    $fail++;
+}
+$gotOff = test_expand($ev, strtotime('2025-01-22'), strtotime('2025-01-22') + 86399);
+if ($gotOff !== []) {
+    echo 'FAIL Outlook summary biweekly: 2025-01-22 should not appear in ' . implode(', ', $gotOff) . PHP_EOL;
     $fail++;
 }
 

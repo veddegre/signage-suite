@@ -14,7 +14,7 @@
  *
  * Recurring events: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), and YEARLY
  * rules are expanded, with INTERVAL/UNTIL/EXDATE honored. Outlook biweekly patterns use
- * INTERVAL=2 with WKST=SU; weekly+EXDATE skips are matched by local calendar day.
+ * INTERVAL=2 with WKST=SU, weekly+EXDATE skips, or a weekly RRULE with cadence in the title.
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
@@ -479,13 +479,9 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
 
     $r = $ev['rrule'];
     $freq = $r['FREQ'] ?? '';
-    $interval = max(1, (int)($r['INTERVAL'] ?? 1));
+    $interval = ics_rrule_interval($ev);
     $until = isset($r['UNTIL']) ? (ics_time('', $r['UNTIL'])[0] ?? PHP_INT_MAX) : PHP_INT_MAX;
     $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
-    $weeklyDays = array_values(array_filter(
-        array_map(fn($rule) => $rule['ord'] === null ? $rule['dow'] : null, $bydayRules),
-        fn($d) => $d !== null
-    ));
 
     $tod = $allDay ? 0 : ($start - strtotime('today', $start));
     for ($day = strtotime('today', $winStart); $day <= $winEnd; $day += 86400) {
@@ -499,11 +495,25 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
                 $match = ((int)floor(($day - strtotime('today', $start)) / 86400)) % $interval === 0;
                 break;
             case 'WEEKLY':
-                $wkstIso = ics_wkst_to_iso($r['WKST'] ?? 'MO');
+                $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));
                 $weeks = ics_weeks_since_start($day, strtotime('today', $start), $wkstIso);
-                $dow = (int)date('N', $day);
-                $days = $weeklyDays !== [] ? $weeklyDays : [(int)date('N', $start)];
-                $match = $weeks >= 0 && $weeks % $interval === 0 && in_array($dow, $days, true);
+                if ($weeks >= 0 && $weeks % $interval === 0) {
+                    if ($bydayRules !== []) {
+                        foreach ($bydayRules as $rule) {
+                            if ($rule['ord'] !== null) {
+                                if (ics_day_matches_byday($day, $rule)) {
+                                    $match = true;
+                                    break;
+                                }
+                            } elseif ((int)date('N', $day) === $rule['dow']) {
+                                $match = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        $match = (int)date('N', $day) === (int)date('N', $start);
+                    }
+                }
                 break;
             case 'MONTHLY':
                 $months = ics_months_between($day, $start);
@@ -547,6 +557,87 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
         }
     }
     return $out;
+}
+
+/**
+ * Collect expanded calendar instances from all feeds for a time window.
+ * Shared by calendar.php and glance.php.
+ *
+ * @return list<array<string,mixed>>
+ */
+function calendar_collect_events(int $winStart, int $winEnd): array
+{
+    $events = [];
+    foreach (ICS_FEEDS as $i => $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        $raw = fetch_calendar_feed($feed, $i, $winStart, $winEnd);
+        if ($raw === null) {
+            continue;
+        }
+        $meta = calendar_feed_meta($feed, $i);
+        $vevents = parse_ics_vevents($raw, $meta);
+        $overrides = [];
+        $masters = [];
+        $mastersByUid = [];
+        foreach ($vevents as $ev) {
+            if ($ev['recurrence_id'] !== null && ($ev['uid'] ?? '') !== '') {
+                continue;
+            }
+            $masters[] = $ev;
+            if (($ev['uid'] ?? '') !== '') {
+                $mastersByUid[$ev['uid']] = $ev;
+            }
+        }
+        foreach ($vevents as $ev) {
+            if ($ev['recurrence_id'] === null || ($ev['uid'] ?? '') === '') {
+                continue;
+            }
+            $master = $mastersByUid[$ev['uid']] ?? null;
+            if ($master !== null && !empty($master['rrule']) && ($master['rrule']['FREQ'] ?? '') === 'WEEKLY') {
+                $interval = ics_rrule_interval($master);
+                if ($interval > 1) {
+                    $ridTs = (int)$ev['recurrence_id'];
+                    $dayStart = strtotime('today', $ridTs);
+                    $dayEnd = $dayStart + 86399;
+                    if (expand_event($master, $dayStart, $dayEnd, []) === []) {
+                        continue;
+                    }
+                }
+            }
+            $overrides[$ev['uid']][$ev['recurrence_id']] = true;
+            if ($ev['all_day']) {
+                foreach (ics_all_day_instances($ev, $winStart, $winEnd) as $ts) {
+                    $events[] = [
+                        'ts' => $ts,
+                        'all_day' => true,
+                        'summary' => $ev['summary'],
+                        'cal' => $ev['cal'],
+                        'color' => $ev['color'],
+                        'hex' => $ev['hex'],
+                    ];
+                }
+            } elseif ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
+                $events[] = [
+                    'ts' => $ev['start'],
+                    'all_day' => $ev['all_day'],
+                    'summary' => $ev['summary'],
+                    'cal' => $ev['cal'],
+                    'color' => $ev['color'],
+                    'hex' => $ev['hex'],
+                ];
+            }
+        }
+        foreach ($masters as $ev) {
+            foreach (expand_event($ev, $winStart, $winEnd, $overrides) as $inst) {
+                $events[] = $inst;
+            }
+        }
+    }
+    usort($events, fn($a, $b) => $a['ts'] <=> $b['ts']);
+
+    return $events;
 }
 
 function parse_ics_vevents(string $raw, array $feedMeta): array
@@ -649,55 +740,7 @@ if (defined('SIGNAGE_CALENDAR_LIB_ONLY') && SIGNAGE_CALENDAR_LIB_ONLY) {
 // ── Gather events for today + 6 days ────────────────────────────────────────
 $winStart = strtotime('today');
 $winEnd   = strtotime('today +7 days') - 1;
-$events   = [];
-
-foreach (ICS_FEEDS as $i => $feed) {
-    if (!is_array($feed)) {
-        continue;
-    }
-    $raw = fetch_calendar_feed($feed, $i, $winStart, $winEnd);
-    if ($raw === null) {
-        continue;
-    }
-    $meta = calendar_feed_meta($feed, $i);
-    $vevents = parse_ics_vevents($raw, $meta);
-    $overrides = [];
-    $masters = [];
-    foreach ($vevents as $ev) {
-        if ($ev['recurrence_id'] !== null && ($ev['uid'] ?? '') !== '') {
-            $overrides[$ev['uid']][$ev['recurrence_id']] = true;
-            if ($ev['all_day']) {
-                foreach (ics_all_day_instances($ev, $winStart, $winEnd) as $ts) {
-                    $events[] = [
-                        'ts' => $ts,
-                        'all_day' => true,
-                        'summary' => $ev['summary'],
-                        'cal' => $ev['cal'],
-                        'color' => $ev['color'],
-                        'hex' => $ev['hex'],
-                    ];
-                }
-            } elseif ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
-                $events[] = [
-                    'ts' => $ev['start'],
-                    'all_day' => $ev['all_day'],
-                    'summary' => $ev['summary'],
-                    'cal' => $ev['cal'],
-                    'color' => $ev['color'],
-                    'hex' => $ev['hex'],
-                ];
-            }
-            continue;
-        }
-        $masters[] = $ev;
-    }
-    foreach ($masters as $ev) {
-        foreach (expand_event($ev, $winStart, $winEnd, $overrides) as $inst) {
-            $events[] = $inst;
-        }
-    }
-}
-usort($events, fn($a, $b) => $a['ts'] <=> $b['ts']);
+$events   = calendar_collect_events($winStart, $winEnd);
 
 // Bucket by day
 $days = [];

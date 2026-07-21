@@ -18,6 +18,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Sports | `sports.php` | `sports.php` | — |
 | | Calendar | `calendar.php` | `calendar.php` | — |
 | | Today at a glance | `glance.php` | `glance.php` | Calendar feeds |
+| | Meal calendar | `meals.php` | `meals.php` | — |
 | | Traffic map | `traffic.php` | `traffic.php` | TomTom |
 | **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
 | | This day in history | `history.php` | `history.php` | — |
@@ -235,6 +236,18 @@ Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with 
 **Admin:** **Today at a Glance** — title, event count, tomorrow preview toggle. Feeds are configured on the **Calendar** board (`calendar.ICS_FEEDS`).
 
 **Rotation presets:** built-in **Weekly planner** template includes `glance.php` alongside the full calendar and weather boards.
+
+### meals.php — Meal calendar
+
+Rolling **7-day meal plan** — today highlighted large on the left, the next six days in a grid. Edit in admin; no external calendar required.
+
+**Admin:** **Meal calendar** board:
+
+- **Weekly plan** — one row per weekday (Mon–Sun): dinner + optional note; lunch/breakfast columns optional
+- **Date overrides** — `YYYY-MM-DD` rows replace the weekly default (holiday, takeout, leftover night)
+- **Show lunch / breakfast** — off by default; enable to show extra slots on the wall
+
+Pairs with the **Dinner menu** slide template for a hero “tonight” graphic and the built-in **Kitchen weeknight** rotation preset.
 
 ---
 
