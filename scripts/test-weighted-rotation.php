@@ -1,7 +1,7 @@
 #!/usr/bin/env php
 <?php
 /**
- * Sanity checks for board.php rotation logic (hour windows + weighted pick).
+ * Sanity checks for board.php rotation logic (hour windows, weighted deck, shuffle).
  * Usage: php scripts/test-weighted-rotation.php
  */
 declare(strict_types=1);
@@ -16,42 +16,6 @@ function test_page_weight(array $page): int
     $w = (int)($page['weight'] ?? 0);
 
     return ($w > 0) ? min(20, $w) : 1;
-}
-
-/**
- * Mirrors board.php pickWeightedPage() for Monte Carlo checks.
- * @param list<array<string,mixed>> $pages
- */
-function test_pick_weighted_page(array $pages, int $excludeIdx): int
-{
-    $eligible = [];
-    foreach ($pages as $i => $page) {
-        if (!is_array($page) || !rotation_page_in_window($page)) {
-            continue;
-        }
-        $eligible[] = $i;
-    }
-    if ($eligible === []) {
-        return $excludeIdx >= 0 ? $excludeIdx : 0;
-    }
-
-    $total = 0;
-    $pool = [];
-    foreach ($eligible as $i) {
-        $w = test_page_weight($pages[$i]);
-        $pool[] = ['i' => $i, 'w' => $w];
-        $total += $w;
-    }
-
-    $r = mt_rand() / mt_getrandmax() * $total;
-    foreach ($pool as $item) {
-        $r -= $item['w'];
-        if ($r <= 0) {
-            return $item['i'];
-        }
-    }
-
-    return $pool[count($pool) - 1]['i'];
 }
 
 // ── Hour windows (rotation_page_in_window) ────────────────────────────────────
@@ -83,33 +47,72 @@ foreach ($windowExpect as $hour => $expect) {
 }
 echo "Hour window checks: OK\n";
 
-// ── Weighted distribution (weights 10:1:1) ───────────────────────────────────
+/**
+ * Mirrors board.php weighted deck (weight copies per cycle, shuffled).
+ * @param list<array<string,mixed>> $pages
+ * @param list<int> $eligible
+ * @return list<int>
+ */
+function test_build_weighted_deck(array $pages, array $eligible): array
+{
+    $deck = [];
+    foreach ($eligible as $i) {
+        $w = test_page_weight($pages[$i]);
+        for ($c = 0; $c < $w; $c++) {
+            $deck[] = $i;
+        }
+    }
+    $n = count($deck);
+    for ($i = $n - 1; $i > 0; $i--) {
+        $j = random_int(0, $i);
+        [$deck[$i], $deck[$j]] = [$deck[$j], $deck[$i]];
+    }
+
+    return $deck;
+}
+
+/**
+ * @param list<array<string,mixed>> $pages
+ */
+function test_weighted_cycle_unique_before_end(array $pages, array $eligible): bool
+{
+    if ($eligible === []) {
+        return true;
+    }
+    $deck = test_build_weighted_deck($pages, $eligible);
+    $seen = [];
+    foreach ($deck as $pick) {
+        $seen[$pick] = true;
+    }
+
+    return count($seen) === count($eligible);
+}
+
+// ── Weighted deck (each page once per cycle minimum, weight sets frequency) ───
 $pages = [
     ['url' => 'heavy', 'weight' => 10],
     ['url' => 'light-a'],
     ['url' => 'light-b'],
 ];
-$trials = 50000;
-$counts = [0, 0, 0];
-$idx = -1;
-for ($t = 0; $t < $trials; $t++) {
-    $idx = test_pick_weighted_page($pages, $idx);
-    $counts[$idx]++;
-}
-
-$heavyPct = round($counts[0] / $trials * 100, 1);
-$lightPct = round(($counts[1] + $counts[2]) / $trials * 100, 1);
-echo "Weighted rotation simulation ({$trials} picks, weights 10:1:1):\n";
-echo "  heavy:   {$counts[0]} ({$heavyPct}%, expected ~83%)\n";
-echo "  light-a: {$counts[1]}\n";
-echo "  light-b: {$counts[2]}\n";
-echo "  light total: {$lightPct}%\n";
-
-if ($counts[0] / $trials < 0.75) {
-    fwrite(STDERR, "FAIL: heavy page under-represented\n");
+$eligible = [0, 1, 2];
+if (!test_weighted_cycle_unique_before_end($pages, $eligible)) {
+    fwrite(STDERR, "FAIL: weighted deck missing a page in cycle\n");
     exit(1);
 }
-echo "Weighted checks: OK\n";
+$deck = test_build_weighted_deck($pages, $eligible);
+if (count($deck) !== 12) {
+    fwrite(STDERR, 'FAIL: weighted deck size expected 12, got ' . count($deck) . PHP_EOL);
+    exit(1);
+}
+$counts = [0, 0, 0];
+foreach ($deck as $pick) {
+    $counts[$pick]++;
+}
+if ($counts !== [10, 1, 1]) {
+    fwrite(STDERR, 'FAIL: weighted deck counts ' . json_encode($counts) . PHP_EOL);
+    exit(1);
+}
+echo "Weighted deck checks: OK (10+1+1 slots, all boards in every cycle)\n";
 
 // ── Shuffle deck (in-window pages only, no repeat before cycle completes) ─────
 function test_shuffle_next(array &$deck, int &$pos, string &$fp, array $eligible, int $lastShown): int

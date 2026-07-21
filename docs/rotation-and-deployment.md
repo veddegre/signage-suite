@@ -18,7 +18,9 @@ Opening a playlist panel below syncs the **Which display** picker and highlights
 
 Some boards auto-skip from rotation when off-season or unreachable for 24h+: **lake.php** (NDBC buoy), **sports.php** (all teams off-season), **webcam.php** (embed probe fails). They stay on the saved playlist and return when data is back.
 
-Two stacked iframes preload each board before crossfade. Hang timeout skips pages that fail to load. Weather ticker lives in the shell (persistent across transitions).
+Two stacked iframes preload each board before crossfade. Hang timeout skips pages that fail to load. Weather ticker lives in the shell (persistent across transitions). NWS alerts use each display’s **Weather / kiosk location** (not a separate ticker lat/lon). The shell polls `board.php?api=1` every **~30 seconds** and reloads when the playlist or display options change.
+
+Framed boards that support per-display settings receive `?screen=<key>` from the shell (weather, calendar, **glance**, sports, traffic, RSS, slides, etc.). Plain `board.php` = **main**.
 
 Optional **hero status strip** — a bar above the ticker showing live Kuma/Zabbix/announcement/ntfy snippets without burning rotation airtime. Configure per display under **Rotation → Playlists → Kiosk settings** (enable strip, add up to four sources, height). The shell polls `board.php?api=hero` every 30s.
 
@@ -33,7 +35,7 @@ Open **Display settings** on the Rotation page (screen list, names, shared edito
 | Clock | Overlay on/off |
 | Debug | Show debug overlay |
 | Crossfade / settle / hang | Timings in ms (blank = global default) |
-| Weighted / Shuffle | Rotation mode (see below) |
+| Weighted / Shuffle | Rotation mode — **Weighted** builds a shuffled multi-slot cycle; **Shuffle** randomizes once per in-window pass (see below) |
 | Hero status strip | Persistent Kuma / Zabbix / announce / ntfy bar above ticker |
 | Location | Optional lat/lon + place name for this kiosk — weather, air, UV, photo, traffic map, and NWS ticker (blank = global **Weather** board) |
 | Sports teams | Up to four ESPN teams for `sports.php` on this display (blank = site default) |
@@ -63,18 +65,22 @@ Optional: **Auto-release** after N minutes, **ntfy** push on activate/release/ex
 
 Each screen *is* a playlist:
 
-- Pages in order, or **Shuffle** (randomize once per full pass — every page still plays once per cycle)
+- Pages in **playlist order**, **Shuffle**, or **Weighted** (see below)
 - Per-page **dwell** (seconds)
 - Per-page hour windows (**From hr** / **To hr**)
 - **Skip** — bench a page without deleting (settings preserved)
 
 Screens need not map to hardware: define `ambient` or `guests` and point any display at it.
 
+### Shuffle rotation
+
+Enable **Shuffle each cycle** under **Kiosk settings** (or the display row for super admins). Each pass builds a **random order of in-window boards only** — every eligible page plays **once** before the deck reshuffles. Out-of-window entries are skipped until their hour window opens (the deck rebuilds when the eligible set changes). **Sequential** mode still walks playlist order (with a random starting slot so kiosks don’t all boot on item 1).
+
 ### Weighted rotation
 
-By default playlists run **sequentially** (or shuffled once per pass).
+By default playlists run **sequentially** (or shuffled once per pass when Shuffle is on).
 
-Enable **Weighted** on a display row to pick the next page at random using each entry's **Weight** (1–20, default 1). Weight 3 is ~3× as likely as weight 1. Unlike shuffle, a page can repeat before every other page has played.
+Enable **Weighted** on a display row to build a **shuffled cycle** from in-window entries. Each entry appears in the cycle **Weight** times (1–20, default 1), so weight 3 is ~3× as often as weight 1. **Every board plays at least once** before the cycle repeats (unlike the old independent random pick). The order within each cycle is randomized so lighter boards are mixed in throughout.
 
 **Weighted overrides Shuffle** when both are checked. Hour windows and **Skip** still apply.
 
@@ -106,6 +112,9 @@ Unknown `?screen=` or empty playlist falls back to **main**.
 ### Example playlist URLs
 
 ```
+glance.php
+calendar.php
+meals.php
 rss.php?feed=krebs
 grafana.php?d=homelab
 zabbix.php?d=network

@@ -59,7 +59,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 
 ### index.php — Weather
 
-Allendale weather, RainViewer animated radar, sunrise arc.
+Allendale weather, RainViewer animated radar, sunrise arc. **Latitude / longitude** here are the site default for every location-aware board (weather, air, UV, photo, traffic, **NWS alert ticker**) unless a display overrides them under **Rotation → Kiosk settings**.
 
 **Setup:** set `OWM_API_KEY` in admin → **Weather**.
 
@@ -227,19 +227,21 @@ Expect **200** and `Content-Type: image/png`. Errors logged to `cache/traffic_ti
 - **Trash/recycle:** `TRASH_WEEKDAY`, `RECYCLE_ANCHOR` (any past recycle date). Leave trash day as default to hide the chip
 - **Countdowns:** label → `YYYY-MM-DD`
 
-RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEARLY, with UNTIL/EXDATE.
+RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST — **biweekly** uses DST-safe week math), MONTHLY (BYMONTHDAY), YEARLY, with UNTIL/EXDATE.
 
 ### glance.php — Today at a glance
 
-Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with a **weather summary** (OpenWeatherMap via the Weather board) and two **headline panels** below it.
+Compact **today + tomorrow** calendar (left), **weather summary** (top right), and up to two **headline panels** (below weather) on one board.
 
-**Admin:** **Today at a Glance** — site-wide defaults for title, event count, tomorrow preview, weather, and headline columns. Per-display overrides live under **Rotation → Kiosk settings** (same pattern as sports teams and ticker RSS). Calendar feeds on the **Calendar** board (`calendar.ICS_FEEDS`).
+**Layout:** Clock, date, and calendar legend; today’s events (with optional tomorrow preview); OpenWeatherMap current conditions with hi/lo, **precip chance**, wind, and tomorrow outlook. Headline columns sit side-by-side when both are enabled.
 
-**Headlines (left, site default):** [GVNext](https://www.gvsu.edu/gvnext/) homepage — scrapes `preview-title` story headlines. Override page URL, title, or RSS fallback per display in Rotation.
+**Admin:** **Today at a Glance** — site-wide defaults for title, event count, tomorrow preview, weather on/off, headline column titles, GVNext URL, RSS keys, max headlines, cache TTL. Per-display overrides: **Rotation → Kiosk settings** (same pattern as sports teams and ticker RSS). Calendar data comes from **Calendar** board feeds (`calendar.ICS_FEEDS`).
 
-**Headlines (right, site default):** RSS feed key from **RSS Stories** (`rss.FEEDS`). Override per display in Rotation kiosk settings.
+**Headlines (left, site default):** [GVNext](https://www.gvsu.edu/gvnext/) — scrapes `preview-title` story titles; autodiscovers RSS when the page links a feed. Per display: override page URL, column title, or RSS fallback (used when scrape returns nothing).
 
-**Rotation presets:** built-in **Weekly planner** template includes `glance.php` alongside the full calendar and weather boards.
+**Headlines (right, site default):** RSS feed key from **RSS Stories**. Per display: override feed key or hide the column.
+
+**Rotation:** `board.php` appends `?screen=<key>` so location, headlines, and calendar scope match the kiosk. Built-in **Weekly planner** and default **starter playlist** include `glance.php`.
 
 ### meals.php — Meal calendar
 
@@ -615,12 +617,16 @@ Keyed sites: `web.php?d=<key>`. Target URLs must allow iframe embedding. Per-sit
 
 ## ticker.php — Weather alert ticker (shared)
 
-Included before `</body>` on every board. Renders nothing when no NWS alerts; otherwise 72px bottom overlay — amber for advisories, red + blinking dot for Severe/Extreme.
+Included before `</body>` on every board. Renders nothing when no NWS alerts (unless **RSS news fallback** is configured for that display); otherwise 72px bottom overlay — amber for advisories, red + blinking dot for warnings.
 
 | Context | Behavior |
 |---------|----------|
 | **board.php** | Ticker in shell; framed pages use `?noticker=1` + safe-bottom inset |
-| **player.php** | Ticker in outer PWA; polls JSON endpoint |
+| **player.php** | Ticker in outer PWA; polls `ticker.php?api=1&screen=<key>` |
 | **Direct board URL** | Each board renders its own ticker; scroll is clock-phased |
 
-**Setup:** **Ticker** in admin — lat/lon, `TICKER_UA`, mode (`scroll` / `static`), min severity, demo mode.
+**Location:** NWS `alerts/active?point=lat,lon` uses the same coordinates as the **Weather** board — global lat/lon under **Weather** in admin, or per-display override under **Rotation → Kiosk settings**. There is no separate latitude/longitude on the **Alert Ticker** board anymore.
+
+**Setup:** **Alert Ticker** in admin — master enable, `TICKER_UA`, poll interval, mode (`scroll` / `static`), min severity, demo mode. Per display: **Show weather alert ticker** and optional **RSS headlines when there are no alerts** under **Rotation → Kiosk settings**.
+
+**Alert text:** Headline, timing, and key hazard language — county **Areas:** lists are omitted (the alert is already for your configured point).

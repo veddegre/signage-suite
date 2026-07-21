@@ -1503,16 +1503,18 @@ function rotation_merge_page_meta(array $page, array $prev): array
 /** Admin tooltip: per-page Weight field (1–20). */
 function rotation_weight_tooltip(): string
 {
-    return 'How often this page is picked when Weighted is on for the display. '
-        . 'Blank or 1 = normal. 2–20 = more often (weight 3 is ~3× as likely as weight 1). '
+    return 'Slots per weighted cycle when Weighted is on for the display. '
+        . 'Blank or 1 = one slot per pass. 2–20 = that many slots (weight 3 ≈ 3× as often as weight 1). '
+        . 'Every in-window board plays at least once before the cycle repeats. '
         . 'Ignored when Weighted is off. Hour windows and Skip still apply.';
 }
 
 /** Admin tooltip: display-level Weighted rotation mode. */
 function rotation_weighted_mode_tooltip(): string
 {
-    return 'Pick the next page at random using each entry\'s Weight (1–20, default 1). '
-        . 'Unlike Shuffle, a page can repeat before every page has played. '
+    return 'Builds a shuffled cycle from in-window playlist entries — each entry appears '
+        . 'Weight times per cycle (1–20, default 1), so weight 3 is ~3× as often as weight 1. '
+        . 'Every board plays at least once before the cycle repeats. '
         . 'Weighted overrides Shuffle when both are checked.';
 }
 

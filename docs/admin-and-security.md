@@ -69,7 +69,7 @@ Operators with multiple displays can manage rotation, deploy targets, and per-sc
 Super admins assign **shared editors** per display under **Rotation** (checkboxes in each playlist panel). A shared editor is an operator who is **not** the primary owner but may manage that display’s **full** configuration:
 
 - Playlist order, dwell, hour windows, skip, weights
-- Display options (ticker, shuffle/weighted, crossfade timings, **hero status strip**, **location**, **sports teams**)
+- Display options (ticker, **shuffle / weighted** rotation, crossfade timings, **hero status strip**, **location**, **sports teams**, **glance headline columns**)
 - Deploy and sync (slides, photos, etc.) including content owned by the primary operator on that display
 - Rotation quick-add for boards visible to the primary owner
 

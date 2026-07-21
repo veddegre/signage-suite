@@ -82,7 +82,7 @@ foreach ($effective as $i => $page) {
             $reasons[] = "outside hour window (from {$from}, to {$to})";
         }
         if (!empty($settings['weighted'])) {
-            $reasons[] = 'eligible for weighted pick';
+            $reasons[] = 'eligible for weighted cycle (weight = slots per pass)';
         } else {
             $reasons[] = 'weight ignored until Weighted is on';
         }

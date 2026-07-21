@@ -2373,7 +2373,7 @@ function admin_rotation_kiosk_settings_panel(
         <div class="field">
           <label class="check" title="<?= h(rotation_weighted_mode_tooltip()) ?>"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][weighted]" value="1"
             <?= !empty($screenSettings['weighted']) ? 'checked' : '' ?>> Weighted picks</label>
-          <div class="help" style="margin-top:4px">Next page chosen at random using each card’s <strong>Weight</strong> (1–20).</div>
+          <div class="help" style="margin-top:4px">Shuffled cycle — each card’s <strong>Weight</strong> is how many slots it gets per pass (every board plays at least once).</div>
         </div>
         <div class="field">
           <label class="check" title="Randomize play order once per full pass; every page appears once per cycle"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][shuffle]" value="1"
@@ -4239,7 +4239,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <div class="panel-body">
           <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Boards (weather, RSS, …): set <strong>Dwell</strong> on each card header. Deployed slides: edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy. Expand a card for hour windows and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
           <?php if (!empty($screenSettings['weighted'])): ?>
-          <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) controls how often it is picked next. Higher = more airtime.</div>
+          <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) is how many slots it gets in each shuffled cycle. Higher weight = more airtime, but every board still plays at least once per cycle.</div>
           <?php endif; ?>
 
           <div class="rotation-screen-tools">

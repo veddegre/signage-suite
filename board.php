@@ -335,40 +335,32 @@ if (($_GET['api'] ?? '') === 'presence') {
     return (!isNaN(w) && w > 0) ? Math.min(20, w) : 1;
   }
 
-  function pickWeightedPage(excludeIdx) {
-    const eligible = pagesInWindow();
-    if (eligible.length === 0) {
-      return excludeIdx >= 0 ? excludeIdx : 0;
-    }
-    let total = 0;
-    const pool = [];
-    for (let k = 0; k < eligible.length; k++) {
-      const i = eligible[k];
-      const w = pageWeight(PAGES[i]);
-      pool.push({ i: i, w: w });
-      total += w;
-    }
-    let r = Math.random() * total;
-    for (let n = 0; n < pool.length; n++) {
-      r -= pool[n].w;
-      if (r <= 0) return pool[n].i;
-    }
-    return pool[pool.length - 1].i;
-  }
-
-  // Play order: weighted random, shuffled deck (in-window pages only), or sequential list.
+  // Play order: weighted deck, shuffled deck, or sequential list.
   let order = PAGES.map((_, i) => i), pos = -1;
   let shuffleDeck = [];
   let shufflePos = 0;
   let shuffleEligibleKey = '';
+  let weightedDeck = [];
+  let weightedPos = 0;
+  let weightedEligibleKey = '';
 
-  function shuffleEligibleIndices() {
+  function eligiblePageIndices() {
     const eligible = pagesInWindow();
     return eligible.length ? eligible : order.slice();
   }
 
+  function eligibleFingerprint(indices) {
+    return indices.map(function (i) {
+      return i + ':' + pageWeight(PAGES[i]);
+    }).join(',');
+  }
+
+  function shuffleEligibleIndices() {
+    return eligiblePageIndices();
+  }
+
   function shuffleEligibleFingerprint() {
-    return shuffleEligibleIndices().join(',');
+    return eligibleFingerprint(shuffleEligibleIndices());
   }
 
   function rebuildShuffleDeck(lastShown) {
@@ -400,7 +392,50 @@ if (($_GET['api'] ?? '') === 'presence') {
     return shuffleDeck[shufflePos++];
   }
 
+  function rebuildWeightedDeck(lastShown) {
+    const eligible = eligiblePageIndices();
+    weightedDeck = [];
+    for (let k = 0; k < eligible.length; k++) {
+      const i = eligible[k];
+      const w = pageWeight(PAGES[i]);
+      for (let c = 0; c < w; c++) {
+        weightedDeck.push(i);
+      }
+    }
+    if (weightedDeck.length === 0) {
+      weightedPos = 0;
+      weightedEligibleKey = '';
+      return;
+    }
+    for (let i = weightedDeck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [weightedDeck[i], weightedDeck[j]] = [weightedDeck[j], weightedDeck[i]];
+    }
+    if (weightedDeck.length > 1 && weightedDeck[0] === lastShown) {
+      for (let s = weightedDeck.length - 1; s > 0; s--) {
+        if (weightedDeck[s] !== lastShown) {
+          [weightedDeck[0], weightedDeck[s]] = [weightedDeck[s], weightedDeck[0]];
+          break;
+        }
+      }
+    }
+    weightedPos = 0;
+    weightedEligibleKey = eligibleFingerprint(eligible);
+  }
+
+  function nextWeightedPage() {
+    const fp = eligibleFingerprint(eligiblePageIndices());
+    if (fp !== weightedEligibleKey || weightedPos >= weightedDeck.length) {
+      rebuildWeightedDeck(idx);
+    }
+    if (!weightedDeck.length) {
+      return 0;
+    }
+    return weightedDeck[weightedPos++];
+  }
+
   if (WEIGHTED) {
+    rebuildWeightedDeck(-1);
     pos = -1;
   } else if (SHUFFLE) {
     rebuildShuffleDeck(-1);
@@ -412,7 +447,7 @@ if (($_GET['api'] ?? '') === 'presence') {
 
   function nextPage() {
     if (WEIGHTED) {
-      return pickWeightedPage(idx);
+      return nextWeightedPage();
     }
     if (SHUFFLE) {
       return nextShufflePage();
@@ -466,6 +501,7 @@ if (($_GET['api'] ?? '') === 'presence') {
         sendPresence('empty');
       } else {
         if (SHUFFLE) rebuildShuffleDeck(-1);
+        else if (WEIGHTED) rebuildWeightedDeck(-1);
         rotate();
       }
     }
