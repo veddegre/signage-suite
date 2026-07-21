@@ -235,7 +235,6 @@ function sports_cached_json(string $url, string $cacheKey, int $ttl): ?array
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);
-    curl_close($ch);
     if ($body !== false && $code === 200) {
         $d = json_decode($body, true);
         if (is_array($d)) {

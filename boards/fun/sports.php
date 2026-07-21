@@ -13,6 +13,8 @@ require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 
 const SPORTS_CACHE_DIR = SIGNAGE_ROOT . '/cache';
 
+ob_start();
+
 $SCREEN = signage_request_screen();
 $sportsLabels = rotation_screen_sports_labels($SCREEN);
 define('TITLE', $sportsLabels['title']);
@@ -22,6 +24,9 @@ define('TIMEZONE', cfg('sports.TIMEZONE', 'America/Detroit'));
 $board = sports_board_data($SCREEN);
 
 if (isset($_GET['api']) && $_GET['api'] === '1') {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
     echo json_encode([
@@ -83,6 +88,10 @@ $rowCards = max(400, $rowCards);
 $layoutClass = 'layout-' . max(1, min(4, $teamCount)) . ($focusLive ? ' focus-live' : '');
 $pollMs = $anyLive ? max(45000, $reloadSec * 1000) : 120000;
 $apiUrl = 'sports.php?api=1&screen=' . rawurlencode($SCREEN);
+
+if (ob_get_level() > 0) {
+    ob_clean();
+}
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -290,14 +299,16 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   <div class="stamp" id="sports-stamp"><?= h(sports_board_stamp_text($board)) ?></div>
 </div>
 <script>
+<?php if (!$embedded): ?>
 (function () {
   var API = <?= json_encode($apiUrl) ?>;
   var POLL = <?= (int)$pollMs ?>;
 
-  function esc(s) {
-    var d = document.createElement('div');
-    d.textContent = s == null ? '' : String(s);
-    return d.innerHTML;
+  function cssEscape(value) {
+    if (window.CSS && typeof CSS.escape === 'function') {
+      return CSS.escape(String(value));
+    }
+    return String(value).replace(/["\\]/g, '\\$&');
   }
 
   function setText(el, value) {
@@ -313,13 +324,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   }
 
   function applyCard(card) {
-    var root = document.querySelector('[data-card-key="' + CSS.escape(card.key) + '"]');
+    var root = document.querySelector('[data-card-key="' + cssEscape(card.key) + '"]');
     if (!root) return;
-    var prevMode = root.getAttribute('data-mode') || '';
-    if (prevMode && prevMode !== card.mode && (card.mode === 'live' || prevMode === 'live' || card.mode === 'final' || prevMode === 'final')) {
-      location.reload();
-      return;
-    }
     root.setAttribute('data-mode', card.mode || 'off');
     root.className = 'card ' + (card.mode || 'off')
       + (card.badge === 'Off season' ? ' offseason' : '')
@@ -346,12 +352,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       var oppLogo = root.querySelector('[data-field="opp_logo"]');
       if (oppLogo && card.opponent_logo) oppLogo.src = card.opponent_logo;
       setText(root.querySelector('[data-field="clock"]'), card.clock_line);
-    } else {
+    } else if (headline) {
       if (scoreboard) scoreboard.style.display = 'none';
-      if (headline) {
-        headline.style.display = '';
-        setText(headline, card.headline);
-      }
+      headline.style.display = '';
+      setText(headline, card.headline);
       setText(root.querySelector('[data-field="clock"]'), '');
     }
     setText(root.querySelector('[data-field="detail"]'), card.detail);
@@ -376,6 +380,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     if (document.visibilityState === 'visible') refresh();
   });
 })();
+<?php endif; ?>
 <?php if ($showClock): ?>
 (function(){
   const tz = <?= json_encode(TIMEZONE) ?>;
