@@ -363,6 +363,9 @@ if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()
         if ($name === '' || !is_array($pages)) {
             $flash = 'Template not saved — enter a name and at least one playlist page.';
             $flashOk = false;
+        } elseif (rotation_playlist_template_is_builtin($name)) {
+            $flash = 'That name is reserved for a built-in template — choose another name.';
+            $flashOk = false;
         } elseif (rotation_playlist_template_save($name, $pages)) {
             audit_log('rotation.template.save', 'Saved playlist template', ['name' => $name]);
             $flash = 'Saved playlist template “' . $name . '”.';
@@ -376,8 +379,11 @@ if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()
     }
     if ($tplAct === 'rotation_template_delete') {
         $name = trim((string)($_POST['template_name'] ?? ''));
-        if ($name === '' || !array_key_exists($name, rotation_playlist_templates())) {
+        if ($name === '' || !array_key_exists($name, rotation_playlist_templates_all())) {
             $flash = 'Template not found.';
+            $flashOk = false;
+        } elseif (rotation_playlist_template_is_builtin($name)) {
+            $flash = 'Built-in templates cannot be deleted — load one and save under a new name to customize.';
             $flashOk = false;
         } elseif (rotation_playlist_template_delete($name)) {
             audit_log('rotation.template.delete', 'Deleted playlist template', ['name' => $name]);
@@ -1761,7 +1767,7 @@ if ($authed && $board === 'video') {
 
 $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
-    'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'traffic'],
+    'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'traffic'],
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
     'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
@@ -1798,7 +1804,7 @@ if ($authed && $board === 'rotation') {
     if ($rotationMainPages === []) {
         $rotationMainPages = $rotationStarterPages;
     }
-    $rotationTemplates = rotation_playlist_templates();
+    $rotationTemplates = rotation_playlist_templates_all();
 }
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesTab = 'deck';
@@ -4051,8 +4057,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     <label class="mini" for="rotationTemplateSelect">Saved templates</label>
                     <select id="rotationTemplateSelect">
                       <option value="">Choose a template…</option>
-                      <?php foreach ($rotationTemplates as $tplName => $tplPages): ?>
-                      <option value="<?= h($tplName) ?>"><?= h($tplName) ?> (<?= count($tplPages) ?> page<?= count($tplPages) === 1 ? '' : 's' ?>)</option>
+                      <?php foreach ($rotationTemplates as $tplName => $tplPages):
+                        $tplBuiltin = rotation_playlist_template_is_builtin($tplName);
+                      ?>
+                      <option value="<?= h($tplName) ?>"><?= h($tplName) ?><?= $tplBuiltin ? ' (built-in)' : '' ?> (<?= count($tplPages) ?> page<?= count($tplPages) === 1 ? '' : 's' ?>)</option>
                       <?php endforeach; ?>
                     </select>
                   </div>
@@ -4060,9 +4068,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <button type="button" class="secondary" onclick="saveRotationTemplate()">Save current playlist</button>
                   <button type="button" class="secondary" onclick="deleteRotationTemplate()">Delete template</button>
                 </div>
-                <?php if ($rotationTemplates === []): ?>
-                <p class="help" style="margin:10px 0 0">No templates yet — build a playlist, pick a display, then click <strong>Save current playlist</strong>.</p>
-                <?php endif; ?>
+                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. Create the dinner slide from Slides → Create → Dinner menu template.</p>
               </div>
             </div>
           </div>
@@ -8358,6 +8364,7 @@ function initRotationGlobalAdd() {
 const ROTATION_STARTER = <?= json_encode($rotationStarterPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_MAIN_PAGES = <?= json_encode($rotationMainPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_TEMPLATES = <?= json_encode($rotationTemplates, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
+const ROTATION_BUILTIN_NAMES = <?= json_encode(array_keys(rotation_playlist_builtin_templates()), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 
 function serializeRotationDeckPages(deck) {
   if (!deck) return [];
@@ -8386,13 +8393,17 @@ function loadRotationTemplate(deckId) {
   const sel = document.getElementById('rotationTemplateSelect');
   const name = sel ? sel.value : '';
   if (!name || !ROTATION_TEMPLATES || !ROTATION_TEMPLATES[name]) {
-    alert('Choose a saved template first.');
+    alert('Choose a template first.');
     return;
   }
   const deck = document.getElementById(deckId);
   if (!deck) return;
+  const isBuiltin = ROTATION_BUILTIN_NAMES && ROTATION_BUILTIN_NAMES.indexOf(name) >= 0;
+  const msg = isBuiltin
+    ? 'Load built-in template “' + name + '”?\n\nThis replaces the current playlist.'
+    : 'Replace the current playlist with template “' + name + '”?';
+  if (deck.querySelector('[data-rotation-card]') && !confirm(msg)) return;
   const pages = ROTATION_TEMPLATES[name];
-  if (deck.querySelector('[data-rotation-card]') && !confirm('Replace the current playlist with template “' + name + '”?')) return;
   deck.querySelectorAll('[data-rotation-card]').forEach(function (c) { c.remove(); });
   pages.forEach(function (p) {
     addRotationPage(deckId, p.url || '', String(p.dwell || 60), false);
@@ -8428,6 +8439,10 @@ function deleteRotationTemplate() {
   const name = sel ? sel.value : '';
   if (!name) {
     alert('Choose a template to delete.');
+    return;
+  }
+  if (ROTATION_BUILTIN_NAMES && ROTATION_BUILTIN_NAMES.indexOf(name) >= 0) {
+    alert('Built-in templates cannot be deleted. Load one and save under a new name to customize.');
     return;
   }
   if (!confirm('Delete playlist template “' + name + '”?\n\nThis cannot be undone.')) return;
@@ -8509,7 +8524,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Grand Haven webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
-    'calendar.php': 'Calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
+    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
     'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'

@@ -12,7 +12,7 @@ The **Playlists** section uses a **Which display** picker at the top. Three tabs
 |-----|---------|
 | **Add boards** | Searchable board list — adds to the selected display’s playlist (rows already on that playlist are dimmed) |
 | **Kiosk settings** | Whole-TV options: rotation mode, weather ticker + RSS fallback, hero status bar, location, sports teams, blank hours |
-| **Templates** | Save/load named playlist presets (`rotation.PLAYLIST_TEMPLATES` in settings) |
+| **Templates** | Load built-in presets (**Kitchen weeknight**, **Weekly planner**) or save/load your own (`rotation.PLAYLIST_TEMPLATES` in settings) |
 
 Opening a playlist panel below syncs the **Which display** picker and highlights that panel. Playlist headers show **On wall: …** from live kiosk heartbeats when online.
 

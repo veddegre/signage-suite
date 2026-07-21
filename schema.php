@@ -603,6 +603,18 @@ function admin_schema(): array
              ]],
             $tz, $ttl(),
         ]],
+        'glance' => ['title' => 'Today at a Glance', 'file' => 'glance.php', 'fields' => [
+            ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text', 'default' => 'Today at a glance'],
+            ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text'],
+            ['key' => 'MAX_TODAY', 'label' => 'Today events shown', 'type' => 'number',
+             'help' => 'How many of today\'s events to list (3–16, default 8)'],
+            ['key' => 'SHOW_TOMORROW', 'label' => 'Show tomorrow preview', 'type' => 'bool', 'default' => true],
+            ['key' => 'RELOAD_SEC', 'label' => 'Page reload (seconds)', 'type' => 'number',
+             'help' => 'Direct view only — rotation iframe reloads with the shell'],
+            $tz,
+            ['key' => 'CACHE_TTL', 'label' => 'Calendar fetch cache (seconds)', 'type' => 'number',
+             'help' => 'Uses Calendar board feeds (calendar.ICS_FEEDS) — same cache TTL as Calendar when unset'],
+        ]],
         'rss' => ['title' => 'RSS Stories', 'file' => 'rss.php', 'fields' => [
             ['key' => 'FEEDS', 'label' => 'Feeds', 'type' => 'rows', 'keyed' => true,
              'columns' => [

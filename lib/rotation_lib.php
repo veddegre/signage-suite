@@ -1622,6 +1622,7 @@ function rotation_page_label(string $url): string
         'xkcd.php' => 'XKCD comic',
         'sports.php' => 'Sports',
         'calendar.php' => 'Calendar',
+        'glance.php' => 'Today at a glance',
         'family.php' => 'Calendar',
         'traffic.php' => 'Traffic map',
         'homelab.php' => 'Homelab status',
@@ -1828,6 +1829,7 @@ function rotation_quick_add_items(): array
         ['label' => 'XKCD comic', 'url' => 'xkcd.php', 'dwell' => 45, 'group' => 'Daily'],
         ['label' => 'Sports', 'url' => 'sports.php', 'dwell' => 75, 'group' => 'Boards'],
         ['label' => 'Calendar', 'url' => 'calendar.php', 'dwell' => 90, 'group' => 'Boards'],
+        ['label' => 'Today at a glance', 'url' => 'glance.php', 'dwell' => 75, 'group' => 'Boards'],
         ['label' => 'Traffic map', 'url' => 'traffic.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Homelab', 'url' => 'homelab.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'UniFi network', 'url' => 'unifi.php', 'dwell' => 45, 'group' => 'Boards'],
@@ -3198,6 +3200,40 @@ function rotation_sync_rss(string $screen = 'main'): array
         }
     }
     return ['pages' => $pages, 'added' => $added, 'updated' => $updated, 'screen' => $screen];
+}
+
+/** @return array<string,list<array<string,mixed>>> */
+function rotation_playlist_builtin_templates(): array
+{
+    return [
+        'Kitchen weeknight' => [
+            ['url' => 'index.php', 'dwell' => 90, 'from' => 16, 'to' => 21],
+            ['url' => 'slides.php?slide=dinner-menu.png', 'dwell' => 45, 'from' => 16, 'to' => 21],
+            ['url' => 'traffic.php', 'dwell' => 75, 'from' => 16, 'to' => 20],
+        ],
+        'Weekly planner' => [
+            ['url' => 'glance.php', 'dwell' => 90, 'from' => 6, 'to' => 21],
+            ['url' => 'calendar.php', 'dwell' => 90, 'from' => 6, 'to' => 21],
+            ['url' => 'index.php', 'dwell' => 120],
+        ],
+    ];
+}
+
+function rotation_playlist_template_is_builtin(string $name): bool
+{
+    return array_key_exists(trim($name), rotation_playlist_builtin_templates());
+}
+
+/** Built-in presets plus saved templates (saved names override built-ins). */
+function rotation_playlist_templates_all(): array
+{
+    $merged = rotation_playlist_builtin_templates();
+    foreach (rotation_playlist_templates() as $name => $pages) {
+        $merged[$name] = $pages;
+    }
+    ksort($merged, SORT_NATURAL | SORT_FLAG_CASE);
+
+    return $merged;
 }
 
 /** @return array<string,list<array<string,mixed>>> */

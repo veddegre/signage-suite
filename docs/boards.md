@@ -17,6 +17,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | UV index | `uv.php` | `uv.php` | — |
 | | Sports | `sports.php` | `sports.php` | — |
 | | Calendar | `calendar.php` | `calendar.php` | — |
+| | Today at a glance | `glance.php` | `glance.php` | Calendar feeds |
 | | Traffic map | `traffic.php` | `traffic.php` | TomTom |
 | **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
 | | This day in history | `history.php` | `history.php` | — |
@@ -226,6 +227,14 @@ Expect **200** and `Content-Type: image/png`. Errors logged to `cache/traffic_ti
 - **Countdowns:** label → `YYYY-MM-DD`
 
 RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEARLY, with UNTIL/EXDATE.
+
+### glance.php — Today at a glance
+
+Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with **moon phase** and **sunrise/sunset** for the display’s rotation location (same as Weather).
+
+**Admin:** **Today at a Glance** — title, event count, tomorrow preview toggle. Feeds are configured on the **Calendar** board (`calendar.ICS_FEEDS`).
+
+**Rotation presets:** built-in **Weekly planner** template includes `glance.php` alongside the full calendar and weather boards.
 
 ---
 
