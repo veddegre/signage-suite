@@ -1,10 +1,11 @@
 <?php
 /**
  * TODAY AT A GLANCE — 1920×1080 signage
- * Today's calendar (from Calendar board feeds) plus moon phase and sun times.
+ * Today's calendar (from Calendar board feeds), weather summary, and headline panels.
  *
  * Setup: configure ICS feeds on the Calendar board (calendar.ICS_FEEDS).
- * Location for sun/moon follows the display's rotation location (same as Weather).
+ * Headlines: left panel from a web page (RSS autodiscover or HTML scrape) or RSS feed key;
+ * right panel from an RSS Stories feed key (rss.FEEDS).
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
@@ -13,12 +14,22 @@ require_once dirname(__DIR__, 2) . '/lib/calendar_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/weather_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/glance_headlines_lib.php';
 
 define('TITLE', cfg('glance.TITLE', 'Today at a glance'));
 define('SUBTITLE', cfg('glance.SUBTITLE', ''));
 define('MAX_TODAY', max(3, min(16, (int)cfg('glance.MAX_TODAY', 8))));
 define('SHOW_TOMORROW', (bool)cfg('glance.SHOW_TOMORROW', true));
 define('SHOW_WEATHER', (bool)cfg('glance.SHOW_WEATHER', true));
+define('SHOW_HEADLINES_1', (bool)cfg('glance.SHOW_HEADLINES_1', true));
+define('HEADLINES_1_TITLE', cfg('glance.HEADLINES_1_TITLE', 'GVNext'));
+define('HEADLINES_1_PAGE_URL', trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/')));
+define('HEADLINES_1_RSS', trim((string)cfg('glance.HEADLINES_1_RSS', '')));
+define('HEADLINES_1_MAX', max(3, min(8, (int)cfg('glance.HEADLINES_1_MAX', 5))));
+define('SHOW_HEADLINES_2', (bool)cfg('glance.SHOW_HEADLINES_2', true));
+define('HEADLINES_2_TITLE', cfg('glance.HEADLINES_2_TITLE', 'News'));
+define('HEADLINES_2_RSS', trim((string)cfg('glance.HEADLINES_2_RSS', '')));
+define('HEADLINES_2_MAX', max(3, min(8, (int)cfg('glance.HEADLINES_2_MAX', 5))));
 define('RELOAD_SEC', max(60, (int)cfg('glance.RELOAD_SEC', 300)));
 define('TIMEZONE', cfg('glance.TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit')));
 
@@ -61,28 +72,34 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 
 $weather = SHOW_WEATHER ? weather_glance_summary($lat, $lon) : null;
 
-$sun = date_sun_info(time(), $lat, $lon);
-$sunriseTs = (int)($sun['sunrise'] ?: 0);
-$sunsetTs = (int)($sun['sunset'] ?: 0);
-$hasSunArc = $sunriseTs > 0 && $sunsetTs > $sunriseTs;
-$synodic = 29.530588853;
-$daysSinceNew = fmod((time() - 947182440) / 86400, $synodic);
-if ($daysSinceNew < 0) {
-    $daysSinceNew += $synodic;
+$headlinesTtl = max(60, (int)cfg('glance.HEADLINES_CACHE_TTL', cfg('rss.CACHE_TTL', 600)));
+$headlines1 = ['items' => [], 'source' => ''];
+$headlines2 = ['items' => [], 'source' => ''];
+$headlines1Active = SHOW_HEADLINES_1 && (HEADLINES_1_PAGE_URL !== '' || HEADLINES_1_RSS !== '');
+$headlines2Active = SHOW_HEADLINES_2 && HEADLINES_2_RSS !== '';
+if ($headlines1Active) {
+    $headlines1 = glance_headlines_panel('page', HEADLINES_1_PAGE_URL, HEADLINES_1_RSS, HEADLINES_1_MAX, $headlinesTtl);
 }
-$phaseFrac = $daysSinceNew / $synodic;
-$illum = (1 - cos(2 * M_PI * $phaseFrac)) / 2;
-$phaseNames = [
-    [0.0325, 'New Moon'], [0.2175, 'Waxing Crescent'], [0.2825, 'First Quarter'],
-    [0.4675, 'Waxing Gibbous'], [0.5325, 'Full Moon'], [0.7175, 'Waning Gibbous'],
-    [0.7825, 'Last Quarter'], [0.9675, 'Waning Crescent'], [1.01, 'New Moon'],
-];
-$phaseName = 'Moon';
-foreach ($phaseNames as [$lim, $name]) {
-    if ($phaseFrac <= $lim) {
-        $phaseName = $name;
-        break;
+if ($headlines2Active) {
+    $headlines2 = glance_headlines_panel('rss', '', HEADLINES_2_RSS, HEADLINES_2_MAX, $headlinesTtl);
+}
+$skyBottomPanels = (int)$headlines1Active + (int)$headlines2Active;
+
+function glance_render_headlines(string $title, array $panel, bool $wide, string $emptyHint): void
+{
+    $items = $panel['items'] ?? [];
+    $wideClass = $wide ? ' headlines-wide' : '';
+    echo '<section class="headlines' . $wideClass . '">';
+    echo '<div class="k">' . h($title) . '</div>';
+    echo '<div class="headline-list">';
+    if ($items !== []) {
+        foreach ($items as $item) {
+            echo '<div class="headline-item">' . h((string)($item['title'] ?? '')) . '</div>';
+        }
+    } else {
+        echo '<div class="headline-empty">' . $emptyHint . '</div>';
     }
+    echo '</div></section>';
 }
 
 $boardH = $frameH;
@@ -141,12 +158,14 @@ $compact = $boardH < 1080;
   .tomorrow .tev .s { font-size:<?= $compact ? 20 : 22 ?>px; }
 
   .sky { grid-area:sky; height:100%; min-height:0; display:grid; gap:<?= $compact ? 14 : 18 ?>px;
-         grid-template-columns:1fr 1fr; grid-template-rows:minmax(0,1fr) minmax(0,1fr); }
-  .sky.no-weather { grid-template-rows:minmax(0,1fr); }
-  .weather, .moon, .suntimes { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+         grid-template-columns:1fr 1fr;
+         grid-template-rows:<?= SHOW_WEATHER ? ($skyBottomPanels > 0 ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)') : ($skyBottomPanels > 0 ? 'minmax(0,1fr)' : 'none') ?>; }
+  .sky.no-weather { grid-template-columns:1fr<?= $skyBottomPanels > 1 ? ' 1fr' : '' ?>; }
+  .sky.no-headlines { grid-template-rows:<?= SHOW_WEATHER ? 'minmax(0,1fr)' : 'none' ?>; }
+  .weather, .headlines { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
                       padding:<?= $compact ? 22 : 28 ?>px; min-height:0; overflow:hidden; }
   .weather { grid-column:1 / -1; display:grid; grid-template-rows:auto minmax(0,1fr); gap:<?= $compact ? 12 : 16 ?>px; }
-  .weather .k, .moon .k, .suntimes .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
+  .weather .k, .headlines .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
   .weather-head { display:flex; align-items:baseline; justify-content:space-between; gap:16px; }
   .weather .place { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); letter-spacing:1px; }
   .weather-body { min-height:0; display:grid; grid-template-columns:minmax(240px,42%) 1fr; gap:<?= $compact ? 16 : 20 ?>px; }
@@ -170,20 +189,16 @@ $compact = $boardH < 1080;
   .weather-meta .val { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 34 : 40 ?>px; color:var(--beacon); line-height:1.1; }
   .weather-meta .val small { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); font-weight:500; }
   .weather-empty { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); line-height:1.5; display:flex; align-items:center; justify-content:center; min-height:0; }
-  .suntimes { display:flex; flex-direction:column; min-height:0; }
-  .sun-arc { flex:1; display:flex; flex-direction:column; justify-content:center; min-height:0; margin-top:<?= $compact ? 8 : 12 ?>px; }
-  .sun-arc svg { width:100%; height:auto; flex:1; min-height:<?= $compact ? 72 : 88 ?>px; max-height:<?= $compact ? 120 : 140 ?>px; display:block; }
-  .sun-times { display:flex; justify-content:space-between; gap:12px; font-size:<?= $compact ? 17 : 19 ?>px; color:var(--mist);
-               margin-top:<?= $compact ? 2 : 4 ?>px; font-variant-numeric:tabular-nums; }
-  .sun-times b { color:var(--snow); font-weight:600; }
-  .sun-twilight { display:flex; justify-content:space-between; gap:12px; font-size:<?= $compact ? 14 : 15 ?>px; color:var(--mist);
-                  margin-top:<?= $compact ? 6 : 8 ?>px; line-height:1.3; font-variant-numeric:tabular-nums; }
-  .moon { display:flex; flex-direction:column; align-items:center; text-align:center; }
-  .moon .k { align-self:flex-start; width:100%; }
-  .moon-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:0; width:100%; }
-  .moon svg { width:min(100%, <?= $compact ? 200 : 260 ?>px); height:auto; aspect-ratio:1; margin:<?= $compact ? 8 : 12 ?>px 0; }
-  .moon .name { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 36 : 44 ?>px; }
-  .moon .pct { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); margin-top:4px; }
+  .headlines { display:flex; flex-direction:column; min-height:0; }
+  .headlines-wide { grid-column:1 / -1; }
+  .headlines .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); flex-shrink:0; }
+  .headline-list { flex:1; display:flex; flex-direction:column; justify-content:space-evenly; gap:<?= $compact ? 8 : 10 ?>px;
+                   min-height:0; margin-top:<?= $compact ? 10 : 14 ?>px; overflow:hidden; }
+  .headline-item { font-size:<?= $compact ? 19 : 22 ?>px; line-height:1.28; color:var(--snow);
+                   padding:<?= $compact ? 8 : 10 ?>px 0; border-bottom:1px solid rgba(38,52,77,.55);
+                   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .headline-item:last-child { border-bottom:none; }
+  .headline-empty { font-size:<?= $compact ? 18 : 20 ?>px; color:var(--mist); line-height:1.45; margin:auto 0; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>
@@ -242,7 +257,7 @@ $compact = $boardH < 1080;
     <?php endif; ?>
   </section>
 
-  <div class="sky<?= SHOW_WEATHER ? '' : ' no-weather' ?>">
+  <div class="sky<?= SHOW_WEATHER ? '' : ' no-weather' ?><?= $skyBottomPanels === 0 ? ' no-headlines' : '' ?>">
     <?php if (SHOW_WEATHER): ?>
     <section class="weather">
       <div class="weather-head">
@@ -327,56 +342,27 @@ $compact = $boardH < 1080;
     </section>
     <?php endif; ?>
 
-    <section class="suntimes">
-      <div class="k">Sun</div>
-      <?php if ($hasSunArc): ?>
-      <div class="sun-arc">
-        <svg viewBox="0 0 640 170" aria-hidden="true">
-          <line x1="20" y1="150" x2="620" y2="150" stroke="var(--hairline)" stroke-width="2"/>
-          <path d="M 60 150 A 260 130 0 0 1 580 150"
-                fill="none" stroke="var(--hairline)" stroke-width="3" stroke-dasharray="2 8"/>
-          <path id="sunTrail" d="" fill="none" stroke="var(--beacon)" stroke-width="3"/>
-          <circle id="sunDot" cx="60" cy="150" r="11" fill="var(--beacon)"/>
-        </svg>
-        <div class="sun-times">
-          <span>Sunrise <b><?= date('g:i A', $sunriseTs) ?></b></span>
-          <span>Sunset <b><?= date('g:i A', $sunsetTs) ?></b></span>
-        </div>
-        <div class="sun-twilight">
-          <span>Civil <?= $sun['civil_twilight_begin'] ? date('g:i A', $sun['civil_twilight_begin']) : '—' ?></span>
-          <span>Twilight ends <?= $sun['civil_twilight_end'] ? date('g:i A', $sun['civil_twilight_end']) : '—' ?></span>
-        </div>
-      </div>
-      <?php else: ?>
-      <div class="sun-twilight" style="margin-top:18px;font-size:18px">Sun times unavailable for this location.</div>
-      <?php endif; ?>
-    </section>
-
-    <section class="moon">
-      <div class="k">Moon</div>
-      <div class="moon-body">
-        <svg viewBox="0 0 100 100" aria-hidden="true">
-          <?php
-            $r = 46;
-            $k = cos(2 * M_PI * $phaseFrac);
-            $waxing = $phaseFrac < 0.5;
-            $lit = 'var(--snow)';
-            $dark = '#1b2840';
-          ?>
-          <circle cx="50" cy="50" r="<?= $r ?>" fill="<?= $dark ?>"/>
-          <path d="M 50 4
-                   A <?= $r ?> <?= $r ?> 0 0 <?= $waxing ? 1 : 0 ?> 50 96
-                   A <?= abs($k) * $r ?> <?= $r ?> 0 0 <?= ($k < 0 ? ($waxing ? 1 : 0) : ($waxing ? 0 : 1)) ?> 50 4 Z"
-                fill="<?= $lit ?>"/>
-          <circle cx="50" cy="50" r="<?= $r ?>" fill="none" stroke="var(--hairline)" stroke-width="1.5"/>
-        </svg>
-        <div class="name"><?= h($phaseName) ?></div>
-        <div class="pct"><?= (int)round($illum * 100) ?>% illuminated</div>
-      </div>
-    </section>
+    <?php if ($headlines1Active):
+        glance_render_headlines(
+            HEADLINES_1_TITLE,
+            $headlines1,
+            !$headlines2Active,
+            HEADLINES_1_PAGE_URL !== ''
+                ? 'No headlines from that page yet — check the URL or add an RSS fallback key.'
+                : 'Set a <strong>Headlines page URL</strong> or RSS feed key in admin → Today at a Glance.'
+        );
+    endif; ?>
+    <?php if ($headlines2Active):
+        glance_render_headlines(
+            HEADLINES_2_TITLE,
+            $headlines2,
+            !$headlines1Active,
+            'Pick an RSS feed key from <strong>RSS Stories</strong> in admin.'
+        );
+    endif; ?>
   </div>
 
-  <div class="stamp">Calendar · <?= SHOW_WEATHER ? 'Weather · ' : '' ?><?= h($LOC['place'] ?? 'local') ?><?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
+  <div class="stamp">Calendar · <?= SHOW_WEATHER ? 'Weather · ' : '' ?><?= ($headlines1Active || $headlines2Active) ? 'Headlines · ' : '' ?><?= h($LOC['place'] ?? 'local') ?><?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>
   function fmtDate() {
@@ -394,30 +380,6 @@ $compact = $boardH < 1080;
     document.getElementById('clock').innerHTML = h + ':' + String(n.getMinutes()).padStart(2, '0') + '<span> ' + ap + '</span>';
   }
   tick(); setInterval(tick, 1000);
-  <?php endif; ?>
-  <?php if ($hasSunArc): ?>
-  (function () {
-    const SUNRISE = <?= $sunriseTs ?> * 1000;
-    const SUNSET = <?= $sunsetTs ?> * 1000;
-    function placeSun() {
-      const t = Math.min(1, Math.max(0, (Date.now() - SUNRISE) / (SUNSET - SUNRISE)));
-      const a = Math.PI * (1 - t);
-      const x = 320 + 260 * Math.cos(a);
-      const y = 150 - 130 * Math.sin(a);
-      const dot = document.getElementById('sunDot');
-      const trail = document.getElementById('sunTrail');
-      if (!dot || !trail) return;
-      dot.setAttribute('cx', x.toFixed(1));
-      dot.setAttribute('cy', y.toFixed(1));
-      if (t > 0.01) {
-        trail.setAttribute('d', 'M 60 150 A 260 130 0 0 1 ' + x.toFixed(1) + ' ' + y.toFixed(1));
-      }
-      const night = Date.now() < SUNRISE || Date.now() > SUNSET;
-      dot.setAttribute('opacity', night ? '0.25' : '1');
-    }
-    placeSun();
-    setInterval(placeSun, 60000);
-  })();
   <?php endif; ?>
   setTimeout(function () { location.reload(); }, <?= (int)RELOAD_SEC ?> * 1000);
 </script>

@@ -231,9 +231,13 @@ RRULE support: DAILY, WEEKLY (BYDAY, INTERVAL, WKST), MONTHLY (BYMONTHDAY), YEAR
 
 ### glance.php — Today at a glance
 
-Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with a **weather summary** (OpenWeatherMap via the Weather board), **moon phase**, and **sunrise/sunset** for the display’s rotation location.
+Compact **today + tomorrow** view from the same ICS feeds as **Calendar**, with a **weather summary** (OpenWeatherMap via the Weather board) and two **headline panels** below it.
 
-**Admin:** **Today at a Glance** — title, event count, tomorrow preview toggle, weather on/off. Feeds are configured on the **Calendar** board (`calendar.ICS_FEEDS`). Weather uses `index.OWM_API_KEY` and the display location from Rotation.
+**Admin:** **Today at a Glance** — title, event count, tomorrow preview, weather on/off, headline panels. Calendar feeds live on the **Calendar** board (`calendar.ICS_FEEDS`). Weather uses `index.OWM_API_KEY` and the display location from Rotation.
+
+**Headlines (left):** defaults to **[GVNext](https://www.gvsu.edu/gvnext/)** — scrapes `preview-title` story headlines from the homepage (no public RSS on that page). Change the URL in admin for another source.
+
+**Headlines (right):** **RSS feed key** from **RSS Stories** (`rss.FEEDS`). Add feeds there first, then enter the key (e.g. `krebs`).
 
 **Rotation presets:** built-in **Weekly planner** template includes `glance.php` alongside the full calendar and weather boards.
 
