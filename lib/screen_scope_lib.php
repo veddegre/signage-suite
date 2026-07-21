@@ -133,6 +133,13 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row): array
         unset($entry['sports_title']);
     }
 
+    $sportsSubtitle = trim((string)($row['sports_subtitle'] ?? ''));
+    if ($sportsSubtitle !== '') {
+        $entry['sports_subtitle'] = $sportsSubtitle;
+    } else {
+        unset($entry['sports_subtitle']);
+    }
+
     require_once __DIR__ . '/rss_ticker_lib.php';
     require_once __DIR__ . '/users_lib.php';
     $newsFeed = trim((string)($row['ticker_news_feed'] ?? ''));

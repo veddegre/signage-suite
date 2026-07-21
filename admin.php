@@ -3781,6 +3781,7 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                 $sportsSlots[] = '';
             }
             $sportsTitle = trim((string)($scrRaw['sports_title'] ?? ''));
+            $sportsSubtitle = trim((string)($scrRaw['sports_subtitle'] ?? ''));
             $tickerNewsFeed = trim((string)($scrRaw['ticker_news_feed'] ?? ''));
             $globalLoc = rotation_global_location();
           ?>
@@ -3957,6 +3958,11 @@ window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UN
                   <label class="mini">Sports board title (optional)</label>
                   <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_title]"
                          value="<?= h($sportsTitle) ?>" placeholder="<?= h((string)cfg('sports.TITLE', 'Local Sports')) ?>">
+                </div>
+                <div class="field" style="margin-top:10px">
+                  <label class="mini">Sports board subtitle (optional)</label>
+                  <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_subtitle]"
+                         value="<?= h($sportsSubtitle) ?>" placeholder="Auto from selected team names when blank">
                 </div>
               </div>
             </div>
