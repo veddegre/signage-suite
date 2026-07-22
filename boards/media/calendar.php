@@ -74,6 +74,18 @@ function calendar_feed_cache_key(int $i, array $feed, int $winStart): string
     return 'ics_' . $i . '_' . substr(sha1($blob), 0, 12);
 }
 
+function calendar_feed_label(array $feed, int $i): string
+{
+    $label = trim((string)($feed['key'] ?? $feed['name'] ?? ''));
+    return $label !== '' ? $label : 'Feed ' . ($i + 1);
+}
+
+function calendar_diag_set(string $label, string $cacheKey, string $message): void
+{
+    unset($GLOBALS['diag'][$cacheKey]);
+    $GLOBALS['diag'][$label !== '' ? $label : $cacheKey] = $message;
+}
+
 function calendar_feed_auth(array $feed): ?array
 {
     $user = trim((string)($feed['user'] ?? ''));
@@ -234,17 +246,41 @@ function fetch_calendar_feed(array $feed, int $i, int $winStart, int $winEnd): ?
     if ($url === '') {
         return null;
     }
-    $source = strtolower(trim((string)($feed['source'] ?? 'ical')));
-    if ($source !== 'webdav') {
-        $source = 'ical';
-    }
+    $source = calendar_feed_source($feed);
     $auth = calendar_feed_auth($feed);
     $key = calendar_feed_cache_key($i, $feed, $winStart);
+    $label = calendar_feed_label($feed, $i);
+    $hasAuth = $auth !== null && trim((string)($auth[0] ?? '')) !== '';
 
     if ($source === 'webdav' && !preg_match('/\.ics(\?|$)/i', $url)) {
-        return caldav_fetch(caldav_normalize_url($url), $auth, $winStart, $winEnd, $key);
+        // Public subscription URLs (iCloud /published/, etc.) are often mislabeled webdav.
+        if (!$hasAuth) {
+            $raw = cached_get($url, $key, null);
+            if ($raw !== null && stripos($raw, 'BEGIN:VCALENDAR') !== false) {
+                unset($GLOBALS['diag'][$key]);
+                return $raw;
+            }
+            calendar_diag_set(
+                $label,
+                $key,
+                'CalDAV requires user and password — set Source to ical for subscription URLs (e.g. iCloud public calendar)'
+            );
+            return is_file(CACHE_DIR . "/$key.dat") ? (string)file_get_contents(CACHE_DIR . "/$key.dat") : null;
+        }
+        $raw = caldav_fetch(caldav_normalize_url($url), $auth, $winStart, $winEnd, $key);
+        if ($raw === null && isset($GLOBALS['diag'][$key])) {
+            calendar_diag_set($label, $key, (string)$GLOBALS['diag'][$key]);
+        }
+        return $raw;
     }
-    return cached_get($url, $key, $auth);
+    $raw = cached_get($url, $key, $auth);
+    if ($raw === null && !isset($GLOBALS['diag'][$label])) {
+        calendar_diag_set($label, $key, 'fetch failed');
+    } elseif ($raw !== null) {
+        unset($GLOBALS['diag'][$key]);
+    }
+
+    return $raw;
 }
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -1144,7 +1180,11 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
     <?php endforeach; ?>
   </section>
   <?php endif; ?>
-  <div class="stamp">ICS feeds refresh every 10 min<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
+  <div class="stamp">ICS feeds refresh every 10 min<?php if ($GLOBALS['diag']): ?> · <?= h(implode('; ', array_map(
+      static fn($label, $msg) => $label . ': ' . $msg,
+      array_keys($GLOBALS['diag']),
+      array_values($GLOBALS['diag'])
+  ))) ?><?php endif; ?></div>
 </div>
 <script>
   function tick(){

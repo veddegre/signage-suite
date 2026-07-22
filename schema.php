@@ -665,8 +665,9 @@ function admin_schema(): array
                  ['key' => 'password', 'label' => 'Password', 'type' => 'password'],
              ],
              'help' => 'Key is the legend label on the wall (e.g. Dad, Mom). Pick a theme color per feed. '
-                     . 'ical: secret iCal URL (webcal:// is converted to https:// automatically). '
-                     . 'webdav: CalDAV (Fastmail, Nextcloud, …) with app password. '
+                     . 'ical: secret iCal URL — iCloud “Public Calendar” / webcal:// links work with no login '
+                     . '(webcal:// is converted to https:// automatically). '
+                     . 'webdav: CalDAV (Fastmail, Nextcloud, …) with app password — not for iCloud public links. '
                      . 'LAN/private hosts need Security → Allow private URL fetches.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],

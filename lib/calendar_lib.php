@@ -75,6 +75,31 @@ function calendar_normalize_feed_url(string $url): string
     return $url;
 }
 
+/** True for vendor-published ICS subscription links (iCloud, etc.) — not CalDAV. */
+function calendar_is_published_ical_url(string $url): bool
+{
+    $url = calendar_normalize_feed_url($url);
+    if ($url === '') {
+        return false;
+    }
+    $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?? ''));
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+
+    return str_contains($host, 'caldav.icloud.com') && str_contains($path, '/published/');
+}
+
+/** Resolve feed transport: public ICS subscriptions must not use CalDAV. */
+function calendar_feed_source(array $feed): string
+{
+    $url = calendar_normalize_feed_url((string)($feed['url'] ?? ''));
+    if (calendar_is_published_ical_url($url)) {
+        return 'ical';
+    }
+    $source = strtolower(trim((string)($feed['source'] ?? 'ical')));
+
+    return $source === 'webdav' ? 'webdav' : 'ical';
+}
+
 /** ISO weekday 1=Mon … 7=Sun for an RRULE WKST token (RFC 5545 default: MO). */
 function ics_wkst_to_iso(string $wkst): int
 {
