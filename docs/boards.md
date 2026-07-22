@@ -10,7 +10,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 |-------|-------|------|--------------|------|
 | Weather & home | Weather | `index.php` | `index.php` | OpenWeatherMap |
 | | Lake Michigan | `lake.php` | `lake.php` | — |
-| | Webcam | `webcam.php` | `webcam.php?cam=gvsu` etc. | — |
+| | Webcam | `webcam.php?cam=gvsu` | `webcam.php?cam=KEY` | — |
 | | Mackinac Bridge cam | `bridgecam.php` | `bridgecam.php` | — |
 | | Photo conditions | `photo.php` | `photo.php` | OpenWeatherMap |
 | | Air & pollen | `air.php` | `air.php` | Google Pollen (optional) |
@@ -75,7 +75,7 @@ Nearshore buoys run in winter (~Nov–Apr); the board notes when they are offlin
 
 ### webcam.php — Live Webcams
 
-Full-screen live feeds from a built-in registry plus any cameras you add in admin.
+Full-screen live feeds — **one camera per rotation slot**, same pattern as `zabbix.php?d=` or `splunk.php?d=`.
 
 **Built-in cameras:**
 
@@ -85,22 +85,21 @@ Full-screen live feeds from a built-in registry plus any cameras you add in admi
 | `wetmet` | [WetMet](https://wetmet.net) station still image (auto-refreshes) |
 | `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
 
-**Setup:** admin → **Webcam** — set **Default camera** (one feed or **Rotate all**), optional overlay title, image refresh interval, and rotation dwell. Under **Cameras**, override built-in names/URLs or add rows with a unique **Key** (letters, numbers, `_`, `-`).
+**Setup:** admin → **Webcam** → **Cameras** — override built-in feeds or add rows with a unique **Key**. Each camera appears in **Rotation → Quick add** as its own entry (e.g. **Webcam — GVSU Campus**).
 
-**Rotation URLs:**
+**Rotation:** add the cameras you want as separate playlist lines, intermixed wherever you like:
 
-- `webcam.php` — uses **Default camera** from settings
-- `webcam.php?cam=gvsu` — GVSU only
-- `webcam.php?cam=wetmet` — WetMet only
-- `webcam.php?cam=grandhaven` — Grand Haven only
-- `webcam.php?cam=all` — rotate every camera in the registry on one board slot
-- `webcam.php?cam=yourkey` — a custom camera you added
+```
+webcam.php?cam=gvsu
+webcam.php?cam=wetmet
+webcam.php?cam=grandhaven
+```
 
-Quick-add presets in **Rotation** include all four built-ins plus **Webcams (rotate all)**.
+Custom cameras: `webcam.php?cam=yourkey`. Set **Off** on a row to hide it from quick-add and disable a built-in feed.
 
-**Rotation:** 90–120s dwell works well. Iframe streams use an hourly reload backstop (`RELOAD_SEC`); still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 60s). Set `RELOAD_SEC` to `0` to disable iframe reload.
+Still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 60s). Iframe streams use an hourly reload backstop (`RELOAD_SEC`).
 
-If a specific camera URL fails probe checks for **24 hours**, that rotation entry is auto-skipped (`?cam=all` skips only when every camera is down). Legacy single `EMBED_URL` settings migrate to a `legacy` camera when no **Cameras** rows exist yet.
+If a camera URL fails probe checks for **24 hours**, that rotation entry is auto-skipped until the stream responds again.
 
 ### bridgecam.php — Mackinac Bridge Cam
 

@@ -159,64 +159,85 @@ function webcam_registry_for_display(): array
     return admin_filter_registry_for_display(webcam_registry());
 }
 
+/** @return array{key:string,name:string,url:string,kind:string,attribution:string,off:bool} */
+function webcam_resolve_camera(?string $camKey = null): array
+{
+    $registry = webcam_registry();
+    if ($registry === []) {
+        return [
+            'key' => '',
+            'name' => 'Not available',
+            'url' => '',
+            'kind' => 'iframe',
+            'attribution' => '',
+            'off' => true,
+        ];
+    }
+
+    require_once __DIR__ . '/users_lib.php';
+    $normalize = static fn($k) => webcam_normalize_key((string)$k);
+    $resolved = admin_resolve_display_registry_key($registry, (string)($camKey ?? ''), $normalize);
+    if ($resolved === null || !isset($registry[$resolved])) {
+        return [
+            'key' => webcam_normalize_key((string)($camKey ?? '')),
+            'name' => 'Not available',
+            'url' => '',
+            'kind' => 'iframe',
+            'attribution' => '',
+            'off' => true,
+        ];
+    }
+
+    $entry = $registry[$resolved];
+
+    return [
+        'key' => (string)$resolved,
+        'name' => (string)($entry['name'] ?? $resolved),
+        'url' => (string)$entry['url'],
+        'kind' => (string)($entry['kind'] ?? 'iframe'),
+        'attribution' => (string)($entry['attribution'] ?? ''),
+        'off' => false,
+    ];
+}
+
+function webcam_rotation_dwell(string $key, array $entry): int
+{
+    if (($entry['kind'] ?? '') === 'image') {
+        return 90;
+    }
+
+    return 120;
+}
+
 function webcam_active_key(): string
 {
     $fromQuery = webcam_normalize_key((string)($_GET['cam'] ?? ''));
-    if ($fromQuery !== '') {
+    if ($fromQuery !== '' && $fromQuery !== 'all') {
         return $fromQuery;
     }
 
-    return webcam_normalize_key((string)cfg('webcam.ACTIVE', 'gvsu')) ?: 'gvsu';
+    $cam = webcam_resolve_camera($fromQuery !== '' ? $fromQuery : null);
+
+    return (string)($cam['key'] ?? '');
 }
 
 /**
  * @return list<array{key:string,name:string,url:string,kind:string,attribution:string}>
+ * @deprecated Use webcam_resolve_camera() — one camera per rotation slot.
  */
 function webcam_active_cameras(): array
 {
-    $registry = webcam_registry();
-    $pick = webcam_active_key();
-    if ($pick === 'all') {
-        $out = [];
-        foreach ($registry as $key => $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-            $out[] = [
-                'key' => (string)$key,
-                'name' => (string)($entry['name'] ?? $key),
-                'url' => (string)$entry['url'],
-                'kind' => (string)($entry['kind'] ?? 'iframe'),
-                'attribution' => (string)($entry['attribution'] ?? ''),
-            ];
-        }
-
-        return $out;
-    }
-
-    $entry = $registry[$pick] ?? null;
-    if (!is_array($entry)) {
-        $first = reset($registry);
-        if (!is_array($first)) {
-            return [];
-        }
-        $pick = (string)(array_key_first($registry) ?? '');
-
-        return [[
-            'key' => $pick,
-            'name' => (string)($first['name'] ?? $pick),
-            'url' => (string)$first['url'],
-            'kind' => (string)($first['kind'] ?? 'iframe'),
-            'attribution' => (string)($first['attribution'] ?? ''),
-        ]];
+    $cam = webcam_resolve_camera((string)($_GET['cam'] ?? ''));
+    if ($cam['off'] || trim($cam['url']) === '') {
+        return [];
     }
 
     return [[
-        'key' => $pick,
-        'name' => (string)($entry['name'] ?? $pick),
-        'url' => (string)$entry['url'],
-        'kind' => (string)($entry['kind'] ?? 'iframe'),
-        'attribution' => (string)($entry['attribution'] ?? ''),
+        'key' => $cam['key'],
+        'name' => $cam['name'],
+        'url' => $cam['url'],
+        'kind' => $cam['kind'],
+        'attribution' => $cam['attribution'],
     ]];
 }
 
@@ -232,7 +253,9 @@ function webcam_cam_url(string $key): string
 {
     $key = webcam_normalize_key($key);
     if ($key === '' || $key === 'all') {
-        return 'webcam.php';
+        $first = array_key_first(webcam_registry());
+
+        return $first !== null ? 'webcam.php?cam=' . rawurlencode((string)$first) : 'webcam.php';
     }
 
     return 'webcam.php?cam=' . rawurlencode($key);
@@ -241,8 +264,8 @@ function webcam_cam_url(string $key): string
 function webcam_cam_label(string $key): string
 {
     $key = webcam_normalize_key($key);
-    if ($key === 'all') {
-        return 'Webcams — all';
+    if ($key === '' || $key === 'all') {
+        return 'Webcam';
     }
     $entry = webcam_registry()[$key] ?? null;
     if (!is_array($entry)) {
@@ -366,36 +389,27 @@ function webcam_url_status(string $url, string $kind = 'iframe'): array
 function webcam_parse_cam_from_rotation_url(string $url): string
 {
     if (preg_match('/[?&]cam=([^&#]+)/i', $url, $m)) {
-        return webcam_normalize_key(rawurldecode($m[1]));
+        $key = webcam_normalize_key(rawurldecode($m[1]));
+        if ($key === 'all') {
+            $key = (string)(array_key_first(webcam_registry()) ?? '');
+        }
+
+        return $key;
     }
 
-    return webcam_normalize_key((string)cfg('webcam.ACTIVE', 'gvsu')) ?: 'gvsu';
+    return (string)(array_key_first(webcam_registry()) ?? '');
 }
 
 function webcam_skip_rotation(?string $rotationUrl = null): bool
 {
-    $pick = $rotationUrl !== null ? webcam_parse_cam_from_rotation_url($rotationUrl) : webcam_active_key();
-    $registry = webcam_registry();
-    if ($pick === 'all') {
-        if ($registry === []) {
-            return true;
-        }
-        $anyOnline = false;
-        foreach ($registry as $entry) {
-            if (!is_array($entry)) {
-                continue;
-            }
-            $status = webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'));
-            if (!$status['skip_rotation']) {
-                $anyOnline = true;
-                break;
-            }
-        }
-
-        return !$anyOnline;
+    $pick = $rotationUrl !== null
+        ? webcam_parse_cam_from_rotation_url($rotationUrl)
+        : (string)(array_key_first(webcam_registry()) ?? '');
+    if ($pick === '') {
+        return true;
     }
 
-    $entry = $registry[$pick] ?? null;
+    $entry = webcam_registry()[$pick] ?? null;
     if (!is_array($entry)) {
         return true;
     }

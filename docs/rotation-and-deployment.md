@@ -121,9 +121,9 @@ zabbix.php?d=network
 splunk.php?d=soc
 video.php?v=drone
 slides.php?slide=birthday.png
-webcam.php
 webcam.php?cam=gvsu
-webcam.php?cam=all
+webcam.php?cam=wetmet
+webcam.php?cam=grandhaven
 bridgecam.php
 air.php
 uv.php

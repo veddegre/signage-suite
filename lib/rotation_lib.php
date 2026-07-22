@@ -1390,9 +1390,11 @@ function rotation_starter_pages(): array
     return [
         ['url' => 'index.php',   'dwell' => 180],
         ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
-        ['url' => 'webcam.php',  'dwell' => 120, 'from' => 7,  'to' => 22],
+        ['url' => 'webcam.php?cam=gvsu', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
+        ['url' => 'webcam.php?cam=wetmet', 'dwell' => 90, 'from' => 7, 'to' => 22],
         ['url' => 'air.php',     'dwell' => 60,  'from' => 6,  'to' => 22],
+        ['url' => 'webcam.php?cam=grandhaven', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'sports.php',  'dwell' => 75,  'from' => 8,  'to' => 23],
         ['url' => 'glance.php',  'dwell' => 90,  'from' => 6,  'to' => 21],
         ['url' => 'calendar.php',  'dwell' => 90,  'from' => 6,  'to' => 21],
@@ -1583,7 +1585,9 @@ function rotation_page_label(string $url): string
 
     if (preg_match('/^webcam\.php(?:\?cam=([^&]+))?/i', $url, $m)) {
         require_once __DIR__ . '/webcam_lib.php';
-        $key = isset($m[1]) ? webcam_normalize_key(rawurldecode($m[1])) : webcam_normalize_key((string)cfg('webcam.ACTIVE', 'gvsu'));
+        $key = isset($m[1])
+            ? webcam_normalize_key(rawurldecode($m[1]))
+            : (string)(array_key_first(webcam_registry()) ?? '');
 
         return webcam_cam_label($key !== '' ? $key : 'gvsu');
     }
@@ -1829,10 +1833,6 @@ function rotation_quick_add_items(): array
     $items = [
         ['label' => 'Weather', 'url' => 'index.php', 'dwell' => 180, 'group' => 'Boards'],
         ['label' => 'Lake Michigan', 'url' => 'lake.php', 'dwell' => 60, 'group' => 'Boards'],
-        ['label' => 'Webcams (rotate all)', 'url' => 'webcam.php?cam=all', 'dwell' => 120, 'group' => 'Boards'],
-        ['label' => 'GVSU webcam', 'url' => 'webcam.php?cam=gvsu', 'dwell' => 120, 'group' => 'Boards'],
-        ['label' => 'WetMet webcam', 'url' => 'webcam.php?cam=wetmet', 'dwell' => 90, 'group' => 'Boards'],
-        ['label' => 'Grand Haven webcam', 'url' => 'webcam.php?cam=grandhaven', 'dwell' => 120, 'group' => 'Boards'],
         ['label' => 'Mackinac Bridge cam', 'url' => 'bridgecam.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Photo conditions', 'url' => 'photo.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Air & pollen', 'url' => 'air.php', 'dwell' => 60, 'group' => 'Boards'],
@@ -1863,6 +1863,23 @@ function rotation_quick_add_items(): array
         ['label' => 'SignalTrace', 'url' => 'signaltrace.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Photo rotator', 'url' => 'rotator.php', 'dwell' => 300, 'group' => 'Media'],
     ];
+
+    require_once __DIR__ . '/webcam_lib.php';
+    foreach (webcam_registry() as $key => $cam) {
+        if (!is_array($cam)) {
+            continue;
+        }
+        if (!rotation_quick_add_entry_allowed($cam)) {
+            continue;
+        }
+        $name = trim((string)($cam['name'] ?? $key));
+        $items[] = [
+            'label' => 'Webcam — ' . ($name !== '' ? $name : $key),
+            'url' => webcam_cam_url((string)$key),
+            'dwell' => webcam_rotation_dwell((string)$key, $cam),
+            'group' => 'Boards',
+        ];
+    }
 
     $feeds = cfg('rss.FEEDS', []);
     if (is_array($feeds)) {
