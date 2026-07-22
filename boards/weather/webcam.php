@@ -33,16 +33,21 @@ $imageRefreshSec = ($cam['kind'] ?? '') === 'widget'
     : IMAGE_REFRESH_SEC;
 $streamRefreshSec = STREAM_REFRESH_SEC;
 $boardAttribution = trim((string)cfg('webcam.ATTRIBUTION', ''));
-$available = !$cam['off'] && trim($cam['url']) !== '';
-$attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attribution'];
 $usesImage = webcam_uses_image_tag($cam);
 $usesStream = webcam_uses_stream_tag($cam);
 $imageSrc = $usesImage ? webcam_board_image_src($cam) : '';
-$streamPlaylist = $usesStream ? webcam_stream_playlist_url((string)$cam['url']) : null;
+$streamPlaylist = $usesStream ? webcam_hls_proxy_url((string)$cam['key']) : null;
+$streamReady = true;
+if ($usesStream) {
+    $streamReady = webcam_hls_proxied_playlist($cam) !== null;
+}
+$available = !$cam['off'] && trim($cam['url']) !== '' && (!$usesStream || $streamReady);
+$attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attribution'];
 $camJson = $cam;
 $camJson['imageSrc'] = $imageSrc;
 $camJson['streamPlaylist'] = $streamPlaylist;
 $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . '&api=1';
+$camJson['streamIframe'] = (string)$cam['url'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,8 +57,8 @@ $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
-<?php if ($usesStream): ?>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<?php if ($usesStream && is_file(dirname(__DIR__, 2) . '/' . webcam_hls_js_url())): ?>
+<script src="<?= h(webcam_hls_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
@@ -132,26 +137,51 @@ $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . 
     return base + sep + 't=' + Date.now();
   }
 
+  function showStreamIframe(url) {
+    const frame = document.getElementById('frame');
+    if (!frame) return;
+    frame.innerHTML = '<iframe id="cam-frame" allow="autoplay; fullscreen; encrypted-media" loading="eager" src="' + url + '"></iframe>';
+  }
+
   function loadStream(playlistUrl) {
     const video = document.getElementById('cam-video');
-    if (!video || !playlistUrl) return;
+    if (!video || !playlistUrl) {
+      if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+      return;
+    }
     if (window.Hls && window.Hls.isSupported()) {
       if (hlsPlayer) {
         hlsPlayer.destroy();
         hlsPlayer = null;
       }
       hlsPlayer = new window.Hls({ enableWorker: true, lowLatencyMode: true });
-      hlsPlayer.loadSource(playlistUrl);
+      hlsPlayer.on(window.Hls.Events.ERROR, function (_event, data) {
+        if (data && data.fatal && cam.streamIframe) {
+          showStreamIframe(cam.streamIframe);
+        }
+      });
+      hlsPlayer.loadSource(refreshImageSrc(playlistUrl));
       hlsPlayer.attachMedia(video);
       hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
-        video.play().catch(function () {});
+        video.play().catch(function () {
+          if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+        });
       });
+      setTimeout(function () {
+        if (video.readyState < 2 && cam.streamIframe) {
+          showStreamIframe(cam.streamIframe);
+        }
+      }, 12000);
       return;
     }
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = playlistUrl;
-      video.play().catch(function () {});
+      video.src = refreshImageSrc(playlistUrl);
+      video.play().catch(function () {
+        if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+      });
+      return;
     }
+    if (cam.streamIframe) showStreamIframe(cam.streamIframe);
   }
 
   async function refreshStreamPlaylist() {

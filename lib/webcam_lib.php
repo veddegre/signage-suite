@@ -223,6 +223,160 @@ function webcam_stream_playlist_url(string $streamFrameUrl): ?string
     return null;
 }
 
+function webcam_hls_js_url(): string
+{
+    return 'vendor/hls.min.js';
+}
+
+function webcam_hls_proxy_url(string $key): string
+{
+    return 'webcam_hls.php?cam=' . rawurlencode(webcam_normalize_key($key));
+}
+
+function webcam_hls_remote_allowed(string $url): bool
+{
+    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+    if ($host === '') {
+        return false;
+    }
+
+    return preg_match('#(^|\.)wetmet\.net$#', $host) === 1
+        || str_contains($host, 'amazonaws.com');
+}
+
+function webcam_hls_absolute_url(string $base, string $ref): ?string
+{
+    $ref = trim($ref);
+    if ($ref === '') {
+        return null;
+    }
+    if (preg_match('#^https?://#i', $ref) === 1) {
+        return webcam_validate_url($ref);
+    }
+    $parts = parse_url($base);
+    if (!is_array($parts)) {
+        return null;
+    }
+    $scheme = (string)($parts['scheme'] ?? 'https');
+    $host = (string)($parts['host'] ?? '');
+    if ($host === '') {
+        return null;
+    }
+    $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+    if (str_starts_with($ref, '/')) {
+        return webcam_validate_url($scheme . '://' . $host . $port . $ref);
+    }
+    $path = (string)($parts['path'] ?? '/');
+    $dir = preg_replace('#/[^/]*$#', '/', $path) ?? '/';
+
+    return webcam_validate_url($scheme . '://' . $host . $port . $dir . $ref);
+}
+
+function webcam_hls_pick_media_playlist(string $masterUrl, string $masterBody): ?string
+{
+    $base = preg_replace('#/[^/]*$#', '/', $masterUrl) ?? $masterUrl;
+    $picked = null;
+    foreach (explode("\n", str_replace("\r", '', $masterBody)) as $line) {
+        $trim = trim($line);
+        if ($trim === '' || str_starts_with($trim, '#')) {
+            continue;
+        }
+        $picked = webcam_hls_absolute_url($base, $trim);
+    }
+
+    return $picked;
+}
+
+function webcam_hls_rewrite_playlist(string $body, string $playlistUrl, string $camKey): string
+{
+    $out = [];
+    foreach (explode("\n", str_replace("\r", '', $body)) as $line) {
+        $trim = trim($line);
+        if ($trim === '' || str_starts_with($trim, '#')) {
+            $out[] = $line;
+            continue;
+        }
+        $abs = webcam_hls_absolute_url($playlistUrl, $trim);
+        if ($abs === null || !webcam_hls_remote_allowed($abs)) {
+            $out[] = $line;
+            continue;
+        }
+        $out[] = 'webcam_hls.php?cam=' . rawurlencode(webcam_normalize_key($camKey))
+            . '&u=' . rawurlencode($abs);
+    }
+
+    return implode("\n", $out);
+}
+
+function webcam_hls_proxied_playlist(array $cam): ?string
+{
+    if (!webcam_uses_stream_tag($cam)) {
+        return null;
+    }
+    $masterUrl = webcam_stream_playlist_url((string)$cam['url']);
+    if ($masterUrl === null) {
+        return null;
+    }
+    $masterBody = webcam_http_get($masterUrl);
+    if ($masterBody === null) {
+        return null;
+    }
+    $mediaUrl = webcam_hls_pick_media_playlist($masterUrl, $masterBody);
+    if ($mediaUrl === null) {
+        return webcam_hls_rewrite_playlist($masterBody, $masterUrl, (string)$cam['key']);
+    }
+    $mediaBody = webcam_http_get($mediaUrl);
+    if ($mediaBody === null) {
+        return null;
+    }
+
+    return webcam_hls_rewrite_playlist($mediaBody, $mediaUrl, (string)$cam['key']);
+}
+
+function webcam_hls_serve(string $camKey): void
+{
+    $cam = webcam_resolve_camera($camKey);
+    if ($cam['off'] || trim((string)$cam['url']) === '' || !webcam_uses_stream_tag($cam)) {
+        http_response_code(404);
+        exit;
+    }
+
+    $fetch = webcam_validate_url((string)($_GET['u'] ?? ''));
+    if ($fetch !== null) {
+        if (!webcam_hls_remote_allowed($fetch)) {
+            http_response_code(403);
+            exit;
+        }
+        $body = webcam_http_get($fetch, 20, true);
+        if ($body === null) {
+            http_response_code(502);
+            exit;
+        }
+        $path = strtolower((string)parse_url($fetch, PHP_URL_PATH));
+        $type = 'application/octet-stream';
+        if (str_contains($path, '.m3u8')) {
+            $type = 'application/vnd.apple.mpegurl';
+        } elseif (preg_match('/\.(ts|mp2t)(\?|$)/', $path) === 1) {
+            $type = 'video/mp2t';
+        }
+        header('Content-Type: ' . $type);
+        header('Cache-Control: no-store, max-age=0');
+        header('Content-Length: ' . (string)strlen($body));
+        echo $body;
+        exit;
+    }
+
+    $playlist = webcam_hls_proxied_playlist($cam);
+    if ($playlist === null) {
+        http_response_code(502);
+        exit;
+    }
+    header('Content-Type: application/vnd.apple.mpegurl');
+    header('Cache-Control: no-store, max-age=0');
+    echo $playlist;
+    exit;
+}
+
 function webcam_stream_api_response(array $cam): void
 {
     header('Content-Type: application/json; charset=UTF-8');
@@ -230,10 +384,9 @@ function webcam_stream_api_response(array $cam): void
         echo json_encode(['ok' => false], JSON_UNESCAPED_SLASHES);
         exit;
     }
-    $playlist = webcam_stream_playlist_url((string)$cam['url']);
     echo json_encode([
-        'ok' => $playlist !== null,
-        'playlist' => $playlist,
+        'ok' => webcam_hls_proxied_playlist($cam) !== null,
+        'playlist' => webcam_hls_proxy_url((string)$cam['key']),
     ], JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -293,6 +446,30 @@ function webcam_stream_image(string $camKey): void
     exit;
 }
 
+/** Upgrade legacy GRPM still-widget saves to the live stream feed. */
+function webcam_apply_grpm_defaults(array $entry, string $key): array
+{
+    $key = webcam_normalize_key($key);
+    if ($key !== 'grpm') {
+        return $entry;
+    }
+    $defaults = webcam_default_cameras()['grpm'];
+    $url = (string)($entry['url'] ?? '');
+    if ($url === ''
+        || webcam_is_widget_frame_url($url)
+        || (($entry['kind'] ?? '') === 'widget')
+        || (($entry['kind'] ?? '') === 'image')) {
+        return array_merge($entry, [
+            'name' => (string)$defaults['name'],
+            'url' => (string)$defaults['url'],
+            'kind' => 'stream',
+            'attribution' => (string)$defaults['attribution'],
+        ]);
+    }
+
+    return $entry;
+}
+
 /** @return array<string,array<string,mixed>> */
 function webcam_registry(): array
 {
@@ -318,7 +495,7 @@ function webcam_registry(): array
             }
             $entry = webcam_normalize_entry($row, is_array($out[$key] ?? null) ? $out[$key] : null);
             if ($entry !== null) {
-                $out[$key] = $entry;
+                $out[$key] = webcam_apply_grpm_defaults($entry, $key);
             }
         }
     }
