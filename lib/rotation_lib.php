@@ -1654,6 +1654,8 @@ function rotation_page_label(string $url): string
         'l3map.php' => 'L3 attack map',
         'hibp.php' => 'Data breaches',
         'cve.php' => 'New CVEs',
+        'ransomware.php' => 'Ransomware tracker',
+        'phish.php' => 'Phishing & brand threats',
         'signaltrace.php' => 'SignalTrace',
         'rotator.php' => 'Photo rotator',
         'slides.php' => 'Custom slides',
@@ -1860,6 +1862,8 @@ function rotation_quick_add_items(): array
         ['label' => 'L3 attack map', 'url' => 'l3map.php', 'dwell' => 75, 'group' => 'Boards'],
         ['label' => 'Data breaches', 'url' => 'hibp.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'New CVEs', 'url' => 'cve.php', 'dwell' => 45, 'group' => 'Boards'],
+        ['label' => 'Ransomware tracker', 'url' => 'ransomware.php', 'dwell' => 60, 'group' => 'Boards'],
+        ['label' => 'Phishing & brand threats', 'url' => 'phish.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'SignalTrace', 'url' => 'signaltrace.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Photo rotator', 'url' => 'rotator.php', 'dwell' => 300, 'group' => 'Media'],
     ];

@@ -38,6 +38,8 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | L3 attack map | `l3map.php` | `l3map.php` | Radar API token (shared) |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
+| | Ransomware tracker | `ransomware.php` | `ransomware.php` | — |
+| | Phishing & brand threats | `phish.php` | `phish.php` | URLhaus Auth-Key |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
 | | UniFi network | `unifi.php` | `unifi.php` | Local admin (UDM) or API key |
 | | Uptime Kuma | `kuma.php?d=<key>` | `kuma.php?d=<key>` | Status page slug per page and/or API key |
@@ -404,6 +406,31 @@ Latest published CVE hero plus a list of recent vulnerabilities — ID, CVSS sco
 **Data:** [NIST NVD API 2.0](https://nvd.nist.gov/developers/vulnerabilities) — free without a key (5 requests / 30s); optional API key for higher limits.
 
 **Setup:** admin → **New CVEs** — lookback window (default 7 days), CVE count (default 8), cache TTL (default 1 hour).
+
+### ransomware.php — Ransomware Tracker (Ransomware.live)
+
+Recent **extortion-site victim claims** — hero victim, group, sector, country, infostealer counts when available, plus sector and group rollups.
+
+**Data:** [Ransomware.live API v2](https://api.ransomware.live/apidocs) `GET /v2/recentvictims` — free, no API key (1 request/min per endpoint; default cache 30 min).
+
+**Important:** Claims are **unverified** shaming posts — not confirmed breaches unless Ransomware.live links press corroboration. The board never links to `.onion` URLs.
+
+**Setup:** admin → **Ransomware Tracker** — lookback (default 7 days), highlight country (default US), optional watch sectors/groups (comma-separated), cache TTL.
+
+**Rotation:** 60s dwell; strategic awareness alongside CVE/HIBP boards.
+
+### phish.php — Phishing & Brand Threats
+
+Two panels: **Brand watch** (Certificate Transparency lookalikes for your root domains via crt.sh) and **URLhaus recent** (malware/phishing URLs from abuse.ch). Hosts are **defanged** on the wall — not clickable.
+
+**Data:**
+
+| Panel | Source | Auth |
+|-------|--------|------|
+| URLhaus recent | `urlhaus-api.abuse.ch/v1/urls/recent/` | [abuse.ch Auth-Key](https://auth.abuse.ch/) (free) |
+| Brand watch | `crt.sh` JSON query per root domain | None (slow — 24h cache per domain) |
+
+**Setup:** admin → **Phishing & Brand Threats** — paste **URLhaus Auth-Key**, optional tag filters (`emotet`, `qakbot`, …), add **Brand watch** rows (root domain + keywords). Poll URLhaus no more often than every 5 minutes (default cache 900s).
 
 ### signaltrace.php — Threat Wall
 
