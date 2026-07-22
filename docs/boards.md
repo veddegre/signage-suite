@@ -10,7 +10,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 |-------|-------|------|--------------|------|
 | Weather & home | Weather | `index.php` | `index.php` | OpenWeatherMap |
 | | Lake Michigan | `lake.php` | `lake.php` | — |
-| | Webcam | `webcam.php?cam=gvsu` | `webcam.php?cam=KEY` | — |
+| | Webcam | `webcam.php?cam=grpm` | `webcam.php?cam=KEY` | — |
 | | Mackinac Bridge cam | `bridgecam.php` | `bridgecam.php` | — |
 | | Photo conditions | `photo.php` | `photo.php` | OpenWeatherMap |
 | | Air & pollen | `air.php` | `air.php` | Google Pollen (optional) |
@@ -82,7 +82,7 @@ Full-screen live feeds — **one camera per rotation slot**, same pattern as `za
 | Key | Source |
 |-----|--------|
 | `gvsu` | [GVSU campus](https://webcams.gvsu.edu) live player (iframe) |
-| `wetmet` | [WetMet](https://wetmet.net) station still (widget proxied server-side) |
+| `grpm` | [Grand Rapids Public Museum](https://www.grpm.org) live stream (HLS) |
 | `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
 
 **Setup:** admin → **Webcam** → **Cameras** — override built-in feeds or add rows with a unique **Key**. Each camera appears in **Rotation → Quick add** as its own entry (e.g. **Webcam — GVSU Campus**).
@@ -91,7 +91,7 @@ Full-screen live feeds — **one camera per rotation slot**, same pattern as `za
 
 ```
 webcam.php?cam=gvsu
-webcam.php?cam=wetmet
+webcam.php?cam=grpm
 webcam.php?cam=grandhaven
 ```
 

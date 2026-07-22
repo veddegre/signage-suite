@@ -1392,7 +1392,7 @@ function rotation_starter_pages(): array
         ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
         ['url' => 'webcam.php?cam=gvsu', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
-        ['url' => 'webcam.php?cam=wetmet', 'dwell' => 90, 'from' => 7, 'to' => 22],
+        ['url' => 'webcam.php?cam=grpm', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'air.php',     'dwell' => 60,  'from' => 6,  'to' => 22],
         ['url' => 'webcam.php?cam=grandhaven', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'sports.php',  'dwell' => 75,  'from' => 8,  'to' => 23],

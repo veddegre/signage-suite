@@ -122,7 +122,7 @@ splunk.php?d=soc
 video.php?v=drone
 slides.php?slide=birthday.png
 webcam.php?cam=gvsu
-webcam.php?cam=wetmet
+webcam.php?cam=grpm
 webcam.php?cam=grandhaven
 bridgecam.php
 air.php

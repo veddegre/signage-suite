@@ -1,19 +1,22 @@
 <?php
 /**
  * WEBCAM BOARD — 1920×1080 signage
- * One camera per board slot — same pattern as zabbix.php?d= / splunk.php?d=.
- *
- * Built-in: GVSU campus, WetMet station, Grand Haven beach (EarthCam).
- * Add cameras in admin → Webcam → Cameras; rotation uses webcam.php?cam=KEY.
+ * One camera per rotation slot — same pattern as zabbix.php?d= / splunk.php?d=.
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/webcam_lib.php';
 
+$cam = webcam_resolve_camera((string)($_GET['cam'] ?? ''));
+if (isset($_GET['api']) && (string)$_GET['api'] === '1') {
+    webcam_stream_api_response($cam);
+}
+
 define('TITLE', cfg('webcam.TITLE', 'Live Webcam'));
 define('SHOW_OVERLAY', cfg('webcam.SHOW_OVERLAY', true));
 define('RELOAD_SEC', cfg('webcam.RELOAD_SEC', 3600));
-define('IMAGE_REFRESH_SEC', max(15, (int)cfg('webcam.IMAGE_REFRESH_SEC', 60)));
+define('IMAGE_REFRESH_SEC', max(10, (int)cfg('webcam.IMAGE_REFRESH_SEC', 15)));
+define('STREAM_REFRESH_SEC', max(300, (int)cfg('webcam.STREAM_REFRESH_SEC', 1500)));
 define('TIMEZONE', cfg('webcam.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
@@ -21,19 +24,25 @@ $showClock = signage_show_clock();
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-$cam = webcam_resolve_camera((string)($_GET['cam'] ?? ''));
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
 $heightCss = signage_viewport_height();
 $reloadSec = max(0, (int)RELOAD_SEC);
-$imageRefreshSec = IMAGE_REFRESH_SEC;
+$imageRefreshSec = ($cam['kind'] ?? '') === 'widget'
+    ? max(10, min(IMAGE_REFRESH_SEC, 20))
+    : IMAGE_REFRESH_SEC;
+$streamRefreshSec = STREAM_REFRESH_SEC;
 $boardAttribution = trim((string)cfg('webcam.ATTRIBUTION', ''));
 $available = !$cam['off'] && trim($cam['url']) !== '';
 $attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attribution'];
 $usesImage = webcam_uses_image_tag($cam);
+$usesStream = webcam_uses_stream_tag($cam);
 $imageSrc = $usesImage ? webcam_board_image_src($cam) : '';
+$streamPlaylist = $usesStream ? webcam_stream_playlist_url((string)$cam['url']) : null;
 $camJson = $cam;
 $camJson['imageSrc'] = $imageSrc;
+$camJson['streamPlaylist'] = $streamPlaylist;
+$camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . '&api=1';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -43,6 +52,9 @@ $camJson['imageSrc'] = $imageSrc;
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<?php if ($usesStream): ?>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<?php endif; ?>
 <style>
   :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
           --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
@@ -51,7 +63,7 @@ $camJson['imageSrc'] = $imageSrc;
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; cursor:none; }
   .board { position:relative; width:1920px; height:<?= h($heightCss) ?>; }
   .frame { position:absolute; inset:0; overflow:hidden; background:var(--lake-night); }
-  .frame iframe, .frame img { width:100%; height:100%; border:0; display:block;
+  .frame iframe, .frame img, .frame video { width:100%; height:100%; border:0; display:block;
                                object-fit:cover; object-position:center; background:var(--lake-night); }
   .overlay { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 24 : 32 ?>px;
              z-index:2; pointer-events:none;
@@ -80,8 +92,10 @@ $camJson['imageSrc'] = $imageSrc;
 <div class="board">
   <?php if ($available): ?>
   <div class="frame" id="frame">
-    <?php if ($usesImage): ?>
-    <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="<?= h($imageSrc) ?>">
+    <?php if ($usesStream): ?>
+    <video id="cam-video" autoplay muted playsinline></video>
+    <?php elseif ($usesImage): ?>
+    <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
     <iframe id="cam-frame" allow="autoplay; fullscreen" loading="eager"
             src="<?= h((string)$cam['url']) ?>"></iframe>
@@ -100,8 +114,7 @@ $camJson['imageSrc'] = $imageSrc;
   <div class="empty">
     <h2>Webcam not available</h2>
     <p>Add cameras in admin → <strong>Webcam</strong>, then add each feed to rotation separately —
-       e.g. <code>webcam.php?cam=gvsu</code>, <code>webcam.php?cam=wetmet</code> — the same way as
-       Zabbix or Splunk pages.</p>
+       e.g. <code>webcam.php?cam=grpm</code>, <code>webcam.php?cam=gvsu</code>.</p>
   </div>
   <?php endif; ?>
 </div>
@@ -111,16 +124,64 @@ $camJson['imageSrc'] = $imageSrc;
   const cam = <?= json_encode($camJson, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const reloadMs = <?= (int)$reloadSec ?> * 1000;
   const imageRefreshMs = <?= (int)$imageRefreshSec ?> * 1000;
+  const streamRefreshMs = <?= (int)$streamRefreshSec ?> * 1000;
+  let hlsPlayer = null;
 
   function refreshImageSrc(base) {
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
     return base + sep + 't=' + Date.now();
   }
 
+  function loadStream(playlistUrl) {
+    const video = document.getElementById('cam-video');
+    if (!video || !playlistUrl) return;
+    if (window.Hls && window.Hls.isSupported()) {
+      if (hlsPlayer) {
+        hlsPlayer.destroy();
+        hlsPlayer = null;
+      }
+      hlsPlayer = new window.Hls({ enableWorker: true, lowLatencyMode: true });
+      hlsPlayer.loadSource(playlistUrl);
+      hlsPlayer.attachMedia(video);
+      hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
+        video.play().catch(function () {});
+      });
+      return;
+    }
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = playlistUrl;
+      video.play().catch(function () {});
+    }
+  }
+
+  async function refreshStreamPlaylist() {
+    try {
+      const res = await fetch(cam.streamApi, { cache: 'no-store' });
+      const data = await res.json();
+      if (data && data.ok && data.playlist) {
+        loadStream(data.playlist);
+      }
+    } catch (e) {}
+  }
+
+  if (cam.streamPlaylist) {
+    loadStream(cam.streamPlaylist);
+    setInterval(refreshStreamPlaylist, streamRefreshMs);
+    return;
+  }
+
   if (cam.imageSrc) {
     const img = document.getElementById('cam-img');
     if (!img) return;
-    function refresh() { img.src = refreshImageSrc(cam.imageSrc); }
+    const preload = new Image();
+    function showLoaded(el) {
+      img.src = el.src;
+    }
+    function refresh() {
+      preload.onload = function () { showLoaded(preload); };
+      preload.src = refreshImageSrc(cam.imageSrc);
+      if (preload.complete) showLoaded(preload);
+    }
     refresh();
     setInterval(refresh, imageRefreshMs);
     return;
