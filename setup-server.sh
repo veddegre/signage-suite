@@ -244,6 +244,43 @@ setup_directories() {
     "$WEBROOT/bin"
 
   chmod 775 "$WEBROOT/config" "$WEBROOT/cache" "$WEBROOT/videos" "$WEBROOT/slides" "$WEBROOT/photos" "$WEBROOT/bin"
+
+  ensure_setup_key
+}
+
+ensure_setup_key() {
+  local keyfile="$WEBROOT/config/setup.key"
+  local usersfile="$WEBROOT/config/users.json"
+
+  if [[ -f "$WEBROOT/config/admin.json" ]]; then
+    log "Legacy admin.json present — skipping setup key"
+    return
+  fi
+  if [[ -f "$usersfile" ]]; then
+    local has_users
+    has_users="$(php -r '
+      $d = json_decode((string)@file_get_contents($argv[1]), true);
+      $u = is_array($d) ? ($d["users"] ?? []) : [];
+      echo (is_array($u) && count($u) > 0) ? "yes" : "no";
+    ' "$usersfile" 2>/dev/null || echo no)"
+    if [[ "$has_users" == yes ]]; then
+      log "Admin account(s) in users.json — skipping setup key"
+      return
+    fi
+  fi
+  if [[ -f "$keyfile" ]]; then
+    log "Setup key already present ($keyfile)"
+    return
+  fi
+
+  log "Creating one-time admin setup key → $keyfile"
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 16 > "$keyfile"
+  else
+    dd if=/dev/urandom bs=16 count=1 2>/dev/null | xxd -p -c 32 > "$keyfile"
+  fi
+  chmod 600 "$keyfile"
+  chown "$WEB_USER:$WEB_USER" "$keyfile"
 }
 
 fix_ytdlp_bin_perms() {
@@ -639,11 +676,23 @@ verify_opcache_web() {
 }
 
 print_summary() {
-  local base board admin player
+  local base board admin player keyfile="$WEBROOT/config/setup.key"
   base="$(guess_url_base)"
   board="${base%/}/board.php"
   admin="${base%/}/admin.php"
   player="${base%/}/player.php"
+
+  local setup_step
+  if [[ -f "$keyfile" ]]; then
+    setup_step="  1. Read the one-time setup key, then open admin:
+       sudo cat $keyfile
+       $admin
+     Paste the setup key when creating your admin password (the file is deleted after setup)."
+  else
+    setup_step="  1. Open admin (account already configured, or visit once to create setup.key):
+       $admin
+     If first-time setup: sudo cat $keyfile"
+  fi
 
   cat <<EOF
 
@@ -655,10 +704,7 @@ Web server:   $WEBSERVER
 Base URL:     $base
 
 Next steps:
-  1. Read the one-time setup key, then open admin:
-       sudo cat $WEBROOT/config/setup.key
-       $admin
-     Paste the setup key when creating your admin password (the file is deleted after setup).
+${setup_step}
   2. Configure boards (API keys, rotation, slides, etc.) in admin.
   3. Preview the main rotation:
        $board

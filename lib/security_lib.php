@@ -174,10 +174,29 @@ function signage_session_start(): void
     session_start();
 }
 
-/** Create setup.key on first boot if admin password does not exist yet. */
-function signage_setup_key_ready(): void
+/** Whether a local admin account already exists (legacy admin.json or users.json). */
+function signage_admin_accounts_exist(): bool
 {
     if (is_file(SIGNAGE_ROOT . '/config/admin.json')) {
+        return true;
+    }
+    $usersFile = SIGNAGE_ROOT . '/config/users.json';
+    if (!is_file($usersFile)) {
+        return false;
+    }
+    $data = json_decode((string)file_get_contents($usersFile), true);
+    if (!is_array($data)) {
+        return false;
+    }
+    $users = $data['users'] ?? [];
+
+    return is_array($users) && $users !== [];
+}
+
+/** Create setup.key on first boot if no admin account exists yet. */
+function signage_setup_key_ready(): void
+{
+    if (signage_admin_accounts_exist()) {
         return;
     }
     $dir = SIGNAGE_ROOT . '/config';
