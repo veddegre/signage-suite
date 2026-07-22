@@ -79,6 +79,8 @@ function admin_schema(): array
              'help' => 'Oldest entries are dropped when the log exceeds this size (100–20000).'],
             ['key' => 'OPERATOR_MULTI_SCREEN', 'label' => 'Operators may manage multiple displays', 'type' => 'bool', 'default' => true,
              'help' => 'When on, assign more than one rotation display per operator under Users. When off, each operator gets exactly one display.'],
+            ['key' => 'TRUSTED_PROXIES', 'label' => 'Trusted reverse proxies', 'type' => 'text',
+             'help' => 'Comma-separated proxy IPs or CIDRs (e.g. 127.0.0.1, 10.0.0.0/8). When REMOTE_ADDR matches, client IP is taken from X-Forwarded-For, X-Real-IP, or CF-Connecting-IP. Leave blank to use REMOTE_ADDR only.'],
         ]],
         'rotation' => ['title' => 'Rotation', 'file' => 'board.php', 'fields' => array_merge([
             ['key' => 'SCREENS', 'label' => 'Screens', 'type' => 'rows', 'keyed' => true,

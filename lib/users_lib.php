@@ -2102,7 +2102,7 @@ function admin_enforce_board_access(string &$board, ?string &$flash, ?bool &$fla
     }
     if ($board === 'audit' && !admin_can_audit()) {
         $board = admin_default_board();
-        $flash = 'That section is restricted to super admins.';
+        $flash = 'Audit logging is disabled or you do not have access.';
         $flashOk = false;
         return;
     }
@@ -2127,7 +2127,10 @@ function admin_filter_presence_dashboard(array $dashboard): array
     }
     $allowed = array_flip(admin_allowed_screen_keys());
     if (isset($dashboard['screens']) && is_array($dashboard['screens'])) {
-        $dashboard['screens'] = array_intersect_key($dashboard['screens'], $allowed);
+        $dashboard['screens'] = array_values(array_filter(
+            $dashboard['screens'],
+            static fn($row) => is_array($row) && isset($allowed[(string)($row['screen'] ?? '')])
+        ));
     }
     if (isset($dashboard['play_log']) && is_array($dashboard['play_log'])) {
         $dashboard['play_log'] = array_values(array_filter(

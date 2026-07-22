@@ -127,7 +127,32 @@ function audit_action_label(string $action): string
 
 function admin_can_audit(): bool
 {
-    return admin_is_super();
+    if (!audit_enabled()) {
+        return false;
+    }
+    if (admin_is_super()) {
+        return true;
+    }
+
+    return admin_is_screen_operator();
+}
+
+/** @return list<array<string,mixed>> */
+function audit_recent_for_user(int $limit = 250): array
+{
+    $rows = audit_recent($limit);
+    if (admin_is_super()) {
+        return $rows;
+    }
+    $uid = admin_user_id();
+    if ($uid === null) {
+        return [];
+    }
+
+    return array_values(array_filter(
+        $rows,
+        static fn($row) => is_array($row) && (string)($row['user_id'] ?? '') === $uid
+    ));
 }
 
 /** Skip audit log when clearing API cache from Tools or board save. */

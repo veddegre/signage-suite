@@ -3334,7 +3334,7 @@ function admin_field(array $f, $val, string $board): void
     <a href="?board=account" class="<?= $accountBoard ? 'active' : '' ?>">Account</a>
     <?php endif; ?>
     <?php if (admin_can_audit()): ?>
-    <a href="?board=audit" class="<?= $auditBoard ? 'active' : '' ?>">Audit</a>
+    <a href="?board=audit" class="<?= $auditBoard ? 'active' : '' ?>"><?= admin_is_super() ? 'Audit' : 'Activity' ?></a>
     <?php endif; ?>
     <?php if (admin_can_tools()): ?>
     <a href="?board=tools" class="<?= $tools ? 'active' : '' ?>">Tools</a>
@@ -3358,15 +3358,15 @@ function admin_field(array $f, $val, string $board): void
       <pre class="raw"><?= h(json_encode($rawConf, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}') ?></pre>
 
     <?php elseif ($auditBoard):
-      $auditRows = audit_recent(300);
+      $auditRows = audit_recent_for_user(300);
       try {
           $auditTz = new DateTimeZone(rotation_timezone());
       } catch (Throwable $e) {
           $auditTz = new DateTimeZone('UTC');
       }
     ?>
-      <h2>Audit log</h2>
-      <div class="sub">Admin sign-ins, saves, and user changes. Stored in <code>cache/admin_audit.json</code> (not cleared with API cache).</div>
+      <h2><?= admin_is_super() ? 'Audit log' : 'Activity log' ?></h2>
+      <div class="sub"><?php if (admin_is_super()): ?>Admin sign-ins, saves, and user changes. Stored in <code>cache/admin_audit.json</code> (not cleared with API cache).<?php else: ?>Your recent admin actions — board saves, uploads, and sign-ins. Playback history for your displays is under <a href="?board=status">Status</a>.<?php endif; ?></div>
       <?php if (!audit_enabled()): ?>
       <div class="flash bad">Audit logging is disabled under <a href="?board=security#<?= h(admin_settings_field_anchor('security', 'AUDIT_ENABLED')) ?>">Security → Enable audit log</a>.</div>
       <?php endif; ?>
@@ -3412,7 +3412,7 @@ function admin_field(array $f, $val, string $board): void
 
       <section class="status-section">
         <h2 style="font-size:22px;margin-bottom:6px">Sign status</h2>
-        <div class="help" style="margin-bottom:10px">Kiosks report while <code>board.php</code> is open (~30s). Offline = no heartbeat in <?= (int)SIGNAGE_PRESENCE_STALE_SEC ?>s.</div>
+        <div class="help" style="margin-bottom:10px">Kiosks report while <code>board.php</code> is open (~30s). Offline = no heartbeat in <?= (int)SIGNAGE_PRESENCE_STALE_SEC ?>s.<?php if (admin_is_super()): ?> Set <a href="?board=security#<?= h(admin_settings_field_anchor('security', 'TRUSTED_PROXIES')) ?>">Trusted reverse proxies</a> when kiosks connect through nginx or a load balancer.<?php endif; ?></div>
         <div id="presencePanel" class="presence-panel">
           <p class="help">Loading sign status…</p>
         </div>
@@ -3459,6 +3459,7 @@ function admin_field(array $f, $val, string $board): void
         slides, photos, RSS, video, announcements, and monitoring pages you own or that are shared with you
         (Zabbix, Uptime Kuma, Splunk, Grafana, …). API URLs and tokens are set by your super admin under each board’s
         <strong>Board settings</strong>. Use <strong>+ Add page</strong> on Zabbix/Kuma/Splunk to create your own walls.
+        Check <a href="?board=status">Status</a> for live playback on your displays and <a href="?board=audit">Activity</a> for your recent changes.
       </div>
       <?php endif; ?>
       <?php
@@ -9023,12 +9024,21 @@ function initPresencePanel() {
       return;
     }
     let html = '<table class="presence-status"><thead><tr>'
-      + '<th>Display</th><th>Status</th><th>Now showing</th><th>Plays today</th>'
+      + '<th>Display</th><th>Status</th><th>Now showing</th><th>Client IP</th><th>Plays today</th>'
       + '</tr></thead><tbody>';
     data.screens.forEach(function (s) {
       const dotCls = s.online ? 'presence-dot online' : 'presence-dot';
       let statusText = s.online ? 'Online' : 'Offline';
       if (s.online && s.blank) statusText = 'Online · blank';
+      let ipHtml = '<span class="presence-now muted">—</span>';
+      if (s.client_ip) {
+        ipHtml = '<code>' + esc(s.client_ip) + '</code>';
+        if (s.ip_via_proxy && s.remote_addr) {
+          ipHtml += '<div class="presence-stats">via ' + esc(s.remote_addr) + '</div>';
+        }
+      } else if (s.remote_addr) {
+        ipHtml = '<code>' + esc(s.remote_addr) + '</code>';
+      }
       let nowHtml = '<span class="presence-now muted">—</span>';
       if (s.online && s.now && s.now.label) {
         nowHtml = '<span class="presence-now">' + esc(s.now.label) + '</span>';
@@ -9053,6 +9063,7 @@ function initPresencePanel() {
         + '<td><span class="' + dotCls + '"></span><code>' + esc(s.screen) + '</code> ' + esc(s.name) + '</td>'
         + '<td>' + esc(statusText) + '</td>'
         + '<td>' + nowHtml + '</td>'
+        + '<td>' + ipHtml + '</td>'
         + '<td>' + plays + '</td>'
         + '</tr>';
     });

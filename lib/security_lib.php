@@ -27,8 +27,145 @@ function signage_admin_idle_seconds(): int
 
 function signage_client_ip(): string
 {
-    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
-    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
+    return signage_client_ip_detail()['client'];
+}
+
+/**
+ * Resolve the client IP, honoring reverse-proxy headers only from trusted proxies.
+ *
+ * @return array{client:string,remote_addr:string,forwarded_for:string,via_proxy:bool,source:string}
+ */
+function signage_client_ip_detail(): array
+{
+    $remote = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    if (!filter_var($remote, FILTER_VALIDATE_IP)) {
+        $remote = '0.0.0.0';
+    }
+    $forwarded = trim((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+    $realIp = trim((string)($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+    $cfIp = trim((string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''));
+    $trueClient = trim((string)($_SERVER['HTTP_TRUE_CLIENT_IP'] ?? ''));
+
+    $viaProxy = signage_ip_from_trusted_proxy($remote);
+    $client = $remote;
+    $source = 'remote_addr';
+
+    if ($viaProxy) {
+        foreach ([
+            'cf_connecting_ip' => $cfIp,
+            'true_client_ip' => $trueClient,
+            'x_real_ip' => $realIp,
+        ] as $headerSource => $candidate) {
+            if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_IP)) {
+                $client = $candidate;
+                $source = $headerSource;
+                break;
+            }
+        }
+        if ($source === 'remote_addr' && $forwarded !== '') {
+            foreach (preg_split('/\s*,\s*/', $forwarded, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $hop) {
+                $hop = trim($hop);
+                if ($hop !== '' && filter_var($hop, FILTER_VALIDATE_IP)) {
+                    $client = $hop;
+                    $source = 'x_forwarded_for';
+                    break;
+                }
+            }
+        }
+    }
+
+    return [
+        'client' => $client,
+        'remote_addr' => $remote,
+        'forwarded_for' => $forwarded,
+        'via_proxy' => $viaProxy,
+        'source' => $source,
+    ];
+}
+
+/** @return list<string> */
+function signage_trusted_proxies(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $raw = trim((string)cfg('security.TRUSTED_PROXIES', ''));
+    if ($raw === '') {
+        return $cache = [];
+    }
+    $out = [];
+    foreach (preg_split('/\s*,\s*/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $item) {
+        $item = trim($item);
+        if ($item !== '') {
+            $out[] = $item;
+        }
+    }
+
+    return $cache = $out;
+}
+
+function signage_ip_from_trusted_proxy(string $remoteAddr): bool
+{
+    foreach (signage_trusted_proxies() as $spec) {
+        if (signage_ip_matches_spec($remoteAddr, $spec)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function signage_ip_matches_spec(string $ip, string $spec): bool
+{
+    if ($ip === $spec) {
+        return true;
+    }
+    if (!str_contains($spec, '/')) {
+        return false;
+    }
+    [$subnet, $bitsRaw] = explode('/', $spec, 2);
+    $bits = (int)$bitsRaw;
+    if ($subnet === '' || $bits < 0) {
+        return false;
+    }
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+        && filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+        && $bits <= 32) {
+        $ipLong = ip2long($ip);
+        $subLong = ip2long($subnet);
+        if ($ipLong === false || $subLong === false) {
+            return false;
+        }
+        if ($bits === 0) {
+            return true;
+        }
+        $mask = (-1 << (32 - $bits)) & 0xFFFFFFFF;
+
+        return ($ipLong & $mask) === ($subLong & $mask);
+    }
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)
+        && filter_var($subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)
+        && $bits <= 128) {
+        $ipBin = inet_pton($ip);
+        $subBin = inet_pton($subnet);
+        if ($ipBin === false || $subBin === false) {
+            return false;
+        }
+        $bytes = (int)floor($bits / 8);
+        $remainder = $bits % 8;
+        if ($bytes > 0 && substr($ipBin, 0, $bytes) !== substr($subBin, 0, $bytes)) {
+            return false;
+        }
+        if ($remainder === 0) {
+            return true;
+        }
+        $mask = (0xFF << (8 - $remainder)) & 0xFF;
+
+        return ((ord($ipBin[$bytes]) & $mask) === (ord($subBin[$bytes]) & $mask));
+    }
+
+    return false;
 }
 
 /** @return array{blocked:bool,reason:?string} */

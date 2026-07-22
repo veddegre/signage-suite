@@ -6,6 +6,7 @@
 require_once dirname(__DIR__) . '/config.php';
 require_once __DIR__ . '/json_store_lib.php';
 require_once __DIR__ . '/rotation_lib.php';
+require_once __DIR__ . '/security_lib.php';
 
 const SIGNAGE_PRESENCE_STALE_SEC = 120;
 const SIGNAGE_PRESENCE_MAX_PAGE_STATS = 40;
@@ -219,6 +220,7 @@ function signage_presence_touch(string $screen, array $payload): void
     $screen = rotation_normalize_screen_key($screen);
     $now = time();
     $today = signage_presence_stats_day();
+    $ipDetail = signage_client_ip_detail();
 
     $isBlank = !empty($payload['blank']);
     $status = trim((string)($payload['status'] ?? ''));
@@ -236,7 +238,8 @@ function signage_presence_touch(string $screen, array $payload): void
         $status,
         $pageUrl,
         $pageLabel,
-        $payload
+        $payload,
+        $ipDetail
     ): array {
         $prev = is_array($all[$screen] ?? null) ? $all[$screen] : [];
 
@@ -292,6 +295,11 @@ function signage_presence_touch(string $screen, array $payload): void
             'play_log' => $playLog,
             'last_play_url' => $lastPlayUrl,
             'first_seen' => (int)($prev['first_seen'] ?? $now),
+            'client_ip' => (string)($ipDetail['client'] ?? ''),
+            'remote_addr' => (string)($ipDetail['remote_addr'] ?? ''),
+            'forwarded_for' => (string)($ipDetail['forwarded_for'] ?? ''),
+            'ip_via_proxy' => !empty($ipDetail['via_proxy']),
+            'ip_source' => (string)($ipDetail['source'] ?? 'remote_addr'),
         ];
 
         return $all;
@@ -358,6 +366,10 @@ function signage_presence_dashboard(): array
             'last_seen' => $entry['last_seen'] ?? null,
             'last_seen_ago' => signage_presence_format_ago($entry['last_seen'] ?? null),
             'blank' => !empty($entry['blank']),
+            'client_ip' => (string)($entry['client_ip'] ?? ''),
+            'remote_addr' => (string)($entry['remote_addr'] ?? ''),
+            'forwarded_for' => (string)($entry['forwarded_for'] ?? ''),
+            'ip_via_proxy' => !empty($entry['ip_via_proxy']),
             'now' => [
                 'label' => $nowLabel,
                 'url' => $nowUrl,
