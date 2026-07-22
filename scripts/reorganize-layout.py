@@ -17,7 +17,7 @@ BOARD_GROUPS: dict[str, list[str]] = {
         'index.php', 'lake.php', 'photo.php', 'air.php', 'uv.php',
         'webcam.php', 'bridgecam.php',
     ],
-    'commute': ['traffic.php', 'traffic_tiles.php'],
+    'commute': ['traffic.php', 'traffic_tiles.php', 'camwall.php', 'camwall_img.php'],
     'security': [
         'cve.php', 'hibp.php', 'attacks.php', 'signaltrace.php',
         'outages.php', 'internet.php',

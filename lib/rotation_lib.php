@@ -1401,6 +1401,7 @@ function rotation_starter_pages(): array
         ['url' => 'calendar.php',  'dwell' => 90,  'from' => 6,  'to' => 21],
         ['url' => 'homelab.php', 'dwell' => 45],
         ['url' => 'traffic.php', 'dwell' => 90,  'from' => 6,  'to' => 20],
+        ['url' => 'camwall.php', 'dwell' => 90, 'from' => 6, 'to' => 20],
     ];
 }
 
@@ -1657,6 +1658,7 @@ function rotation_page_label(string $url): string
         'meals.php' => 'Meal calendar',
         'family.php' => 'Calendar',
         'traffic.php' => 'Traffic map',
+        'camwall.php' => 'Commute camera wall',
         'homelab.php' => 'Homelab status',
         'unifi.php' => 'UniFi network',
         'outages.php' => 'Cloud outages',
@@ -1865,6 +1867,7 @@ function rotation_quick_add_items(): array
         ['label' => 'Today at a glance', 'url' => 'glance.php', 'dwell' => 75, 'group' => 'Boards'],
         ['label' => 'Meal calendar', 'url' => 'meals.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Traffic map', 'url' => 'traffic.php', 'dwell' => 90, 'group' => 'Boards'],
+        ['label' => 'Commute camera wall', 'url' => 'camwall.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Homelab', 'url' => 'homelab.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'UniFi network', 'url' => 'unifi.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'Cloud outages', 'url' => 'outages.php', 'dwell' => 60, 'group' => 'Boards'],
