@@ -1749,6 +1749,23 @@ function admin_preview_filter_active(): bool
 }
 
 /**
+ * Whether ?img= / ?meta= responses should enforce deck-row visibility.
+ * Admin library thumbnails use bare ?img= while logged in — not deck-scoped.
+ * Kiosk display scoping and ?noticker=1 board previews still enforce visibility.
+ */
+function admin_media_img_scope_active(): bool
+{
+    if (!admin_display_filter_active()) {
+        return false;
+    }
+    if (admin_preview_session_ready() && !admin_preview_filter_active()) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Operator user id for signage board display scoping.
  * Logged-in operators use their account; kiosk rotation passes ?screen= for assigned displays.
  */

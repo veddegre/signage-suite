@@ -27,7 +27,7 @@ date_default_timezone_set(TIMEZONE);
 
 $diskPhotos = rotator_list_photos(PHOTO_DIR);
 $deckPhotos = rotator_photos_for_screen(null);
-if (admin_display_filter_active()) {
+if (admin_display_filter_active() && admin_media_img_scope_active()) {
     $deckPhotos = admin_filter_list_for_display($deckPhotos);
     $ownedFiles = [];
     foreach ($deckPhotos as $photo) {
@@ -79,7 +79,7 @@ if (isset($_GET['img']) || isset($_GET['meta'])) {
         http_response_code(404);
         exit;
     }
-    if (admin_display_filter_active()) {
+    if (admin_media_img_scope_active()) {
         $photo = rotator_deck_by_file($name);
         if (!is_array($photo) || !admin_entry_visible_for_user($photo, admin_display_scope_user_id())) {
             http_response_code(404);
@@ -223,7 +223,7 @@ if (isset($_GET['photo'])) {
     $photo = $name !== null ? rotator_deck_by_file($name) : null;
     $onDisk = $name !== null && is_file(PHOTO_DIR . '/' . $name);
     $active = $onDisk && ($preview || (is_array($photo) && empty($photo['off'])));
-    if ($preview && admin_display_filter_active() && (!is_array($photo) || !admin_entry_visible_for_user($photo, admin_display_scope_user_id()))) {
+    if ($preview && admin_preview_filter_active() && (!is_array($photo) || !admin_entry_visible_for_user($photo, admin_display_scope_user_id()))) {
         $active = false;
     }
     $pageTitle = is_array($photo) && trim((string)($photo['caption'] ?? '')) !== ''
