@@ -675,6 +675,23 @@ verify_opcache_web() {
   fi
 }
 
+update_commands() {
+  local src wr
+  src="$(realpath -m "$SOURCE")"
+  wr="$(realpath -m "$WEBROOT")"
+
+  if [[ -n "$CLONE_URL" ]] || { [[ -d "$WEBROOT/.git" ]] && [[ "$src" == "$wr" ]]; }; then
+    printf '  cd %s && git pull --ff-only\n  sudo bash setup-server.sh --skip-apt --source %s --webroot %s\n' \
+      "$WEBROOT" "$WEBROOT" "$WEBROOT"
+  elif [[ "$src" != "$wr" ]]; then
+    printf '  cd %s && git pull\n  sudo bash setup-server.sh --skip-apt --source %s --webroot %s\n' \
+      "$SOURCE" "$SOURCE" "$WEBROOT"
+  else
+    printf '  cd %s && git pull\n  sudo bash setup-server.sh --skip-apt --source %s\n' \
+      "$WEBROOT" "$WEBROOT"
+  fi
+}
+
 print_summary() {
   local base board admin player keyfile="$WEBROOT/config/setup.key"
   base="$(guess_url_base)"
@@ -730,7 +747,7 @@ Logs:
   Video:   /var/log/signage-video-fetch.log (if --with-video-cron)
 
 Re-run this script safely after pulling updates:
-  sudo bash setup-server.sh --skip-apt --source $WEBROOT
+$(update_commands)
 ============================================================
 EOF
 }

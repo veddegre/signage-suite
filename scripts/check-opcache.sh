@@ -87,5 +87,6 @@ if [[ "$body" == enabled* ]]; then
   exit 0
 fi
 echo "== FAIL — OPcache not active for web requests"
-echo "   Re-run: sudo bash setup-server.sh --skip-apt --source $WEBROOT --webroot $WEBROOT"
+echo "   Re-run setup-server.sh --skip-apt with your git checkout as --source and $WEBROOT as --webroot"
+echo "   Example: sudo bash setup-server.sh --skip-apt --source ~/signage-suite --webroot $WEBROOT"
 exit 1

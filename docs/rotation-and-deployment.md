@@ -162,7 +162,12 @@ cd ~/signage-suite && git pull
 sudo bash setup-server.sh --skip-apt --source ~/signage-suite --webroot /var/www/html/boards
 ```
 
-If webroot *is* the git checkout: `cd /var/www/html/boards && sudo git pull`
+If webroot *is* the git checkout (`--clone` install):
+
+```bash
+cd /var/www/html/boards && git pull --ff-only
+sudo bash setup-server.sh --skip-apt --source /var/www/html/boards --webroot /var/www/html/boards
+```
 
 ---
 
