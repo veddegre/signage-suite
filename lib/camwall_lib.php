@@ -42,7 +42,7 @@ function camwall_default_cameras(): array
             'route' => 'I-96',
             'url' => 'https://micamerasimages.net/thumbs/grand_cam_062.flv.jpg?item=1',
             'sort' => 5,
-            'focus' => 'top',
+            'focus' => '50% 15%',
         ],
         'i196-zeeland' => [
             'name' => 'Zeeland Rest Area',
