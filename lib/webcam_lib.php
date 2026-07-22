@@ -1,6 +1,6 @@
 <?php
 /**
- * Webcam board — embed URL validation, probe cache, rotation seasonal skip.
+ * Webcam board — multi-camera registry, embed validation, probe cache, rotation skip.
  */
 
 require_once __DIR__ . '/../config.php';
@@ -9,9 +9,41 @@ const WEBCAM_PROBE_TTL_SEC = 1800;
 const WEBCAM_ONLINE_MAX_AGE_MIN = 60;
 const WEBCAM_SKIP_MIN_AGE_MIN = 1440;
 
-function webcam_embed_url(): ?string
+/** @return array<string,array<string,mixed>> Built-in cameras (always available; overridden by saved CAMS rows). */
+function webcam_default_cameras(): array
 {
-    $url = trim((string)cfg('webcam.EMBED_URL', ''));
+    return [
+        'gvsu' => [
+            'name' => 'GVSU Campus',
+            'url' => 'https://webcams.gvsu.edu:5443/live/play.html?id=dtSQveui8yRVSKvb153147654438870',
+            'kind' => 'iframe',
+            'attribution' => 'GVSU',
+        ],
+        'wetmet' => [
+            'name' => 'WetMet Station',
+            'url' => 'https://api.wetmet.net/widgets/image/frame.php?uid=7c402384eafaef2215a0e9f556797ee8',
+            'kind' => 'image',
+            'attribution' => 'WetMet',
+        ],
+        'grandhaven' => [
+            'name' => 'Grand Haven Beach',
+            'url' => 'https://share.earthcam.net/tJ90CoLmq7TzrY396Yd88KTssi7iV3ZNicDEymFXa2k!',
+            'kind' => 'iframe',
+            'attribution' => 'EarthCam · MACkite · Surf Grand Haven',
+        ],
+    ];
+}
+
+function webcam_normalize_key(string $key): string
+{
+    $key = strtolower(preg_replace('/[^a-z0-9_-]/', '', $key));
+
+    return $key;
+}
+
+function webcam_validate_url(string $url): ?string
+{
+    $url = trim($url);
     if ($url === '') {
         return null;
     }
@@ -30,20 +62,211 @@ function webcam_embed_url(): ?string
     return $url;
 }
 
-function webcam_status_cache_path(): string
+/** @param array<string,mixed> $row @param array<string,mixed>|null $fallback */
+function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
+{
+    $url = webcam_validate_url((string)($row['url'] ?? ($fallback['url'] ?? '')));
+    if ($url === null) {
+        return null;
+    }
+    $name = trim((string)($row['name'] ?? ($fallback['name'] ?? '')));
+    if ($name === '') {
+        $name = 'Webcam';
+    }
+    $kind = strtolower(trim((string)($row['kind'] ?? ($fallback['kind'] ?? 'auto'))));
+    if (!in_array($kind, ['iframe', 'image', 'auto'], true)) {
+        $kind = 'auto';
+    }
+    if ($kind === 'auto') {
+        $kind = webcam_detect_kind($url);
+    }
+    $attribution = trim((string)($row['attribution'] ?? ($fallback['attribution'] ?? '')));
+
+    return [
+        'name' => $name,
+        'url' => $url,
+        'kind' => $kind,
+        'attribution' => $attribution,
+    ];
+}
+
+function webcam_detect_kind(string $url): string
+{
+    $path = strtolower(parse_url($url, PHP_URL_PATH) ?: '');
+    if (preg_match('/\.(jpe?g|png|gif|webp|php)(\?|$)/i', $path) === 1) {
+        return 'image';
+    }
+
+    return 'iframe';
+}
+
+/** @return array<string,array<string,mixed>> */
+function webcam_registry(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $out = webcam_default_cameras();
+    $saved = cfg('webcam.CAMS', []);
+    if (is_array($saved)) {
+        foreach ($saved as $k => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if (!empty($row['off'])) {
+                unset($out[webcam_normalize_key((string)$k)]);
+                continue;
+            }
+            $key = webcam_normalize_key((string)($row['_key'] ?? $k));
+            if ($key === '') {
+                continue;
+            }
+            $entry = webcam_normalize_entry($row, is_array($out[$key] ?? null) ? $out[$key] : null);
+            if ($entry !== null) {
+                $out[$key] = $entry;
+            }
+        }
+    }
+
+    $legacy = webcam_validate_url((string)cfg('webcam.EMBED_URL', ''));
+    if ($legacy !== null && empty($saved)) {
+        $out['legacy'] = webcam_normalize_entry([
+            'name' => trim((string)cfg('webcam.TITLE', 'Webcam')),
+            'url' => $legacy,
+            'attribution' => trim((string)cfg('webcam.ATTRIBUTION', '')),
+        ]) ?? null;
+        if ($out['legacy'] === null) {
+            unset($out['legacy']);
+        }
+    }
+
+    foreach ($out as $key => $entry) {
+        if (!is_array($entry) || trim((string)($entry['url'] ?? '')) === '') {
+            unset($out[$key]);
+        }
+    }
+
+    return $cache = $out;
+}
+
+/** @return array<string,array<string,mixed>> */
+function webcam_registry_for_display(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_filter_registry_for_display(webcam_registry());
+}
+
+function webcam_active_key(): string
+{
+    $fromQuery = webcam_normalize_key((string)($_GET['cam'] ?? ''));
+    if ($fromQuery !== '') {
+        return $fromQuery;
+    }
+
+    return webcam_normalize_key((string)cfg('webcam.ACTIVE', 'gvsu')) ?: 'gvsu';
+}
+
+/**
+ * @return list<array{key:string,name:string,url:string,kind:string,attribution:string}>
+ */
+function webcam_active_cameras(): array
+{
+    $registry = webcam_registry();
+    $pick = webcam_active_key();
+    if ($pick === 'all') {
+        $out = [];
+        foreach ($registry as $key => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $out[] = [
+                'key' => (string)$key,
+                'name' => (string)($entry['name'] ?? $key),
+                'url' => (string)$entry['url'],
+                'kind' => (string)($entry['kind'] ?? 'iframe'),
+                'attribution' => (string)($entry['attribution'] ?? ''),
+            ];
+        }
+
+        return $out;
+    }
+
+    $entry = $registry[$pick] ?? null;
+    if (!is_array($entry)) {
+        $first = reset($registry);
+        if (!is_array($first)) {
+            return [];
+        }
+        $pick = (string)(array_key_first($registry) ?? '');
+
+        return [[
+            'key' => $pick,
+            'name' => (string)($first['name'] ?? $pick),
+            'url' => (string)$first['url'],
+            'kind' => (string)($first['kind'] ?? 'iframe'),
+            'attribution' => (string)($first['attribution'] ?? ''),
+        ]];
+    }
+
+    return [[
+        'key' => $pick,
+        'name' => (string)($entry['name'] ?? $pick),
+        'url' => (string)$entry['url'],
+        'kind' => (string)($entry['kind'] ?? 'iframe'),
+        'attribution' => (string)($entry['attribution'] ?? ''),
+    ]];
+}
+
+/** @deprecated Use webcam_active_cameras() */
+function webcam_embed_url(): ?string
+{
+    $cams = webcam_active_cameras();
+
+    return $cams !== [] ? (string)$cams[0]['url'] : null;
+}
+
+function webcam_cam_url(string $key): string
+{
+    $key = webcam_normalize_key($key);
+    if ($key === '' || $key === 'all') {
+        return 'webcam.php';
+    }
+
+    return 'webcam.php?cam=' . rawurlencode($key);
+}
+
+function webcam_cam_label(string $key): string
+{
+    $key = webcam_normalize_key($key);
+    if ($key === 'all') {
+        return 'Webcams — all';
+    }
+    $entry = webcam_registry()[$key] ?? null;
+    if (!is_array($entry)) {
+        return 'Webcam — ' . $key;
+    }
+    $name = trim((string)($entry['name'] ?? ''));
+
+    return 'Webcam — ' . ($name !== '' ? $name : $key);
+}
+
+function webcam_status_cache_path(string $url): string
 {
     $dir = SIGNAGE_ROOT . '/cache';
     if (!is_dir($dir)) {
         @mkdir($dir, 0775, true);
     }
 
-    return $dir . '/webcam_embed_status.json';
+    return $dir . '/webcam_probe_' . substr(sha1($url), 0, 16) . '.json';
 }
 
 /** @return array{last_ok:?int,last_fail:?int,last_probe:?int} */
-function webcam_status_read_cache(): array
+function webcam_status_read_cache(string $url): array
 {
-    $f = webcam_status_cache_path();
+    $f = webcam_status_cache_path($url);
     if (!is_file($f)) {
         return ['last_ok' => null, 'last_fail' => null, 'last_probe' => null];
     }
@@ -60,36 +283,36 @@ function webcam_status_read_cache(): array
 }
 
 /** @param array{last_ok:?int,last_fail:?int,last_probe:?int} $data */
-function webcam_status_write_cache(array $data): void
+function webcam_status_write_cache(string $url, array $data): void
 {
-    @file_put_contents(webcam_status_cache_path(), json_encode([
+    @file_put_contents(webcam_status_cache_path($url), json_encode([
         'last_ok' => $data['last_ok'],
         'last_fail' => $data['last_fail'],
         'last_probe' => $data['last_probe'],
     ], JSON_UNESCAPED_SLASHES), LOCK_EX);
 }
 
-function webcam_probe_embed(?string $url = null): bool
+function webcam_probe_url(string $url, string $kind = 'iframe'): bool
 {
-    $url = $url ?? webcam_embed_url();
-    if ($url === null) {
-        return false;
-    }
-    if (!function_exists('curl_init')) {
+    $url = webcam_validate_url($url);
+    if ($url === null || !function_exists('curl_init')) {
         return false;
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_NOBODY => true,
+        CURLOPT_RETURNTRANSFER => $kind === 'image',
+        CURLOPT_NOBODY => $kind !== 'image',
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_USERAGENT => 'HomeSignage/1.0',
     ]);
-    curl_exec($ch);
+    $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);
+    if ($kind === 'image') {
+        return $err === '' && $code >= 200 && $code < 400 && is_string($body) && $body !== '';
+    }
 
     return $err === '' && $code >= 200 && $code < 400;
 }
@@ -97,36 +320,31 @@ function webcam_probe_embed(?string $url = null): bool
 /**
  * @return array{online:bool,skip_rotation:bool,embed_configured:bool}
  */
-function webcam_embed_status(): array
+function webcam_url_status(string $url, string $kind = 'iframe'): array
 {
-    static $mem = null;
-    if ($mem !== null) {
-        return $mem;
-    }
-
-    $url = webcam_embed_url();
+    $url = webcam_validate_url($url);
     if ($url === null) {
-        return $mem = [
+        return [
             'online' => false,
             'skip_rotation' => true,
             'embed_configured' => false,
         ];
     }
 
-    $cache = webcam_status_read_cache();
+    $cache = webcam_status_read_cache($url);
     $now = time();
     $needsProbe = ($cache['last_probe'] ?? null) === null
         || ($now - (int)$cache['last_probe']) >= WEBCAM_PROBE_TTL_SEC;
 
     if ($needsProbe) {
-        $ok = webcam_probe_embed($url);
+        $ok = webcam_probe_url($url, $kind);
         if ($ok) {
             $cache['last_ok'] = $now;
         } else {
             $cache['last_fail'] = $now;
         }
         $cache['last_probe'] = $now;
-        webcam_status_write_cache($cache);
+        webcam_status_write_cache($url, $cache);
     }
 
     $lastOk = $cache['last_ok'];
@@ -138,14 +356,64 @@ function webcam_embed_status(): array
         || ($okAgeMin !== null && $okAgeMin >= WEBCAM_SKIP_MIN_AGE_MIN)
     );
 
-    return $mem = [
+    return [
         'online' => $online,
         'skip_rotation' => $skipRotation,
         'embed_configured' => true,
     ];
 }
 
-function webcam_skip_rotation(): bool
+function webcam_parse_cam_from_rotation_url(string $url): string
 {
-    return webcam_embed_status()['skip_rotation'];
+    if (preg_match('/[?&]cam=([^&#]+)/i', $url, $m)) {
+        return webcam_normalize_key(rawurldecode($m[1]));
+    }
+
+    return webcam_normalize_key((string)cfg('webcam.ACTIVE', 'gvsu')) ?: 'gvsu';
+}
+
+function webcam_skip_rotation(?string $rotationUrl = null): bool
+{
+    $pick = $rotationUrl !== null ? webcam_parse_cam_from_rotation_url($rotationUrl) : webcam_active_key();
+    $registry = webcam_registry();
+    if ($pick === 'all') {
+        if ($registry === []) {
+            return true;
+        }
+        $anyOnline = false;
+        foreach ($registry as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $status = webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'));
+            if (!$status['skip_rotation']) {
+                $anyOnline = true;
+                break;
+            }
+        }
+
+        return !$anyOnline;
+    }
+
+    $entry = $registry[$pick] ?? null;
+    if (!is_array($entry)) {
+        return true;
+    }
+
+    return webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'))['skip_rotation'];
+}
+
+/** @deprecated */
+function webcam_embed_status(): array
+{
+    $cams = webcam_active_cameras();
+    if ($cams === []) {
+        return [
+            'online' => false,
+            'skip_rotation' => true,
+            'embed_configured' => false,
+        ];
+    }
+
+    return webcam_url_status((string)$cams[0]['url'], (string)$cams[0]['kind']);
 }

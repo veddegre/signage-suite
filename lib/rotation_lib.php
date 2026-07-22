@@ -1228,7 +1228,7 @@ function rotation_page_seasonal_skip(string $url, string $screen = 'main'): bool
         }
         require_once $lib;
 
-        return webcam_skip_rotation();
+        return webcam_skip_rotation($url);
     }
 
     return false;
@@ -1581,6 +1581,13 @@ function rotation_page_label(string $url): string
         return 'Announcement — ' . announce_item_label($key);
     }
 
+    if (preg_match('/^webcam\.php(?:\?cam=([^&]+))?/i', $url, $m)) {
+        require_once __DIR__ . '/webcam_lib.php';
+        $key = isset($m[1]) ? webcam_normalize_key(rawurldecode($m[1])) : webcam_normalize_key((string)cfg('webcam.ACTIVE', 'gvsu'));
+
+        return webcam_cam_label($key !== '' ? $key : 'gvsu');
+    }
+
     if (preg_match('/^web\.php(?:\?d=([^&]+))?/', $url, $m)) {
         require_once __DIR__ . '/web_lib.php';
         $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(web_sites_config()) ?: 'main');
@@ -1614,7 +1621,7 @@ function rotation_page_label(string $url): string
     static $boards = [
         'index.php' => 'Weather',
         'lake.php' => 'Lake Michigan',
-        'webcam.php' => 'Grand Haven webcam',
+        'webcam.php' => 'Webcam',
         'bridgecam.php' => 'Mackinac Bridge cam',
         'photo.php' => 'Photo conditions',
         'air.php' => 'Air & pollen',
@@ -1822,7 +1829,10 @@ function rotation_quick_add_items(): array
     $items = [
         ['label' => 'Weather', 'url' => 'index.php', 'dwell' => 180, 'group' => 'Boards'],
         ['label' => 'Lake Michigan', 'url' => 'lake.php', 'dwell' => 60, 'group' => 'Boards'],
-        ['label' => 'Grand Haven webcam', 'url' => 'webcam.php', 'dwell' => 120, 'group' => 'Boards'],
+        ['label' => 'Webcams (rotate all)', 'url' => 'webcam.php?cam=all', 'dwell' => 120, 'group' => 'Boards'],
+        ['label' => 'GVSU webcam', 'url' => 'webcam.php?cam=gvsu', 'dwell' => 120, 'group' => 'Boards'],
+        ['label' => 'WetMet webcam', 'url' => 'webcam.php?cam=wetmet', 'dwell' => 90, 'group' => 'Boards'],
+        ['label' => 'Grand Haven webcam', 'url' => 'webcam.php?cam=grandhaven', 'dwell' => 120, 'group' => 'Boards'],
         ['label' => 'Mackinac Bridge cam', 'url' => 'bridgecam.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Photo conditions', 'url' => 'photo.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Air & pollen', 'url' => 'air.php', 'dwell' => 60, 'group' => 'Boards'],

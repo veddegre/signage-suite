@@ -10,7 +10,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 |-------|-------|------|--------------|------|
 | Weather & home | Weather | `index.php` | `index.php` | OpenWeatherMap |
 | | Lake Michigan | `lake.php` | `lake.php` | — |
-| | Webcam | `webcam.php` | `webcam.php` | — |
+| | Webcam | `webcam.php` | `webcam.php?cam=gvsu` etc. | — |
 | | Mackinac Bridge cam | `bridgecam.php` | `bridgecam.php` | — |
 | | Photo conditions | `photo.php` | `photo.php` | OpenWeatherMap |
 | | Air & pollen | `air.php` | `air.php` | Google Pollen (optional) |
@@ -73,15 +73,34 @@ Nearshore buoys run in winter (~Nov–Apr); the board notes when they are offlin
 
 **Rotation:** if the buoy has reported no fresh data for **24 hours**, `lake.php` is automatically skipped in rotation until readings return (saved playlist unchanged).
 
-### webcam.php — Grand Haven Beach Webcam
+### webcam.php — Live Webcams
 
-Full-screen EarthCam embed from [Surf Grand Haven](https://surfgrandhaven.com) (MACkite).
+Full-screen live feeds from a built-in registry plus any cameras you add in admin.
 
-**Setup:** admin → **Webcam** — paste iframe `src` if the default breaks. Optional title + clock overlay.
+**Built-in cameras:**
 
-**Rotation:** long dwell (120s+). Default hourly iframe reload (`RELOAD_SEC`) clears memory on long kiosk sessions — set `0` to disable.
+| Key | Source |
+|-----|--------|
+| `gvsu` | [GVSU campus](https://webcams.gvsu.edu) live player (iframe) |
+| `wetmet` | [WetMet](https://wetmet.net) station still image (auto-refreshes) |
+| `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
 
-If the embed URL is missing or fails probe checks for **24 hours**, `webcam.php` is auto-skipped in rotation until the stream responds again.
+**Setup:** admin → **Webcam** — set **Default camera** (one feed or **Rotate all**), optional overlay title, image refresh interval, and rotation dwell. Under **Cameras**, override built-in names/URLs or add rows with a unique **Key** (letters, numbers, `_`, `-`).
+
+**Rotation URLs:**
+
+- `webcam.php` — uses **Default camera** from settings
+- `webcam.php?cam=gvsu` — GVSU only
+- `webcam.php?cam=wetmet` — WetMet only
+- `webcam.php?cam=grandhaven` — Grand Haven only
+- `webcam.php?cam=all` — rotate every camera in the registry on one board slot
+- `webcam.php?cam=yourkey` — a custom camera you added
+
+Quick-add presets in **Rotation** include all four built-ins plus **Webcams (rotate all)**.
+
+**Rotation:** 90–120s dwell works well. Iframe streams use an hourly reload backstop (`RELOAD_SEC`); still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 60s). Set `RELOAD_SEC` to `0` to disable iframe reload.
+
+If a specific camera URL fails probe checks for **24 hours**, that rotation entry is auto-skipped (`?cam=all` skips only when every camera is down). Legacy single `EMBED_URL` settings migrate to a `legacy` camera when no **Cameras** rows exist yet.
 
 ### bridgecam.php — Mackinac Bridge Cam
 
