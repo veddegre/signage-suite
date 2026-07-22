@@ -120,12 +120,11 @@ $camJson['streamIframe'] = (string)$cam['url'];
     <h2>Webcam not available</h2>
     <?php if ($usesStream && trim((string)$cam['url']) !== ''): ?>
     <p>This camera&rsquo;s live stream is offline or stale at the source
-       (<?= h((string)$cam['name']) ?>). Other GVSU campus feeds may still be live on
-       <a href="https://www.gvsu.edu/webcams.htm" target="_blank" rel="noopener" style="color:var(--beacon)">gvsu.edu/webcams</a>.
+       (<?= h((string)$cam['name']) ?>).
        Add a working feed under admin → <strong>Webcam</strong>, or pick another quick-add entry in <strong>Rotation</strong>.</p>
     <?php else: ?>
     <p>Add cameras in admin → <strong>Webcam</strong>, then add each feed to rotation separately —
-       e.g. <code>webcam.php?cam=grpm</code>, <code>webcam.php?cam=gvsu</code>.</p>
+       e.g. <code>webcam.php?cam=grpm</code>, <code>webcam.php?cam=grandhaven</code>.</p>
     <?php endif; ?>
   </div>
   <?php endif; ?>

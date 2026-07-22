@@ -127,8 +127,7 @@ All boards are configured in **admin.php**. Parameterized URLs plug into rotatio
 rss.php?feed=krebs              glance.php
 grafana.php?d=homelab           calendar.php
 zabbix.php?d=network            splunk.php?d=soc
-webcam.php?cam=gvsu             webcam.php?cam=grpm
-webcam.php?cam=grandhaven       meals.php
+webcam.php?cam=grpm             webcam.php?cam=grandhaven
 ransomware.php                  phish.php
 video.php?v=drone               slides.php?slide=birthday.png
 ```
@@ -209,19 +208,17 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 | Key | Source |
 |-----|--------|
-| `gvsu` | [GVSU campus](https://webcams.gvsu.edu) live player (iframe) |
 | `grpm` | [Grand Rapids Public Museum](https://www.wmta.org/live-west-michigan-camera-gallery/grand-rapids-public-museum-west-michigan-live-camera/) live stream (WMTA / WetMet iframe) |
 | `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
 
 Add each camera you want as its own playlist line — intermix with weather, Zabbix, Splunk, etc.:
 
 ```
-webcam.php?cam=gvsu
 webcam.php?cam=grpm
 webcam.php?cam=grandhaven
 ```
 
-Admin → **Webcam** → **Cameras** — override built-in names/URLs or add rows with a unique **Key** (`?cam=yourkey`). Each camera appears in **Rotation → Add boards** quick-add (e.g. **Webcam — GVSU Campus**). Set **Off** on a row to hide it from quick-add. Still-image cameras refresh on a timer; iframe streams use an hourly reload backstop. **Rotation auto-skips** a camera after **24 hours** of failed probe checks and restores it when the feed responds again. Do not use plain `webcam.php` without `?cam=` — pick a keyed slot instead.
+Admin → **Webcam** → **Cameras** — override built-in names/URLs or add rows with a unique **Key** (`?cam=yourkey`). Each camera appears in **Rotation → Add boards** quick-add (e.g. **Webcam — GR Public Museum**). Set **Off** on a row to hide it from quick-add. Still-image cameras refresh on a timer; iframe streams use an hourly reload backstop. **Rotation auto-skips** a camera after **24 hours** of failed probe checks and restores it when the feed responds again. Do not use plain `webcam.php` without `?cam=` — pick a keyed slot instead.
 
 **Mackinac Bridge cam** (`bridgecam.php`) — Four still-image views from the Mackinac Bridge Authority; one camera or rotate all four on a single board (unlike `webcam.php`, which is one cam per rotation entry). Admin → **Mackinac Bridge Cam** — no API key.
 

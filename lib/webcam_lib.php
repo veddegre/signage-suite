@@ -9,16 +9,32 @@ const WEBCAM_PROBE_TTL_SEC = 1800;
 const WEBCAM_ONLINE_MAX_AGE_MIN = 60;
 const WEBCAM_SKIP_MIN_AGE_MIN = 1440;
 
+/** Camera keys removed from the registry, rotation quick-add, and playlists. */
+function webcam_retired_keys(): array
+{
+    return ['gvsu'];
+}
+
+function webcam_is_retired_key(string $key): bool
+{
+    return in_array(webcam_normalize_key($key), webcam_retired_keys(), true);
+}
+
+/** Whether a rotation playlist URL targets a retired webcam slot. */
+function webcam_rotation_url_is_retired(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || !preg_match('/[?&]cam=([^&#]+)/i', $url, $m)) {
+        return false;
+    }
+
+    return webcam_is_retired_key(rawurldecode($m[1]));
+}
+
 /** @return array<string,array<string,mixed>> Built-in cameras (always available; overridden by saved CAMS rows). */
 function webcam_default_cameras(): array
 {
     return [
-        'gvsu' => [
-            'name' => 'GVSU — Kindschi Hall',
-            'url' => 'https://webcams.gvsu.edu:5443/live/play.html?id=dtSQveui8yRVSKvb153147654438870',
-            'kind' => 'stream',
-            'attribution' => 'GVSU',
-        ],
         'grpm' => [
             'name' => 'GR Public Museum',
             'url' => 'https://api.wetmet.net/widgets/stream/frame.php?uid=7bcde7d22d900d7061461d4953482c4b',
@@ -561,18 +577,23 @@ function webcam_registry(): array
     }
 
     $out = webcam_default_cameras();
+    foreach (array_keys($out) as $key) {
+        if (webcam_is_retired_key((string)$key)) {
+            unset($out[$key]);
+        }
+    }
     $saved = cfg('webcam.CAMS', []);
     if (is_array($saved)) {
         foreach ($saved as $k => $row) {
             if (!is_array($row)) {
                 continue;
             }
-            if (!empty($row['off'])) {
-                unset($out[webcam_normalize_key((string)$k)]);
+            $key = webcam_normalize_key((string)($row['_key'] ?? $k));
+            if ($key === '' || webcam_is_retired_key($key)) {
                 continue;
             }
-            $key = webcam_normalize_key((string)($row['_key'] ?? $k));
-            if ($key === '') {
+            if (!empty($row['off'])) {
+                unset($out[$key]);
                 continue;
             }
             $entry = webcam_normalize_entry($row, is_array($out[$key] ?? null) ? $out[$key] : null);
@@ -583,7 +604,9 @@ function webcam_registry(): array
     }
 
     foreach ($out as $key => $entry) {
-        if (!is_array($entry) || trim((string)($entry['url'] ?? '')) === '') {
+        if (webcam_is_retired_key((string)$key)
+            || !is_array($entry)
+            || trim((string)($entry['url'] ?? '')) === '') {
             unset($out[$key]);
         }
     }
@@ -934,10 +957,13 @@ function webcam_parse_cam_from_rotation_url(string $url): string
 
 function webcam_skip_rotation(?string $rotationUrl = null): bool
 {
+    if ($rotationUrl !== null && webcam_rotation_url_is_retired($rotationUrl)) {
+        return true;
+    }
     $pick = $rotationUrl !== null
         ? webcam_parse_cam_from_rotation_url($rotationUrl)
         : (string)(array_key_first(webcam_registry()) ?? '');
-    if ($pick === '') {
+    if ($pick === '' || webcam_is_retired_key($pick)) {
         return true;
     }
 

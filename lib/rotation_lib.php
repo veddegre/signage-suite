@@ -1041,13 +1041,15 @@ function rotation_resolved_playlist_pages(string $screen = 'main'): array
             return rotation_resolved_playlist_pages('main');
         }
 
-        return rotation_inherited_playlist_pages('main');
+        return rotation_strip_retired_webcam_pages(rotation_inherited_playlist_pages('main'));
     }
     if (!rotation_playlist_has_board_pages($own)) {
-        return rotation_combine_inherited_boards_with_own_media($screen, $own);
+        return rotation_strip_retired_webcam_pages(
+            rotation_combine_inherited_boards_with_own_media($screen, $own)
+        );
     }
 
-    return $own;
+    return rotation_strip_retired_webcam_pages($own);
 }
 
 /**
@@ -1390,7 +1392,6 @@ function rotation_starter_pages(): array
     return [
         ['url' => 'index.php',   'dwell' => 180],
         ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
-        ['url' => 'webcam.php?cam=gvsu', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
         ['url' => 'webcam.php?cam=grpm', 'dwell' => 120, 'from' => 7, 'to' => 22],
         ['url' => 'air.php',     'dwell' => 60,  'from' => 6,  'to' => 22],
@@ -1430,6 +1431,21 @@ function rotation_pages_from_json_string(string $raw): ?array
     return $out;
 }
 
+/** Drop rotation rows that target retired webcam keys (e.g. discontinued feeds). */
+function rotation_strip_retired_webcam_pages(array $pages): array
+{
+    require_once __DIR__ . '/webcam_lib.php';
+
+    return array_values(array_filter($pages, static function ($page) {
+        if (!is_array($page)) {
+            return false;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+
+        return $url !== '' && !webcam_rotation_url_is_retired($url);
+    }));
+}
+
 /** Parse posted rotation page rows from admin forms. @return list<array<string,mixed>> */
 function rotation_parse_pages_rows(array $rows): array
 {
@@ -1464,7 +1480,8 @@ function rotation_parse_pages_rows(array $rows): array
         }
         $outV[] = $obj;
     }
-    return $outV;
+
+    return rotation_strip_retired_webcam_pages($outV);
 }
 
 /** Dwell seconds for one playlist row — missing/zero defaults to 60. */
@@ -1589,7 +1606,7 @@ function rotation_page_label(string $url): string
             ? webcam_normalize_key(rawurldecode($m[1]))
             : (string)(array_key_first(webcam_registry()) ?? '');
 
-        return webcam_cam_label($key !== '' ? $key : 'gvsu');
+        return webcam_cam_label($key !== '' ? $key : (string)(array_key_first(webcam_registry()) ?? 'webcam'));
     }
 
     if (preg_match('/^web\.php(?:\?d=([^&]+))?/', $url, $m)) {
