@@ -173,6 +173,10 @@ if ($authed && !signage_admin_idle_check()) {
     $flash = 'Session expired from inactivity — log in again.';
     $flashOk = false;
 }
+if ($authed) {
+    admin_sync_session_user();
+    $authed = admin_is_authenticated();
+}
 
 // ── Save handler ─────────────────────────────────────────────────────────────
 $board = preg_replace('/[^a-z0-9_\-]/i', '', (string)($_GET['board'] ?? $_POST['board'] ?? ''));

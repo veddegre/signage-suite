@@ -13,7 +13,7 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
-    'rotation', 'slides', 'rotator', 'rss', 'web', 'video',
+    'rotation', 'slides', 'rotator', 'rss', 'web', 'video', 'webcam',
     'grafana', 'splunk', 'splunkdash', 'zabbix', 'announce', 'calendar', 'account',
 ];
 
@@ -537,6 +537,41 @@ function admin_current_user(): ?array
 {
     $user = $_SESSION['admin_user'] ?? null;
     return is_array($user) ? $user : null;
+}
+
+/**
+ * Reload role, screens, and disabled flag from users.json into the session.
+ * Super admins use this when saving Users; operators pick up new display assignments
+ * without logging out again.
+ */
+function admin_sync_session_user(): void
+{
+    if (empty($_SESSION['auth'])) {
+        return;
+    }
+    $current = admin_current_user();
+    if (!is_array($current)) {
+        return;
+    }
+    $id = (string)($current['id'] ?? '');
+    if ($id === '') {
+        admin_logout_user();
+
+        return;
+    }
+    $fresh = users_find_by_id($id);
+    if ($fresh === null || !empty($fresh['disabled'])) {
+        admin_logout_user();
+
+        return;
+    }
+    $public = users_public_row($fresh);
+    if ($public === null) {
+        admin_logout_user();
+
+        return;
+    }
+    $_SESSION['admin_user'] = $public;
 }
 
 function admin_is_authenticated(): bool

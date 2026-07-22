@@ -509,7 +509,43 @@ function webcam_registry(): array
         }
     }
 
+    $out = webcam_apply_builtin_operator_access($out);
+
     return $cache = $out;
+}
+
+/**
+ * Built-in camera feeds (no owner) are shared with display operators — schema
+ * documents them as always available for rotation quick-add and kiosk use.
+ *
+ * @param array<string,array<string,mixed>> $registry
+ * @return array<string,array<string,mixed>>
+ */
+function webcam_apply_builtin_operator_access(array $registry): array
+{
+    $defaults = webcam_default_cameras();
+    foreach ($registry as $key => $entry) {
+        if (!is_array($entry) || !isset($defaults[$key])) {
+            continue;
+        }
+        if (trim((string)($entry['owner'] ?? '')) !== '') {
+            continue;
+        }
+        $roles = $entry['shared_roles'] ?? [];
+        if (!is_array($roles)) {
+            $roles = [];
+        }
+        foreach (['operator', 'infra'] as $role) {
+            if (!in_array($role, $roles, true)) {
+                $roles[] = $role;
+            }
+        }
+        sort($roles);
+        $entry['shared_roles'] = $roles;
+        $registry[$key] = $entry;
+    }
+
+    return $registry;
 }
 
 /** @return array<string,array<string,mixed>> */
