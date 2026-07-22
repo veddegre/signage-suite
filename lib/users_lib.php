@@ -1116,6 +1116,12 @@ function admin_entry_visible_for_user(?array $entry, ?string $userId): bool
     }
 
     $role = admin_user_role_for_id($userId);
+    if ($role === null && function_exists('admin_user_id') && admin_user_id() === $userId) {
+        $sessionUser = admin_current_user();
+        if (is_array($sessionUser)) {
+            $role = users_normalize_role((string)($sessionUser['role'] ?? ''));
+        }
+    }
     if ($role !== null && in_array($role, admin_entry_shared_roles($entry), true)) {
         return true;
     }

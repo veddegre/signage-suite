@@ -29,6 +29,7 @@ require_once __DIR__ . '/lib/hero_strip_lib.php';
 require_once __DIR__ . '/lib/emergency_lib.php';
 require_once __DIR__ . '/lib/web_lib.php';
 require_once __DIR__ . '/lib/users_lib.php';
+require_once __DIR__ . '/lib/webcam_lib.php';
 require_once __DIR__ . '/lib/sso_lib.php';
 require_once __DIR__ . '/lib/audit_lib.php';
 require_once __DIR__ . '/lib/screen_scope_lib.php';
@@ -5598,7 +5599,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <?php if ($f['type'] === 'rows'):
               $cols = $f['columns'];
               $rows = [];
-              if (is_array($val)) {
+              if ($board === 'webcam' && $f['key'] === 'CAMS') {
+                  $rows = webcam_admin_cams_rows();
+              } elseif (is_array($val)) {
                   if (!empty($f['keyed'])) {
                       if (!admin_is_super()) {
                           $val = !empty($f['scalar'])
@@ -5647,6 +5650,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <?php foreach ($cols as $c): ?><th><?= h($c['label']) ?></th><?php endforeach; ?>
                   <?php if (($board === 'rss' && $f['key'] === 'FEEDS')
                       || ($board === 'web' && $f['key'] === 'SITES')
+                      || ($board === 'webcam' && $f['key'] === 'CAMS')
                       || (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS')): ?><th></th><?php endif; ?>
                   <?php if (admin_is_super()): ?><th>Access</th><?php endif; ?>
                   <th></th>
@@ -5656,16 +5660,17 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     if ($hasKeyCol && ($row['key'] ?? '') === '' && ($row['name'] ?? '') !== '') {
                         $row['key'] = $row['name'];
                     }
+                    $camReadonly = $board === 'webcam' && $f['key'] === 'CAMS' && !empty($row['_readonly']);
                   ?>
-                    <tr>
+                    <tr<?= $camReadonly ? ' class="webcam-row-readonly"' : '' ?>>
                       <?php foreach ($cols as $c): ?>
                         <td class="<?= !empty($c['wide']) ? 'wide' : '' ?>"<?= ($c['type'] ?? '') === 'check' ? ' style="text-align:center;vertical-align:middle"' : '' ?>>
                           <?php if (($c['type'] ?? '') === 'check'): ?>
                             <input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                                    name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
-                                   <?= !empty($row[$c['key']]) ? 'checked' : '' ?>>
+                                   <?= !empty($row[$c['key']]) ? 'checked' : '' ?><?= $camReadonly ? ' disabled' : '' ?>>
                           <?php elseif (($c['type'] ?? '') === 'select'): ?>
-                            <select name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]">
+                            <select name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"<?= $camReadonly ? ' disabled' : '' ?>>
                               <option value=""></option>
                               <?php foreach ($c['options'] as $o): ?>
                                 <option value="<?= h($o) ?>" <?= ($row[$c['key']] ?? '') === $o ? 'selected' : '' ?>><?= h($o) ?></option>
@@ -5696,7 +5701,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                           <?php else: ?>
                             <input type="text" name="<?= h($f['key']) ?>[<?= $ri ?>][<?= h($c['key']) ?>]"
                                    value="<?= h((string)($row[$c['key']] ?? '')) ?>"
-                                   placeholder="<?= h($c['placeholder'] ?? '') ?>">
+                                   placeholder="<?= h($c['placeholder'] ?? '') ?>"<?= $camReadonly ? ' readonly' : '' ?>>
                           <?php endif; ?>
                         </td>
                       <?php endforeach; ?>
@@ -5736,6 +5741,14 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $annPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($annPrev !== '' ? $annPrev : '#') ?>" target="_blank" rel="noopener" data-board-preview>Preview ↗</a>
                       </td>
+                      <?php elseif ($board === 'webcam' && $f['key'] === 'CAMS'):
+                        $camKey = trim((string)($row['_key'] ?? ''));
+                        $camPrev = $camKey !== '' ? webcam_cam_url($camKey) : '';
+                      ?>
+                      <td>
+                        <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $camPrev === '' ? ';display:none' : '' ?>"
+                           href="<?= h($camPrev !== '' ? $camPrev : '#') ?>" target="_blank" rel="noopener">Preview ↗</a>
+                      </td>
                       <?php elseif (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS'):
                         $dashKey = trim((string)($row['_key'] ?? ''));
                         $dashPrev = $dashKey !== '' ? ($board === 'grafana' ? grafana_preview_url($dashKey) : splunkdash_preview_url($dashKey)) : '';
@@ -5761,7 +5774,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                         <?php admin_entry_sharing_html($f['key'] . '[' . (int)$ri . ']', $shareEntry, true); ?>
                       </td>
                       <?php endif; ?>
-                      <td><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button></td>
+                      <td><?php if ($camReadonly): ?><span class="pill ok" title="Built-in feed — add from Rotation → Add boards">Built-in</span><?php else: ?><button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button><?php endif; ?></td>
                     </tr>
                   <?php endforeach; ?>
                 </tbody>
@@ -5772,6 +5785,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <div class="cal-legend-preview" id="calLegendPreview" aria-label="Wall legend preview"></div>
               <?php endif; ?>
               <?php if (!empty($f['help'])): ?><div class="help"><?= h($f['help']) ?></div><?php endif; ?>
+              <?php if ($board === 'webcam' && $f['key'] === 'CAMS' && !admin_is_super()): ?>
+              <div class="help" style="margin-top:8px">Built-in cameras are read-only here. Add them to a display under <strong>Rotation</strong> → <strong>Add boards</strong> (search for “Webcam”), or add your own camera with <strong>+ Add row</strong> above.</div>
+              <?php endif; ?>
 
             <?php else:
               admin_field($f, $val, $board);

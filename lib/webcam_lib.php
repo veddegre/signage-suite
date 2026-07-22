@@ -34,6 +34,11 @@ function webcam_default_cameras(): array
     ];
 }
 
+function webcam_is_builtin_key(string $key): bool
+{
+    return isset(webcam_default_cameras()[webcam_normalize_key($key)]);
+}
+
 function webcam_normalize_key(string $key): string
 {
     $key = strtolower(preg_replace('/[^a-z0-9_-]/', '', $key));
@@ -515,8 +520,9 @@ function webcam_registry(): array
 }
 
 /**
- * Built-in camera feeds (no owner) are shared with display operators — schema
- * documents them as always available for rotation quick-add and kiosk use.
+ * Built-in camera feeds are shared with display operators — schema documents them
+ * as always available for rotation quick-add and kiosk use (even when a super
+ * admin saved an override row with an owner).
  *
  * @param array<string,array<string,mixed>> $registry
  * @return array<string,array<string,mixed>>
@@ -525,10 +531,7 @@ function webcam_apply_builtin_operator_access(array $registry): array
 {
     $defaults = webcam_default_cameras();
     foreach ($registry as $key => $entry) {
-        if (!is_array($entry) || !isset($defaults[$key])) {
-            continue;
-        }
-        if (trim((string)($entry['owner'] ?? '')) !== '') {
+        if (!is_array($entry) || !isset($defaults[$key]) || !empty($entry['off'])) {
             continue;
         }
         $roles = $entry['shared_roles'] ?? [];
@@ -546,6 +549,38 @@ function webcam_apply_builtin_operator_access(array $registry): array
     }
 
     return $registry;
+}
+
+/**
+ * Rows for the Webcam admin Cameras table — merged registry, including built-ins
+ * operators may add to rotation even when they are not stored under webcam.CAMS.
+ *
+ * @return list<array<string,mixed>>
+ */
+function webcam_admin_cams_rows(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    $rows = [];
+    foreach (webcam_registry() as $key => $entry) {
+        if (!is_array($entry) || trim((string)($entry['url'] ?? '')) === '' || !empty($entry['off'])) {
+            continue;
+        }
+        if (!admin_is_super() && !admin_entry_visible($entry)) {
+            continue;
+        }
+        $row = ['_key' => $key] + $entry;
+        if (webcam_is_builtin_key($key)) {
+            $row['_builtin'] = true;
+        }
+        if (!admin_is_super() && admin_entry_owner($entry) !== admin_user_id()) {
+            $row['_readonly'] = true;
+        }
+        $rows[] = $row;
+    }
+    usort($rows, static fn($a, $b) => strcmp((string)($a['_key'] ?? ''), (string)($b['_key'] ?? '')));
+
+    return $rows;
 }
 
 /** @return array<string,array<string,mixed>> */
