@@ -128,6 +128,7 @@ rss.php?feed=krebs              glance.php
 grafana.php?d=homelab           calendar.php
 zabbix.php?d=network            splunk.php?d=soc
 webcam.php?cam=grpm             webcam.php?cam=grandhaven
+camwall.php                     traffic.php
 ransomware.php                  phish.php
 video.php?v=drone               slides.php?slide=birthday.png
 ```
@@ -136,7 +137,7 @@ video.php?v=drone               slides.php?slide=birthday.png
 
 | Group | Highlights | Keys |
 |-------|------------|------|
-| **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, **today at a glance**, meal calendar, traffic | OWM, TomTom, Google Pollen (optional) |
+| **Weather & home** | Weather, lake, webcam, **MDOT cams**, Mackinac Bridge cam, photo, air, UV index, sports, calendar, **today at a glance**, meal calendar, traffic | OWM, TomTom, Google Pollen (optional) |
 | **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides (upload + **slide creator** with occasion templates — dinner menu, snow day, anniversary, …), RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
@@ -219,6 +220,34 @@ webcam.php?cam=grandhaven
 ```
 
 Admin → **Webcam** → **Cameras** — override built-in names/URLs or add rows with a unique **Key** (`?cam=yourkey`). Each camera appears in **Rotation → Add boards** quick-add (e.g. **Webcam — GR Public Museum**). Set **Off** on a row to hide it from quick-add. Still-image cameras refresh on a timer; iframe streams use an hourly reload backstop. **Rotation auto-skips** a camera after **24 hours** of failed probe checks and restores it when the feed responds again. Do not use plain `webcam.php` without `?cam=` — pick a keyed slot instead.
+
+**MDOT cams** (`camwall.php`) — A **3×4 grid** of live still-image traffic cameras on one rotation slot (unlike `webcam.php`, which is one full-screen feed per playlist line). Ships with a built-in **Allendale ↔ Grand Rapids** corridor preset on **I-96**, **I-196**, and **US-131** (MDOT [Mi Drive](https://mdotjboss.state.mi.us/MiDrive/map) snapshot URLs, proxied server-side via `camwall_img.php` so the kiosk never hits MDOT directly). Labels sit at the top of each tile so the weather/news ticker does not cover them.
+
+**Setup:** no API key — add `camwall.php` to rotation (~90–120s dwell pairs well with **`traffic.php`** TomTom flow map). Admin → **MDOT Cams** → set title/subtitle, grid size (**Cols** × **Rows**, default 3×4 = 12 tiles), and refresh interval (default 45s).
+
+**Customize the built-in wall** — Under **Cameras**, each row overrides or extends the preset:
+
+| Column | Purpose |
+|--------|---------|
+| **Key** | Slot id (e.g. `i96-24th`). Match a built-in key to override that tile; use a new key to add one. |
+| **Label** | Name under the route badge |
+| **Route badge** | Short tag shown on the tile (e.g. `I-96`, `US-131`) |
+| **Snapshot URL** | Direct `.jpg` still URL — see below |
+| **Order** | Sort order (lower = earlier in the grid, top-left first) |
+| **Off** | Hide this slot |
+
+Set **Off** on a built-in key to drop it from the grid. Cameras beyond **Cols × Rows** are not shown. Duplicate snapshot URLs are deduplicated automatically.
+
+**Add your own cameras (any install):**
+
+1. Find a **direct still-image URL** (not the Mi Drive map page — that is not embeddable). For Michigan MDOT feeds, open [Mi Drive → Cameras](https://mdotjboss.state.mi.us/MiDrive/cameras), pick a camera, and copy the image `src` (usually `https://micamerasimages.net/thumbs/….flv.jpg?item=1`). Some RWIS cams use `https://mdotjboss.state.mi.us/docs/drive/camfiles/rwis/<id>.jpg`.
+2. Admin → **MDOT Cams** → **Cameras** → add a row with a unique **Key** (e.g. `us131-market`), **Label**, optional **Route badge**, **Snapshot URL**, and **Order**.
+3. Save, then open `camwall.php` in a browser to confirm the tile loads.
+4. Add **`camwall.php`** to your rotation playlist (or use quick-add **MDOT Cams**).
+
+To replace the whole corridor for another region, add rows for the cameras you want (with sort order 1–12), set **Off** on any built-in keys you do not need, or clear unused defaults by overriding them with your URLs under the same keys. Only **`micamerasimages.net`** and **`mdotjboss.state.mi.us`** snapshot hosts are allowed (server-side safety check).
+
+MDOT feeds are refreshed stills, not video; thumbs are modest resolution (~720×480 source) — fine for “is traffic moving?” on a wall. [Mi Drive disclaimer](https://www.michigan.gov/mdot/about/mi-drive-disclaimer) applies.
 
 **Mackinac Bridge cam** (`bridgecam.php`) — Four still-image views from the Mackinac Bridge Authority; one camera or rotate all four on a single board (unlike `webcam.php`, which is one cam per rotation entry). Admin → **Mackinac Bridge Cam** — no API key.
 
