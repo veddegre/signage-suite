@@ -21,9 +21,9 @@ function webcam_default_cameras(): array
         ],
         'grpm' => [
             'name' => 'GR Public Museum',
-            'url' => 'https://api.wetmet.net/widgets/stream/frame.php?uid=7c402384eafaef2215a0e9f556797ee8&width=1920&height=1080',
-            'kind' => 'stream',
-            'attribution' => 'Grand Rapids Public Museum',
+            'url' => 'https://api.wetmet.net/widgets/stream/frame.php?uid=7bcde7d22d900d7061461d4953482c4b',
+            'kind' => 'iframe',
+            'attribution' => 'Grand Rapids Public Museum · WMTA',
         ],
         'grandhaven' => [
             'name' => 'Grand Haven Beach',
@@ -446,7 +446,7 @@ function webcam_stream_image(string $camKey): void
     exit;
 }
 
-/** Upgrade legacy GRPM still-widget saves to the live stream feed. */
+/** Upgrade legacy GRPM saves to the WMTA live stream iframe URL. */
 function webcam_apply_grpm_defaults(array $entry, string $key): array
 {
     $key = webcam_normalize_key($key);
@@ -455,14 +455,17 @@ function webcam_apply_grpm_defaults(array $entry, string $key): array
     }
     $defaults = webcam_default_cameras()['grpm'];
     $url = (string)($entry['url'] ?? '');
-    if ($url === ''
+    $kind = (string)($entry['kind'] ?? '');
+    $legacyImageUid = '7c402384eafaef2215a0e9f556797ee8';
+    $needsUpgrade = $url === ''
+        || str_contains($url, $legacyImageUid)
         || webcam_is_widget_frame_url($url)
-        || (($entry['kind'] ?? '') === 'widget')
-        || (($entry['kind'] ?? '') === 'image')) {
+        || in_array($kind, ['widget', 'image', 'stream'], true);
+    if ($needsUpgrade) {
         return array_merge($entry, [
             'name' => (string)$defaults['name'],
             'url' => (string)$defaults['url'],
-            'kind' => 'stream',
+            'kind' => (string)$defaults['kind'],
             'attribution' => (string)$defaults['attribution'],
         ]);
     }
