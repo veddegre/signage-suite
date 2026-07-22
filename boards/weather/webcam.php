@@ -30,6 +30,10 @@ $imageRefreshSec = IMAGE_REFRESH_SEC;
 $boardAttribution = trim((string)cfg('webcam.ATTRIBUTION', ''));
 $available = !$cam['off'] && trim($cam['url']) !== '';
 $attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attribution'];
+$usesImage = webcam_uses_image_tag($cam);
+$imageSrc = $usesImage ? webcam_board_image_src($cam) : '';
+$camJson = $cam;
+$camJson['imageSrc'] = $imageSrc;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -76,8 +80,8 @@ $attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attr
 <div class="board">
   <?php if ($available): ?>
   <div class="frame" id="frame">
-    <?php if ($cam['kind'] === 'image'): ?>
-    <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
+    <?php if ($usesImage): ?>
+    <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="<?= h($imageSrc) ?>">
     <?php else: ?>
     <iframe id="cam-frame" allow="autoplay; fullscreen" loading="eager"
             src="<?= h((string)$cam['url']) ?>"></iframe>
@@ -104,24 +108,19 @@ $attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attr
 <?php if ($available): ?>
 <script>
 (function(){
-  const cam = <?= json_encode($cam, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+  const cam = <?= json_encode($camJson, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
   const reloadMs = <?= (int)$reloadSec ?> * 1000;
   const imageRefreshMs = <?= (int)$imageRefreshSec ?> * 1000;
 
-  function bust(url) {
-    try {
-      const u = new URL(url, location.href);
-      u.searchParams.set('t', String(Date.now()));
-      return u.toString();
-    } catch (e) {
-      return url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-    }
+  function refreshImageSrc(base) {
+    const sep = base.indexOf('?') >= 0 ? '&' : '?';
+    return base + sep + 't=' + Date.now();
   }
 
-  if (cam.kind === 'image') {
+  if (cam.imageSrc) {
     const img = document.getElementById('cam-img');
     if (!img) return;
-    function refresh() { img.src = bust(cam.url); }
+    function refresh() { img.src = refreshImageSrc(cam.imageSrc); }
     refresh();
     setInterval(refresh, imageRefreshMs);
     return;

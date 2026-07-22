@@ -22,7 +22,7 @@ function webcam_default_cameras(): array
         'wetmet' => [
             'name' => 'WetMet Station',
             'url' => 'https://api.wetmet.net/widgets/image/frame.php?uid=7c402384eafaef2215a0e9f556797ee8',
-            'kind' => 'image',
+            'kind' => 'widget',
             'attribution' => 'WetMet',
         ],
         'grandhaven' => [
@@ -74,7 +74,7 @@ function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
         $name = 'Webcam';
     }
     $kind = strtolower(trim((string)($row['kind'] ?? ($fallback['kind'] ?? 'auto'))));
-    if (!in_array($kind, ['iframe', 'image', 'auto'], true)) {
+    if (!in_array($kind, ['iframe', 'image', 'widget', 'auto'], true)) {
         $kind = 'auto';
     }
     if ($kind === 'auto') {
@@ -92,12 +92,155 @@ function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
 
 function webcam_detect_kind(string $url): string
 {
+    if (webcam_is_widget_frame_url($url)) {
+        return 'widget';
+    }
     $path = strtolower(parse_url($url, PHP_URL_PATH) ?: '');
-    if (preg_match('/\.(jpe?g|png|gif|webp|php)(\?|$)/i', $path) === 1) {
+    if (preg_match('/\.(jpe?g|png|gif|webp)(\?|$)/i', $path) === 1) {
         return 'image';
     }
 
     return 'iframe';
+}
+
+function webcam_is_widget_frame_url(string $url): bool
+{
+    return preg_match('#wetmet\.net/widgets/image/frame\.php#i', $url) === 1;
+}
+
+function webcam_is_direct_image_url(string $url): bool
+{
+    $path = strtolower(parse_url($url, PHP_URL_PATH) ?: '');
+
+    return preg_match('/\.(jpe?g|png|gif|webp)(\?|$)/i', $path) === 1;
+}
+
+function webcam_uses_image_tag(array $cam): bool
+{
+    $kind = (string)($cam['kind'] ?? 'iframe');
+
+    return in_array($kind, ['image', 'widget'], true);
+}
+
+function webcam_url_needs_image_proxy(string $url, string $kind): bool
+{
+    if ($kind === 'widget' || webcam_is_widget_frame_url($url)) {
+        return true;
+    }
+
+    return $kind === 'image' && !webcam_is_direct_image_url($url);
+}
+
+function webcam_image_proxy_url(string $key): string
+{
+    return 'webcam_img.php?cam=' . rawurlencode(webcam_normalize_key($key));
+}
+
+function webcam_board_image_src(array $cam): string
+{
+    $url = (string)($cam['url'] ?? '');
+    $kind = (string)($cam['kind'] ?? 'iframe');
+    $key = (string)($cam['key'] ?? '');
+    if ($url === '' || !webcam_uses_image_tag($cam)) {
+        return '';
+    }
+    if (webcam_url_needs_image_proxy($url, $kind)) {
+        return webcam_image_proxy_url($key);
+    }
+
+    return $url;
+}
+
+function webcam_http_get(string $url, int $timeout = 12): ?string
+{
+    $url = webcam_validate_url($url);
+    if ($url === null || !function_exists('curl_init')) {
+        return null;
+    }
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_USERAGENT => 'HomeSignage/1.0',
+    ]);
+    $body = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err = curl_error($ch);
+    if ($err !== '' || $code < 200 || $code >= 400 || !is_string($body) || $body === '') {
+        return null;
+    }
+
+    return $body;
+}
+
+function webcam_widget_image_url(string $frameUrl): ?string
+{
+    $html = webcam_http_get($frameUrl);
+    if ($html === null) {
+        return null;
+    }
+    if (preg_match('#background-image:\s*url\((https?://[^)]+)\)#i', $html, $m)) {
+        return webcam_validate_url(html_entity_decode($m[1], ENT_QUOTES, 'UTF-8'));
+    }
+
+    return null;
+}
+
+function webcam_resolve_remote_image_url(array $cam): ?string
+{
+    $url = webcam_validate_url((string)($cam['url'] ?? ''));
+    if ($url === null) {
+        return null;
+    }
+    $kind = (string)($cam['kind'] ?? 'iframe');
+    if ($kind === 'widget' || webcam_is_widget_frame_url($url)) {
+        return webcam_widget_image_url($url);
+    }
+    if ($kind === 'image') {
+        return $url;
+    }
+
+    return null;
+}
+
+/** Stream the current still frame for image/widget cameras (same-origin proxy). */
+function webcam_stream_image(string $camKey): void
+{
+    $cam = webcam_resolve_camera($camKey);
+    if ($cam['off'] || trim((string)$cam['url']) === '' || !webcam_uses_image_tag($cam)) {
+        http_response_code(404);
+        exit;
+    }
+
+    $remote = webcam_resolve_remote_image_url($cam);
+    if ($remote === null) {
+        http_response_code(502);
+        exit;
+    }
+
+    $body = webcam_http_get($remote, 20);
+    if ($body === null) {
+        http_response_code(502);
+        exit;
+    }
+
+    $path = strtolower(parse_url($remote, PHP_URL_PATH) ?: '');
+    $type = 'image/jpeg';
+    if (preg_match('/\.png(\?|$)/i', $path) === 1) {
+        $type = 'image/png';
+    } elseif (preg_match('/\.gif(\?|$)/i', $path) === 1) {
+        $type = 'image/gif';
+    } elseif (preg_match('/\.webp(\?|$)/i', $path) === 1) {
+        $type = 'image/webp';
+    }
+
+    header('Content-Type: ' . $type);
+    header('Cache-Control: no-store, max-age=0');
+    header('Content-Length: ' . (string)strlen($body));
+    echo $body;
+    exit;
 }
 
 /** @return array<string,array<string,mixed>> */
@@ -202,7 +345,8 @@ function webcam_resolve_camera(?string $camKey = null): array
 
 function webcam_rotation_dwell(string $key, array $entry): int
 {
-    if (($entry['kind'] ?? '') === 'image') {
+    $kind = (string)($entry['kind'] ?? 'iframe');
+    if ($kind === 'image' || $kind === 'widget') {
         return 90;
     }
 
@@ -320,6 +464,11 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
     $url = webcam_validate_url($url);
     if ($url === null || !function_exists('curl_init')) {
         return false;
+    }
+    if ($kind === 'widget' || webcam_is_widget_frame_url($url)) {
+        $img = webcam_widget_image_url($url);
+
+        return $img !== null && webcam_probe_url($img, 'image');
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [

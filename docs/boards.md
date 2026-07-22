@@ -82,7 +82,7 @@ Full-screen live feeds — **one camera per rotation slot**, same pattern as `za
 | Key | Source |
 |-----|--------|
 | `gvsu` | [GVSU campus](https://webcams.gvsu.edu) live player (iframe) |
-| `wetmet` | [WetMet](https://wetmet.net) station still image (auto-refreshes) |
+| `wetmet` | [WetMet](https://wetmet.net) station still (widget proxied server-side) |
 | `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
 
 **Setup:** admin → **Webcam** → **Cameras** — override built-in feeds or add rows with a unique **Key**. Each camera appears in **Rotation → Quick add** as its own entry (e.g. **Webcam — GVSU Campus**).
