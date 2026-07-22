@@ -124,10 +124,12 @@ Settings use file locking so concurrent saves on different boards merge safely. 
 All boards are configured in **admin.php**. Parameterized URLs plug into rotation:
 
 ```
-rss.php?feed=krebs          glance.php
-grafana.php?d=homelab       calendar.php
-zabbix.php?d=network        splunk.php?d=soc
-video.php?v=drone           slides.php?slide=birthday.png
+rss.php?feed=krebs              glance.php
+grafana.php?d=homelab           calendar.php
+zabbix.php?d=network            splunk.php?d=soc
+webcam.php?cam=gvsu             webcam.php?cam=grpm
+webcam.php?cam=grandhaven       meals.php
+video.php?v=drone               slides.php?slide=birthday.png
 ```
 
 ### At a glance
@@ -137,7 +139,7 @@ video.php?v=drone           slides.php?slide=birthday.png
 | **Weather & home** | Weather, lake, webcam, Mackinac Bridge cam, photo, air, UV index, sports, calendar, **today at a glance**, meal calendar, traffic | OWM, TomTom, Google Pollen (optional) |
 | **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic | — |
-| **Media** | Photo rotator, scheduled slides, RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
+| **Media** | Photo rotator, scheduled slides (upload + **slide creator** with occasion templates — dinner menu, snow day, anniversary, …), RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
 
 **Zabbix** — no iframe; server-side `problem.get` + host status. Problems are filtered to match the Zabbix UI (unresolved only; excludes disabled triggers/hosts/items and symptom events that `problem.get` still returns). Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. If the wall shows an alert you cannot find in Zabbix, run `php scripts/diagnose-zabbix.php <page_key> [--needle=substring]` on the server — **HIDDEN** rows are API-only leftovers (e.g. a Docker trigger disabled after a container was removed). See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
@@ -180,11 +182,33 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 **Lake Michigan** (`lake.php`) — NDBC buoy + NWS shoreline alerts + sunset. Nearshore buoys are seasonal (~Apr–Oct). When data goes stale the board still renders (offline message, alerts, sun times). **Rotation auto-skips** `lake.php` after **24 hours** with no fresh buoy observations and puts it back when the buoy is live again — no manual Skip toggle each winter. Open `lake.php` directly any time to see the offline layout.
 
+**Live webcams** (`webcam.php?cam=<key>`) — Full-screen feeds with **one camera per rotation slot** (same pattern as `zabbix.php?d=` or RSS feeds). Built-in cameras:
+
+| Key | Source |
+|-----|--------|
+| `gvsu` | [GVSU campus](https://webcams.gvsu.edu) live player (iframe) |
+| `grpm` | [Grand Rapids Public Museum](https://www.wmta.org/live-west-michigan-camera-gallery/grand-rapids-public-museum-west-michigan-live-camera/) live stream (WMTA / WetMet iframe) |
+| `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
+
+Add each camera you want as its own playlist line — intermix with weather, Zabbix, Splunk, etc.:
+
+```
+webcam.php?cam=gvsu
+webcam.php?cam=grpm
+webcam.php?cam=grandhaven
+```
+
+Admin → **Webcam** → **Cameras** — override built-in names/URLs or add rows with a unique **Key** (`?cam=yourkey`). Each camera appears in **Rotation → Add boards** quick-add (e.g. **Webcam — GVSU Campus**). Set **Off** on a row to hide it from quick-add. Still-image cameras refresh on a timer; iframe streams use an hourly reload backstop. **Rotation auto-skips** a camera after **24 hours** of failed probe checks and restores it when the feed responds again. Do not use plain `webcam.php` without `?cam=` — pick a keyed slot instead.
+
+**Mackinac Bridge cam** (`bridgecam.php`) — Four still-image views from the Mackinac Bridge Authority; one camera or rotate all four on a single board (unlike `webcam.php`, which is one cam per rotation entry). Admin → **Mackinac Bridge Cam** — no API key.
+
 **Sports** (`sports.php`) — ESPN scoreboards for up to **four teams per display** (NFL/MLB/NBA/NHL plus NCAAF, NCAAM, NCAAW, WNBA, MLS). Set teams, optional title, and subtitle under **Rotation → Display options**; global defaults under **Sports** in admin. Standalone views poll for live score updates; in rotation the board reloads with the shell. Adaptive layout (1–4 teams), live clock, streaks, and opponent logos on game days.
 
 **Weather ticker** — Lives in the rotation shell (`board.php`), not inside each iframe. Polls NWS at the kiosk’s configured location every 30s (15s in demo mode) so alerts appear without a full page reload. Alert text shows timing and hazards — not long county lists (alerts are already point-specific). **Location:** global lat/lon on the **Weather** board; override per display under **Rotation → Kiosk settings** (same coordinates used for weather, air, UV, photo, traffic, and NWS alerts). Per display: enable **Bottom ticker** under kiosk settings, and optionally pick an **RSS feed for when there are no weather alerts** (headlines from **RSS Stories**; weather always wins when NWS has alerts). Master on/off: **Alert Ticker** in admin (no separate lat/lon there anymore).
 
 **Today at a glance** (`glance.php`) — Compact today/tomorrow calendar, weather summary, and two headline columns (GVNext scrape + RSS by default). Site defaults under **Today at a Glance**; per-display headline URLs/feeds under **Rotation → Kiosk settings**. In rotation, `board.php` passes `?screen=` so kiosk overrides apply (same as sports and weather boards).
+
+**Meal calendar** (`meals.php`) — Rolling **7-day meal plan** with today highlighted. Edit weekly defaults and **date overrides** (takeout night, holidays) under **Meal calendar** in admin — no external calendar feed. Pairs with the **Dinner menu** slide creator template and the built-in **Kitchen weeknight** rotation preset.
 
 **Per-display overrides** — Under **Rotation → Kiosk settings** for each display: transition timings, blank hours, **location** (weather, air, UV, photo, traffic map, **NWS alert ticker**), **sports teams** / title / subtitle, **glance headline columns** (left page URL / RSS fallback, right RSS feed), **hero strip** slots, and **news ticker fallback** (above). Leave location blank to use global **Weather** coordinates.
 
@@ -210,7 +234,11 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
-Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle** (random order — every in-window board once per cycle), **Weighted** rotation (weight = slots per shuffled cycle; every board at least once before repeat), multiple displays (`?screen=`). The shell **polls for config changes every ~30s** and reloads when the playlist or display options change. **`lake.php` is omitted automatically** when its buoy has been offline 24h+ (seasonal); it returns when fresh data is back. Under **Rotation**, use **Add to display** before quick-adding a board so it lands on the right playlist (e.g. `veddersg`, not `main`). **Kiosk settings** (inside each playlist panel) set location, sports teams, glance headlines, hero strip, ticker, rotation mode, and news fallback per display.
+Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle** (random order — every in-window board once per cycle), **Weighted** rotation (weight = slots per shuffled cycle; every board at least once before repeat), multiple displays (`?screen=`). The shell **polls for config changes every ~30s** and reloads when the playlist or display options change.
+
+**Auto-skip (saved playlist unchanged):** **`lake.php`** when its buoy has been offline 24h+; **`sports.php`** when every team is off-season; **`webcam.php?cam=…`** per camera when that feed fails probes for 24h+. Boards return automatically when data is back.
+
+Under **Rotation**, each display playlist has three setup tabs: **Add boards** (searchable quick-add), **Kiosk settings** (location, sports teams, glance headlines, hero strip, ticker, rotation mode, news fallback), and **Templates** — built-in **Kitchen weeknight** and **Weekly planner** presets, plus save/load your own (`rotation.PLAYLIST_TEMPLATES`). Use **Add to display** before quick-adding so the board lands on the right playlist (e.g. `veddersg`, not `main`).
 
 Operators with **multiple displays** assigned (see [Admin & security](#admin--security)) see and edit every playlist they own; **shared editors** get the same control on displays they are invited to. Deploy pickers (slides, photos, RSS, video) target any display they may fully edit.
 
@@ -269,7 +297,7 @@ Run from the boards install root on the server (the directory with `config/setti
 php scripts/diagnose-zabbix.php network --needle=signaltrace
 # from a clone: SIGNAGE_ROOT=/var/www/html/boards php ~/signage-suite/scripts/diagnose-zabbix.php main
 
-# Rotation: shuffle/weighted decks, eligible pages, per-slide weights, lake seasonal skip
+# Rotation: shuffle/weighted decks, eligible pages, per-slide weights, lake/sports/webcam auto-skip
 php scripts/diagnose-rotation.php veddersg
 
 # Air & Pollen: AirNow key, EPA monitor AQI, NWS alerts, Open-Meteo model
