@@ -4,7 +4,7 @@
  * Dense grid of MDOT Mi Drive still cameras on the Allendale ↔ Grand Rapids corridor
  * (I-96, I-196, US-131). Images are proxied via camwall_img.php.
  *
- * Setup: admin → Camera wall — override the built-in corridor set or tune the grid.
+ * Setup: admin → MDOT Cams — override the built-in corridor set or tune the grid.
  * Add camwall.php to rotation (90–120s dwell pairs well with traffic.php).
  */
 
@@ -12,7 +12,7 @@ require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/emergency_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/camwall_lib.php';
 
-define('TITLE', cfg('camwall.TITLE', 'Commute Cameras'));
+define('TITLE', cfg('camwall.TITLE', 'MDOT Cams'));
 define('SUBTITLE', cfg('camwall.SUBTITLE', 'Allendale ↔ Grand Rapids · I-96 · I-196 · US-131'));
 define('ATTRIBUTION', cfg('camwall.ATTRIBUTION', 'MDOT Mi Drive'));
 define('SHOW_OVERLAY', cfg('camwall.SHOW_OVERLAY', true));

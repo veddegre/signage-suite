@@ -834,7 +834,7 @@ function admin_schema(): array
              'help' => 'Fixed top-right over the iframe; uses the timezone below'],
             $tz,
         ]],
-        'camwall' => ['title' => 'Camera Wall', 'file' => 'camwall.php', 'fields' => [
+        'camwall' => ['title' => 'MDOT Cams', 'file' => 'camwall.php', 'fields' => [
             ['key' => 'TITLE', 'label' => 'Board title', 'type' => 'text'],
             ['key' => 'SUBTITLE', 'label' => 'Subtitle', 'type' => 'text'],
             ['key' => 'COLS', 'label' => 'Grid columns', 'type' => 'number', 'default' => 3,
