@@ -37,10 +37,11 @@ foreach ($cameras as $cam) {
         'name' => $cam['name'],
         'route' => $cam['route'],
         'src' => camwall_image_proxy_url($cam['key']),
+        'focus' => (string)($cam['focus'] ?? 'center center'),
     ];
 }
 while (count($tiles) < $slots) {
-    $tiles[] = ['key' => '', 'name' => '', 'route' => '', 'src' => ''];
+    $tiles[] = ['key' => '', 'name' => '', 'route' => '', 'src' => '', 'focus' => 'center center'];
 }
 
 $compact = $boardH < 1080;
@@ -121,7 +122,8 @@ $heightPx = $boardH . 'px';
     <div class="tile<?= $tile['src'] === '' ? ' empty' : '' ?>" data-key="<?= h($tile['key']) ?>">
       <?php if ($tile['src'] !== ''): ?>
       <img id="cam-<?= (int)$i ?>" alt="<?= h($tile['name']) ?>" src="<?= h($tile['src']) ?>"
-           data-base="<?= h($tile['src']) ?>" loading="eager">
+           data-base="<?= h($tile['src']) ?>" loading="eager"
+           style="object-position:<?= h($tile['focus']) ?>">
       <div class="cap">
         <?php if ($tile['route'] !== ''): ?><span class="route"><?= h($tile['route']) ?></span><?php endif; ?>
         <span class="name"><?= h($tile['name']) ?></span>

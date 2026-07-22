@@ -42,6 +42,7 @@ function camwall_default_cameras(): array
             'route' => 'I-96',
             'url' => 'https://micamerasimages.net/thumbs/grand_cam_062.flv.jpg?item=1',
             'sort' => 5,
+            'focus' => 'top',
         ],
         'i196-zeeland' => [
             'name' => 'Zeeland Rest Area',
@@ -104,6 +105,27 @@ function camwall_allowed_image_host(string $url): bool
         || preg_match('#(^|\.)state\.mi\.us$#', $host) === 1;
 }
 
+function camwall_normalize_focus(string $raw, ?string $fallback = null): string
+{
+    $raw = strtolower(trim($raw));
+    if ($raw === '') {
+        $raw = strtolower(trim((string)$fallback));
+    }
+    $presets = [
+        'top' => 'center top',
+        'center' => 'center center',
+        'bottom' => 'center bottom',
+    ];
+    if (isset($presets[$raw])) {
+        return $presets[$raw];
+    }
+    if ($raw !== '' && preg_match('/^[a-z0-9.%\s-]+$/i', $raw) === 1) {
+        return $raw;
+    }
+
+    return 'center center';
+}
+
 /** @param array<string,mixed> $row @param array<string,mixed>|null $fallback */
 function camwall_normalize_entry(array $row, ?array $fallback = null): ?array
 {
@@ -117,12 +139,17 @@ function camwall_normalize_entry(array $row, ?array $fallback = null): ?array
     }
     $route = trim((string)($row['route'] ?? ($fallback['route'] ?? '')));
     $sort = (int)($row['sort'] ?? ($fallback['sort'] ?? 0));
+    $focus = camwall_normalize_focus(
+        (string)($row['focus'] ?? ''),
+        isset($fallback['focus']) ? (string)$fallback['focus'] : null
+    );
 
     return [
         'name' => $name,
         'route' => $route,
         'url' => $url,
         'sort' => $sort,
+        'focus' => $focus,
     ];
 }
 
@@ -180,6 +207,7 @@ function camwall_active_cameras(): array
             'route' => (string)($entry['route'] ?? ''),
             'url' => (string)$entry['url'],
             'sort' => (int)($entry['sort'] ?? 0),
+            'focus' => camwall_normalize_focus((string)($entry['focus'] ?? '')),
         ];
     }
     usort($rows, static function (array $a, array $b): int {
