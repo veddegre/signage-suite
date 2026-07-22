@@ -9,6 +9,7 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
+require_once dirname(__DIR__, 2) . '/lib/emergency_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/camwall_lib.php';
 
 define('TITLE', cfg('camwall.TITLE', 'Commute Cameras'));
@@ -22,7 +23,7 @@ date_default_timezone_set(TIMEZONE);
 $showClock = signage_show_clock();
 $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
-$heightCss = signage_viewport_height();
+$tickerOnPage = !$embedded && (signage_ticker_enabled() || emergency_ticker_forces_display());
 $grid = camwall_grid_size();
 $cameras = camwall_active_cameras();
 $slots = $grid['slots'];
@@ -43,9 +44,10 @@ while (count($tiles) < $slots) {
 }
 
 $compact = $boardH < 1080;
-$headH = $compact ? 72 : 88;
-$gap = $compact ? 8 : 10;
-$pad = $compact ? 16 : 20;
+$headH = $compact ? 68 : 80;
+$gap = $compact ? 6 : 8;
+$pad = $compact ? 12 : 16;
+$heightPx = $boardH . 'px';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -56,55 +58,62 @@ $pad = $compact ? 16 : 20;
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --bad:#e05c5c; }
+  :root {
+    --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
+    --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347;
+    <?php if ($tickerOnPage): ?>--signage-ticker-inset: <?= (int)SIGNAGE_TICKER_H ?>px;<?php endif; ?>
+  }
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; height:<?= h($heightCss) ?>; overflow:hidden; background:var(--lake-night);
+  html,body { width:1920px; height:<?= h($heightPx) ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; cursor:none; }
-  .board { width:1920px; height:<?= h($heightCss) ?>; padding:<?= $pad ?>px <?= $pad + 4 ?>px <?= $pad - 4 ?>px;
+  .board { width:1920px; height:100%; padding:<?= $pad ?>px <?= $pad + 4 ?>px <?= $pad ?>px;
            display:grid; gap:<?= $gap ?>px;
-           grid-template-rows: <?= $headH ?>px minmax(0, 1fr) auto; }
-  .head { display:flex; align-items:baseline; justify-content:space-between; gap:24px; min-height:0; }
+           grid-template-rows: <?= SHOW_OVERLAY ? $headH . 'px' : '0px' ?> minmax(0, 1fr) auto; min-height:0; }
+  .head { display:flex; align-items:flex-start; justify-content:space-between; gap:32px; min-height:0; }
   .head h1 { font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:700;
-             font-size:<?= $compact ? 42 : 52 ?>px; letter-spacing:.4px; line-height:1; }
-  .head .sub { display:block; margin-top:6px; font-size:<?= $compact ? 16 : 18 ?>px; font-weight:500;
-               letter-spacing:1.4px; text-transform:uppercase; color:var(--mist); }
-  .head .meta { text-align:right; font-size:<?= $compact ? 14 : 15 ?>px; color:var(--mist); white-space:nowrap; }
+             font-size:<?= $compact ? 38 : 46 ?>px; letter-spacing:.4px; line-height:1.05; }
+  .head .sub { display:block; margin-top:4px; font-size:<?= $compact ? 14 : 16 ?>px; font-weight:500;
+               letter-spacing:1.2px; text-transform:uppercase; color:var(--mist); }
+  .head-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex:0 0 auto;
+                min-width:220px; padding-top:2px; }
+  #clock { font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600;
+           font-size:<?= $compact ? 34 : 40 ?>px; color:var(--snow); font-variant-numeric:tabular-nums;
+           line-height:1; white-space:nowrap; }
+  .meta { text-align:right; font-size:<?= $compact ? 13 : 14 ?>px; color:var(--mist); white-space:nowrap; }
   .grid { min-height:0; display:grid; gap:<?= $gap ?>px;
           grid-template-columns:repeat(<?= (int)$grid['cols'] ?>, minmax(0, 1fr));
           grid-template-rows:repeat(<?= (int)$grid['rows'] ?>, minmax(0, 1fr)); }
   .tile { position:relative; min-height:0; background:var(--harbor); border:1px solid var(--hairline);
-          border-radius:<?= $compact ? 10 : 12 ?>px; overflow:hidden; display:flex; flex-direction:column; }
+          border-radius:<?= $compact ? 8 : 10 ?>px; overflow:hidden; }
   .tile.empty { opacity:.35; }
-  .tile img { flex:1; min-height:0; width:100%; object-fit:cover; object-position:center; background:#0a1018;
-              display:block; }
+  .tile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center;
+              background:#0a1018; display:block; }
   .tile img.err { opacity:.15; }
-  .tile .cap { flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:8px 12px;
-               background:rgba(12,20,34,.88); border-top:1px solid var(--hairline); min-height:<?= $compact ? 38 : 42 ?>px; }
-  .route { font-size:<?= $compact ? 11 : 12 ?>px; font-weight:600; letter-spacing:.8px; text-transform:uppercase;
-           color:var(--beacon); background:rgba(255,179,71,.12); border:1px solid rgba(255,179,71,.35);
-           border-radius:999px; padding:2px 8px; white-space:nowrap; }
-  .name { font-size:<?= $compact ? 15 : 17 ?>px; font-weight:500; color:var(--snow);
+  .cap { position:absolute; left:0; right:0; top:0; z-index:2; display:flex; align-items:center; gap:8px;
+         padding:<?= $compact ? '6px 10px' : '8px 12px' ?>;
+         background:linear-gradient(180deg, rgba(12,20,34,.92) 0%, rgba(12,20,34,.72) 70%, transparent 100%);
+         pointer-events:none; }
+  .route { font-size:<?= $compact ? 10 : 11 ?>px; font-weight:600; letter-spacing:.7px; text-transform:uppercase;
+           color:var(--beacon); background:rgba(255,179,71,.14); border:1px solid rgba(255,179,71,.35);
+           border-radius:999px; padding:2px 7px; white-space:nowrap; flex:0 0 auto; }
+  .name { font-size:<?= $compact ? 14 : 15 ?>px; font-weight:500; color:var(--snow);
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
-  .stamp { font-size:14px; color:var(--mist); opacity:.85; text-align:right; padding-top:2px; }
-  #clock { position:fixed; top:<?= $compact ? 24 : 32 ?>px; right:<?= $compact ? 32 : 44 ?>px; z-index:9000;
-           pointer-events:none; font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600;
-           font-size:<?= $compact ? 40 : 46 ?>px; color:var(--snow); font-variant-numeric:tabular-nums;
-           padding:6px 16px; border-radius:10px; background:rgba(12,20,34,.78);
-           box-shadow:0 2px 24px rgba(0,0,0,.55); }
+  .stamp { font-size:13px; color:var(--mist); opacity:.85; text-align:right; line-height:1.2; }
   .empty-msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
                color:var(--mist); font-size:15px; padding:12px; text-align:center; }
 </style>
 </head>
 <body>
 <div class="board">
-  <?php if ($showClock && SHOW_OVERLAY): ?><div id="clock">--:--</div><?php endif; ?>
   <?php if (SHOW_OVERLAY): ?>
   <header class="head">
     <div>
       <h1><?= h(TITLE) ?><span class="sub"><?= h(SUBTITLE) ?></span></h1>
     </div>
-    <div class="meta"><?= count($cameras) ?> live feeds · refresh <?= (int)REFRESH_SEC ?>s</div>
+    <div class="head-right">
+      <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
+      <div class="meta"><?= count($cameras) ?> live feeds · refresh <?= (int)REFRESH_SEC ?>s</div>
+    </div>
   </header>
   <?php endif; ?>
   <div class="grid" id="grid">
@@ -161,6 +170,10 @@ $pad = $compact ? 16 : 20;
 })();
 <?php endif; ?>
 </script>
-<?php if (!$embedded): include dirname(__DIR__, 2) . '/ticker.php'; endif; ?>
+<?php
+if (!$embedded) {
+    include dirname(__DIR__, 2) . '/ticker.php';
+}
+?>
 </body>
 </html>

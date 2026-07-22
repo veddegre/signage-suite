@@ -61,10 +61,10 @@ function camwall_default_cameras(): array
             'url' => 'https://micamerasimages.net/thumbs/grand_cam_008.flv.jpg?item=1',
             'sort' => 8,
         ],
-        'i196-i96' => [
-            'name' => 'I-96 interchange',
+        'i196-8th' => [
+            'name' => '8th Ave',
             'route' => 'I-196',
-            'url' => 'https://micamerasimages.net/thumbs/grand_cam_062.flv.jpg?item=1',
+            'url' => 'https://micamerasimages.net/thumbs/grand_cam_092.flv.jpg?item=1',
             'sort' => 9,
         ],
         'us131-m89' => [
@@ -79,10 +79,10 @@ function camwall_default_cameras(): array
             'url' => 'https://micamerasimages.net/thumbs/grand_cam_056.flv.jpg?item=1',
             'sort' => 11,
         ],
-        'us131-i96' => [
-            'name' => 'I-96 interchange',
+        'us131-m6' => [
+            'name' => 'M-6 interchange',
             'route' => 'US-131',
-            'url' => 'https://micamerasimages.net/thumbs/grand_cam_053.flv.jpg?item=1',
+            'url' => 'https://micamerasimages.net/thumbs/grand_cam_005.flv.jpg?item=1',
             'sort' => 12,
         ],
     ];
@@ -190,6 +190,18 @@ function camwall_active_cameras(): array
 
         return strcmp($a['key'], $b['key']);
     });
+
+    $seenUrls = [];
+    $unique = [];
+    foreach ($rows as $row) {
+        $url = $row['url'];
+        if ($url === '' || isset($seenUrls[$url])) {
+            continue;
+        }
+        $seenUrls[$url] = true;
+        $unique[] = $row;
+    }
+    $rows = $unique;
 
     $cols = max(1, min(6, (int)cfg('camwall.COLS', CAMWALL_DEFAULT_COLS)));
     $rowsMax = max(1, min(6, (int)cfg('camwall.ROWS', CAMWALL_DEFAULT_ROWS)));
