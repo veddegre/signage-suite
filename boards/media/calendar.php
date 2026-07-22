@@ -230,7 +230,7 @@ function caldav_response_to_ics(string $xml): string
 
 function fetch_calendar_feed(array $feed, int $i, int $winStart, int $winEnd): ?string
 {
-    $url = trim((string)($feed['url'] ?? ''));
+    $url = calendar_normalize_feed_url((string)($feed['url'] ?? ''));
     if ($url === '') {
         return null;
     }
@@ -448,6 +448,215 @@ function ics_finalize_vevent(array $cur): array
     return $cur;
 }
 
+/** Last local-midnight day that is still part of a finite RRULE series (COUNT or UNTIL). */
+function ics_rrule_last_instance_day(array $ev): ?int
+{
+    $r = $ev['rrule'] ?? null;
+    if (!is_array($r)) {
+        return null;
+    }
+    if (isset($r['UNTIL'])) {
+        $until = ics_time('', $r['UNTIL']);
+        if ($until) {
+            return strtotime('today', $until[0]);
+        }
+    }
+    if (!isset($r['COUNT'])) {
+        return null;
+    }
+
+    $count = max(1, (int)$r['COUNT']);
+    $interval = ics_rrule_interval($ev);
+    $startDay = strtotime('today', $ev['start']);
+    $freq = $r['FREQ'] ?? '';
+
+    switch ($freq) {
+        case 'DAILY':
+            return $startDay + ($count - 1) * $interval * 86400;
+        case 'WEEKLY':
+            $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
+            if ($bydayRules === []) {
+                return $startDay + ($count - 1) * 7 * $interval * 86400;
+            }
+            $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));
+            $found = 0;
+            $cap = $startDay + max($count * 7 * $interval * 4, 366) * 86400;
+            for ($day = $startDay; $day <= $cap; $day += 86400) {
+                $weeks = ics_weeks_since_start($day, $startDay, $wkstIso);
+                if ($weeks < 0 || $weeks % $interval !== 0) {
+                    continue;
+                }
+                $hit = false;
+                foreach ($bydayRules as $rule) {
+                    if ($rule['ord'] !== null) {
+                        if (ics_day_matches_byday($day, $rule)) {
+                            $hit = true;
+                            break;
+                        }
+                    } elseif ((int)date('N', $day) === $rule['dow']) {
+                        $hit = true;
+                        break;
+                    }
+                }
+                if (!$hit) {
+                    continue;
+                }
+                $found++;
+                if ($found >= $count) {
+                    return $day;
+                }
+            }
+            return null;
+        case 'MONTHLY':
+            $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
+            $found = 0;
+            $cap = $startDay + max($count * 32 * $interval, 366) * 86400;
+            for ($day = $startDay; $day <= $cap; $day += 86400) {
+                $months = ics_months_between($day, $startDay);
+                if ($months < 0 || $months % $interval !== 0) {
+                    continue;
+                }
+                $hit = false;
+                if ($bydayRules !== []) {
+                    foreach ($bydayRules as $rule) {
+                        if (ics_day_matches_byday($day, $rule)) {
+                            $hit = true;
+                            break;
+                        }
+                    }
+                } else {
+                    $dom = (int)($r['BYMONTHDAY'] ?? date('j', $startDay));
+                    $hit = (int)date('j', $day) === $dom;
+                }
+                if (!$hit) {
+                    continue;
+                }
+                $found++;
+                if ($found >= $count) {
+                    return $day;
+                }
+            }
+            return null;
+        case 'YEARLY':
+            return strtotime('+' . ($count - 1) * $interval . ' years', $startDay);
+        default:
+            return null;
+    }
+}
+
+/** 1-based RRULE occurrence index for $dayMidnight, or null if that day is not an instance. */
+function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
+{
+    $r = $ev['rrule'] ?? null;
+    if (!is_array($r)) {
+        return null;
+    }
+    $startDay = strtotime('today', $ev['start']);
+    if ($dayMidnight < $startDay) {
+        return null;
+    }
+    $interval = ics_rrule_interval($ev);
+    $freq = $r['FREQ'] ?? '';
+    $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
+
+    switch ($freq) {
+        case 'DAILY':
+            $daysSince = ics_calendar_days_between($startDay, $dayMidnight);
+            if ($daysSince < 0 || $daysSince % $interval !== 0) {
+                return null;
+            }
+
+            return (int)($daysSince / $interval) + 1;
+        case 'WEEKLY':
+            $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));
+            $weeks = ics_weeks_since_start($dayMidnight, $startDay, $wkstIso);
+            if ($weeks < 0 || $weeks % $interval !== 0) {
+                return null;
+            }
+            if ($bydayRules === []) {
+                if ((int)date('N', $dayMidnight) !== (int)date('N', $startDay)) {
+                    return null;
+                }
+
+                return (int)($weeks / $interval) + 1;
+            }
+            $found = 0;
+            for ($day = $startDay; $day <= $dayMidnight; $day += 86400) {
+                $w = ics_weeks_since_start($day, $startDay, $wkstIso);
+                if ($w < 0 || $w % $interval !== 0) {
+                    continue;
+                }
+                $hit = false;
+                foreach ($bydayRules as $rule) {
+                    if ($rule['ord'] !== null) {
+                        if (ics_day_matches_byday($day, $rule)) {
+                            $hit = true;
+                            break;
+                        }
+                    } elseif ((int)date('N', $day) === $rule['dow']) {
+                        $hit = true;
+                        break;
+                    }
+                }
+                if ($hit) {
+                    $found++;
+                    if ($day === $dayMidnight) {
+                        return $found;
+                    }
+                }
+            }
+            return null;
+        case 'MONTHLY':
+            $months = ics_months_between($dayMidnight, $startDay);
+            if ($months < 0 || $months % $interval !== 0) {
+                return null;
+            }
+            $hit = false;
+            if ($bydayRules !== []) {
+                foreach ($bydayRules as $rule) {
+                    if (ics_day_matches_byday($dayMidnight, $rule)) {
+                        $hit = true;
+                        break;
+                    }
+                }
+            } else {
+                $dom = (int)($r['BYMONTHDAY'] ?? date('j', $startDay));
+                $hit = (int)date('j', $dayMidnight) === $dom;
+            }
+            if (!$hit) {
+                return null;
+            }
+
+            return (int)($months / $interval) + 1;
+        case 'YEARLY':
+            $years = (int)date('Y', $dayMidnight) - (int)date('Y', $startDay);
+            if ($years < 0 || $years % $interval !== 0) {
+                return null;
+            }
+            if (isset($r['BYMONTH']) && (int)date('n', $dayMidnight) !== (int)$r['BYMONTH']) {
+                return null;
+            }
+            if ($bydayRules !== []) {
+                $hit = false;
+                foreach ($bydayRules as $rule) {
+                    if (ics_day_matches_byday($dayMidnight, $rule)) {
+                        $hit = true;
+                        break;
+                    }
+                }
+                if (!$hit) {
+                    return null;
+                }
+            } elseif (date('md', $dayMidnight) !== date('md', $startDay)) {
+                return null;
+            }
+
+            return (int)($years / $interval) + 1;
+        default:
+            return null;
+    }
+}
+
 /** Expand one VEVENT into instances inside [winStart, winEnd]. */
 function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = []): array
 {
@@ -482,9 +691,14 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
     $interval = ics_rrule_interval($ev);
     $until = isset($r['UNTIL']) ? (ics_time('', $r['UNTIL'])[0] ?? PHP_INT_MAX) : PHP_INT_MAX;
     $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
+    $rruleCount = isset($r['COUNT']) ? max(1, (int)$r['COUNT']) : null;
+    $lastInstanceDay = ics_rrule_last_instance_day($ev);
 
     $tod = $allDay ? 0 : ($start - strtotime('today', $start));
     for ($day = strtotime('today', $winStart); $day <= $winEnd; $day += 86400) {
+        if ($lastInstanceDay !== null && $day > $lastInstanceDay) {
+            continue;
+        }
         $ts = $day + $tod;
         if ($ts < $start || $ts > $until || $ts < $winStart || $ts > $winEnd) {
             continue;
@@ -492,7 +706,8 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
         $match = false;
         switch ($freq) {
             case 'DAILY':
-                $match = ics_calendar_days_between(strtotime('today', $start), $day) % $interval === 0;
+                $daysSince = ics_calendar_days_between(strtotime('today', $start), $day);
+                $match = $daysSince >= 0 && $daysSince % $interval === 0;
                 break;
             case 'WEEKLY':
                 $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));
@@ -551,6 +766,10 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
                     $match = date('md', $day) === date('md', $start);
                 }
                 break;
+        }
+        if ($match && $rruleCount !== null) {
+            $occ = ics_rrule_occurrence_index($ev, $day);
+            $match = ($occ !== null && $occ <= $rruleCount);
         }
         if ($match) {
             $push($ts);

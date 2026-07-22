@@ -64,6 +64,17 @@ function calendar_palette_has_key(string $key): bool
     return false;
 }
 
+/** iCal subscription URLs often use webcal:// — normalize to https:// for curl and policy checks. */
+function calendar_normalize_feed_url(string $url): string
+{
+    $url = trim($url);
+    if (preg_match('#^webcals?://#i', $url)) {
+        return 'https://' . preg_replace('#^webcals?://#i', '', $url);
+    }
+
+    return $url;
+}
+
 /** ISO weekday 1=Mon … 7=Sun for an RRULE WKST token (RFC 5545 default: MO). */
 function ics_wkst_to_iso(string $wkst): int
 {

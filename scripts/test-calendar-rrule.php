@@ -160,6 +160,32 @@ foreach (['2026-07-13' => true, '2026-07-27' => true, '2026-07-20' => false] as 
     }
 }
 
+// iCloud-style finite multi-day spans: DAILY;COUNT=N must not repeat forever
+$start = strtotime('2019-07-29'); // all-day vacation
+$ev['start'] = $start;
+$ev['end'] = $start + 86400;
+$ev['all_day'] = true;
+$ev['summary'] = 'Brad Vacation';
+$ev['rrule'] = parse_rrule('FREQ=DAILY;COUNT=5');
+$ev['exdate_ts'] = [];
+$win = [strtotime('2026-07-22'), strtotime('2026-07-28')];
+$got = test_expand($ev, $win[0], $win[1]);
+if ($got !== []) {
+    echo 'FAIL DAILY COUNT: old vacation should not appear in 2026: ' . implode(', ', $got) . PHP_EOL;
+    $fail++;
+}
+$gotSpan = test_expand($ev, strtotime('2019-07-29'), strtotime('2019-08-10'));
+foreach (['2019-07-29', '2019-07-30', '2019-08-02'] as $ymd) {
+    if (!preg_grep("/^$ymd/", $gotSpan)) {
+        echo "FAIL DAILY COUNT: missing $ymd in " . implode(', ', $gotSpan) . PHP_EOL;
+        $fail++;
+    }
+}
+if (preg_grep('/2019-08-03/', $gotSpan)) {
+    echo 'FAIL DAILY COUNT: 2019-08-03 should be excluded (5-day span)' . PHP_EOL;
+    $fail++;
+}
+
 if ($fail === 0) {
     echo "OK — all RRULE checks passed\n";
     exit(0);
