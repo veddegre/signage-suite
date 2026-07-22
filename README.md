@@ -129,6 +129,7 @@ grafana.php?d=homelab           calendar.php
 zabbix.php?d=network            splunk.php?d=soc
 webcam.php?cam=gvsu             webcam.php?cam=grpm
 webcam.php?cam=grandhaven       meals.php
+ransomware.php                  phish.php
 video.php?v=drone               slides.php?slide=birthday.png
 ```
 
@@ -167,6 +168,28 @@ video.php?v=drone               slides.php?slide=birthday.png
 If you previously saved a token under **Internet Attacks**, it is still read until you move it to **Cloudflare Radar**.
 
 **Internet infrastructure** (`internet.php`) — BGP/ASN outages via IODA (no key) and DNS root probes via `dig` (`dnsutils` package; installed by `setup-server.sh`).
+
+**Ransomware tracker** (`ransomware.php`) — Recent **extortion-site victim claims** from [Ransomware.live](https://www.ransomware.live/) (group, sector, country, optional infostealer counts). Strategic awareness — **not** homelab alerts. Claims are **unverified** until press corroboration; the board never links to `.onion` URLs.
+
+**Data:** `GET https://api.ransomware.live/v2/recentvictims` — free, **no API key** (rate limit 1 request/min; default cache 30 min).
+
+**Setup:** admin → **Ransomware Tracker** — lookback days (default 7), highlight country (default **US**), optional **Watch sectors** / **Watch groups** (comma-separated, e.g. `Healthcare, Education` and `akira, qilin`). Add `ransomware.php` to rotation (~60s dwell).
+
+**Phishing & brand threats** (`phish.php`) — Two panels: **Brand watch** (Certificate Transparency lookalikes for your domains via crt.sh) and **URLhaus recent** (malware/phishing URLs from abuse.ch). Malicious hosts are **defanged** on the wall — not clickable links.
+
+| Panel | Source | Key |
+|-------|--------|-----|
+| URLhaus recent | [urlhaus-api.abuse.ch](https://urlhaus.abuse.ch/api/) | **Auth-Key required** (free) |
+| Brand watch | [crt.sh](https://crt.sh/) | None (slow — cached 24h per domain) |
+
+**Setup — URLhaus Auth-Key (one time):**
+
+1. Create a free account at [auth.abuse.ch](https://auth.abuse.ch/).
+2. Copy your **Auth-Key** from the portal.
+3. Admin → **Phishing & Brand Threats** → paste into **URLhaus Auth-Key** → **Save**.
+4. Optional: **Tags include** — comma-separated filters (`emotet`, `qakbot`, `cobalt`, …). Blank = all recent URLs.
+5. Add **Brand watch** rows — **Root domain** (e.g. `gvsu.edu`, `vdrs.fyi`) and **Keywords** to match suspicious hostname patterns. crt.sh scans run at most once per day per domain.
+6. Add `phish.php` to rotation (~60s dwell). Poll URLhaus no more often than every **5 minutes** (default cache 900s).
 
 **UniFi Network** (`unifi.php`) — Dream Machine / UCG / UDM via local admin login (most installs) or optional Integration API key (Network 9.3+). Shows device grid, client counts, health pills, **WAN download/upload**, **top talkers**, and **last speed test** when available. Requires **Security → Allow private URL fetches** for LAN controllers. Add via **Rotation** → pick target display → quick-add **UniFi network**.
 
