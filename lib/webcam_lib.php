@@ -14,9 +14,9 @@ function webcam_default_cameras(): array
 {
     return [
         'gvsu' => [
-            'name' => 'GVSU Campus',
+            'name' => 'GVSU — Kindschi Hall',
             'url' => 'https://webcams.gvsu.edu:5443/live/play.html?id=dtSQveui8yRVSKvb153147654438870',
-            'kind' => 'iframe',
+            'kind' => 'stream',
             'attribution' => 'GVSU',
         ],
         'grpm' => [
@@ -88,6 +88,9 @@ function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
     if ($kind === 'auto') {
         $kind = webcam_detect_kind($url);
     }
+    if ($kind === 'iframe' && webcam_is_ant_media_play_url($url)) {
+        $kind = 'stream';
+    }
     $attribution = trim((string)($row['attribution'] ?? ($fallback['attribution'] ?? '')));
 
     return [
@@ -100,6 +103,9 @@ function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
 
 function webcam_detect_kind(string $url): string
 {
+    if (webcam_is_ant_media_play_url($url)) {
+        return 'stream';
+    }
     if (webcam_is_stream_frame_url($url)) {
         return 'stream';
     }
@@ -122,6 +128,63 @@ function webcam_is_widget_frame_url(string $url): bool
 function webcam_is_stream_frame_url(string $url): bool
 {
     return preg_match('#wetmet\.net/widgets/stream/frame\.php#i', $url) === 1;
+}
+
+function webcam_is_ant_media_play_url(string $url): bool
+{
+    return preg_match('~/live/play\.html(?:[?#]|$)~i', $url) === 1
+        && preg_match('~[?&]id=([^&#]+)~', $url) === 1;
+}
+
+function webcam_ant_media_stream_id(string $url): ?string
+{
+    if (!preg_match('~[?&]id=([^&#]+)~', $url, $m)) {
+        return null;
+    }
+    $id = trim(rawurldecode($m[1]));
+
+    return $id !== '' ? $id : null;
+}
+
+/** Ant Media Server adaptive HLS master playlist for a play.html URL. */
+function webcam_ant_media_hls_master_url(string $playUrl): ?string
+{
+    $playUrl = webcam_validate_url($playUrl);
+    if ($playUrl === null) {
+        return null;
+    }
+    $id = webcam_ant_media_stream_id($playUrl);
+    if ($id === null) {
+        return null;
+    }
+    $parts = parse_url($playUrl);
+    if (!is_array($parts)) {
+        return null;
+    }
+    $scheme = (string)($parts['scheme'] ?? 'https');
+    $host = (string)($parts['host'] ?? '');
+    if ($host === '') {
+        return null;
+    }
+    $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+    return webcam_validate_url($scheme . '://' . $host . $port . '/live/streams/' . rawurlencode($id) . '_adaptive.m3u8');
+}
+
+/** True when an HLS media playlist looks like a live stream (not a stale ENDLIST snapshot). */
+function webcam_hls_playlist_is_live(string $body): bool
+{
+    if ($body === '' || str_contains($body, '#EXT-X-ENDLIST')) {
+        return false;
+    }
+    if (preg_match('#EXT-X-PROGRAM-DATE-TIME:([^\n]+)#', $body, $m)) {
+        $ts = strtotime(trim($m[1]));
+        if ($ts !== false && (time() - $ts) > 120) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function webcam_uses_stream_tag(array $cam): bool
@@ -217,6 +280,9 @@ function webcam_widget_image_url(string $frameUrl): ?string
 
 function webcam_stream_playlist_url(string $streamFrameUrl): ?string
 {
+    if (webcam_is_ant_media_play_url($streamFrameUrl)) {
+        return webcam_ant_media_hls_master_url($streamFrameUrl);
+    }
     $html = webcam_http_get($streamFrameUrl);
     if ($html === null) {
         return null;
@@ -246,6 +312,7 @@ function webcam_hls_remote_allowed(string $url): bool
     }
 
     return preg_match('#(^|\.)wetmet\.net$#', $host) === 1
+        || preg_match('#(^|\.)gvsu\.edu$#', $host) === 1
         || str_contains($host, 'amazonaws.com');
 }
 
@@ -328,10 +395,17 @@ function webcam_hls_proxied_playlist(array $cam): ?string
     }
     $mediaUrl = webcam_hls_pick_media_playlist($masterUrl, $masterBody);
     if ($mediaUrl === null) {
+        if (!webcam_hls_playlist_is_live($masterBody)) {
+            return null;
+        }
+
         return webcam_hls_rewrite_playlist($masterBody, $masterUrl, (string)$cam['key']);
     }
     $mediaBody = webcam_http_get($mediaUrl);
     if ($mediaBody === null) {
+        return null;
+    }
+    if (!webcam_hls_playlist_is_live($mediaBody)) {
         return null;
     }
 
@@ -762,8 +836,22 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
 
         return $img !== null && webcam_probe_url($img, 'image');
     }
-    if ($kind === 'stream' || webcam_is_stream_frame_url($url)) {
-        return webcam_stream_playlist_url($url) !== null;
+    if ($kind === 'stream' || webcam_is_stream_frame_url($url) || webcam_is_ant_media_play_url($url)) {
+        $master = webcam_stream_playlist_url($url);
+        if ($master === null) {
+            return false;
+        }
+        $masterBody = webcam_http_get($master);
+        if ($masterBody === null) {
+            return false;
+        }
+        $mediaUrl = webcam_hls_pick_media_playlist($master, $masterBody);
+        $mediaBody = $mediaUrl !== null ? webcam_http_get($mediaUrl) : $masterBody;
+        if ($mediaBody === null) {
+            return false;
+        }
+
+        return webcam_hls_playlist_is_live($mediaBody);
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
