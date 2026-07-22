@@ -503,18 +503,6 @@ function webcam_registry(): array
         }
     }
 
-    $legacy = webcam_validate_url((string)cfg('webcam.EMBED_URL', ''));
-    if ($legacy !== null && empty($saved)) {
-        $out['legacy'] = webcam_normalize_entry([
-            'name' => trim((string)cfg('webcam.TITLE', 'Webcam')),
-            'url' => $legacy,
-            'attribution' => trim((string)cfg('webcam.ATTRIBUTION', '')),
-        ]) ?? null;
-        if ($out['legacy'] === null) {
-            unset($out['legacy']);
-        }
-    }
-
     foreach ($out as $key => $entry) {
         if (!is_array($entry) || trim((string)($entry['url'] ?? '')) === '') {
             unset($out[$key]);
