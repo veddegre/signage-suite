@@ -108,6 +108,26 @@ detect_os() {
   fi
 }
 
+# Ubuntu 24.04+ lists php-opcache as virtual-only — install php8.x-opcache instead.
+resolve_php_opcache_pkg() {
+  local policy candidate ver
+  policy="$(apt-cache policy php-opcache 2>/dev/null || true)"
+  candidate="$(printf '%s\n' "$policy" | awk '/Candidate:/ {print $2; exit}')"
+  if [[ -n "$candidate" && "$candidate" != "(none)" ]]; then
+    echo php-opcache
+    return
+  fi
+  for ver in 8.4 8.3 8.2 8.1 8.0; do
+    policy="$(apt-cache policy "php${ver}-opcache" 2>/dev/null || true)"
+    candidate="$(printf '%s\n' "$policy" | awk '/Candidate:/ {print $2; exit}')"
+    if [[ -n "$candidate" && "$candidate" != "(none)" ]]; then
+      echo "php${ver}-opcache"
+      return
+    fi
+  done
+  echo php-opcache
+}
+
 install_packages() {
   [[ $SKIP_APT -eq 1 ]] && { log "Skipping apt (--skip-apt)"; return; }
 
@@ -116,9 +136,14 @@ install_packages() {
   apt-get update -q
 
   log "Installing Apache, PHP, ffmpeg, and dnsutils (dig)"
+  local php_opcache_pkg
+  php_opcache_pkg="$(resolve_php_opcache_pkg)"
+  if [[ "$php_opcache_pkg" != php-opcache ]]; then
+    log "Using ${php_opcache_pkg} (php-opcache meta-package not installable on this release)"
+  fi
   apt-get install -y -q \
     apache2 libapache2-mod-php \
-    php-cli php-curl php-xml php-mbstring php-gd php-zip php-opcache \
+    php-cli php-curl php-xml php-mbstring php-gd php-zip "$php_opcache_pkg" \
     ffmpeg \
     dnsutils \
     rsync git curl
@@ -400,7 +425,7 @@ post_install_php() {
   }
 
   local ext
-  for ext in curl xml mbstring gd zip; do
+  for ext in curl xml mbstring gd zip opcache; do
     enable_php_mod "$ext"
   done
 
@@ -435,7 +460,7 @@ post_install_php() {
   elif php -m | grep -qi '^Zend OPcache$'; then
     log "OPcache module present (distribution defaults — re-run setup to apply signage tuning)"
   else
-    warn "OPcache not loaded — install php-opcache and re-run setup-server.sh"
+    warn "OPcache not loaded — install $(resolve_php_opcache_pkg) and re-run setup-server.sh"
   fi
 
   if ! php -m | grep -qi '^zip$'; then
@@ -522,7 +547,7 @@ setup_php_opcache() {
   [[ -n "$phpver" ]] || { warn "Could not detect PHP version — skipping OPcache tuning"; return; }
 
   if ! php -m | grep -qi '^Zend OPcache$'; then
-    warn "OPcache not loaded — install php-opcache and re-run setup-server.sh"
+    warn "OPcache not loaded — install $(resolve_php_opcache_pkg) and re-run setup-server.sh"
     return
   fi
 
