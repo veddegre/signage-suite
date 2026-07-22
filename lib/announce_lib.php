@@ -204,7 +204,10 @@ function announce_item_active(array $item, ?DateTimeImmutable $now = null): bool
     }
     if (($item['mode'] ?? 'announcement') === 'countdown') {
         $target = announce_parse_datetime((string)($item['countdown_until'] ?? ''), $tz);
-        if ($target !== null && $now > $target) {
+        if ($target === null) {
+            return false;
+        }
+        if ($now > $target) {
             return false;
         }
     }
@@ -255,11 +258,31 @@ function announce_countdown_parts(array $item, ?DateTimeImmutable $now = null): 
     ];
 }
 
+/** True when a rotation URL targets a countdown item with no target date configured. */
+function announce_skip_rotation(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || !preg_match('~^announce\.php(?:\?|$)~i', $url)) {
+        return false;
+    }
+    if (!preg_match('/[?&]d=([^&#]+)/i', $url, $m)) {
+        return false;
+    }
+    $item = announce_resolve_item(rawurldecode($m[1]));
+    if (($item['mode'] ?? '') !== 'countdown') {
+        return false;
+    }
+
+    return announce_parse_datetime((string)($item['countdown_until'] ?? '')) === null;
+}
+
 /** @param array<string,mixed> $item */
 function announce_wall_payload(array $item): array
 {
-    $active = announce_item_active($item);
     $mode = (string)($item['mode'] ?? 'announcement');
+    $countdownReady = $mode !== 'countdown'
+        || announce_parse_datetime((string)($item['countdown_until'] ?? '')) !== null;
+    $active = $countdownReady && announce_item_active($item);
     $payload = [
         'ok' => $active,
         'active' => $active,

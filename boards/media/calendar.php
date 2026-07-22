@@ -775,10 +775,20 @@ foreach (COUNTDOWNS as $label => $date) {
         $date = trim((string)($date['value'] ?? ''));
     }
     $date = trim((string)$date);
-    $d = (int)ceil((strtotime($date) - time()) / 86400);
-    if ($d >= 0) $counts[] = [$label, $d];
+    if ($date === '') {
+        continue;
+    }
+    $ts = strtotime($date);
+    if ($ts === false) {
+        continue;
+    }
+    $d = (int)ceil(($ts - time()) / 86400);
+    if ($d >= 0) {
+        $counts[] = [$label, $d];
+    }
 }
 usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
+$showCountdownStrip = $counts !== [] || $showTrash;
 
 $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 ?>
@@ -798,8 +808,11 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 600px 1fr; grid-template-rows: minmax(0,1fr) 150px auto;
-           grid-template-areas: "today week" "strip strip" "meta meta"; }
+           grid-template-columns: 600px 1fr;
+           grid-template-rows: <?= $showCountdownStrip ? 'minmax(0,1fr) 150px auto' : 'minmax(0,1fr) auto' ?>;
+           grid-template-areas: <?= $showCountdownStrip
+               ? '"today week" "strip strip" "meta meta"'
+               : '"today week" "meta meta"' ?>; }
 
   .today { grid-area:today; background:var(--harbor); border:1px solid var(--hairline);
            border-radius:14px; padding:38px 42px; display:flex; flex-direction:column; min-height:0; }
@@ -896,6 +909,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
     <?php endforeach; ?>
   </section>
 
+  <?php if ($showCountdownStrip): ?>
   <section class="strip">
     <?php if ($showTrash): ?>
     <div class="chip trash">
@@ -909,11 +923,8 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
         <span class="v"><?= $c[1] ?><small> <?= $c[1] === 1 ? 'day' : 'days' ?></small></span>
       </div>
     <?php endforeach; ?>
-    <?php if (!$counts): ?>
-      <div class="chip"><span class="k">Countdowns</span>
-        <span class="v" style="font-size:26px;color:var(--mist)">add dates to COUNTDOWNS</span></div>
-    <?php endif; ?>
   </section>
+  <?php endif; ?>
   <div class="stamp">ICS feeds refresh every 10 min<?= $GLOBALS['diag'] ? ' · ' . h(implode('; ', array_map(fn($k,$v)=>"$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag']))) : '' ?></div>
 </div>
 <script>

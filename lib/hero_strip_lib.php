@@ -181,6 +181,9 @@ function hero_strip_announce_lines(string $itemKey): array
         return [['text' => (string)($item['title'] ?? 'Announcement'), 'class' => 'muted']];
     }
     if (($item['mode'] ?? '') === 'countdown') {
+        if (announce_parse_datetime((string)($item['countdown_until'] ?? '')) === null) {
+            return [];
+        }
         $cd = announce_countdown_parts($item);
 
         return [

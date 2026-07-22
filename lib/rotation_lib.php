@@ -1232,6 +1232,15 @@ function rotation_page_seasonal_skip(string $url, string $screen = 'main'): bool
 
         return webcam_skip_rotation($url);
     }
+    if (preg_match('~(?:^|/)announce\.php$~i', (string)(parse_url($url, PHP_URL_PATH) ?? ''))) {
+        $lib = __DIR__ . '/announce_lib.php';
+        if (!is_file($lib)) {
+            return false;
+        }
+        require_once $lib;
+
+        return announce_skip_rotation($url);
+    }
 
     return false;
 }

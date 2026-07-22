@@ -21,6 +21,8 @@ $payload = $pageOff
     ? ['ok' => false, 'active' => false, 'mode' => 'announcement', 'title' => BOARD_TITLE, 'body' => 'This item is marked Off wall in admin.', 'sub' => BOARD_SUB]
     : announce_wall_payload($item);
 $isCountdown = ($payload['mode'] ?? '') === 'countdown';
+$countdownReady = $isCountdown
+    && announce_parse_datetime((string)($item['countdown_until'] ?? '')) !== null;
 $countdown = is_array($payload['countdown'] ?? null) ? $payload['countdown'] : announce_countdown_parts($item);
 $active = !empty($payload['active']);
 
@@ -81,7 +83,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <div class="title"><?= h(BOARD_TITLE) ?></div>
       <div class="inactive">This announcement is outside its active window or the countdown has ended.</div>
     </div>
-  <?php elseif ($isCountdown): ?>
+  <?php elseif ($isCountdown && $countdownReady): ?>
     <div class="hero">
       <div class="k">Countdown</div>
       <div class="title"><?= h(BOARD_TITLE) ?></div>
@@ -111,7 +113,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     </div>
   <?php endif; ?>
 
-  <div class="stamp">Announcements<?php if ($isCountdown && !$countdown['past']): ?> · live countdown<?php endif; ?></div>
+  <div class="stamp">Announcements<?php if ($countdownReady && !$countdown['past']): ?> · live countdown<?php endif; ?></div>
 </div>
 
 <?php if ($showClock): ?>
@@ -129,7 +131,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 </script>
 <?php endif; ?>
 
-<?php if ($isCountdown && $active && empty($countdown['past']) && trim((string)($item['countdown_until'] ?? '')) !== ''): ?>
+<?php if ($countdownReady && $active && empty($countdown['past'])): ?>
 <script>
 (function () {
   const target = new Date(<?= json_encode((string)($payload['countdown_until'] ?? '')) ?>).getTime();
