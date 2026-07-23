@@ -67,7 +67,10 @@ Each screen *is* a playlist:
 
 - Pages in **playlist order**, **Shuffle**, or **Weighted** (see below)
 - Per-page **dwell** (seconds)
-- Per-page hour windows (**From hr** / **To hr**)
+- Per-page hour windows — one or more ranges (e.g. 7–9 and 16–18 for commute times). Leave blank for all day. Overnight 22→6 supported.
+- Optional **weekdays** per playlist row (e.g. traffic Mon–Fri only).
+- **Minute precision** — use `7:30`–`9:00` instead of whole hours when needed.
+- **Calendar overrides** (Rotation → Calendar overrides) — swap the playlist while a matching ICS event is active (title contains + feed key).
 - **Skip** — bench a page without deleting (settings preserved)
 
 Screens need not map to hardware: define `ambient` or `guests` and point any display at it.

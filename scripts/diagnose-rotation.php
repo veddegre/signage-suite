@@ -13,8 +13,12 @@ require_once $root . '/lib/slides_lib.php';
 
 $screen = rotation_normalize_screen_key($argv[1] ?? 'main');
 $settings = rotation_screen_settings($screen);
-$hour = rotation_current_hour();
+$now = rotation_now();
+$hour = (int)$now->format('G');
+$minute = rotation_minutes_since_midnight($now);
 $tz = rotation_timezone();
+require_once $root . '/lib/rotation_calendar_lib.php';
+$calOverride = rotation_calendar_override_status($screen, $now);
 $effective = rotation_screen_effective_pages($screen);
 $active = rotation_screen_active_pages($screen);
 $activeUrls = [];
@@ -26,9 +30,13 @@ foreach ($active as $p) {
 }
 
 echo "Screen: {$screen}\n";
-echo 'Timezone: ' . $tz . " (hour {$hour})\n";
+echo 'Timezone: ' . $tz . ' (now ' . rotation_format_time_label($minute) . ", weekday {$now->format('l')})\n";
 echo 'Weighted mode: ' . (!empty($settings['weighted']) ? 'ON' : 'OFF — weights are ignored') . "\n";
 echo 'Shuffle: ' . (!empty($settings['shuffle']) ? 'on' : 'off') . "\n";
+if ($calOverride !== null) {
+    echo 'Calendar override ACTIVE: ' . ($calOverride['label'] ?? '') . ' until '
+        . date('g:i A', (int)($calOverride['end'] ?? 0)) . " ({$calOverride['page_count']} pages)\n";
+}
 echo 'On wall now: ' . count($active) . ' active / ' . count($effective) . " in saved playlist\n\n";
 
 if ($effective === []) {
@@ -48,7 +56,7 @@ foreach ($effective as $i => $page) {
     }
     $weight = (int)($page['weight'] ?? 1);
     $skipped = !empty($page['off']);
-    $inWindow = rotation_page_in_window($page, $hour);
+    $inWindow = rotation_page_in_window($page, $now);
     $onWall = isset($activeUrls[$url]);
     if ($inWindow && $onWall && !$skipped) {
         $inWindowCount++;
@@ -77,9 +85,10 @@ foreach ($effective as $i => $page) {
             }
         }
         if (!$inWindow) {
-            $from = $page['from'] ?? '—';
-            $to = $page['to'] ?? '—';
-            $reasons[] = "outside hour window (from {$from}, to {$to})";
+            $label = rotation_page_schedule_label($page);
+            $reasons[] = $label !== ''
+                ? "outside schedule ({$label})"
+                : 'outside schedule';
         }
         if (!empty($settings['weighted'])) {
             $reasons[] = 'eligible for weighted cycle (weight = slots per pass)';
@@ -120,7 +129,7 @@ foreach ($weightedRows as $row) {
 if (!empty($settings['weighted']) && $inWindowCount > 0) {
     $totalW = 0;
     foreach ($active as $p) {
-        if (!is_array($p) || !rotation_page_in_window($p, $hour)) {
+        if (!is_array($p) || !rotation_page_in_window($p, $now)) {
             continue;
         }
         $w = (int)($p['weight'] ?? 1);

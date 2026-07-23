@@ -5,9 +5,10 @@
  * windows, all editable in admin.php under "Rotation".
  *
  * Each page entry: url (relative, e.g. "rss.php?feed=krebs"), dwell (seconds),
- * and optional from/to hours (0–23). Pages outside their window are skipped;
- * overnight windows (from 22, to 6) work. If every page is out of window the
- * first one shows as a fallback.
+ * and optional time window(s) (0–23 or HH:MM). Single window uses from/to;
+ * multiple use windows: [{from,to},…]. Optional weekdays per row. Pages outside
+ * windows (from 22, to 6) work. If every page is out of window the first one
+ * shows as a fallback.
  *
  * The weather-alert ticker lives HERE, in the shell — genuinely persistent
  * across page transitions. Framed boards get ?noticker=1 so they don't render
@@ -300,26 +301,78 @@ if (($_GET['api'] ?? '') === 'presence') {
     rotateForward();
   });
 
-  function rotationHour() {
+  function parseWindowTime(v) {
+    if (v == null || v === '') return null;
+    const s = String(v).trim();
+    if (/^\d+$/.test(s)) return parseInt(s, 10) * 60;
+    const m = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    return null;
+  }
+
+  function rotationNowParts() {
     try {
       const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: ROTATION_TZ,
         hour: 'numeric',
+        minute: 'numeric',
+        weekday: 'long',
         hourCycle: 'h23',
       }).formatToParts(new Date());
-      const hit = parts.find(function (p) { return p.type === 'hour'; });
-      if (hit) {
-        const h = parseInt(hit.value, 10);
-        if (!isNaN(h)) return h % 24;
-      }
+      const map = {};
+      parts.forEach(function (p) { map[p.type] = p.value; });
+      return map;
     } catch (e) {}
-    return new Date().getHours();
+    const d = new Date();
+    return {
+      hour: String(d.getHours()),
+      minute: String(d.getMinutes()),
+      weekday: d.toLocaleDateString('en-US', { weekday: 'long' }),
+    };
+  }
+
+  function rotationMinutesNow() {
+    const p = rotationNowParts();
+    const h = parseInt(p.hour, 10);
+    const m = parseInt(p.minute, 10);
+    if (isNaN(h) || isNaN(m)) {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes();
+    }
+    return (h % 24) * 60 + m;
+  }
+
+  function pageWeekdaysActive(p) {
+    if (!Array.isArray(p.weekdays) || !p.weekdays.length) return true;
+    const today = rotationNowParts().weekday || '';
+    return p.weekdays.indexOf(today) >= 0;
+  }
+
+  function pageWindows(p) {
+    let raw = [];
+    if (Array.isArray(p.windows) && p.windows.length) raw = p.windows;
+    else if (p.from != null && p.to != null && p.from !== '' && p.to !== '') raw = [{ from: p.from, to: p.to }];
+    return raw.map(function (w) {
+      return { from: parseWindowTime(w.from), to: parseWindowTime(w.to) };
+    }).filter(function (w) {
+      return w.from != null && w.to != null;
+    });
+  }
+
+  function minutesInRange(nowMin, fromMin, toMin) {
+    return fromMin <= toMin ? (nowMin >= fromMin && nowMin < toMin) : (nowMin >= fromMin || nowMin < toMin);
   }
 
   function inWindow(p) {
-    if (p.from == null || p.to == null || p.from === '' || p.to === '') return true;
-    const h = rotationHour(), a = +p.from, b = +p.to;
-    return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // overnight supported
+    if (!pageWeekdaysActive(p)) return false;
+    const windows = pageWindows(p);
+    if (!windows.length) return true;
+    const nowMin = rotationMinutesNow();
+    for (let i = 0; i < windows.length; i++) {
+      const w = windows[i];
+      if (minutesInRange(nowMin, w.from, w.to)) return true;
+    }
+    return false;
   }
 
   function pagesInWindow() {

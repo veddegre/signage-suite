@@ -766,35 +766,290 @@ function rotation_timezone(): string
 /** Current hour (0–23) in the rotation timezone. */
 function rotation_current_hour(): int
 {
-    $tz = rotation_timezone();
-    try {
-        $prevTz = date_default_timezone_get();
-        date_default_timezone_set($tz);
-        $hour = (int)date('G');
-        date_default_timezone_set($prevTz);
-
-        return $hour;
-    } catch (Throwable $e) {
-        return (int)date('G');
-    }
+    return (int)rotation_now()->format('G');
 }
 
-/** Whether a playlist row is inside its optional from/to hour window (matches board.php). */
-function rotation_page_in_window(array $page, ?int $hour = null): bool
+/** Minutes since local midnight (0–1439) in the rotation timezone. */
+function rotation_minutes_since_midnight(?DateTimeInterface $now = null): int
 {
-    $from = $page['from'] ?? null;
-    $to = $page['to'] ?? null;
-    if ($from === null || $to === null || $from === '' || $to === '') {
-        return true;
+    $now = $now ?? rotation_now();
+
+    return ((int)$now->format('G') * 60) + (int)$now->format('i');
+}
+
+/** Parse a window time — whole hour (7) or HH:MM (7:30) — to minutes since midnight. */
+function rotation_parse_time(mixed $v): ?int
+{
+    if ($v === null || $v === '') {
+        return null;
     }
-    $hour = $hour ?? rotation_current_hour();
-    $from = (int)$from;
-    $to = (int)$to;
-    if ($from <= $to) {
-        return $hour >= $from && $hour < $to;
+    if (is_int($v)) {
+        return max(0, min(23, $v)) * 60;
+    }
+    $v = trim((string)$v);
+    if ($v === '') {
+        return null;
+    }
+    if (preg_match('/^(\d{1,2}):(\d{2})$/', $v, $m)) {
+        $h = max(0, min(23, (int)$m[1]));
+        $min = max(0, min(59, (int)$m[2]));
+
+        return $h * 60 + $min;
+    }
+    if (preg_match('/^\d+$/', $v)) {
+        return max(0, min(23, (int)$v)) * 60;
     }
 
-    return $hour >= $from || $hour < $to;
+    return null;
+}
+
+/** @deprecated Use rotation_parse_time() */
+function rotation_parse_hour(mixed $v): ?int
+{
+    $min = rotation_parse_time($v);
+
+    return $min === null ? null : intdiv($min, 60);
+}
+
+/** Format minutes since midnight for storage/display (7 or 7:30). */
+function rotation_format_time_value(int $minutes): int|string
+{
+    $minutes = max(0, min(1439, $minutes));
+    if ($minutes % 60 === 0) {
+        return intdiv($minutes, 60);
+    }
+
+    return sprintf('%d:%02d', intdiv($minutes, 60), $minutes % 60);
+}
+
+/** Human label for one window endpoint. */
+function rotation_format_time_label(int $minutes): string
+{
+    return (string)rotation_format_time_value($minutes);
+}
+
+/** Whether $nowMin falls in a from/to range (end exclusive; overnight supported). */
+function rotation_minutes_in_range(int $fromMin, int $toMin, int $nowMin): bool
+{
+    if ($fromMin <= $toMin) {
+        return $nowMin >= $fromMin && $nowMin < $toMin;
+    }
+
+    return $nowMin >= $fromMin || $nowMin < $toMin;
+}
+
+/** @deprecated Use rotation_minutes_in_range() */
+function rotation_hour_in_range(int $from, int $to, int $hour): bool
+{
+    return rotation_minutes_in_range($from * 60, $to * 60, $hour * 60);
+}
+
+/**
+ * Normalized minute windows for a playlist row.
+ *
+ * @return list<array{from_min:int,to_min:int}>
+ */
+function rotation_page_window_ranges(array $page): array
+{
+    $out = [];
+    if (!empty($page['windows']) && is_array($page['windows'])) {
+        foreach ($page['windows'] as $w) {
+            if (!is_array($w)) {
+                continue;
+            }
+            $fromMin = rotation_parse_time($w['from'] ?? null);
+            $toMin = rotation_parse_time($w['to'] ?? null);
+            if ($fromMin !== null && $toMin !== null) {
+                $out[] = ['from_min' => $fromMin, 'to_min' => $toMin];
+            }
+        }
+        if ($out !== []) {
+            return $out;
+        }
+    }
+    $fromMin = rotation_parse_time($page['from'] ?? null);
+    $toMin = rotation_parse_time($page['to'] ?? null);
+    if ($fromMin !== null && $toMin !== null) {
+        return [['from_min' => $fromMin, 'to_min' => $toMin]];
+    }
+
+    return [];
+}
+
+/** @return list<array{from:int,to:int}> @deprecated */
+function rotation_page_windows(array $page): array
+{
+    return array_map(static fn(array $w): array => [
+        'from' => intdiv($w['from_min'], 60),
+        'to' => intdiv($w['to_min'], 60),
+    ], rotation_page_window_ranges($page));
+}
+
+/** Optional weekday filter on a playlist row — null means every day. @return list<string>|null */
+function rotation_page_weekdays(array $page): ?array
+{
+    if (!array_key_exists('weekdays', $page)) {
+        return null;
+    }
+    if (!is_array($page['weekdays'])) {
+        $parsed = rotation_parse_weekdays((string)$page['weekdays']);
+
+        return $parsed === [] ? null : $parsed;
+    }
+
+    $normalized = rotation_normalize_weekdays_list($page['weekdays']);
+
+    return $normalized === [] ? null : $normalized;
+}
+
+function rotation_page_weekdays_active(array $page, ?DateTimeInterface $now = null): bool
+{
+    $days = rotation_page_weekdays($page);
+    if ($days === null) {
+        return true;
+    }
+
+    return rotation_today_in_weekdays($days, $now);
+}
+
+/** Human label for admin/diagnose, e.g. "7:30–9, 16–18". Empty when all day. */
+function rotation_page_windows_label(array $page): string
+{
+    $parts = [];
+    foreach (rotation_page_window_ranges($page) as $w) {
+        $parts[] = rotation_format_time_label($w['from_min']) . '–' . rotation_format_time_label($w['to_min']);
+    }
+
+    return implode(', ', $parts);
+}
+
+/** Full schedule label including weekdays when restricted. */
+function rotation_page_schedule_label(array $page): string
+{
+    $parts = [];
+    $windows = rotation_page_windows_label($page);
+    if ($windows !== '') {
+        $parts[] = $windows;
+    }
+    $days = rotation_page_weekdays($page);
+    if ($days !== null) {
+        $abbrevs = [];
+        foreach (rotation_weekday_options() as $opt) {
+            if (in_array($opt['full'], $days, true)) {
+                $abbrevs[] = $opt['short'];
+            }
+        }
+        if ($abbrevs !== []) {
+            $parts[] = implode('', $abbrevs);
+        }
+    }
+
+    return implode(' · ', $parts);
+}
+
+/** Admin form rows — at least one blank pair when unrestricted. @return list<array{from:mixed,to:mixed}> */
+function rotation_page_windows_form_rows(array $page): array
+{
+    if (!empty($page['windows']) && is_array($page['windows'])) {
+        $rows = [];
+        foreach ($page['windows'] as $w) {
+            if (!is_array($w)) {
+                continue;
+            }
+            $rows[] = [
+                'from' => (string)($w['from'] ?? ''),
+                'to' => (string)($w['to'] ?? ''),
+            ];
+        }
+        if ($rows !== []) {
+            return $rows;
+        }
+    }
+    $from = $page['from'] ?? '';
+    $to = $page['to'] ?? '';
+    if ($from !== '' && $from !== null && $to !== '' && $to !== null) {
+        return [['from' => (string)$from, 'to' => (string)$to]];
+    }
+
+    return [['from' => '', 'to' => '']];
+}
+
+/**
+ * Parse time windows from a posted playlist row.
+ *
+ * @return list<array{from_min:int,to_min:int}>
+ */
+function rotation_parse_page_windows_from_row(array $row): array
+{
+    $windows = [];
+    $raw = $row['windows'] ?? null;
+    if (is_array($raw)) {
+        foreach ($raw as $w) {
+            if (!is_array($w)) {
+                continue;
+            }
+            $fromMin = rotation_parse_time($w['from'] ?? null);
+            $toMin = rotation_parse_time($w['to'] ?? null);
+            if ($fromMin !== null && $toMin !== null) {
+                $windows[] = ['from_min' => $fromMin, 'to_min' => $toMin];
+            }
+        }
+    }
+    if ($windows === []) {
+        $fromMin = rotation_parse_time($row['from'] ?? null);
+        $toMin = rotation_parse_time($row['to'] ?? null);
+        if ($fromMin !== null && $toMin !== null) {
+            $windows[] = ['from_min' => $fromMin, 'to_min' => $toMin];
+        }
+    }
+
+    return $windows;
+}
+
+/** @param list<array{from_min:int,to_min:int}> $ranges */
+function rotation_store_window_fields(array $ranges): array
+{
+    if ($ranges === []) {
+        return [];
+    }
+    $serialize = static fn(array $w): array => [
+        'from' => rotation_format_time_value($w['from_min']),
+        'to' => rotation_format_time_value($w['to_min']),
+    ];
+    if (count($ranges) === 1) {
+        $one = $serialize($ranges[0]);
+
+        return ['from' => $one['from'], 'to' => $one['to']];
+    }
+
+    return ['windows' => array_map($serialize, $ranges)];
+}
+
+/** Whether a playlist row is inside its optional schedule (weekdays + time windows). */
+function rotation_page_in_window(array $page, DateTimeInterface|int|null $now = null): bool
+{
+    if (!$now instanceof DateTimeInterface) {
+        if (is_int($now)) {
+            $now = rotation_now()->setTime($now, 0);
+        } else {
+            $now = rotation_now();
+        }
+    }
+    if (!rotation_page_weekdays_active($page, $now)) {
+        return false;
+    }
+    $windows = rotation_page_window_ranges($page);
+    if ($windows === []) {
+        return true;
+    }
+    $nowMin = rotation_minutes_since_midnight($now);
+    foreach ($windows as $w) {
+        if (rotation_minutes_in_range((int)$w['from_min'], (int)$w['to_min'], $nowMin)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /** Inside the configured off window (supports overnight, e.g. off 23 / on 6). */
@@ -1126,6 +1381,12 @@ function rotation_merge_pages_from_post(array $conf, string $screen, array $rawR
 /** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
 function rotation_screen_effective_pages(string $screen = 'main'): array
 {
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+    $override = rotation_calendar_override_pages($screen);
+    if ($override !== null) {
+        return $override;
+    }
+
     return rotation_resolved_playlist_pages($screen);
 }
 
@@ -1358,6 +1619,11 @@ function rotation_config_revision(string $screen = 'main'): string
 
             return emergency_revision_blob();
         })(),
+        'calendar_overrides' => (static function () use ($screen) {
+            require_once __DIR__ . '/rotation_calendar_lib.php';
+
+            return rotation_calendar_overrides($screen);
+        })(),
     ], JSON_UNESCAPED_SLASHES);
     return substr(sha1($blob ?: ''), 0, 12);
 }
@@ -1371,6 +1637,8 @@ function rotation_screen_runtime(string $screen = 'main'): array
     $screen = rotation_normalize_screen_key($screen);
     $settings = rotation_screen_settings($screen);
     $blank = rotation_screen_blank_active($screen);
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+    $calendarOverride = rotation_calendar_override_status($screen);
 
     $runtime = [
         'screen' => $screen,
@@ -1384,6 +1652,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'keyboard_nav' => $settings['keyboard_nav'],
         'schedule' => $settings['schedule'],
         'blank' => $blank,
+        'calendar_override' => $calendarOverride,
         'fade_ms' => $settings['fade_ms'],
         'settle_ms' => $settings['settle_ms'],
         'hang_ms' => $settings['hang_ms'],
@@ -1464,18 +1733,20 @@ function rotation_parse_pages_rows(array $rows): array
         if (!is_array($row)) {
             continue;
         }
-        $row = array_map(fn($v) => trim((string)$v), $row);
         $url = trim((string)($row['url'] ?? ''));
         if ($url === '') {
             continue;
         }
         $obj = ['url' => $url];
-        $dwell = (int)($row['dwell'] ?? 0);
+        $dwell = (int)trim((string)($row['dwell'] ?? ''));
         $obj['dwell'] = $dwell > 0 ? $dwell : 60;
-        foreach (['from', 'to'] as $col) {
-            $v = $row[$col] ?? '';
-            if ($v !== '') {
-                $obj[$col] = (int)$v;
+        $windows = rotation_parse_page_windows_from_row($row);
+        $obj = array_merge($obj, rotation_store_window_fields($windows));
+        $weekdaysPosted = rotation_weekdays_from_post_row($row);
+        if ($weekdaysPosted !== null) {
+            $normalizedDays = rotation_normalize_weekdays_list($weekdaysPosted);
+            if ($normalizedDays !== [] && count($normalizedDays) < 7) {
+                $obj['weekdays'] = $normalizedDays;
             }
         }
         $wRaw = trim((string)($row['weight'] ?? ''));
@@ -1510,10 +1781,18 @@ function rotation_page_dwell(array $page): int
  */
 function rotation_merge_page_meta(array $page, array $prev): array
 {
-    foreach (['from', 'to'] as $col) {
-        if (array_key_exists($col, $prev) && $prev[$col] !== '' && $prev[$col] !== null) {
-            $page[$col] = (int)$prev[$col];
+    if (!empty($prev['windows']) && is_array($prev['windows'])) {
+        $page['windows'] = $prev['windows'];
+        unset($page['from'], $page['to']);
+    } else {
+        foreach (['from', 'to'] as $col) {
+            if (array_key_exists($col, $prev) && $prev[$col] !== '' && $prev[$col] !== null) {
+                $page[$col] = $prev[$col];
+            }
         }
+    }
+    if (array_key_exists('weekdays', $prev) && is_array($prev['weekdays']) && $prev['weekdays'] !== []) {
+        $page['weekdays'] = $prev['weekdays'];
     }
     if (!empty($prev['off'])) {
         $page['off'] = true;

@@ -47,6 +47,65 @@ foreach ($windowExpect as $hour => $expect) {
 }
 echo "Hour window checks: OK\n";
 
+$commutePages = [
+    ['url' => 'traffic', 'windows' => [['from' => 7, 'to' => 9], ['from' => 16, 'to' => 18]]],
+    ['url' => 'always'],
+];
+$commuteExpect = [
+    6 => ['always'],
+    8 => ['traffic', 'always'],
+    12 => ['always'],
+    17 => ['traffic', 'always'],
+    20 => ['always'],
+];
+foreach ($commuteExpect as $hour => $expect) {
+    $got = [];
+    foreach ($commutePages as $page) {
+        if (rotation_page_in_window($page, (int)$hour)) {
+            $got[] = (string)$page['url'];
+        }
+    }
+    if ($got !== $expect) {
+        fwrite(STDERR, "FAIL multi-window at h={$hour}: got " . implode(',', $got)
+            . ' expected ' . implode(',', $expect) . PHP_EOL);
+        exit(1);
+    }
+}
+echo "Multi-window checks: OK\n";
+
+$minutePage = ['url' => 'traffic', 'from' => '7:30', 'to' => '9:00'];
+$minuteExpect = [
+    449 => false, // 7:29
+    450 => true,  // 7:30
+    480 => true,  // 8:00
+    539 => true,  // 8:59
+    540 => false, // 9:00 end exclusive
+];
+foreach ($minuteExpect as $min => $expect) {
+    $now = rotation_now()->setTime(intdiv($min, 60), $min % 60);
+    $got = rotation_page_in_window($minutePage, $now);
+    if ($got !== $expect) {
+        fwrite(STDERR, "FAIL minute window at {$min}m: got " . ($got ? 'in' : 'out') . PHP_EOL);
+        exit(1);
+    }
+}
+echo "Minute window checks: OK\n";
+
+$weekdayPage = [
+    'url' => 'traffic',
+    'from' => 7,
+    'to' => 9,
+    'weekdays' => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+];
+$dow = (int)rotation_now()->format('N');
+$isWeekday = $dow >= 1 && $dow <= 5;
+$inCommuteHour = rotation_page_in_window($weekdayPage, rotation_now()->setTime(8, 0));
+if ($inCommuteHour !== $isWeekday) {
+    fwrite(STDERR, "FAIL weekday filter: expected " . ($isWeekday ? 'in' : 'out') . PHP_EOL);
+    exit(1);
+}
+echo "Weekday window checks: OK\n";
+
 /**
  * Mirrors board.php weighted deck (weight copies per cycle, shuffled).
  * @param list<array<string,mixed>> $pages
@@ -163,7 +222,20 @@ echo "Shuffle deck checks: OK\n";
 $prev = ['url' => 'slides.php?slide=a.png', 'dwell' => 30, 'weight' => 20, 'from' => 8, 'to' => 18, 'off' => true];
 $merged = rotation_merge_page_meta(['url' => 'slides.php?slide=a.png', 'dwell' => 45], $prev);
 if (($merged['weight'] ?? 0) !== 20 || ($merged['from'] ?? null) !== 8 || ($merged['to'] ?? null) !== 18 || empty($merged['off'])) {
-    fwrite(STDERR, "FAIL: rotation_merge_page_meta dropped playlist metadata\n");
+    fwrite(STDERR, "FAIL: rotation_merge_page_meta dropped single-window metadata\n");
+    exit(1);
+}
+$prevMulti = [
+    'url' => 'traffic.php',
+    'dwell' => 90,
+    'windows' => [['from' => 7, 'to' => 9], ['from' => 16, 'to' => 18]],
+];
+$mergedMulti = rotation_merge_page_meta(['url' => 'traffic.php', 'dwell' => 60], $prevMulti);
+$mergedWindows = $mergedMulti['windows'] ?? [];
+if (count($mergedWindows) !== 2
+    || (int)($mergedWindows[0]['from'] ?? 0) !== 7
+    || (int)($mergedWindows[1]['to'] ?? 0) !== 18) {
+    fwrite(STDERR, "FAIL: rotation_merge_page_meta dropped multi-window metadata\n");
     exit(1);
 }
 echo "Sync metadata preservation: OK\n";

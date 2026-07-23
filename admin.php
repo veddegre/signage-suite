@@ -861,6 +861,18 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 }
             }
         }
+        $calOverrideJsonRaw = trim((string)($_POST['ROTATION_CALENDAR_OVERRIDES_JSON'] ?? ''));
+        if (!$rotationSaveLocked && $calOverrideJsonRaw !== '') {
+            require_once __DIR__ . '/lib/rotation_calendar_lib.php';
+            $parsedCalOverrides = rotation_calendar_overrides_from_json_string($calOverrideJsonRaw);
+            if ($parsedCalOverrides === null) {
+                $errors[] = 'Calendar override data invalid — not saved.';
+            } elseif ($parsedCalOverrides === []) {
+                unset($conf['rotation.CALENDAR_OVERRIDES']);
+            } else {
+                $conf['rotation.CALENDAR_OVERRIDES'] = $parsedCalOverrides;
+            }
+        }
         if (!$rotationPagesFromJson && !$rotationSaveLocked) {
             if (admin_post_input_vars_saturated()) {
                 $errors[] = 'Rotation save may have been truncated (PHP max_input_vars=' . (int)ini_get('max_input_vars')
@@ -1805,11 +1817,15 @@ $rotationStarterPages = rotation_starter_pages();
 $rotationMainPages = [];
 $rotationTemplates = [];
 if ($authed && $board === 'rotation') {
+    require_once __DIR__ . '/lib/rotation_calendar_lib.php';
     $rotationMainPages = rotation_screen_pages('main');
     if ($rotationMainPages === []) {
         $rotationMainPages = $rotationStarterPages;
     }
     $rotationTemplates = rotation_playlist_templates_all();
+    $rotationCalendarFeedKeys = rotation_calendar_feed_keys();
+    $rotationCalendarOverrides = is_array($rawConf['rotation.CALENDAR_OVERRIDES'] ?? null)
+        ? $rawConf['rotation.CALENDAR_OVERRIDES'] : [];
 }
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesTab = 'deck';
@@ -3047,6 +3063,14 @@ function admin_field(array $f, $val, string $board): void
                                   color:var(--mist); margin-bottom:4px; }
   .video-card-grid input, .rotation-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
                             background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .rotation-windows { grid-column:1 / -1; }
+  .rotation-window-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px; }
+  .rotation-window-row input { width:4.5em; flex:0 0 auto; }
+  .rotation-window-row .rowdel { flex:0 0 auto; }
+  .rotation-window-add { margin-top:4px; padding:4px 10px; font-size:12px; }
+  .rotation-calendar-override { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:12px; background:var(--lake-night); }
+  .rotation-calendar-override-head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .rotation-calendar-page-row input { width:100%; min-width:0; }
   .video-card-meta, .rotation-card-meta { display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:12px; font-size:13px; color:var(--mist); align-items:center; }
   .splunk-playlist { display:flex; flex-direction:column; gap:14px; margin-top:8px; }
   .splunk-pages-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0 16px; }
@@ -4098,6 +4122,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <button type="button" class="rotation-setup-tab is-active" data-rotation-tab="boards" role="tab" aria-selected="true">Add boards</button>
                 <button type="button" class="rotation-setup-tab" data-rotation-tab="kiosk" role="tab" aria-selected="false">Kiosk settings</button>
                 <button type="button" class="rotation-setup-tab" data-rotation-tab="templates" role="tab" aria-selected="false">Templates</button>
+                <button type="button" class="rotation-setup-tab" data-rotation-tab="calendar" role="tab" aria-selected="false">Calendar overrides</button>
               </div>
               <div class="rotation-setup-panel is-active" data-rotation-tab-panel="boards" role="tabpanel">
                 <p class="help" style="margin:0 0 8px">Adds a board to the playlist for the display selected above — Weather, RSS, Zabbix, Sports, and the rest. Rows already on that playlist are dimmed.</p>
@@ -4150,6 +4175,56 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <button type="button" class="secondary" onclick="deleteRotationTemplate()">Delete template</button>
                 </div>
                 <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — meal calendar, weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. Create the dinner slide from Slides → Create → Dinner menu template; plan the week on <strong>Meal calendar</strong>.</p>
+              </div>
+              <div class="rotation-setup-panel" data-rotation-tab-panel="calendar" role="tabpanel" hidden>
+                <p class="help" style="margin:0 0 10px">Swap the selected display’s playlist while a matching calendar event is underway — e.g. title contains <strong>party</strong> from 5:30–10pm uses a party playlist. Feeds come from <strong>Calendar → ICS feeds</strong>. Overrides beat the normal playlist but not emergency mode.</p>
+                <?php if ($rotationCalendarFeedKeys === []): ?>
+                <div class="flash bad" style="margin:0">Add at least one ICS feed under <strong>Calendar</strong> before configuring overrides.</div>
+                <?php else: ?>
+                <div id="rotationCalendarOverridePanels">
+                  <?php foreach ($rotationScreens as $screenKey => $screenMeta):
+                    $calRows = is_array($rotationCalendarOverrides[$screenKey] ?? null) ? $rotationCalendarOverrides[$screenKey] : [];
+                  ?>
+                  <div class="rotation-calendar-panel" data-calendar-screen="<?= h((string)$screenKey) ?>" hidden>
+                    <?php foreach ($calRows as $ci => $crow): ?>
+                    <div class="rotation-calendar-override" data-calendar-override>
+                      <div class="rotation-calendar-override-head">
+                        <label class="check"><input type="checkbox" data-cal-enabled <?= !empty($crow['enabled']) ? 'checked' : '' ?>> Enabled</label>
+                        <input type="text" data-cal-label value="<?= h((string)($crow['label'] ?? '')) ?>" placeholder="Label (optional)" style="flex:1;min-width:120px">
+                        <button type="button" class="rowdel" onclick="removeCalendarOverride(this)">×</button>
+                      </div>
+                      <div class="field-grid" style="grid-template-columns:160px 1fr;margin:8px 0">
+                        <div class="field">
+                          <label class="mini">Calendar feed</label>
+                          <select data-cal-feed>
+                            <?php foreach ($rotationCalendarFeedKeys as $feedKey): ?>
+                            <option value="<?= h($feedKey) ?>" <?= ($crow['feed'] ?? '') === $feedKey ? 'selected' : '' ?>><?= h($feedKey) ?></option>
+                            <?php endforeach; ?>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label class="mini">Title contains</label>
+                          <input type="text" data-cal-match value="<?= h((string)($crow['match'] ?? '')) ?>" placeholder="party">
+                        </div>
+                      </div>
+                      <div class="help" style="margin:0 0 6px">Override playlist (event start → end):</div>
+                      <div data-cal-pages>
+                        <?php foreach (($crow['pages'] ?? []) as $pi => $page): ?>
+                        <div class="field-grid rotation-calendar-page-row" style="grid-template-columns:1fr 90px auto;margin-bottom:6px">
+                          <input type="text" data-cal-url value="<?= h((string)($page['url'] ?? '')) ?>" placeholder="slides.php?slide=party.png">
+                          <input type="number" min="5" data-cal-dwell value="<?= (int)($page['dwell'] ?? 60) ?>" placeholder="Sec">
+                          <button type="button" class="rowdel" onclick="this.closest('.rotation-calendar-page-row').remove()">×</button>
+                        </div>
+                        <?php endforeach; ?>
+                      </div>
+                      <button type="button" class="secondary" style="padding:4px 10px;font-size:12px" onclick="addCalendarOverridePage(this)">+ Add page</button>
+                    </div>
+                    <?php endforeach; ?>
+                    <button type="button" class="addrow" onclick="addCalendarOverride('<?= h((string)$screenKey) ?>')">+ Calendar override</button>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
               </div>
             </div>
           </div>
@@ -4243,7 +4318,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </span>
             </summary>
             <div class="panel-body">
-          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Boards (weather, RSS, …): set <strong>Dwell</strong> on each card header. Deployed slides: edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy. Expand a card for hour windows and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
+          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Boards (weather, RSS, …): set <strong>Dwell</strong> on each card header. Deployed slides: edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy. Expand a card for hour windows (multiple ranges OK, e.g. commute times) and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
           <?php if (!empty($screenSettings['weighted'])): ?>
           <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) is how many slots it gets in each shuffled cycle. Higher weight = more airtime, but every board still plays at least once per cycle.</div>
           <?php endif; ?>
@@ -4521,16 +4596,19 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <?php
               $dwellShow = trim((string)($prow['dwell'] ?? ''));
               $weightShow = trim((string)($prow['weight'] ?? ''));
-              $editSummary = 'Hours & weight';
+              $scheduleLabel = rotation_page_schedule_label($prow);
+              $editSummary = 'Schedule & weight';
               if ($weightShow !== '' && (int)$weightShow > 1) {
                   $editSummary = 'Weight ' . (int)$weightShow;
               }
-              if (!empty($prow['from']) || !empty($prow['to'])) {
-                  $editSummary .= ($editSummary !== 'Hours & weight' ? ' · ' : '') . 'hrs';
+              if ($scheduleLabel !== '') {
+                  $editSummary .= ($editSummary !== 'Schedule & weight' ? ' · ' : '') . $scheduleLabel;
               }
-              if ($editSummary === 'Hours & weight' && empty($prow['from']) && empty($prow['to']) && ($weightShow === '' || (int)$weightShow <= 1)) {
+              if ($editSummary === 'Schedule & weight' && ($weightShow === '' || (int)$weightShow <= 1)) {
                   $editSummary = 'More options';
               }
+              $windowRows = rotation_page_windows_form_rows($prow);
+              $pageWeekdays = rotation_page_weekdays($prow);
               ?>
               <details class="rotation-card-edit">
                 <summary><?= h($editSummary) ?></summary>
@@ -4540,13 +4618,25 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
                          placeholder="index.php or rss.php?feed=ars" data-rotation-url required>
                 </div>
-                <div>
-                  <label class="mini">From hr</label>
-                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][from]" value="<?= h((string)($prow['from'] ?? '')) ?>" placeholder="0-23">
+                <div class="rotation-windows" data-rotation-windows>
+                  <label class="mini">Time windows</label>
+                  <div class="help" style="margin:0 0 6px">Leave blank for all day. Use whole hours (<code>7</code>) or minutes (<code>7:30</code>). Add multiple for split schedules.</div>
+                  <?php foreach ($windowRows as $wi => $win): ?>
+                  <div class="rotation-window-row" data-rotation-window-row>
+                    <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][from]"
+                           value="<?= h((string)($win['from'] ?? '')) ?>" placeholder="7 or 7:30" aria-label="From time">
+                    <span class="help" style="margin:0">–</span>
+                    <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][to]"
+                           value="<?= h((string)($win['to'] ?? '')) ?>" placeholder="9 or 9:00" aria-label="To time">
+                    <button type="button" class="rowdel rotation-window-remove" title="Remove window"<?= count($windowRows) <= 1 ? ' hidden' : '' ?>>×</button>
+                  </div>
+                  <?php endforeach; ?>
+                  <button type="button" class="secondary rotation-window-add">+ Add window</button>
                 </div>
-                <div>
-                  <label class="mini">To hr</label>
-                  <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][to]" value="<?= h((string)($prow['to'] ?? '')) ?>" placeholder="0-23">
+                <div class="rotation-page-weekdays" style="grid-column:1 / -1">
+                  <label class="mini">Active days</label>
+                  <div class="help" style="margin:0 0 6px">Optional — limit this board to certain weekdays. All seven = every day.</div>
+                  <?php rotation_admin_weekdays_html($fieldKey . '[' . (int)$pri . ']', $pageWeekdays); ?>
                 </div>
                 <div>
                   <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
@@ -6054,6 +6144,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 <?php if ($authed && $board === 'rotation'): ?>
 window.ROTATION_WEIGHT_TOOLTIP = <?= json_encode(rotation_weight_tooltip()) ?>;
 window.ROTATION_WEIGHTED_MODE_TOOLTIP = <?= json_encode(rotation_weighted_mode_tooltip()) ?>;
+window.ROTATION_CALENDAR_FEED_KEYS = <?= json_encode($rotationCalendarFeedKeys ?? [], JSON_UNESCAPED_UNICODE) ?>;
 window.HERO_STRIP_KEY_OPTIONS = <?= json_encode($heroStripKeyOptions, JSON_UNESCAPED_UNICODE) ?>;
 window.HERO_STRIP_SOURCES = <?= json_encode($heroStripSources, JSON_UNESCAPED_UNICODE) ?>;
 <?php endif; ?>
@@ -6147,18 +6238,24 @@ function initKeyedBoardPreviews() {
   document.querySelectorAll('table.rows[data-preview-script] tbody tr').forEach(bindKeyedBoardRow);
 }
 
-function rotationWeekdaysCellHtml(prefix) {
+function rotationWeekdaysHtml(prefix, selected) {
   const days = [
     ['Mon', 'Monday'], ['Tue', 'Tuesday'], ['Wed', 'Wednesday'], ['Thu', 'Thursday'],
     ['Fri', 'Friday'], ['Sat', 'Saturday'], ['Sun', 'Sunday']
   ];
-  let html = '<div class="rotation-weekdays" title="Active on these days only; other days stay blank all day. All seven = every day.">';
+  const sel = Array.isArray(selected) ? selected.reduce(function (m, d) { m[String(d)] = true; return m; }, {}) : null;
+  let html = '<div class="rotation-weekdays" title="Active on these days only. All seven = every day.">';
   days.forEach(function (pair) {
-    html += '<label class="rotation-weekday"><input type="checkbox" name="' + prefix + '[weekdays][]" value="' + pair[1] + '" checked> '
+    const checked = sel ? !!sel[pair[1]] : true;
+    html += '<label class="rotation-weekday"><input type="checkbox" name="' + prefix + '[weekdays][]" value="' + pair[1] + '"' + (checked ? ' checked' : '') + '> '
       + pair[0] + '</label>';
   });
   html += '</div>';
   return html;
+}
+
+function rotationWeekdaysCellHtml(prefix) {
+  return rotationWeekdaysHtml(prefix, null);
 }
 
 function addRow(btn) {
@@ -6457,14 +6554,31 @@ function collectRotationCardRow(card) {
   const row = {};
   const urlInp = card.querySelector('[data-rotation-url], input[name*="[url]"]');
   const dwellInp = card.querySelector('input[name*="[dwell]"]');
-  const fromInp = card.querySelector('input[name*="[from]"]');
-  const toInp = card.querySelector('input[name*="[to]"]');
   const weightInp = card.querySelector('input[name*="[weight]"]');
   const offInp = card.querySelector('input[name*="[off]"]');
   if (urlInp) row.url = urlInp.value.trim();
   if (dwellInp) row.dwell = dwellInp.value.trim();
-  if (fromInp && fromInp.value.trim() !== '') row.from = fromInp.value.trim();
-  if (toInp && toInp.value.trim() !== '') row.to = toInp.value.trim();
+  const windowRows = [];
+  card.querySelectorAll('[data-rotation-window-row]').forEach(function (winRow) {
+    const fromInp = winRow.querySelector('input[name*="[from]"]');
+    const toInp = winRow.querySelector('input[name*="[to]"]');
+    const from = fromInp ? fromInp.value.trim() : '';
+    const to = toInp ? toInp.value.trim() : '';
+    if (from !== '' && to !== '') {
+      windowRows.push({ from: from, to: to });
+    }
+  });
+  if (windowRows.length === 1) {
+    row.from = windowRows[0].from;
+    row.to = windowRows[0].to;
+  } else if (windowRows.length > 1) {
+    row.windows = windowRows;
+  }
+  const wdAll = card.querySelectorAll('input[name*="[weekdays]"]');
+  const wdChecked = card.querySelectorAll('input[name*="[weekdays]"]:checked');
+  if (wdAll.length && wdChecked.length < wdAll.length) {
+    row.weekdays = Array.from(wdChecked).map(function (cb) { return cb.value; });
+  }
   if (weightInp && weightInp.value.trim() !== '') row.weight = weightInp.value.trim();
   if (offInp && offInp.checked) row.off = '1';
   return row;
@@ -6504,6 +6618,111 @@ function serializeRotationPlaylistsForSave() {
     form.appendChild(inp);
   }
   inp.value = JSON.stringify(payloads);
+}
+
+function collectCalendarOverrideRow(rowEl) {
+  const feed = rowEl.querySelector('[data-cal-feed]');
+  const match = rowEl.querySelector('[data-cal-match]');
+  const enabled = rowEl.querySelector('[data-cal-enabled]');
+  const label = rowEl.querySelector('[data-cal-label]');
+  const pages = [];
+  rowEl.querySelectorAll('[data-cal-pages] .rotation-calendar-page-row').forEach(function (prow) {
+    const urlInp = prow.querySelector('[data-cal-url]');
+    const dwellInp = prow.querySelector('[data-cal-dwell]');
+    const url = urlInp ? urlInp.value.trim() : '';
+    if (url === '') return;
+    pages.push({ url: url, dwell: dwellInp ? dwellInp.value.trim() : '60' });
+  });
+  return {
+    enabled: enabled && enabled.checked ? '1' : '',
+    label: label ? label.value.trim() : '',
+    feed: feed ? feed.value.trim() : '',
+    match: match ? match.value.trim() : '',
+    pages: pages,
+  };
+}
+
+function serializeRotationCalendarOverridesForSave() {
+  const form = document.getElementById('boardform');
+  const root = document.getElementById('rotationCalendarOverridePanels');
+  if (!form || !root) return;
+  const payloads = {};
+  root.querySelectorAll('.rotation-calendar-panel[data-calendar-screen]').forEach(function (panel) {
+    const screenKey = panel.getAttribute('data-calendar-screen') || '';
+    if (!screenKey) return;
+    const rows = [];
+    panel.querySelectorAll('[data-calendar-override]').forEach(function (rowEl) {
+      const row = collectCalendarOverrideRow(rowEl);
+      if ((row.feed || '') !== '' && (row.match || '') !== '' && row.pages.length) {
+        rows.push(row);
+      }
+    });
+    if (rows.length) payloads[screenKey] = rows;
+  });
+  let inp = form.querySelector('input[name="ROTATION_CALENDAR_OVERRIDES_JSON"]');
+  if (!inp) {
+    inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'ROTATION_CALENDAR_OVERRIDES_JSON';
+    form.appendChild(inp);
+  }
+  inp.value = JSON.stringify(payloads);
+}
+
+function calendarOverrideFeedOptions(selected) {
+  const keys = window.ROTATION_CALENDAR_FEED_KEYS || [];
+  return keys.map(function (k) {
+    return '<option value="' + String(k).replace(/"/g, '&quot;') + '"' + (k === selected ? ' selected' : '') + '>' + k + '</option>';
+  }).join('');
+}
+
+function addCalendarOverridePage(btn) {
+  const pages = btn.closest('[data-calendar-override]').querySelector('[data-cal-pages]');
+  if (!pages) return;
+  const row = document.createElement('div');
+  row.className = 'field-grid rotation-calendar-page-row';
+  row.style.cssText = 'grid-template-columns:1fr 90px auto;margin-bottom:6px';
+  row.innerHTML = '<input type="text" data-cal-url placeholder="slides.php?slide=party.png">'
+    + '<input type="number" min="5" data-cal-dwell value="60" placeholder="Sec">'
+    + '<button type="button" class="rowdel" onclick="this.closest(\'.rotation-calendar-page-row\').remove()">×</button>';
+  pages.appendChild(row);
+}
+
+function addCalendarOverride(screenKey) {
+  const panel = document.querySelector('.rotation-calendar-panel[data-calendar-screen="' + screenKey + '"]');
+  if (!panel) return;
+  const addBtn = panel.querySelector('.addrow');
+  const block = document.createElement('div');
+  block.className = 'rotation-calendar-override';
+  block.setAttribute('data-calendar-override', '');
+  block.innerHTML =
+    '<div class="rotation-calendar-override-head">'
+      + '<label class="check"><input type="checkbox" data-cal-enabled checked> Enabled</label>'
+      + '<input type="text" data-cal-label placeholder="Label (optional)" style="flex:1;min-width:120px">'
+      + '<button type="button" class="rowdel" onclick="removeCalendarOverride(this)">×</button>'
+    + '</div>'
+    + '<div class="field-grid" style="grid-template-columns:160px 1fr;margin:8px 0">'
+      + '<div class="field"><label class="mini">Calendar feed</label>'
+      + '<select data-cal-feed>' + calendarOverrideFeedOptions('') + '</select></div>'
+      + '<div class="field"><label class="mini">Title contains</label>'
+      + '<input type="text" data-cal-match placeholder="party"></div>'
+    + '</div>'
+    + '<div class="help" style="margin:0 0 6px">Override playlist (event start → end):</div>'
+    + '<div data-cal-pages>'
+      + '<div class="field-grid rotation-calendar-page-row" style="grid-template-columns:1fr 90px auto;margin-bottom:6px">'
+        + '<input type="text" data-cal-url placeholder="slides.php?slide=party.png">'
+        + '<input type="number" min="5" data-cal-dwell value="60" placeholder="Sec">'
+        + '<button type="button" class="rowdel" onclick="this.closest(\'.rotation-calendar-page-row\').remove()">×</button>'
+      + '</div>'
+    + '</div>'
+    + '<button type="button" class="secondary" style="padding:4px 10px;font-size:12px" onclick="addCalendarOverridePage(this)">+ Add page</button>';
+  if (addBtn) panel.insertBefore(block, addBtn);
+  else panel.appendChild(block);
+}
+
+function removeCalendarOverride(btn) {
+  const row = btn.closest('[data-calendar-override]');
+  if (row) row.remove();
 }
 
 function serializePhotoDeckForSave() {
@@ -8234,6 +8453,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
       if (document.querySelector('.rotation-playlist[data-field]')) serializeRotationPlaylistsForSave();
+      if (document.getElementById('rotationCalendarOverridePanels')) serializeRotationCalendarOverridesForSave();
     });
   }
   initScreenPickers(document);
@@ -8445,6 +8665,9 @@ function initRotationGlobalAdd() {
     document.querySelectorAll('[data-display-options-screen]').forEach(function (el) {
       el.hidden = el.getAttribute('data-display-options-screen') !== sk;
     });
+    document.querySelectorAll('.rotation-calendar-panel[data-calendar-screen]').forEach(function (el) {
+      el.hidden = el.getAttribute('data-calendar-screen') !== sk;
+    });
   }
   function syncTargetDisplay() {
     syncCopyBtn();
@@ -8655,20 +8878,181 @@ function removeRotationCard(btn, deckId) {
   }
 }
 
+function syncRotationWindowRemoveButtons(container) {
+  if (!container) return;
+  const rows = container.querySelectorAll('[data-rotation-window-row]');
+  rows.forEach(function (row) {
+    const btn = row.querySelector('.rotation-window-remove');
+    if (btn) btn.hidden = rows.length <= 1;
+  });
+}
+
+function reindexRotationWindowRows(card) {
+  if (!card) return;
+  card.querySelectorAll('[data-rotation-window-row]').forEach(function (row, wi) {
+    row.querySelectorAll('input[name*="[windows]"]').forEach(function (inp) {
+      inp.name = inp.name.replace(/\[windows\]\[\d+\]/, '[windows][' + wi + ']');
+    });
+  });
+  const container = card.querySelector('[data-rotation-windows]');
+  syncRotationWindowRemoveButtons(container);
+  syncRotationCardSummary(card);
+}
+
+function rotationWindowsSummary(card) {
+  const parts = [];
+  card.querySelectorAll('[data-rotation-window-row]').forEach(function (row) {
+    const fromInp = row.querySelector('input[name*="[from]"]');
+    const toInp = row.querySelector('input[name*="[to]"]');
+    const from = fromInp ? fromInp.value.trim() : '';
+    const to = toInp ? toInp.value.trim() : '';
+    if (from !== '' && to !== '') parts.push(from + '–' + to);
+  });
+  return parts.join(', ');
+}
+
+function rotationScheduleSummary(card) {
+  const time = rotationWindowsSummary(card);
+  const wdAll = card.querySelectorAll('input[name*="[weekdays]"]');
+  const wdChecked = card.querySelectorAll('input[name*="[weekdays]"]:checked');
+  let days = '';
+  if (wdAll.length && wdChecked.length < wdAll.length && wdChecked.length > 0) {
+    days = Array.from(wdChecked).map(function (cb) {
+      return (cb.parentElement ? cb.parentElement.textContent : cb.value).trim();
+    }).join('');
+  }
+  if (time && days) return time + ' · ' + days;
+  return time || days;
+}
+
+function syncRotationCardSummary(card) {
+  if (!card) return;
+  const details = card.querySelector('.rotation-card-edit');
+  const summary = details ? details.querySelector('summary') : null;
+  if (!summary) return;
+  const weightInp = card.querySelector('input[name*="[weight]"]');
+  const weight = weightInp ? parseInt(weightInp.value.trim(), 10) : 1;
+  const scheduleLabel = rotationScheduleSummary(card);
+  let text = 'Schedule & weight';
+  if (!isNaN(weight) && weight > 1) text = 'Weight ' + weight;
+  if (scheduleLabel) text += (text !== 'Schedule & weight' ? ' · ' : '') + scheduleLabel;
+  if (text === 'Schedule & weight') text = 'More options';
+  summary.textContent = text;
+}
+
+function appendRotationWindowRow(container, fieldPrefix) {
+  if (!container) return null;
+  const addBtn = container.querySelector('.rotation-window-add');
+  const idx = container.querySelectorAll('[data-rotation-window-row]').length;
+  const row = document.createElement('div');
+  row.className = 'rotation-window-row';
+  row.setAttribute('data-rotation-window-row', '');
+  row.innerHTML =
+    '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][from]" placeholder="from" aria-label="From hour">' +
+    '<span class="help" style="margin:0">–</span>' +
+    '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][to]" placeholder="to" aria-label="To hour">' +
+    '<button type="button" class="rowdel rotation-window-remove" title="Remove window">×</button>';
+  if (addBtn) container.insertBefore(row, addBtn);
+  else container.appendChild(row);
+  row.querySelector('.rotation-window-remove').addEventListener('click', function () {
+    const card = row.closest('[data-rotation-card]');
+    row.remove();
+    if (card) reindexRotationWindowRows(card);
+  });
+  return row;
+}
+
+function bindRotationWindows(card) {
+  const container = card.querySelector('[data-rotation-windows]');
+  if (!container || container.dataset.bound) return;
+  container.dataset.bound = '1';
+  const addBtn = container.querySelector('.rotation-window-add');
+  if (addBtn) {
+    addBtn.addEventListener('click', function () {
+      const fieldPrefix = (function () {
+        const inp = container.querySelector('input[name*="[windows]"]');
+        if (!inp || !inp.name) return '';
+        return inp.name.replace(/\[windows\]\[\d+\]\[(from|to)\]/, '');
+      })();
+      appendRotationWindowRow(container, fieldPrefix);
+      reindexRotationWindowRows(card);
+    });
+  }
+  container.querySelectorAll('.rotation-window-remove').forEach(function (btn) {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function () {
+      const row = btn.closest('[data-rotation-window-row]');
+      if (row) {
+        row.remove();
+        reindexRotationWindowRows(card);
+      }
+    });
+  });
+  container.querySelectorAll('input[type="text"]').forEach(function (inp) {
+    if (inp.dataset.summaryBound) return;
+    inp.dataset.summaryBound = '1';
+    inp.addEventListener('input', function () { syncRotationCardSummary(card); });
+  });
+  card.querySelectorAll('input[name*="[weekdays]"]').forEach(function (cb) {
+    if (cb.dataset.summaryBound) return;
+    cb.dataset.summaryBound = '1';
+    cb.addEventListener('change', function () { syncRotationCardSummary(card); });
+  });
+  syncRotationWindowRemoveButtons(container);
+}
+
 function fillRotationCardTimes(card, page) {
   if (!card || !page) return;
-  if (page.from != null && page.from !== '') {
-    const from = card.querySelector('[name*="[from]"]');
-    if (from) from.value = String(page.from);
+  const container = card.querySelector('[data-rotation-windows]');
+  if (container) {
+    let windows = [];
+    if (Array.isArray(page.windows) && page.windows.length) {
+      windows = page.windows;
+    } else if (page.from != null && page.from !== '' && page.to != null && page.to !== '') {
+      windows = [{ from: page.from, to: page.to }];
+    } else {
+      windows = [{ from: '', to: '' }];
+    }
+    container.querySelectorAll('[data-rotation-window-row]').forEach(function (r) { r.remove(); });
+    const fieldPrefix = (function () {
+      const urlInp = card.querySelector('[data-rotation-url], input[name*="[url]"]');
+      if (!urlInp || !urlInp.name) return '';
+      return urlInp.name.replace(/\[url\]$/, '');
+    })();
+    windows.forEach(function (w, wi) {
+      const row = appendRotationWindowRow(container, fieldPrefix);
+      if (!row) return;
+      const fromInp = row.querySelector('input[name*="[from]"]');
+      const toInp = row.querySelector('input[name*="[to]"]');
+      if (fromInp) fromInp.value = String(w.from ?? '');
+      if (toInp) toInp.value = String(w.to ?? '');
+      row.querySelectorAll('input[name*="[windows]"]').forEach(function (inp) {
+        inp.name = inp.name.replace(/\[windows\]\[\d+\]/, '[windows][' + wi + ']');
+      });
+    });
+    if (!container.querySelector('[data-rotation-window-row]')) {
+      appendRotationWindowRow(container, fieldPrefix);
+    }
+    bindRotationWindows(card);
+    reindexRotationWindowRows(card);
   }
-  if (page.to != null && page.to !== '') {
-    const to = card.querySelector('[name*="[to]"]');
-    if (to) to.value = String(page.to);
+  if (page.weight != null && page.weight !== '') {
+    const weight = card.querySelector('input[name*="[weight]"]');
+    if (weight) weight.value = String(page.weight);
   }
   if (page.off) {
-    const off = card.querySelector('[name*="[off]"]');
+    const off = card.querySelector('input[name*="[off]"]');
     if (off) off.checked = true;
   }
+  if (Array.isArray(page.weekdays) && page.weekdays.length) {
+    const wdMap = {};
+    page.weekdays.forEach(function (d) { wdMap[String(d)] = true; });
+    card.querySelectorAll('input[name*="[weekdays]"]').forEach(function (cb) {
+      cb.checked = !!wdMap[cb.value];
+    });
+  }
+  syncRotationCardSummary(card);
 }
 
 function loadRotationStarter(deckId) {
@@ -8732,7 +9116,14 @@ function bindRotationCard(card, deck) {
     urlInp.dataset.bound = '1';
     urlInp.addEventListener('input', syncHead);
   }
+  const weightInp = card.querySelector('input[name*="[weight]"]');
+  if (weightInp && !weightInp.dataset.summaryBound) {
+    weightInp.dataset.summaryBound = '1';
+    weightInp.addEventListener('input', function () { syncRotationCardSummary(card); });
+  }
+  bindRotationWindows(card);
   syncHead();
+  syncRotationCardSummary(card);
 }
 
 function bindRotationCardDrag(card, deck) {
@@ -8779,8 +9170,22 @@ function addRotationPage(deckId, url, dwell, scroll) {
     '<div class="rotation-card-grid">' +
       '<div style="grid-column:1 / -1"><label class="mini">URL</label>' +
       '<input type="text" name="' + field + '[' + idx + '][url]" value="' + url.replace(/"/g, '&quot;') + '" placeholder="slides.php" data-rotation-url required></div>' +
-      '<div><label class="mini">From hr</label><input type="text" name="' + field + '[' + idx + '][from]" placeholder="0-23"></div>' +
-      '<div><label class="mini">To hr</label><input type="text" name="' + field + '[' + idx + '][to]" placeholder="0-23"></div>' +
+      '<div class="rotation-windows" data-rotation-windows>' +
+        '<label class="mini">Time windows</label>' +
+        '<div class="help" style="margin:0 0 6px">Leave blank for all day. Use whole hours (7) or minutes (7:30).</div>' +
+        '<div class="rotation-window-row" data-rotation-window-row>' +
+          '<input type="text" name="' + field + '[' + idx + '][windows][0][from]" placeholder="7 or 7:30" aria-label="From time">' +
+          '<span class="help" style="margin:0">–</span>' +
+          '<input type="text" name="' + field + '[' + idx + '][windows][0][to]" placeholder="9 or 9:00" aria-label="To time">' +
+          '<button type="button" class="rowdel rotation-window-remove" title="Remove window" hidden>×</button>' +
+        '</div>' +
+        '<button type="button" class="secondary rotation-window-add">+ Add window</button>' +
+      '</div>' +
+      '<div class="rotation-page-weekdays" style="grid-column:1 / -1">' +
+        '<label class="mini">Active days</label>' +
+        '<div class="help" style="margin:0 0 6px">Optional — limit this board to certain weekdays.</div>' +
+        rotationWeekdaysHtml(field + '[' + idx + ']', null) +
+      '</div>' +
       '<div><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight</label>' +
       '<input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '"></div>' +
     '</div></details>';

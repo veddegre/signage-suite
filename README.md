@@ -283,7 +283,7 @@ MDOT feeds are refreshed stills, not video; thumbs are modest resolution (~720×
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
-Playlist features: per-page dwell, hour windows, **Skip**, **Shuffle** (random order — every in-window board once per cycle), **Weighted** rotation (weight = slots per shuffled cycle; every board at least once before repeat), multiple displays (`?screen=`). The shell **polls for config changes every ~30s** and reloads when the playlist or display options change.
+Playlist features: per-page dwell, time windows (multiple ranges, optional weekdays, `7:30` minute precision), **calendar overrides** from ICS events, **Skip**, **Shuffle** (random order — every in-window board once per cycle), **Weighted** rotation (weight = slots per shuffled cycle; every board at least once before repeat), multiple displays (`?screen=`). The shell **polls for config changes every ~30s** and reloads when the playlist or display options change.
 
 **Auto-skip (saved playlist unchanged):** **`lake.php`** when its buoy has been offline 24h+; **`sports.php`** when every team is off-season; **`webcam.php?cam=…`** per camera when that feed fails probes for 24h+. Boards return automatically when data is back.
 

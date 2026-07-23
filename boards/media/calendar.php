@@ -693,6 +693,35 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
     }
 }
 
+/** End timestamp for one expanded instance (end exclusive for timed events). */
+function ics_instance_end_ts(array $ev, int $startTs): int
+{
+    if (!empty($ev['all_day'])) {
+        return strtotime('tomorrow', $startTs);
+    }
+    $masterStart = (int)($ev['start'] ?? $startTs);
+    $masterEnd = (int)($ev['end'] ?? 0);
+    if ($masterEnd > $masterStart) {
+        return $startTs + ($masterEnd - $masterStart);
+    }
+
+    return $startTs + 3600;
+}
+
+/** @return array<string,mixed> */
+function calendar_event_instance(array $ev, int $ts, bool $allDay): array
+{
+    return [
+        'ts' => $ts,
+        'end_ts' => ics_instance_end_ts($ev, $ts),
+        'all_day' => $allDay,
+        'summary' => $ev['summary'],
+        'cal' => $ev['cal'],
+        'color' => $ev['color'],
+        'hex' => $ev['hex'],
+    ];
+}
+
 /** Expand one VEVENT into instances inside [winStart, winEnd]. */
 function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = []): array
 {
@@ -707,8 +736,7 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
         if ($uid !== '' && isset($overrides[$uid][$ts])) {
             return;
         }
-        $out[] = ['ts' => $ts, 'all_day' => $allDay, 'summary' => $ev['summary'],
-                  'cal' => $ev['cal'], 'color' => $ev['color'], 'hex' => $ev['hex']];
+        $out[] = calendar_event_instance($ev, $ts, $allDay);
     };
 
     if (!$ev['rrule']) {
@@ -820,10 +848,22 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
  *
  * @return list<array<string,mixed>>
  */
-function calendar_collect_events(int $winStart, int $winEnd): array
+function calendar_collect_events(int $winStart, int $winEnd, ?array $feeds = null): array
 {
+    if ($feeds === null) {
+        if (defined('ICS_FEEDS')) {
+            $feeds = ICS_FEEDS;
+        } else {
+            $rawFeeds = cfg('calendar.ICS_FEEDS', []);
+            $feeds = is_array($rawFeeds) ? $rawFeeds : [];
+            if (function_exists('admin_filter_list_for_display')) {
+                require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+                $feeds = admin_filter_list_for_display($feeds);
+            }
+        }
+    }
     $events = [];
-    foreach (ICS_FEEDS as $i => $feed) {
+    foreach ($feeds as $i => $feed) {
         if (!is_array($feed)) {
             continue;
         }
@@ -864,24 +904,10 @@ function calendar_collect_events(int $winStart, int $winEnd): array
             $overrides[$ev['uid']][$ev['recurrence_id']] = true;
             if ($ev['all_day']) {
                 foreach (ics_all_day_instances($ev, $winStart, $winEnd) as $ts) {
-                    $events[] = [
-                        'ts' => $ts,
-                        'all_day' => true,
-                        'summary' => $ev['summary'],
-                        'cal' => $ev['cal'],
-                        'color' => $ev['color'],
-                        'hex' => $ev['hex'],
-                    ];
+                    $events[] = calendar_event_instance($ev, $ts, true);
                 }
             } elseif ($ev['start'] >= $winStart && $ev['start'] <= $winEnd) {
-                $events[] = [
-                    'ts' => $ev['start'],
-                    'all_day' => $ev['all_day'],
-                    'summary' => $ev['summary'],
-                    'cal' => $ev['cal'],
-                    'color' => $ev['color'],
-                    'hex' => $ev['hex'],
-                ];
+                $events[] = calendar_event_instance($ev, (int)$ev['start'], false);
             }
         }
         foreach ($masters as $ev) {
