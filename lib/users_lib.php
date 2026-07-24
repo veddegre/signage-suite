@@ -14,7 +14,7 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video', 'webcam',
-    'grafana', 'splunk', 'splunkdash', 'powerbi', 'zabbix', 'announce', 'calendar', 'account',
+    'grafana', 'splunk', 'splunkdash', 'powerbi', 'zabbix', 'tdx', 'announce', 'calendar', 'account',
 ];
 
 /** Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy — super admin and Infrastructure role only. */
@@ -2460,6 +2460,16 @@ function admin_operator_board_preamble(string $board): void
                     : 'Zabbix URL and API token are not configured yet — ask a super admin to set them under Board settings.',
                 'Use <strong>+ Add page</strong> to create your own monitoring pages (host groups, severity). Quick-add them to rotation under <strong>Monitoring</strong>.',
                 'Pages you create are owned by you. To use pages a super admin built, they must set you as owner or share via <strong>Access</strong> (Operators role).',
+            ];
+            break;
+        case 'tdx':
+            require_once __DIR__ . '/tdx_lib.php';
+            $lines = [
+                tdx_configured()
+                    ? 'TeamDynamix connection is configured by your super admin.'
+                    : 'TDX base URL and credentials are not configured — ask a super admin under Board settings.',
+                'Use <strong>+ Add page</strong> for ticket walls filtered by app, groups, types, and status. Quick-add under <strong>Monitoring</strong> in rotation.',
+                'Load metadata under Board settings to copy app/type/status/group IDs into each page tab.',
             ];
             break;
         case 'kuma':

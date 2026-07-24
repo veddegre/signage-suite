@@ -2,7 +2,7 @@
 
 Every board is a **1920×1080** PHP page with shared styling. Configure all boards in **admin.php**; settings save to `config/settings.json`.
 
-On operator-editable boards, super admins set **Access** per row: **owner**, **shared with users**, and **shared with roles** (e.g. all Operators). See [admin-and-security.md → Content ownership & sharing](admin-and-security.md#content-ownership--sharing).
+On operator-editable boards, super admins set **Access** per row: **owner**, **shared with users**, and **shared with roles** (e.g. all Operators). See [admin-and-security.md → Content ownership & sharing](admin-and-security.md#content-ownership--sharing). Operator-facing overview: [user-guide.md](user-guide.md).
 
 ## Quick index
 
@@ -48,6 +48,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Tailscale | `tailscale.php` | `tailscale.php` | Tailscale API key |
 | | ntfy alerts | `ntfy.php` | `ntfy.php` | Webhook token and/or poll topic |
 | | Zabbix | `zabbix.php` | `zabbix.php?d=<key>` | API token |
+| | TeamDynamix | `tdx.php` | `tdx.php?d=<key>` | BEID + Web Services Key or user/password |
 | Media | Photo rotator | `rotator.php` | `rotator.php` | — |
 | | Custom slides | `slides.php` | `slides.php?slide=…` | — |
 | | Video | `video.php` | `video.php?v=<key>` | — |
@@ -580,6 +581,39 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 | Access | Owner; shared with users and/or roles (e.g. Operators) |
 
 **Wall layout:** severity summary pills, active problem list (host, age, acknowledged), host grid (green = OK, red = problem, grey = disabled). Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
+
+### tdx.php — TeamDynamix tickets (TDWebApi)
+
+TeamDynamix Web in an iframe hits SSO. This board uses **`POST /api/{appId}/tickets/search`** server-side — open tickets with ID, title, status, priority, group, and age. JWT credentials never reach the display browser.
+
+**TDX setup:**
+
+1. TDAdmin → Organization → **BEID** + **Web Services Key** (recommended), or use a service account username/password
+2. Admin → **Monitoring → TeamDynamix → Board settings:** base URL, auth mode, credentials, **`TDX_VERIFY_TLS`**
+3. **Test connection** and **Refresh metadata** to load app/type/status/group/priority IDs
+4. If TDX is on a private IP → **Security → Allow private URL fetches**
+
+**Multiple pages:** each admin tab is `tdx.php?d=<key>`. Filter by application ID, ticket types, **responsible users**, **responsible groups**, statuses, and priorities — e.g. `itsm`, `myqueue`, `helpdesk`.
+
+**Per-page settings:**
+
+| Setting | Purpose |
+|---------|---------|
+| Application ID | Ticketing app in TDX (required) |
+| Type / status / priority IDs | Comma-separated numeric IDs (status blank = open/in-process/on-hold) |
+| Responsible users | Email or username — tickets where person is **Responsible** |
+| Responsible user UIDs | Optional person GUIDs |
+| Responsible group IDs | Group IDs — tickets assigned to those groups |
+| Include closed / cancelled | Expand status filter when status IDs are blank |
+| Max tickets | 1–50 search results |
+| Off wall | Skip on kiosk and rotation quick-add |
+| Access | Owner; share with Operators or Infrastructure |
+
+**Wall layout:** summary pills (open, overdue, SLA, by priority), ticket list with ID, priority, status, group, age. Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
+
+**Full guide** (TDAdmin setup, JSON examples, troubleshooting, API reference): **[docs/tdx.md](tdx.md)**.
+
+**CLI:** `php scripts/diagnose-tdx.php <page_key>` on the server.
 
 ---
 

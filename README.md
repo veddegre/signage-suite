@@ -32,6 +32,7 @@ flowchart LR
 | [Getting started](#getting-started) | Install, first login, manual requirements |
 | [Kiosk display](#3-point-a-display-at-rotation) | Dedicated TV/Pi — [full guide](docs/kiosk-setup.md) |
 | [Admin & security](#admin--security) | Roles, display assignment, sharing (users + roles) — [full guide](docs/admin-and-security.md) |
+| [User guide](docs/user-guide.md) | **Manual for super admins, infrastructure & operators** |
 | [Boards](#boards) | Overview — [per-board reference](docs/boards.md) |
 | [Rotation & deployment](#rotation--deployment) | Playlists, scripts — [full guide](docs/rotation-and-deployment.md) |
 | [Documentation](#documentation) | Deep-dive docs in `docs/` |
@@ -117,6 +118,8 @@ Settings use file locking so concurrent saves on different boards merge safely. 
 
 → **[Admin, SSO, and hardening](docs/admin-and-security.md)** — Entra ID, Authentik, JIT provisioning, troubleshooting
 
+→ **[User guide](docs/user-guide.md)** — give this to super admins, infrastructure staff, and operators (roles, every board, rotation, sharing)
+
 ---
 
 ## Boards
@@ -139,12 +142,14 @@ video.php?v=drone               slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, **MDOT cams**, Mackinac Bridge cam, photo, air, UV index, sports, calendar, **today at a glance**, meal calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **CISA KEV**, **TLS cert expiry**, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
+| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **CISA KEV**, **TLS cert expiry**, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group), **TeamDynamix** (TDWebApi tickets, multi-page by app/filters) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides (upload + **slide creator** with occasion templates — dinner menu, snow day, anniversary, …), RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, Power BI, embedded websites | Grafana JWT secret (SSO embed); Splunk token (panels); Azure app (Power BI private) |
 
 **Zabbix** — no iframe; server-side `problem.get` + host status. Problems are filtered to match the Zabbix UI (unresolved only; excludes disabled triggers/hosts/items and symptom events that `problem.get` still returns). Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. If the wall shows an alert you cannot find in Zabbix, run `php scripts/diagnose-zabbix.php <page_key> [--needle=substring]` on the server — **HIDDEN** rows are API-only leftovers (e.g. a Docker trigger disabled after a container was removed). See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
+
+**TeamDynamix** (`tdx.php?d=<key>`) — native ticket wall via TDWebApi; filter by app, **responsible users**, **groups**, types, and status per page. Super admins set BEID + Web Services Key; operators can own pages shared via Access. Full guide: [docs/tdx.md](docs/tdx.md).
 
 **Splunk panels** — oneshot searches server-side (port 8089), multi-page like Grafana.
 
@@ -309,9 +314,11 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 
 | Doc | Contents |
 |-----|----------|
+| **[docs/user-guide.md](docs/user-guide.md)** | **Admin & operator manual** — roles, sidebar reference, rotation playbook, sharing, integration index, troubleshooting |
 | [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, CEC, cursor, freezes, updates |
 | [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
+| [docs/tdx.md](docs/tdx.md) | **TeamDynamix** — TDAdmin BEID/key, multi-page filters, responsible users/groups, API reference |
 | [docs/grafana.md](docs/grafana.md) | **Grafana JWT embed (self-hosted)** — HS256, grafana.ini, JWK file |
 | [docs/grafana-cloud.md](docs/grafana-cloud.md) | **Grafana Cloud** — RS256, JWKS URL, public dashboards, support enablement |
 | [docs/powerbi.md](docs/powerbi.md) | **Power BI private embed** — Entra app registration, API permissions, workspace access, RLS, troubleshooting |
@@ -357,6 +364,9 @@ Run from the boards install root on the server (the directory with `config/setti
 # Zabbix: API vs wall — HIDDEN = in DB but not in Zabbix UI (disabled trigger/host/item)
 php scripts/diagnose-zabbix.php network --needle=signaltrace
 # from a clone: SIGNAGE_ROOT=/var/www/html/boards php ~/signage-suite/scripts/diagnose-zabbix.php main
+
+# TeamDynamix: auth, metadata, ticket search for a page
+php scripts/diagnose-tdx.php main
 
 # Rotation: shuffle/weighted decks, eligible pages, per-slide weights, lake/sports/webcam auto-skip
 php scripts/diagnose-rotation.php veddersg

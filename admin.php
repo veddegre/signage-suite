@@ -24,6 +24,7 @@ require_once __DIR__ . '/lib/traffic_lib.php';
 require_once __DIR__ . '/lib/splunk_lib.php';
 require_once __DIR__ . '/lib/zabbix_lib.php';
 require_once __DIR__ . '/lib/kuma_lib.php';
+require_once __DIR__ . '/lib/tdx_lib.php';
 require_once __DIR__ . '/lib/announce_lib.php';
 require_once __DIR__ . '/lib/hero_strip_lib.php';
 require_once __DIR__ . '/lib/emergency_lib.php';
@@ -333,7 +334,7 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
         $shareRole = 'infra';
     }
     $pagesKey = match ($shareBoard) {
-        'zabbix', 'kuma', 'splunk' => $shareBoard . '.PAGES',
+        'zabbix', 'kuma', 'splunk', 'tdx' => $shareBoard . '.PAGES',
         default => '',
     };
     if ($pagesKey === '') {
@@ -750,6 +751,42 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
     }
+    if ($board === 'tdx') {
+        if (!admin_is_super() && !empty($_POST['tdx_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['tdx_use_json'])) {
+            $parsed = tdx_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Pages JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['tdx.PAGES']);
+            } else {
+                $conf['tdx.PAGES'] = $parsed;
+            }
+        } else {
+            $existingPages = is_array($conf['tdx.PAGES'] ?? null) ? $conf['tdx.PAGES'] : [];
+            $outV = tdx_pages_from_post($_POST['PAGES'] ?? []);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = tdx_normalize_page_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
+            if ($mergedPages === []) {
+                unset($conf['tdx.PAGES']);
+            } else {
+                $conf['tdx.PAGES'] = $mergedPages;
+            }
+        }
+    }
     if ($board === 'rotation') {
         $rotationSaveLocked = emergency_blocks_operator_rotation();
         if ($rotationSaveLocked) {
@@ -1148,6 +1185,47 @@ if ($authed && $board === 'grafana' && admin_can_board('grafana') && csrf_ok() &
             $flash .= ': ' . $grafanaTestResult['detail'];
         }
         $flashOk = false;
+    }
+}
+
+// ── TeamDynamix: auth + ticket search test ──────────────────────────────────
+$tdxTestResult = null;
+if ($authed && $board === 'tdx' && admin_can_board('tdx') && csrf_ok() && ($_POST['action'] ?? '') === 'tdx_test') {
+    $testAppId = max(0, (int)($_POST['test_app_id'] ?? 0));
+    if ($testAppId <= 0) {
+        $active = tdx_resolve_page_registry((string)($_POST['test_page_key'] ?? ''));
+        $testAppId = max(0, (int)($active['app_id'] ?? 0));
+    }
+    $tdxTestResult = tdx_test_connection($testAppId > 0 ? $testAppId : null);
+    if ($tdxTestResult['ok']) {
+        $flash = 'TeamDynamix test OK — ' . ($tdxTestResult['detail'] ?? 'connected');
+        if (!empty($tdxTestResult['ms'])) {
+            $flash .= ' (' . (int)$tdxTestResult['ms'] . ' ms)';
+        }
+    } else {
+        $flash = 'TeamDynamix test failed — ' . ($tdxTestResult['error'] ?? 'unknown error');
+        if (!empty($tdxTestResult['detail'])) {
+            $flash .= ': ' . $tdxTestResult['detail'];
+        }
+        $flashOk = false;
+    }
+}
+
+if ($authed && $board === 'tdx' && admin_can_board('tdx') && csrf_ok() && ($_POST['action'] ?? '') === 'tdx_refresh_metadata') {
+    $metaAppId = max(0, (int)($_POST['metadata_app_id'] ?? 0));
+    if ($metaAppId <= 0) {
+        $active = tdx_resolve_page_registry((string)($_POST['metadata_page_key'] ?? ''));
+        $metaAppId = max(0, (int)($active['app_id'] ?? 0));
+    }
+    $metaErr = null;
+    $tdxMetadata = tdx_fetch_metadata($metaAppId, $metaErr, true);
+    if ($metaErr !== null && ($tdxMetadata['applications'] ?? []) === []) {
+        $flash = 'Metadata refresh failed — ' . $metaErr;
+        $flashOk = false;
+    } else {
+        $flash = 'Metadata refreshed'
+            . (count($tdxMetadata['applications'] ?? []) > 0 ? ' — ' . count($tdxMetadata['applications']) . ' app(s)' : '')
+            . ($metaAppId > 0 ? ', app ' . $metaAppId : '');
     }
 }
 
@@ -1834,7 +1912,7 @@ $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
     'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'meals', 'traffic', 'camwall'],
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
-    'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix'],
+    'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix', 'tdx'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'powerbi', 'web'],
 ];
@@ -1842,6 +1920,7 @@ $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK'
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
+$tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
@@ -1967,6 +2046,20 @@ if ($board === 'kuma') {
     $kumaActivePage = kuma_normalize_page_key((string)($_GET['page'] ?? ''));
     if (!isset($kumaPages[$kumaActivePage])) {
         $kumaActivePage = (string)(array_key_first($kumaPages) ?: 'main');
+    }
+}
+$tdxPages = [];
+$tdxActivePage = 'main';
+$tdxMetadata = [];
+if ($board === 'tdx') {
+    $tdxPages = admin_filter_owned_map(tdx_admin_pages($rawConf));
+    $tdxActivePage = tdx_normalize_page_key((string)($_GET['page'] ?? ''));
+    if (!isset($tdxPages[$tdxActivePage])) {
+        $tdxActivePage = (string)(array_key_first($tdxPages) ?: 'main');
+    }
+    if (tdx_configured()) {
+        $metaAppId = (int)($tdxPages[$tdxActivePage]['app_id'] ?? 0);
+        $tdxMetadata = tdx_metadata_cached($metaAppId);
     }
 }
 
@@ -3689,6 +3782,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
         <?php elseif ($board === 'zabbix'): ?>
           Each page is <code>zabbix.php?d=<em>key</em></code> in rotation — filter by Zabbix host group per tab below.
+        <?php elseif ($board === 'tdx'): ?>
+          Each page is <code>tdx.php?d=<em>key</em></code> in rotation — filter tickets by app, groups, types, and status per tab below.
         <?php elseif ($board === 'kuma'): ?>
           Each page is <code>kuma.php?d=<em>key</em></code> in rotation — one status page slug per tab below.
         <?php elseif ($board === 'grafana'): ?>
@@ -5194,6 +5289,221 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
               </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'tdx'): ?>
+          <?php admin_operator_board_preamble('tdx'); ?>
+          <?php admin_super_registry_share_hint('TeamDynamix'); ?>
+          <div class="section-title">TeamDynamix ticket pages</div>
+          <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
+            <code>tdx.php?d=<em>key</em></code>. Set the ticketing <strong>application ID</strong> and optional filters per tab.
+            Leave status IDs blank to show open/in-process/on-hold tickets only.</div>
+          <?php if ($tdxPages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No pages yet — click <strong>+ Add page</strong> below to create your first ticket wall.
+          </div>
+          <?php endif; ?>
+
+          <div class="splunk-pages-bar" id="tdxPagesBar">
+            <?php foreach ($tdxPages as $pk => $pg): ?>
+            <button type="button" class="splunk-page-tab<?= $pk === $tdxActivePage ? ' active' : '' ?>"
+                    data-tdx-page-tab="<?= h($pk) ?>">
+              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="addrow" onclick="addTdxPage()">+ Add page</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=tdx" formmethod="post"
+                    onclick="this.form.share_board.value='tdx'; return confirm('Share every TeamDynamix page with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
+          </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="operator">
+          <?php endif; ?>
+
+          <?php foreach ($tdxPages as $pk => $pg):
+            $pageAppId = (int)($pg['app_id'] ?? 0);
+          ?>
+          <div class="splunk-page-editor" data-tdx-page-editor="<?= h($pk) ?>"
+               style="<?= $pk === $tdxActivePage ? '' : 'display:none' ?>">
+            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-tdx-page-key>
+            <div class="splunk-page-head">
+              <div>
+                <label class="mini">Page title</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="ITSM NOC" data-tdx-page-title>
+              </div>
+              <div>
+                <label class="mini">Subtitle</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Open incidents" data-tdx-page-sub>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
+                   href="<?= h(tdx_preview_url($pk)) ?>" target="_blank" rel="noopener" data-tdx-page-preview>Preview ↗</a>
+                <?php if (count($tdxPages) > 1): ?>
+                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
+                        onclick="removeTdxPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(tdx_page_url($pk)) ?></code></div>
+
+            <div class="field-grid" style="margin-bottom:12px">
+              <div class="field">
+                <label class="mini">Application ID</label>
+                <input type="number" name="PAGES[<?= h($pk) ?>][app_id]" min="1"
+                       value="<?= $pageAppId > 0 ? $pageAppId : '' ?>" placeholder="12345" list="tdxAppIds">
+                <div class="help">Ticketing app ID from TDAdmin or metadata table below.</div>
+              </div>
+              <div class="field">
+                <label class="mini">Max tickets</label>
+                <input type="number" name="PAGES[<?= h($pk) ?>][max_tickets]" min="1" max="50"
+                       value="<?= (int)($pg['max_tickets'] ?? 20) ?>">
+              </div>
+              <div class="field span-2">
+                <label class="mini">Type IDs</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][type_ids]"
+                       value="<?= h(tdx_ids_string($pg['type_ids'] ?? '')) ?>"
+                       placeholder="Incident, Service Request — comma-separated numeric IDs" list="tdxTypeIds">
+              </div>
+              <div class="field span-2">
+                <label class="mini">Status IDs</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][status_ids]"
+                       value="<?= h(tdx_ids_string($pg['status_ids'] ?? '')) ?>"
+                       placeholder="Leave blank for open/in-process/on-hold" list="tdxStatusIds">
+              </div>
+              <div class="field span-2">
+                <label class="mini">Responsible users</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][responsible_users]"
+                       value="<?= h(tdx_users_string($pg['responsible_users'] ?? '')) ?>"
+                       placeholder="jane.doe@example.com, jdoe — email or username">
+                <div class="help">Tickets where this person is <strong>Responsible</strong>. Comma-separated; each entry is looked up via TDX people search.</div>
+              </div>
+              <div class="field span-2">
+                <label class="mini">Responsible user UIDs</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][responsible_uids]"
+                       value="<?= h(tdx_uids_string($pg['responsible_uids'] ?? '')) ?>"
+                       placeholder="Optional GUIDs if you already know them">
+                <div class="help">Direct person GUIDs (<code>ResponsibilityUids</code>). Use when email lookup is ambiguous.</div>
+              </div>
+              <div class="field span-2">
+                <label class="mini">Responsible group IDs</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][group_ids]"
+                       value="<?= h(tdx_ids_string($pg['group_ids'] ?? '')) ?>"
+                       placeholder="Help Desk, Network Team — comma-separated IDs" list="tdxGroupIds">
+                <div class="help">Tickets owned by / assigned to these groups (<code>ResponsibilityGroupIDs</code>).</div>
+              </div>
+              <div class="field span-2">
+                <label class="mini">Priority IDs</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][priority_ids]"
+                       value="<?= h(tdx_ids_string($pg['priority_ids'] ?? '')) ?>"
+                       placeholder="Optional — comma-separated IDs" list="tdxPriorityIds">
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][include_closed]"
+                  <?= !empty($pg['include_closed']) ? 'checked' : '' ?>> Include closed</label>
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][include_cancelled]"
+                  <?= !empty($pg['include_cancelled']) ? 'checked' : '' ?>> Include cancelled</label>
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
+                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+              </div>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <?php if ($tdxMetadata !== []): ?>
+          <datalist id="tdxAppIds">
+            <?php foreach ((array)($tdxMetadata['applications'] ?? []) as $app):
+              if (!is_array($app)) continue; ?>
+            <option value="<?= (int)($app['id'] ?? 0) ?>"><?= h((string)($app['name'] ?? '')) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <datalist id="tdxTypeIds">
+            <?php foreach ((array)($tdxMetadata['types'] ?? []) as $row):
+              if (!is_array($row)) continue; ?>
+            <option value="<?= (int)($row['id'] ?? 0) ?>"><?= h((string)($row['name'] ?? '')) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <datalist id="tdxStatusIds">
+            <?php foreach ((array)($tdxMetadata['statuses'] ?? []) as $row):
+              if (!is_array($row)) continue; ?>
+            <option value="<?= (int)($row['id'] ?? 0) ?>"><?= h((string)($row['name'] ?? '')) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <datalist id="tdxGroupIds">
+            <?php foreach ((array)($tdxMetadata['groups'] ?? []) as $row):
+              if (!is_array($row)) continue; ?>
+            <option value="<?= (int)($row['id'] ?? 0) ?>"><?= h((string)($row['name'] ?? '')) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <datalist id="tdxPriorityIds">
+            <?php foreach ((array)($tdxMetadata['priorities'] ?? []) as $row):
+              if (!is_array($row)) continue; ?>
+            <option value="<?= (int)($row['id'] ?? 0) ?>"><?= h((string)($row['name'] ?? '')) ?></option>
+            <?php endforeach; ?>
+          </datalist>
+          <?php endif; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="tdx_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Keyed object: <code>{"itsm":{"title":"…","app_id":12345,"responsible_users":"you@org.edu","group_ids":"7,12"}}</code>.</div>
+              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($tdxPages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('tdx') ? '' : ' hidden' ?>>
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $tdxBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+              <?php if (admin_can_board_settings('tdx') && tdx_configured()): ?>
+              <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                <button type="submit" name="action" value="tdx_test" class="secondary">Test connection</button>
+                <input type="hidden" name="test_page_key" value="<?= h($tdxActivePage) ?>">
+                <button type="submit" name="action" value="tdx_refresh_metadata" class="secondary">Refresh metadata</button>
+                <input type="hidden" name="metadata_page_key" value="<?= h($tdxActivePage) ?>">
+                <span class="help" style="margin:0">Uses the active tab's app ID when set. API docs:
+                  <a href="https://demotemplate.teamdynamix.com/TDWebApi/swagger" target="_blank" rel="noopener">TDWebApi</a></span>
+              </div>
+              <?php if ($tdxMetadata !== []): ?>
+              <div class="help" style="margin-top:14px">Reference IDs (from cache) — use in page filters above:</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px;font-size:13px">
+                <?php
+                $metaSections = [
+                    'Applications' => $tdxMetadata['applications'] ?? [],
+                    'Types' => $tdxMetadata['types'] ?? [],
+                    'Statuses' => $tdxMetadata['statuses'] ?? [],
+                    'Groups' => $tdxMetadata['groups'] ?? [],
+                    'Priorities' => $tdxMetadata['priorities'] ?? [],
+                ];
+                foreach ($metaSections as $label => $rows):
+                    if (!is_array($rows) || $rows === []) continue;
+                ?>
+                <div style="border:1px solid var(--hairline);border-radius:8px;padding:10px 12px;max-height:180px;overflow:auto">
+                  <strong><?= h($label) ?></strong>
+                  <?php foreach (array_slice($rows, 0, 40) as $row):
+                      if (!is_array($row)) continue; ?>
+                  <div><code><?= (int)($row['id'] ?? 0) ?></code> <?= h((string)($row['name'] ?? '')) ?></div>
+                  <?php endforeach; ?>
+                </div>
+                <?php endforeach; ?>
+              </div>
+              <?php endif; ?>
+              <?php endif; ?>
             </div>
           </details>
 
@@ -10269,6 +10579,123 @@ function removeZabbixPage(pageKey) {
   const remaining = document.querySelector('[data-zabbix-page-tab]');
   if (remaining) showZabbixPage(remaining.getAttribute('data-zabbix-page-tab'));
 }
+
+function tdxNormalizePageKey(raw) {
+  raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+  return raw || 'main';
+}
+
+function tdxPreviewHref(pageKey) {
+  return 'tdx.php?d=' + encodeURIComponent(pageKey) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function showTdxPage(pageKey) {
+  document.querySelectorAll('[data-tdx-page-editor]').forEach(function (el) {
+    el.style.display = el.getAttribute('data-tdx-page-editor') === pageKey ? '' : 'none';
+  });
+  document.querySelectorAll('[data-tdx-page-tab]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-tdx-page-tab') === pageKey);
+  });
+}
+
+function syncTdxPageTabLabel(titleInp) {
+  const editor = titleInp.closest('[data-tdx-page-editor]');
+  if (!editor) return;
+  const pageKey = editor.getAttribute('data-tdx-page-editor');
+  const tab = document.querySelector('[data-tdx-page-tab="' + pageKey + '"]');
+  if (!tab) return;
+  const title = (titleInp.value || '').trim() || 'New page';
+  tab.childNodes[0].textContent = title + ' ';
+}
+
+function bindTdxPageTab(btn) {
+  btn.addEventListener('click', function () {
+    showTdxPage(btn.getAttribute('data-tdx-page-tab'));
+  });
+}
+
+function addTdxPage() {
+  const key = prompt('Page key (letters, numbers, underscore — used in tdx.php?d=KEY):', 'page2');
+  if (key === null) return;
+  const pageKey = tdxNormalizePageKey(key);
+  if (document.querySelector('[data-tdx-page-editor="' + pageKey + '"]')) {
+    alert('A page with key "' + pageKey + '" already exists.');
+    showTdxPage(pageKey);
+    return;
+  }
+  const bar = document.getElementById('tdxPagesBar');
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'splunk-page-tab';
+  tab.setAttribute('data-tdx-page-tab', pageKey);
+  tab.appendChild(document.createTextNode('New page '));
+  const tabCode = document.createElement('code');
+  tabCode.textContent = pageKey;
+  tab.appendChild(tabCode);
+  if (bar) {
+    const addBtn = bar.querySelector('.addrow');
+    if (addBtn) bar.insertBefore(tab, addBtn);
+    else bar.appendChild(tab);
+  }
+  bindTdxPageTab(tab);
+
+  const editor = document.createElement('div');
+  editor.className = 'splunk-page-editor';
+  editor.setAttribute('data-tdx-page-editor', pageKey);
+  editor.style.display = 'none';
+  editor.innerHTML =
+    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-tdx-page-key>' +
+    '<div class="splunk-page-head">' +
+      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="ITSM NOC" data-tdx-page-title></div>' +
+      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Open incidents" data-tdx-page-sub></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
+        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + tdxPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-tdx-page-preview>Preview ↗</a>' +
+        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeTdxPage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>tdx.php?d=' + pageKey + '</code></div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
+    '<div class="field-grid" style="margin-bottom:12px">' +
+      '<div class="field"><label class="mini">Application ID</label><input type="number" name="PAGES[' + pageKey + '][app_id]" min="1" placeholder="12345" list="tdxAppIds"></div>' +
+      '<div class="field"><label class="mini">Max tickets</label><input type="number" name="PAGES[' + pageKey + '][max_tickets]" min="1" max="50" value="20"></div>' +
+      '<div class="field span-2"><label class="mini">Type IDs</label><input type="text" name="PAGES[' + pageKey + '][type_ids]" list="tdxTypeIds"></div>' +
+      '<div class="field span-2"><label class="mini">Status IDs</label><input type="text" name="PAGES[' + pageKey + '][status_ids]" placeholder="Blank = open tickets" list="tdxStatusIds"></div>' +
+      '<div class="field span-2"><label class="mini">Responsible users</label><input type="text" name="PAGES[' + pageKey + '][responsible_users]" placeholder="jane.doe@example.com"></div>' +
+      '<div class="field span-2"><label class="mini">Responsible user UIDs</label><input type="text" name="PAGES[' + pageKey + '][responsible_uids]" placeholder="Optional GUIDs"></div>' +
+      '<div class="field span-2"><label class="mini">Responsible group IDs</label><input type="text" name="PAGES[' + pageKey + '][group_ids]" list="tdxGroupIds"></div>' +
+      '<div class="field span-2"><label class="mini">Priority IDs</label><input type="text" name="PAGES[' + pageKey + '][priority_ids]" list="tdxPriorityIds"></div>' +
+      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][include_closed]"> Include closed</label>' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][include_cancelled]"> Include cancelled</label>' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
+      '</div>' +
+    '</div>';
+
+  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
+  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
+  if (jsonDetails && jsonDetails.closest('details')) {
+    jsonDetails.closest('details').before(editor);
+  } else if (form) {
+    form.appendChild(editor);
+  }
+  editor.querySelector('[data-tdx-page-title]').addEventListener('input', function () { syncTdxPageTabLabel(this); });
+  showTdxPage(pageKey);
+}
+
+function removeTdxPage(pageKey) {
+  if (!confirm('Remove page "' + pageKey + '"?')) return;
+  const editor = document.querySelector('[data-tdx-page-editor="' + pageKey + '"]');
+  const tab = document.querySelector('[data-tdx-page-tab="' + pageKey + '"]');
+  if (editor) editor.remove();
+  if (tab) tab.remove();
+  const remaining = document.querySelector('[data-tdx-page-tab]');
+  if (remaining) showTdxPage(remaining.getAttribute('data-tdx-page-tab'));
+}
+
+document.querySelectorAll('[data-tdx-page-tab]').forEach(bindTdxPageTab);
+document.querySelectorAll('[data-tdx-page-title]').forEach(function (inp) {
+  inp.addEventListener('input', function () { syncTdxPageTabLabel(inp); });
+});
 
 function kumaNormalizePageKey(raw) {
   raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');

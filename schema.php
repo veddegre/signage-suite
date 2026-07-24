@@ -870,6 +870,23 @@ function admin_schema(): array
             ['key' => 'BOARD_SUB', 'label' => 'Default page subtitle', 'type' => 'text'],
             $tz, $ttl('How long problem/host queries are cached'),
         ]],
+        'tdx' => ['title' => 'TeamDynamix', 'file' => 'tdx.php', 'fields' => [
+            ['key' => 'TDX_BASE_URL', 'label' => 'TDX base URL', 'type' => 'text',
+             'help' => 'e.g. https://yourorg.teamdynamix.com — /TDWebApi is appended if omitted'],
+            ['key' => 'TDX_AUTH_MODE', 'label' => 'Auth mode', 'type' => 'select', 'options' => ['admin', 'user'], 'default' => 'admin',
+             'help' => 'admin = BEID + Web Services Key (loginadmin); user = username + password'],
+            ['key' => 'TDX_BEID', 'label' => 'BEID (admin auth)', 'type' => 'text',
+             'help' => 'TDAdmin → Organization → BEID — for Web Services Key auth'],
+            ['key' => 'TDX_WEB_SERVICES_KEY', 'label' => 'Web Services Key', 'type' => 'password'],
+            ['key' => 'TDX_USERNAME', 'label' => 'Username (user auth)', 'type' => 'text'],
+            ['key' => 'TDX_PASSWORD', 'label' => 'Password (user auth)', 'type' => 'password'],
+            ['key' => 'TDX_VERIFY_TLS', 'label' => 'Verify TLS', 'type' => 'bool', 'default' => false],
+            ['key' => 'BOARD_TITLE', 'label' => 'Default page title', 'type' => 'text'],
+            ['key' => 'BOARD_SUB', 'label' => 'Default page subtitle', 'type' => 'text'],
+            ['key' => 'METADATA_CACHE_TTL', 'label' => 'Metadata cache (s)', 'type' => 'number', 'default' => 3600,
+             'help' => 'How long app/type/status/group lists are cached for admin reference'],
+            $tz, $ttl('How long ticket searches are cached on the wall'),
+        ]],
         'splunkdash' => ['title' => 'Splunk Published', 'file' => 'splunkdash.php', 'fields' => [
             ['key' => 'DASHBOARDS', 'label' => 'Published dashboards', 'type' => 'rows', 'keyed' => true,
              'columns' => [
