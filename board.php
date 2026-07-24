@@ -28,6 +28,10 @@ require_once __DIR__ . '/lib/screen_scope_lib.php';
 // Which screen is this device? board.php?screen=garage etc.; default 'main'.
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 
+require_once __DIR__ . '/lib/signage_theme_lib.php';
+$signageThemeKey = signage_theme_for_screen($SCREEN);
+$signageThemeCss = signage_theme_css_block($signageThemeKey);
+
 $runtime = rotation_screen_runtime($SCREEN);
 $heroStrip = hero_strip_render(is_array($runtime['hero_strip'] ?? null) ? $runtime['hero_strip'] : [], $SCREEN);
 $heroStripHeight = !empty($heroStrip['enabled']) ? (int)($heroStrip['height'] ?? 120) : 0;
@@ -87,9 +91,10 @@ if (($_GET['api'] ?? '') === 'presence') {
 <meta charset="UTF-8">
 <title>Signage</title>
 <style>
+  <?= $signageThemeCss ?>
   * { margin:0; padding:0; }
   <?= signage_kiosk_cursor_css() ?>
-  html,body { width:1920px; height:1080px; overflow:hidden; background:#0c1422; }
+  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night); }
   iframe { position:absolute; top:0; left:0; width:1920px;
            height:calc(1080px - var(--signage-ticker-inset, 0px) - var(--signage-hero-inset, 0px)); border:0;
            opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease;
@@ -97,34 +102,34 @@ if (($_GET['api'] ?? '') === 'presence') {
   iframe.show { opacity:1; }
   #hero-strip { position:absolute; left:0; right:0; bottom:var(--signage-ticker-inset, 0px); height:var(--signage-hero-inset, 0px);
                display:flex; align-items:center; gap:18px; padding:0 28px; overflow:hidden;
-               background:rgba(20,31,51,.94); border-top:1px solid #26344d; z-index:9000;
-               font:600 22px/1.3 'IBM Plex Sans',system-ui,sans-serif; color:#edf2fb; }
+               background:color-mix(in srgb, var(--harbor) 94%, transparent); border-top:1px solid var(--hairline); z-index:9000;
+               font:600 22px/1.3 'IBM Plex Sans',system-ui,sans-serif; color:var(--snow); }
   #hero-strip:empty { display:none; }
   #hero-strip .hero-strip-item { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:640px; }
-  #hero-strip .hero-strip-item.label { color:#ffb347; text-transform:uppercase; letter-spacing:.08em; font-size:18px; max-width:220px; }
-  #hero-strip .hero-strip-item.ok { color:#59db8f; }
-  #hero-strip .hero-strip-item.bad { color:#e45959; }
-  #hero-strip .hero-strip-item.warn { color:#ffc859; }
-  #hero-strip .hero-strip-item.muted { color:#8aa0c0; }
+  #hero-strip .hero-strip-item.label { color:var(--beacon); text-transform:uppercase; letter-spacing:.08em; font-size:18px; max-width:220px; }
+  #hero-strip .hero-strip-item.ok { color:var(--ok); }
+  #hero-strip .hero-strip-item.bad { color:var(--bad); }
+  #hero-strip .hero-strip-item.warn { color:var(--warn); }
+  #hero-strip .hero-strip-item.muted { color:var(--mist); }
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
-           flex-direction:column; gap:16px; color:#8aa0c0; font-family:system-ui,sans-serif; }
-  #empty h1 { font-size:48px; color:#ffb347; }
+           flex-direction:column; gap:16px; color:var(--mist); font-family:system-ui,sans-serif; }
+  #empty h1 { font-size:48px; color:var(--beacon); }
   #empty p { font-size:24px; }
   #blank { position:absolute; inset:0; z-index:10000; background:#000; display:none; }
   body.signage-blank:not(.signage-emergency-ticker) #signage-ticker-root,
   body.signage-blank:not(.signage-emergency-ticker) #signage-ticker { display:none !important; }
   #rotate-debug { position:absolute; top:24px; left:24px; z-index:9500; pointer-events:none;
                   max-width:880px; padding:14px 18px; border-radius:10px;
-                  background:rgba(0,0,0,.78); color:#edf2fb; font:600 22px/1.35 system-ui,sans-serif;
+                  background:rgba(0,0,0,.78); color:var(--snow); font:600 22px/1.35 system-ui,sans-serif;
                   box-shadow:0 4px 28px rgba(0,0,0,.55); display:none; }
-  #rotate-debug .rd-pos { font-size:18px; letter-spacing:.04em; text-transform:uppercase; color:#ffb347; margin-bottom:6px; }
+  #rotate-debug .rd-pos { font-size:18px; letter-spacing:.04em; text-transform:uppercase; color:var(--beacon); margin-bottom:6px; }
   #rotate-debug .rd-label { font-size:28px; margin-bottom:4px; }
   #rotate-debug .rd-url { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-                          font-size:20px; font-weight:500; color:#8aa0c0; word-break:break-all; }
+                          font-size:20px; font-weight:500; color:var(--mist); word-break:break-all; }
   #rotate-debug .rd-src { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-                          font-size:16px; font-weight:400; color:#6a809c; word-break:break-all; margin-top:6px; }
-  #rotate-debug .rd-status { margin-top:8px; font-size:18px; color:#ffb347; }
-  #rotate-debug.rd-wait .rd-status { color:#8aa0c0; }
+                          font-size:16px; font-weight:400; color:var(--mist); opacity:.85; word-break:break-all; margin-top:6px; }
+  #rotate-debug .rd-status { margin-top:8px; font-size:18px; color:var(--beacon); }
+  #rotate-debug.rd-wait .rd-status { color:var(--mist); }
 </style>
 </head>
 <body<?= $blankActive ? ' class="signage-blank' . ($emergencyTicker ? ' signage-emergency-ticker' : '') . '"' : ($emergencyTicker ? ' class="signage-emergency-ticker"' : '') ?> style="--signage-hero-inset: <?= (int)$heroStripHeight ?>px">
@@ -154,6 +159,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
+  const THEME   = <?= json_encode($signageThemeKey) ?>;
   const HERO_STRIP = <?= json_encode(!empty($heroStrip['enabled'])) ?>;
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
@@ -616,6 +622,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     let qs = 'noticker=1&settle=' + SETTLE;
     if (SHOW_TICKER) qs += '&safebottom=' + TICKER_H;
     if (SCREEN && SCREEN !== 'main' && boardNeedsScope(p.url)) qs += '&screen=' + encodeURIComponent(SCREEN);
+    if (THEME && THEME !== 'lake_night') qs += '&theme=' + encodeURIComponent(THEME);
     if (!SHOW_CLOCK) qs += '&clock=0';
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();
     updateRotateDebug('loading…', p, idx, fullSrc);

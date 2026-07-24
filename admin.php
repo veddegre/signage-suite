@@ -2627,6 +2627,8 @@ function admin_rotation_kiosk_settings_panel(
         $hints[] = 'TV off ' . (int)$screenSettings['schedule']['off'] . '→' . (int)$screenSettings['schedule']['on'];
     }
     $hintSummary = implode(' · ', $hints);
+    $savedTheme = (string)($screenSettings['theme'] ?? 'lake_night');
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
     ?>
 <div class="rotation-display-options-wrap" data-display-options-screen="<?= h($screenKey) ?>"<?= $visible ? '' : ' hidden' ?>>
   <div class="rotation-display-options">
@@ -2643,6 +2645,14 @@ function admin_rotation_kiosk_settings_panel(
     <div class="help" style="margin-bottom:10px">Applies to the whole TV running <code>board.php?screen=<?= h($screenKey) ?></code> — not to individual playlist pages. Controls how pages rotate, the persistent bottom bar, optional hero status bar, and per-display weather/sports overrides.</div>
       <div class="field-grid rotation-options-grid">
         <div class="field span-2 rotation-section" style="border-top:0;padding-top:0;margin-top:0">
+          <span class="mini">Color scheme</span>
+        </div>
+        <div class="field span-2">
+          <span class="l">Wall palette</span>
+          <?php admin_rotation_theme_picker($screenKey, $savedTheme); ?>
+          <div class="help" style="margin-top:8px">Each swatch shows the wall look and three ticker strips: <strong>themed</strong> (RSS fallback), <strong>yellow</strong> (watch/advisory), <strong>red</strong> (warning). Native boards and the rotation shell use the palette; Grafana, Splunk, and similar embeds keep their own themes.</div>
+        </div>
+        <div class="field span-2 rotation-section">
           <span class="mini">Rotation behavior</span>
         </div>
         <div class="field">
@@ -3445,6 +3455,21 @@ function admin_field(array $f, $val, string $board): void
   .bg-swatch img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
   .bg-pick input:checked + .bg-swatch { border-color:var(--beacon); box-shadow:0 0 0 1px var(--beacon); }
   .bg-pick input:focus-visible + .bg-swatch { outline:2px solid var(--beacon); outline-offset:2px; }
+  .rotation-theme-pick { display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:10px; margin-top:8px; }
+  .rotation-theme-pick label { cursor:pointer; min-width:0; }
+  .rotation-theme-pick input { position:absolute; opacity:0; pointer-events:none; }
+  .rotation-theme-swatch { position:relative; display:flex; flex-direction:column; border-radius:8px; border:2px solid var(--line);
+    overflow:hidden; background:var(--night); min-height:0; }
+  .rotation-theme-swatch img,
+  .rotation-theme-swatch .rotation-theme-fallback { display:block; width:100%; aspect-ratio:16/10; object-fit:cover; }
+  .rotation-theme-swatch .rotation-theme-fallback { min-height:56px; }
+  .rotation-theme-label { display:block; padding:5px 8px 4px; font-size:11px; color:var(--snow); line-height:1.25;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rotation-theme-swatch .rotation-theme-label { position:relative; left:auto; bottom:auto; text-shadow:none; }
+  .rotation-theme-ticker-samples { display:flex; gap:3px; padding:0 6px 6px; }
+  .rotation-theme-ticker-samples .tt-bar { flex:1; height:7px; border-radius:2px; border-top:2px solid transparent; box-sizing:border-box; }
+  .rotation-theme-pick input:checked + .rotation-theme-swatch { border-color:var(--beacon); box-shadow:0 0 0 1px var(--beacon); }
+  .rotation-theme-pick input:focus-visible + .rotation-theme-swatch { outline:2px solid var(--beacon); outline-offset:2px; }
   .bg-swatch span { position:absolute; left:8px; bottom:6px; z-index:1; font-size:11px; color:#edf2fb;
                      text-shadow:0 1px 4px rgba(0,0,0,.8); letter-spacing:.3px; font-weight:500; }
   .bg-swatch.photo::after { content:''; position:absolute; inset:0; pointer-events:none;

@@ -54,8 +54,8 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --ok:#39c46d; --warn:#ffb347; --crit:#ff5d5d; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }

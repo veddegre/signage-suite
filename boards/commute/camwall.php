@@ -59,11 +59,8 @@ $heightPx = $boardH . 'px';
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-    --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347;
-    <?php if ($tickerOnPage): ?>--signage-ticker-inset: <?= (int)SIGNAGE_TICKER_H ?>px;<?php endif; ?>
-  }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= h($heightPx) ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; cursor:none; }

@@ -84,8 +84,8 @@ $configured = !str_contains($dash['url'], 'REPLACE');
 <meta charset="UTF-8">
 <title><?= h($dash['title']) ?></title>
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);

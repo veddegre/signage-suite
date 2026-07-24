@@ -37,8 +37,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --seafoam:#7ec8a4; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;

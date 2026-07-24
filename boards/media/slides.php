@@ -132,7 +132,8 @@ if (isset($_GET['slide'])) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
               font-family:'IBM Plex Sans',sans-serif; cursor:none;
@@ -193,7 +194,6 @@ $playlist = array_map(fn($s) => [
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:#000; color:var(--snow);
               font-family:'IBM Plex Sans',sans-serif; cursor:none;

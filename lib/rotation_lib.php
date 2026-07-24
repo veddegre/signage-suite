@@ -77,6 +77,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'schedule' => rotation_schedule_defaults(),
         'cec' => rotation_cec_defaults(),
         'hero_strip' => rotation_hero_strip_from_screen(null),
+        'theme' => 'lake_night',
     ];
     if ($scr === null) {
         return $defaults;
@@ -96,6 +97,7 @@ function rotation_screen_settings(string $screen = 'main'): array
             'schedule' => rotation_schedule_defaults(),
             'cec' => rotation_cec_defaults(),
             'hero_strip' => rotation_hero_strip_from_screen(is_array($scr) ? $scr : null),
+            'theme' => 'lake_night',
         ];
     }
     if (!is_array($scr)) {
@@ -123,6 +125,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'schedule' => rotation_schedule_from_screen($scr),
         'cec' => rotation_cec_from_screen($scr),
         'hero_strip' => rotation_hero_strip_from_screen(is_array($scr) ? $scr : null),
+        'theme' => signage_theme_for_screen($screen),
     ];
 }
 
@@ -499,6 +502,7 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         require_once __DIR__ . '/screen_scope_lib.php';
         $entry = rotation_apply_screen_scope_post_row($entry, $row);
         unset($entry['_screen_opts_form']);
+        $entry = rotation_apply_screen_theme_from_post_row($entry, $row);
 
         return $entry;
     }
@@ -616,6 +620,31 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
     }
 
     unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on'], $entry['_screen_opts_form']);
+
+    $entry = rotation_apply_screen_theme_from_post_row($entry, $row);
+
+    return $entry;
+}
+
+/** @param array<string,mixed> $entry @param array<string,mixed> $row */
+function rotation_apply_screen_theme_from_post_row(array $entry, array $row): array
+{
+    if (!array_key_exists('theme', $row)) {
+        return $entry;
+    }
+    require_once __DIR__ . '/signage_theme_lib.php';
+    $themeRaw = trim((string)($row['theme'] ?? ''));
+    if ($themeRaw === '') {
+        unset($entry['theme']);
+
+        return $entry;
+    }
+    $themeKey = signage_normalize_theme_key($themeRaw);
+    if ($themeKey !== '' && signage_theme_preset($themeKey) !== null) {
+        $entry['theme'] = $themeKey;
+    } else {
+        unset($entry['theme']);
+    }
 
     return $entry;
 }
@@ -1787,6 +1816,7 @@ function rotation_config_revision(string $screen = 'main'): string
         'fade_ms' => $settings['fade_ms'],
         'settle_ms' => $settings['settle_ms'],
         'hang_ms' => $settings['hang_ms'],
+        'theme' => $settings['theme'],
         'emergency' => (static function () {
             require_once __DIR__ . '/emergency_lib.php';
 
@@ -1830,6 +1860,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'settle_ms' => $settings['settle_ms'],
         'hang_ms' => $settings['hang_ms'],
         'hero_strip' => $settings['hero_strip'],
+        'theme' => $settings['theme'],
         'revision' => rotation_config_revision($screen),
     ];
     require_once __DIR__ . '/emergency_lib.php';

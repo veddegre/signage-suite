@@ -61,8 +61,8 @@ $camJson['streamIframe'] = (string)$cam['url'];
 <script src="<?= h(webcam_hls_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= h($heightCss) ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; cursor:none; }

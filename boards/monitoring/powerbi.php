@@ -87,8 +87,8 @@ $boardH = signage_frame_height();
 <meta charset="UTF-8">
 <title><?= h($dash['title'] ?? $key) ?></title>
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d;
-          --snow:#edf2fb; --mist:#8aa0c0; --beacon:#ffb347; --warn:#ff8c42; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);

@@ -322,14 +322,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root {
-    --lake-night: #0c1422;   /* page background          */
-    --harbor:     #141f33;   /* panels                   */
-    --hairline:   #26344d;   /* rules and borders        */
-    --snow:       #edf2fb;   /* primary text             */
-    --mist:       #8aa0c0;   /* secondary text           */
-    --beacon:     #ffb347;   /* the one accent: amber    */
-  }
+  <?= signage_theme_css() ?>
+
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 

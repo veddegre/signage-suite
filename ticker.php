@@ -309,35 +309,13 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
 
 $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
 $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
+require_once __DIR__ . '/lib/signage_theme_lib.php';
+$tickerThemeKey = signage_active_theme_key();
 ?>
 <style>
+  <?= signage_theme_css_block($tickerThemeKey) ?>
   <?= signage_kiosk_cursor_css() ?>
-  #signage-ticker-root { position:fixed; left:0; right:0; bottom:0; z-index:9999; pointer-events:none; }
-  #signage-ticker { display:flex; align-items:stretch; height:72px;
-    font-family:'IBM Plex Sans',sans-serif;
-    background:#33260e; border-top:2px solid #ffb347;
-    box-shadow:0 -8px 30px rgba(0,0,0,.45); }
-  #signage-ticker.tk-severe { background:#3a1016; border-top-color:#ff5d5d; }
-  #signage-ticker.tk-news { background:#0e1a2e; border-top-color:#4da3ff; }
-  #signage-ticker.tk-news .tk-tag { color:#0c1422; background:#4da3ff; }
-  #signage-ticker .tk-tag { flex:0 0 auto; display:flex; align-items:center; gap:14px;
-    padding:0 28px; font-weight:700; font-size:26px; letter-spacing:2px;
-    color:#0c1422; background:#ffb347; text-transform:uppercase; white-space:nowrap; }
-  #signage-ticker.tk-severe .tk-tag { background:#ff5d5d; }
-  #signage-ticker .tk-dot { width:14px; height:14px; border-radius:50%; background:#0c1422;
-    animation:tk-blink 1.2s steps(2,start) infinite; }
-  @keyframes tk-blink { to { visibility:hidden; } }
-  #signage-ticker .tk-scroll { flex:1; overflow:hidden; display:flex; align-items:center; }
-  #signage-ticker .tk-track { display:flex; white-space:nowrap; will-change:transform; }
-  #signage-ticker .tk-item { font-size:27px; color:#edf2fb; padding-right:90px; }
-  #signage-ticker .tk-item b { color:#ffd089; font-weight:600; letter-spacing:1px; text-transform:uppercase; }
-  #signage-ticker.tk-severe .tk-item b { color:#ff9d9d; }
-  #signage-ticker .tk-item .tk-sep { color:#ffb347; padding:0 18px; }
-  #signage-ticker.tk-severe .tk-item .tk-sep { color:#ff5d5d; }
-  #signage-ticker.tk-static .tk-item { padding-right:0; width:100%;
-    overflow:hidden; text-overflow:ellipsis; padding-left:26px; }
-  @media (prefers-reduced-motion: reduce) {
-    #signage-ticker .tk-track { animation:none !important; transform:none !important; } }
+  <?= signage_ticker_css_rules() ?>
 </style>
 <div id="signage-ticker-root"></div>
 <script>
@@ -352,6 +330,13 @@ $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
     var d = document.createElement('div');
     d.textContent = s == null ? '' : String(s);
     return d.innerHTML;
+  }
+
+  function alertBannerClass(kind) {
+    if (kind === 'warning') return 'tk-severe';
+    if (kind === 'watch') return 'tk-watch';
+    if (kind === 'advisory' || kind === 'statement' || kind === 'alert') return 'tk-advisory';
+    return 'tk-advisory';
   }
 
   function topAlertKind(alerts) {
@@ -471,7 +456,7 @@ $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
     }
 
     var banner = topAlertKind(data.alerts);
-    var severe = banner.kind === 'warning';
+    var kindCls = alertBannerClass(banner.kind);
     var mode = data.mode === 'static' ? 'static' : 'scroll';
     var items = '';
     if (mode === 'static') {
@@ -486,7 +471,7 @@ $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
     }
 
     root.innerHTML =
-      '<div id="signage-ticker" class="' + (severe ? 'tk-severe ' : '') + (mode === 'static' ? 'tk-static' : '') + '">'
+      '<div id="signage-ticker" class="' + kindCls + (mode === 'static' ? ' tk-static' : '') + '">'
       + '<div class="tk-tag"><span class="tk-dot"></span>' + esc(banner.label) + '</div>'
       + '<div class="tk-scroll"><div class="tk-track" id="tk-track">' + items + '</div></div></div>';
 

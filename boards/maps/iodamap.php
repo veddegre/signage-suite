@@ -53,7 +53,8 @@ function iodamap_format_score(float $score): string
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <?php endif; ?>
 <style>
-  :root { --lake-night:#0c1422; --harbor:#141f33; --hairline:#26344d; --snow:#edf2fb; --mist:#8aa0c0; --beacon:#d9a7ff; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }

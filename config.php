@@ -191,14 +191,21 @@ function signage_viewport_css(): string
     return 'height:' . signage_viewport_height() . ';';
 }
 
+/** CSS :root tokens for the active display theme (?theme= or ?screen=). */
+function signage_theme_css(): string
+{
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
+
+    return signage_theme_css_block(signage_active_theme_key());
+}
+
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */
 function signage_board_preview_url(string $file): string
 {
+    require_once __DIR__ . '/lib/screen_scope_lib.php';
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
     $sep = str_contains($file, '?') ? '&' : '?';
-    $qs = 'noticker=1';
-    if (signage_ticker_enabled()) {
-        $qs .= '&safebottom=' . SIGNAGE_TICKER_H;
-    }
+    $qs = signage_board_rotation_query(signage_request_screen(), signage_active_theme_key(), signage_ticker_enabled());
 
     return $file . $sep . $qs;
 }

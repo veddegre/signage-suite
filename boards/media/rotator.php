@@ -155,7 +155,8 @@ function rotator_page_shell_open(string $title): void
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root { --lake-night:#0c1422; --mist:#8aa0c0; --beacon:#ffb347; --snow:#edf2fb; }
+  <?= signage_theme_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
               font-family:'IBM Plex Sans',sans-serif; cursor:none; overscroll-behavior:none; }
