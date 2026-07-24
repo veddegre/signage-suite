@@ -209,6 +209,7 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
     $panelDim = signage_theme_derive_panel_dim($lakeNight, $harbor);
     $snow = trim((string)($preset['title'] ?? '#edf2fb'));
     $mist = trim((string)($preset['body'] ?? '#8aa0c0'));
+    $tickerBar = trim((string)($preset['signage_ticker_bar'] ?? ''));
 
     return array_merge($status, [
         'label' => trim((string)($preset['label'] ?? $key)),
@@ -219,6 +220,7 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
         'snow' => $snow,
         'mist' => $mist,
         'beacon' => $beacon,
+        'ticker-bar' => $tickerBar !== '' ? $tickerBar : $harbor,
         'light' => $light ? '1' : '0',
     ]);
 }
@@ -320,14 +322,14 @@ function signage_theme_ticker_root_tokens(array $preset): array
     $nws = signage_ticker_nws_tokens();
 
     return [
-        '--tk-bar-bg' => $preset['harbor'],
+        '--tk-bar-bg' => $preset['ticker-bar'] ?? $preset['harbor'],
         '--tk-bar-border' => $preset['beacon'],
         '--tk-tag-bg' => $preset['beacon'],
         '--tk-tag-fg' => $preset['lake-night'],
         '--tk-text' => $preset['snow'],
         '--tk-emphasis' => $preset['gold'],
         '--tk-sep' => $preset['beacon'],
-        '--tk-news-bar' => $preset['lake-night'],
+        '--tk-news-bar' => $preset['ticker-bar'] ?? $preset['lake-night'],
         '--tk-news-border' => $preset['beacon'],
         '--tk-news-tag' => $preset['beacon'],
         '--tk-news-tag-fg' => $preset['lake-night'],

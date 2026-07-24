@@ -109,9 +109,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:<?= $heightCss ?>; min-height:0; overflow:hidden;
+  .board { --surface: color-mix(in srgb, var(--harbor) 86%, var(--lake-night));
+           --surface-inset: color-mix(in srgb, var(--lake-night) 22%, var(--harbor));
+           width:1920px; height:<?= $heightCss ?>; min-height:0; overflow:hidden;
            padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
-           display:grid; gap:<?= $gap ?>px; min-height:0;
+           display:grid; gap:<?= $gap ?>px;
            grid-template-columns:1fr 1fr;
            grid-template-rows: <?= $rowHead ?>px <?= $rowCards ?>px<?= $rowRecent ? ' ' . $rowRecent . 'px' : '' ?><?= $rowNext ? ' ' . $rowNext . 'px' : '' ?> auto;
            grid-template-areas:
@@ -137,7 +139,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .cards.focus-live { grid-template-columns:1.45fr .85fr; grid-template-rows:1fr 1fr; }
   .cards.focus-live .card.live.focus { grid-row:1 / span 2; }
 
-  .card { position:relative; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+  .card { position:relative; background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent);
+          border-radius:14px;
           padding:<?= $boardH < 1080 ? '16px 18px' : '18px 22px' ?>; min-height:0; overflow:hidden;
           border-top:4px solid var(--accent, var(--beacon)); display:flex; flex-direction:column; }
   .card.live { border-top-color:var(--down); box-shadow:0 0 0 1px rgba(255,93,93,.25); }
@@ -148,8 +151,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .card-row { display:flex; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0; flex:1; align-items:stretch; }
   .logo-wrap { flex:0 0 <?= $boardH < 1080 ? 92 : 108 ?>px; display:flex; align-items:center; justify-content:center;
                border-radius:12px; padding:10px; overflow:hidden;
-               background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
-               border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent); }
+               background:var(--surface-inset);
+               border:1px solid color-mix(in srgb, var(--hairline) 55%, transparent); }
   .logo-wrap img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
   .logo-wrap .sport-fallback { width:100%; height:100%; color:var(--mist); opacity:.55; display:flex;
                                align-items:center; justify-content:center; }
@@ -164,9 +167,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           border:1px solid var(--hairline); border-radius:999px; padding:3px 9px; }
   .badge { font-size:12px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600;
            border-radius:999px; padding:4px 10px; color:var(--mist);
-           background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 80%, var(--harbor)); }
+           background:var(--surface-inset); }
   .badge.live { background:rgba(255,93,93,.18); color:var(--down); animation:pulse 1.6s ease-in-out infinite; }
-  .badge.next { background:rgba(255,179,71,.12); color:var(--beacon); }
+  .badge.next { background:color-mix(in srgb, var(--beacon) 16%, transparent); color:var(--beacon); }
   .badge.final { background:rgba(57,196,109,.12); color:var(--up); }
   .badge.off { opacity:.85; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
@@ -192,13 +195,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .standings { margin-top:auto; padding-top:8px; font-size:<?= $boardH < 1080 ? 17 : 20 ?>px;
                color:var(--beacon); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  .recent { grid-area:recent; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-            padding:<?= $boardH < 1080 ? '10px 16px' : '12px 20px' ?>; min-height:0; overflow:hidden; }
+  .recent { grid-area:recent; padding:<?= $boardH < 1080 ? '4px 0' : '6px 0' ?>; min-height:0; overflow:hidden; }
   .recent .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
   .recent-grid { display:grid; grid-template-columns:repeat(<?= max(1, count($recentStrip)) ?>,1fr); gap:10px; }
-  .recent-item { border-radius:10px; padding:8px 12px; min-width:0;
-                 background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
-                 border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent); }
+  .recent-item { border-radius:12px; padding:8px 12px; min-width:0;
+                 background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent); }
   .recent-item .top { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .recent-item .mini-logo { width:28px; height:28px; flex:0 0 28px; display:flex; align-items:center; justify-content:center; }
   .recent-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; }
@@ -206,16 +207,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .recent-item .streak { margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:16px; color:var(--beacon); }
   .recent-item .line { font-size:15px; color:var(--mist); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  .nextup { grid-area:next; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-            padding:<?= $boardH < 1080 ? '12px 16px' : '14px 20px' ?>; min-height:0; overflow:hidden;
+  .nextup { grid-area:next; padding:<?= $boardH < 1080 ? '4px 0' : '6px 0' ?>; min-height:0; overflow:hidden;
             display:flex; flex-direction:column; gap:8px; }
   .nextup .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); flex-shrink:0; }
   .next-grid { display:grid; grid-template-columns:repeat(<?= max(1, $teamCount) ?>,1fr); gap:<?= $boardH < 1080 ? 10 : 12 ?>px;
                flex:1; min-height:0; align-items:stretch; }
-  .next-item { border-radius:10px; padding:<?= $boardH < 1080 ? '8px 10px' : '10px 12px' ?>; display:flex; align-items:center;
+  .next-item { border-radius:12px; padding:<?= $boardH < 1080 ? '8px 10px' : '10px 12px' ?>; display:flex; align-items:center;
                gap:10px; min-width:0; min-height:0; overflow:hidden;
-               background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
-               border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent); }
+               background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent); }
   .next-item .mini-logo { flex:0 0 38px; width:38px; height:38px; display:flex; align-items:center;
                           justify-content:center; }
   .next-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
@@ -229,8 +228,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   .empty { grid-area:cards; display:flex; align-items:center; justify-content:center;
-           background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           font-size:24px; color:var(--mist); }
+           background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent);
+           border-radius:14px; font-size:24px; color:var(--mist); }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>
@@ -330,6 +329,22 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     el.textContent = v;
   }
 
+  function cardAccent(hex) {
+    if (hex == null || hex === '') return '#ffb347';
+    var raw = String(hex).trim();
+    if (raw.indexOf('var(') === 0) return raw;
+    var h = raw.replace(/^#/, '');
+    if (h.length === 3) {
+      h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    }
+    if (!/^[0-9a-f]{6}$/i.test(h)) return raw;
+    var r = parseInt(h.slice(0, 2), 16);
+    var g = parseInt(h.slice(2, 4), 16);
+    var b = parseInt(h.slice(4, 6), 16);
+    var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.68 ? 'var(--beacon)' : ('#' + h.toLowerCase());
+  }
+
   function applyCard(card) {
     var root = document.querySelector('[data-card-key="' + cssEscape(card.key) + '"]');
     if (!root) return;
@@ -338,7 +353,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       + (card.badge === 'Off season' ? ' offseason' : '')
       + (card.result_class ? ' result-' + card.result_class : '')
       + (card.data_error ? ' error' : '');
-    root.style.setProperty('--accent', card.accent || '#ffb347');
+    root.style.setProperty('--accent', cardAccent(card.accent || '#ffb347'));
     setText(root.querySelector('[data-field="name"]'), card.name);
     setText(root.querySelector('[data-field="league"]'), card.league);
     var badgeEl = root.querySelector('[data-field="badge"]');

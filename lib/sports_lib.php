@@ -15,6 +15,34 @@ function sports_default_teams(): array
     ];
 }
 
+/** Team brand color safe for a 4px top border on dark themed cards (skip near-white). */
+function sports_card_accent_css(string $hex): string
+{
+    $hex = trim($hex);
+    if ($hex === '') {
+        return '#ffb347';
+    }
+    if (!str_starts_with($hex, '#')) {
+        $hex = '#' . $hex;
+    }
+    if (!preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $hex, $m)) {
+        return $hex;
+    }
+    $h = strtolower($m[1]);
+    if (strlen($h) === 3) {
+        $h = $h[0] . $h[0] . $h[1] . $h[1] . $h[2] . $h[2];
+    }
+    $r = hexdec(substr($h, 0, 2));
+    $g = hexdec(substr($h, 2, 2));
+    $b = hexdec(substr($h, 4, 2));
+    $lum = (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
+    if ($lum > 0.68) {
+        return 'var(--beacon)';
+    }
+
+    return '#' . $h;
+}
+
 /** @return list<array{sport:string,league:string,label:string,icon:string,months:list<int>,opens:string}> */
 function sports_league_definitions(): array
 {
@@ -1278,7 +1306,7 @@ function sports_render_card(array $c, bool $focus = false): string
     <article class="<?= htmlspecialchars($classes, ENT_QUOTES, 'UTF-8') ?>"
              data-card-key="<?= htmlspecialchars((string)($c['key'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
              data-mode="<?= htmlspecialchars($mode, ENT_QUOTES, 'UTF-8') ?>"
-             style="--accent:<?= htmlspecialchars((string)($c['accent'] ?? '#ffb347'), ENT_QUOTES, 'UTF-8') ?>">
+             style="--accent:<?= htmlspecialchars(sports_card_accent_css((string)($c['accent'] ?? '#ffb347')), ENT_QUOTES, 'UTF-8') ?>">
       <div class="card-row">
         <div class="logo-wrap team-logo">
           <?php if ($logo): ?>
