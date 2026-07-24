@@ -3321,6 +3321,7 @@ function admin_field(array $f, $val, string $board): void
   .rotation-board-picker-row select optgroup { color:var(--mist); font-style:normal; font-weight:600; letter-spacing:.04em; }
   .rotation-board-picker-row select option:checked { background:rgba(255,179,71,.25); color:var(--snow); }
   .rotation-board-picker-row select option.in-playlist { color:var(--mist); font-style:italic; }
+  .rotation-board-picker-row select[multiple] option:checked { background:rgba(255,179,71,.35); }
   .rotation-setup-tabs { margin-top:4px; }
   .rotation-setup-tabbar { display:flex; flex-wrap:wrap; gap:4px 12px; border-bottom:1px solid var(--hairline); margin-bottom:12px; }
   .rotation-setup-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--mist);
@@ -4426,10 +4427,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <button type="button" class="rotation-setup-tab" data-rotation-tab="calendar" role="tab" aria-selected="false">Calendar overrides</button>
               </div>
               <div class="rotation-setup-panel is-active" data-rotation-tab-panel="boards" role="tabpanel">
-                <p class="help" style="margin:0 0 8px">Adds a board to the playlist for the display selected above — Weather, RSS, Zabbix, Sports, and the rest. Rows already on that playlist are dimmed.</p>
+                <p class="help" style="margin:0 0 8px">Adds boards to the playlist for the display selected above. Select <strong>one or more</strong> rows (Ctrl/Cmd+click, Shift+click for a range). Rows already on the playlist are dimmed.</p>
                 <input type="search" class="deploy-filter" id="rotationBoardSearch" placeholder="Search boards, RSS feeds, monitoring…" autocomplete="off" style="max-width:none;margin:0 0 10px">
                 <div class="rotation-board-picker-row">
-                  <select id="rotationBoardSelect" size="10" aria-label="Boards to add to playlist">
+                  <select id="rotationBoardSelect" size="10" multiple aria-label="Boards to add to playlist">
                     <?php foreach ($rotationQuickGroups as $groupName => $groupItems): ?>
                     <optgroup label="<?= h($groupName) ?>">
                       <?php foreach ($groupItems as $qa): ?>
@@ -4438,9 +4439,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     </optgroup>
                     <?php endforeach; ?>
                   </select>
-                  <button type="button" class="addrow" id="rotationBoardAddBtn">Add to playlist</button>
+                  <button type="button" class="addrow" id="rotationBoardAddBtn">Add selected to playlist</button>
                 </div>
-                <p class="help" style="margin:0">Double-click a row or click <strong>Add to playlist</strong>. Need a one-off URL? Use <strong>+ Custom URL</strong>.</p>
+                <p class="help" style="margin:0">Double-click a row to add just that board. Need a one-off URL? Use <strong>+ Custom URL</strong>.</p>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="kiosk" role="tabpanel" hidden>
                 <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, sports, and glance headline columns. Matches the display chosen above.</p>
@@ -9585,16 +9586,35 @@ function initRotationBoardPicker() {
     refreshBoardPickerInPlaylistMarks();
   }
 
-  function addSelectedBoard() {
-    const opt = select.options[select.selectedIndex];
-    if (!opt || !opt.value || opt.hidden || opt.disabled) return;
+  function addSelectedBoards(singleOpt) {
     const sel = document.getElementById('rotationTargetScreen');
     const deckId = sel ? sel.value : '';
     const deck = deckId ? document.getElementById(deckId) : null;
-    if (!deck) return;
-    addRotationPage(deck.id, opt.value, opt.dataset.dwell || '60');
-    const panel = deck.closest('.rotation-playlist-panel');
-    if (panel) panel.open = true;
+    if (!deck) return 0;
+    let toAdd = [];
+    if (singleOpt && singleOpt.value && !singleOpt.hidden && !singleOpt.disabled) {
+      toAdd = [singleOpt];
+    } else {
+      toAdd = Array.from(select.selectedOptions).filter(function (opt) {
+        return opt.value && !opt.hidden && !opt.disabled;
+      });
+      if (!toAdd.length) {
+        const opt = select.options[select.selectedIndex];
+        if (opt && opt.value && !opt.hidden && !opt.disabled) toAdd = [opt];
+      }
+    }
+    if (!toAdd.length) return 0;
+    const scrollY = window.scrollY;
+    toAdd.forEach(function (opt) {
+      addRotationPage(deck.id, opt.value, opt.dataset.dwell || '60', false);
+    });
+    refreshBoardPickerInPlaylistMarks();
+    requestAnimationFrame(function () { window.scrollTo(0, scrollY); });
+    return toAdd.length;
+  }
+
+  function addSelectedBoard() {
+    addSelectedBoards(null);
   }
 
   if (search) {
@@ -9607,7 +9627,10 @@ function initRotationBoardPicker() {
     });
   }
   if (addBtn) addBtn.addEventListener('click', addSelectedBoard);
-  select.addEventListener('dblclick', addSelectedBoard);
+  select.addEventListener('dblclick', function (e) {
+    const opt = e.target && e.target.tagName === 'OPTION' ? e.target : select.options[select.selectedIndex];
+    addSelectedBoards(opt);
+  });
 }
 
 function initRotationGlobalAdd() {
@@ -10101,7 +10124,7 @@ function initRotationDecks() {
 }
 
 function addRotationPage(deckId, url, dwell, scroll) {
-  if (scroll === undefined) scroll = true;
+  if (scroll === undefined) scroll = false;
   const deck = typeof deckId === 'string' ? document.getElementById(deckId) : deckId;
   if (!deck || !deck.dataset.field) return null;
   const field = deck.dataset.field;
