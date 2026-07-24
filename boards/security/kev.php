@@ -12,6 +12,7 @@ define('SUBTITLE', cfg('kev.SUBTITLE', 'Known Exploited Vulnerabilities'));
 define('TIMEZONE', cfg('kev.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('kev.RELOAD_SEC', 0));
 define('WARN_DAYS', kev_warn_days());
+define('ADDED_DAYS', kev_added_days());
 
 date_default_timezone_set(TIMEZONE);
 $showClock = signage_show_clock();
@@ -22,6 +23,7 @@ $hero = $data['hero'];
 $list = $data['list'];
 $stats = $data['stats'];
 $hasData = $data['has_data'];
+$hasActionable = $data['has_actionable'] ?? ($hero !== null);
 
 $embedded = isset($_GET['noticker']);
 $heightCss = signage_viewport_height();
@@ -32,6 +34,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
 function kev_row_class(array $row): string
 {
+    if (ADDED_DAYS > 0 && kev_row_added_within($row, ADDED_DAYS)) {
+        return 'new';
+    }
     $days = $row['due_days'] ?? null;
     if ($days !== null && $days < 0) {
         return 'overdue';
@@ -44,6 +49,18 @@ function kev_row_class(array $row): string
     }
 
     return '';
+}
+
+function kev_row_when_label(array $row): string
+{
+    if (ADDED_DAYS > 0 && kev_row_added_within($row, ADDED_DAYS)) {
+        $added = kev_format_added_relative($row);
+        if ($added !== '') {
+            return $added;
+        }
+    }
+
+    return kev_format_relative_date((string)($row['due'] ?? '')) ?: '—';
 }
 ?>
 <!DOCTYPE html>
@@ -87,6 +104,7 @@ function kev_row_class(array $row): string
           background:var(--lake-night); min-width:0; }
   .hero.due { border-color:rgba(255,179,71,.45); }
   .hero.overdue { border-color:rgba(255,107,107,.55); }
+  .hero.new { border-color:rgba(57,196,109,.55); }
   .hero.ransom { border-color:rgba(255,179,71,.35); }
   .hero-id { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 24 : 28 ?>px; color:var(--beacon); }
   .hero-title { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 36 : 42 ?>px; line-height:1.08; margin-top:8px; }
@@ -102,6 +120,8 @@ function kev_row_class(array $row): string
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row.due { border-color:rgba(255,179,71,.45); }
   .row.overdue { border-color:rgba(255,107,107,.55); }
+  .row.new { border-color:rgba(57,196,109,.45); }
+  .row.new .when { color:var(--ok); }
   .row .title { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 17 : 18 ?>px; font-weight:500; }
   .row .sub { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; color:var(--mist); margin-top:3px;
               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -121,12 +141,15 @@ function kev_row_class(array $row): string
     <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
 
-  <?php if ($hasData && $hero): ?>
+  <?php if ($hasData && $hasActionable && $hero): ?>
   <div class="summary">
-    <div class="pill ok"><strong><?= (int)$stats['catalog'] ?></strong> in catalog</div>
+    <?php if (ADDED_DAYS > 0): ?>
+    <div class="pill ok"><strong><?= (int)$stats['new_to_kev'] ?></strong> new in <?= (int)ADDED_DAYS ?>d</div>
+    <?php endif; ?>
     <?php if ((int)$stats['due_soon'] > 0): ?>
     <div class="pill warn"><strong><?= (int)$stats['due_soon'] ?></strong> due within <?= (int)WARN_DAYS ?>d</div>
     <?php endif; ?>
+    <div class="pill"><strong><?= (int)$stats['catalog'] ?></strong> in catalog</div>
     <?php if (($stats['catalog_version'] ?? '') !== ''): ?>
     <div class="pill">Catalog <strong><?= h((string)$stats['catalog_version']) ?></strong></div>
     <?php endif; ?>
@@ -145,10 +168,13 @@ function kev_row_class(array $row): string
           <?php if (($hero['due'] ?? '') !== ''): ?>
           <span class="chip"><?= h(kev_format_relative_date((string)$hero['due'])) ?></span>
           <?php endif; ?>
+          <?php if (ADDED_DAYS > 0 && kev_row_added_within($hero, ADDED_DAYS)): ?>
+          <span class="chip"><?= h(kev_format_added_relative($hero)) ?></span>
+          <?php endif; ?>
           <?php if (!empty($hero['ransomware'])): ?>
           <span class="chip warn">Ransomware use</span>
           <?php endif; ?>
-          <?php if (($hero['added'] ?? '') !== ''): ?>
+          <?php if (($hero['added'] ?? '') !== '' && !(ADDED_DAYS > 0 && kev_row_added_within($hero, ADDED_DAYS))): ?>
           <span class="chip">Added <?= h((string)$hero['added']) ?></span>
           <?php endif; ?>
         </div>
@@ -165,7 +191,7 @@ function kev_row_class(array $row): string
             <div class="title"><?= h((string)$row['id']) ?></div>
             <div class="sub"><?= h((string)$row['vendor']) ?><?= ($row['product'] ?? '') !== '' ? ' · ' . h((string)$row['product']) : '' ?></div>
           </div>
-          <div class="when"><?= h(kev_format_relative_date((string)($row['due'] ?? '')) ?: '—') ?></div>
+          <div class="when"><?= h(kev_row_when_label($row)) ?></div>
         </div>
         <?php endforeach; ?>
       </div>
@@ -183,6 +209,20 @@ function kev_row_class(array $row): string
       <div class="empty">CISA mandates remediation for federal agencies; use as a prioritization signal for patching and vendor outreach.</div>
     </section>
   </div>
+  <?php elseif ($hasData): ?>
+  <div class="summary">
+    <?php if (ADDED_DAYS > 0): ?>
+    <div class="pill ok"><strong>0</strong> new in <?= (int)ADDED_DAYS ?>d</div>
+    <?php endif; ?>
+    <?php if ((int)$stats['due_soon'] > 0): ?>
+    <div class="pill warn"><strong><?= (int)$stats['due_soon'] ?></strong> due within <?= (int)WARN_DAYS ?>d</div>
+    <?php endif; ?>
+    <div class="pill"><strong><?= (int)$stats['catalog'] ?></strong> in catalog</div>
+  </div>
+  <div class="notcfg">No actionable KEV entries for current filters.
+    <?php if (ADDED_DAYS > 0): ?>Nothing newly added in the last <?= (int)ADDED_DAYS ?> days<?php endif; ?>
+    <?php if ((int)($stats['watch_vendors'] ?? 0) > 0): ?> matching your watch list<?php endif; ?>.
+    Set <strong>Watch vendors</strong> in admin for your stack, or widen the new-entry window.</div>
   <?php else: ?>
   <div class="notcfg">CISA KEV catalog unavailable<?= !empty($GLOBALS['diag']['kev']) ? ' — ' . h((string)$GLOBALS['diag']['kev']) : '' ?>.
     Check network access to <code>cisa.gov</code>.</div>
@@ -190,6 +230,7 @@ function kev_row_class(array $row): string
 
   <div class="stamp"><?= h(implode(' · ', array_filter([
     'cisa.gov/kev',
+    ADDED_DAYS > 0 ? ADDED_DAYS . 'd new window' : 'all additions',
     WARN_DAYS . 'd due window',
     !empty($GLOBALS['diag']['kev']) ? (string)$GLOBALS['diag']['kev'] : '',
   ]))) ?></div>

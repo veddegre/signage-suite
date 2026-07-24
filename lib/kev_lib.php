@@ -29,6 +29,12 @@ function kev_warn_days(): int
     return max(0, min(90, (int)cfg('kev.WARN_DAYS', 14)));
 }
 
+/** Only surface entries newly added to the KEV catalog within N days (0 = no limit). */
+function kev_added_days(): int
+{
+    return max(0, min(365, (int)cfg('kev.ADDED_DAYS', 90)));
+}
+
 function kev_show_ransomware(): bool
 {
     return (bool)cfg('kev.SHOW_RANSOMWARE', true);
@@ -104,6 +110,79 @@ function kev_format_relative_date(string $raw): string
     }
 
     return date('M j', kev_parse_date($raw));
+}
+
+function kev_row_added_within(array $row, int $addedDays): bool
+{
+    if ($addedDays <= 0) {
+        return true;
+    }
+    $addedTs = (int)($row['added_ts'] ?? 0);
+    if ($addedTs <= 0) {
+        return false;
+    }
+
+    return $addedTs >= strtotime('-' . $addedDays . ' days midnight');
+}
+
+function kev_days_since_added(array $row): ?int
+{
+    $addedTs = (int)($row['added_ts'] ?? 0);
+    if ($addedTs <= 0) {
+        return null;
+    }
+
+    return (int)floor((strtotime('today') - $addedTs) / 86400);
+}
+
+function kev_format_added_relative(array $row): string
+{
+    $days = kev_days_since_added($row);
+    if ($days === null) {
+        return '';
+    }
+    if ($days === 0) {
+        return 'added today';
+    }
+    if ($days === 1) {
+        return 'added yesterday';
+    }
+    if ($days <= 14) {
+        return 'added ' . $days . 'd ago';
+    }
+
+    return 'added ' . date('M j', (int)$row['added_ts']);
+}
+
+function kev_row_passes_filters(array $row, bool $showRansom, array $watch): bool
+{
+    if (!$showRansom && !empty($row['ransomware'])) {
+        return false;
+    }
+
+    return kev_row_matches_watch($row, $watch);
+}
+
+/** @return list<array<string,mixed>> */
+function kev_merge_unique_rows(array ...$groups): array
+{
+    $out = [];
+    $seen = [];
+    foreach ($groups as $group) {
+        foreach ($group as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $id = (string)($row['id'] ?? '');
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $out[] = $row;
+        }
+    }
+
+    return $out;
 }
 
 /** @return array<string,mixed>|null */
@@ -227,59 +306,68 @@ function kev_board_data(): array
 {
     $max = kev_max_items();
     $warnDays = kev_warn_days();
+    $addedDays = kev_added_days();
     $watch = kev_watch_vendors();
     $showRansom = kev_show_ransomware();
     $all = kev_all_entries();
 
-    $recent = array_slice($all, 0, $max);
+    $newToKev = [];
     $dueSoon = [];
+    $watchRows = [];
+    $newCount = 0;
+    $dueSoonCount = 0;
+
     foreach ($all as $row) {
-        $days = $row['due_days'];
-        if ($days === null || $days > $warnDays) {
+        if (!kev_row_passes_filters($row, $showRansom, $watch)) {
             continue;
         }
-        if (!$showRansom && !empty($row['ransomware'])) {
-            continue;
+
+        $daysUntilDue = $row['due_days'];
+        if ($daysUntilDue !== null && $daysUntilDue >= 0 && $daysUntilDue <= $warnDays) {
+            $dueSoon[] = $row;
+            $dueSoonCount++;
         }
-        if (!kev_row_matches_watch($row, $watch)) {
-            continue;
+
+        if (kev_row_added_within($row, $addedDays)) {
+            $newToKev[] = $row;
+            $newCount++;
         }
-        $dueSoon[] = $row;
+
+        if ($watch !== []) {
+            $watchRows[] = $row;
+        }
     }
+
     usort($dueSoon, static fn(array $a, array $b): int => ((int)($a['due_days'] ?? 999)) <=> ((int)($b['due_days'] ?? 999)));
     $dueSoon = array_slice($dueSoon, 0, $max);
+    $newToKev = array_slice($newToKev, 0, $max);
+    $watchRows = array_slice($watchRows, 0, $max);
 
-    $watchRows = [];
-    if ($watch !== []) {
-        foreach ($all as $row) {
-            if (!kev_row_matches_watch($row, $watch)) {
-                continue;
-            }
-            if (!$showRansom && !empty($row['ransomware'])) {
-                continue;
-            }
-            $watchRows[] = $row;
-            if (count($watchRows) >= $max) {
-                break;
-            }
+    $hero = $newToKev[0] ?? $dueSoon[0] ?? ($watchRows[0] ?? null);
+    $merged = kev_merge_unique_rows($newToKev, $dueSoon, $watchRows);
+    $list = [];
+    foreach ($merged as $row) {
+        if ($hero !== null && ($row['id'] ?? '') === ($hero['id'] ?? '')) {
+            continue;
+        }
+        $list[] = $row;
+        if (count($list) >= max(0, $max - 1)) {
+            break;
         }
     }
-
-    $hero = $dueSoon[0] ?? $recent[0] ?? null;
-    $list = $dueSoon !== [] ? $dueSoon : ($watchRows !== [] ? $watchRows : $recent);
-    if ($hero !== null && isset($list[0]) && ($list[0]['id'] ?? '') === ($hero['id'] ?? '')) {
-        $list = array_slice($list, 1);
-    }
-    $list = array_slice($list, 0, max(0, $max - 1));
 
     return [
         'hero' => $hero,
         'list' => $list,
         'stats' => [
             'catalog' => count($all),
-            'due_soon' => count($dueSoon),
+            'new_to_kev' => $newCount,
+            'due_soon' => $dueSoonCount,
+            'added_days' => $addedDays,
+            'watch_vendors' => count($watch),
             'catalog_version' => trim((string)(kev_fetch_catalog()['catalogVersion'] ?? '')),
         ],
         'has_data' => $all !== [],
+        'has_actionable' => $hero !== null,
     ];
 }

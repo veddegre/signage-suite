@@ -411,11 +411,11 @@ Latest published CVE hero plus a list of recent vulnerabilities — ID, CVSS sco
 
 ### kev.php — CISA Known Exploited Vulnerabilities
 
-Federal **KEV catalog** — hero CVE with remediation due date, vendor/product, ransomware-use flag, and required action text.
+Federal **KEV catalog** — hero CVE with remediation due date, vendor/product, ransomware-use flag, and required action text. Prioritizes **newly added** catalog entries and **upcoming** remediation deadlines (not years-overdue legacy items).
 
 **Data:** [CISA KEV JSON feed](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) — free, no API key (default cache 1 hour).
 
-**Setup:** admin → **CISA KEV** — due-soon window (default 14 days), optional **Watch vendors** filter, hide ransomware-linked entries if desired. Add `kev.php` to rotation (~60s dwell).
+**Setup:** admin → **CISA KEV** — **New to KEV window** (default 90 days) limits the wall to recent additions; **Due-soon window** (default 14 days) surfaces upcoming federal deadlines; **Watch vendors** (e.g. `microsoft, cisco, vmware`) keeps your stack visible even when nothing new was added. Add `kev.php` to rotation (~60s dwell).
 
 ### certexp.php — TLS Certificate Expiry
 

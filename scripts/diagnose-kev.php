@@ -25,6 +25,7 @@ echo 'Config: ' . cfg_path() . "\n\n";
 
 echo 'Cache TTL: ' . kev_cache_ttl() . "s\n";
 echo 'Warn window: ' . kev_warn_days() . " days\n";
+echo 'New-entry window: ' . kev_added_days() . " days\n";
 echo 'Max items: ' . kev_max_items() . "\n";
 echo 'Show ransomware-linked: ' . (kev_show_ransomware() ? 'yes' : 'no') . "\n";
 $watch = kev_watch_vendors();
@@ -53,6 +54,7 @@ if (empty($data['has_data'])) {
 }
 
 echo 'Catalog entries: ' . (int)($stats['catalog'] ?? 0) . "\n";
+echo 'New within window: ' . (int)($stats['new_to_kev'] ?? 0) . "\n";
 echo 'Due within warn window: ' . (int)($stats['due_soon'] ?? 0) . "\n";
 if (($stats['catalog_version'] ?? '') !== '') {
     echo 'Catalog version: ' . (string)$stats['catalog_version'] . "\n";
@@ -61,11 +63,14 @@ echo "\n";
 
 if (is_array($hero)) {
     echo "Hero: " . (string)($hero['id'] ?? '') . ' — ' . (string)($hero['name'] ?? '') . "\n";
+    echo '  Added: ' . kev_format_added_relative($hero) . "\n";
     echo '  Due: ' . kev_format_relative_date((string)($hero['due'] ?? '')) . "\n";
     if (($hero['vendor'] ?? '') !== '') {
         echo '  Vendor: ' . (string)$hero['vendor'] . "\n";
     }
     echo "\n";
+} else {
+    echo "Hero: (none — no entries match current filters)\n\n";
 }
 
 $list = $data['list'] ?? [];
@@ -75,7 +80,7 @@ if ($list !== []) {
         if (!is_array($row)) {
             continue;
         }
-        echo '  ' . (string)($row['id'] ?? '') . ' · ' . kev_format_relative_date((string)($row['due'] ?? '')) . "\n";
+        echo '  ' . (string)($row['id'] ?? '') . ' · ' . kev_format_added_relative($row) . ' · ' . kev_format_relative_date((string)($row['due'] ?? '')) . "\n";
     }
     echo "\n";
 }
