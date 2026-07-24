@@ -4,6 +4,7 @@
  */
 
 require_once dirname(__DIR__) . '/config.php';
+require_once __DIR__ . '/grafana_lib.php';
 
 function rotation_normalize_screen_key(string $key): string
 {
@@ -1976,6 +1977,16 @@ function rotation_page_label(string $url): string
         return 'Splunk published — ' . ($title !== '' ? $title : $key);
     }
 
+    if (preg_match('/^powerbi\.php\?d=([^&]+)/', $url, $m)) {
+        require_once __DIR__ . '/powerbi_lib.php';
+        $key = urldecode($m[1]);
+        $dashboards = powerbi_dashboard_registry();
+        $d = is_array($dashboards[$key] ?? null) ? $dashboards[$key] : null;
+        $title = is_array($d) ? trim((string)($d['title'] ?? '')) : '';
+
+        return 'Power BI — ' . ($title !== '' ? $title : $key);
+    }
+
     if (preg_match('/^splunk\.php(?:\?d=([^&]+))?/', $url, $m)) {
         require_once __DIR__ . '/splunk_lib.php';
         $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(splunk_pages_config()) ?: 'main');
@@ -2085,6 +2096,7 @@ function rotation_page_label(string $url): string
         'video.php' => 'Video board',
         'splunk.php' => 'Splunk panels',
         'splunkdash.php' => 'Splunk dashboard',
+        'powerbi.php' => 'Power BI',
         'zabbix.php' => 'Zabbix monitoring',
         'web.php' => 'Website',
     ];
@@ -2120,21 +2132,6 @@ function rss_feeds_for_display(): array
     require_once __DIR__ . '/users_lib.php';
 
     return admin_filter_registry_for_display(rss_feed_registry());
-}
-
-/** @return array<string,array<string,mixed>> */
-function grafana_dashboard_registry(): array
-{
-    $dash = cfg('grafana.DASHBOARDS', []);
-    return is_array($dash) ? $dash : [];
-}
-
-/** @return array<string,array<string,mixed>> */
-function grafana_dashboards_for_display(): array
-{
-    require_once __DIR__ . '/users_lib.php';
-
-    return admin_filter_registry_for_display(grafana_dashboard_registry());
 }
 
 /** @return array<string,array<string,mixed>> */
@@ -2203,23 +2200,6 @@ function rss_delete_feed(string $key): array
     cfg_reload();
 
     return ['ok' => true, 'key' => $safe];
-}
-
-function grafana_normalize_key(string $key): string
-{
-    $key = preg_replace('/[^a-z0-9_\-]/i', '', $key);
-
-    return $key !== '' ? $key : 'main';
-}
-
-function grafana_page_url(string $key): string
-{
-    return 'grafana.php?d=' . rawurlencode(grafana_normalize_key($key));
-}
-
-function grafana_preview_url(string $key): string
-{
-    return signage_board_preview_url(grafana_page_url($key));
 }
 
 function splunkdash_normalize_key(string $key): string
@@ -2382,6 +2362,29 @@ function rotation_quick_add_items(): array
             $items[] = [
                 'label' => 'Splunk published — ' . $title,
                 'url' => splunkdash_page_url((string)$key),
+                'dwell' => 60,
+                'group' => 'Dashboards',
+            ];
+        }
+    }
+
+    require_once __DIR__ . '/powerbi_lib.php';
+    $dashboards = powerbi_dashboard_registry();
+    if (is_array($dashboards)) {
+        foreach ($dashboards as $key => $d) {
+            if (!is_array($d)) {
+                continue;
+            }
+            if (!rotation_quick_add_entry_allowed($d)) {
+                continue;
+            }
+            if (!powerbi_dashboard_is_configured($d)) {
+                continue;
+            }
+            $title = trim((string)($d['title'] ?? $key));
+            $items[] = [
+                'label' => 'Power BI — ' . $title,
+                'url' => powerbi_page_url((string)$key),
                 'dwell' => 60,
                 'group' => 'Dashboards',
             ];

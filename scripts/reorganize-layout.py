@@ -27,7 +27,7 @@ BOARD_GROUPS: dict[str, list[str]] = {
         'attackports.php', 'iodamap.php', 'radar.php',
     ],
     'monitoring': [
-        'zabbix.php', 'splunk.php', 'splunkdash.php', 'grafana.php', 'homelab.php',
+        'zabbix.php', 'splunk.php', 'splunkdash.php', 'powerbi.php', 'grafana.php', 'homelab.php',
     ],
     'media': ['slides.php', 'rotator.php', 'video.php', 'rss.php', 'calendar.php'],
     'embed': ['web.php'],

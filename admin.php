@@ -1103,6 +1103,54 @@ if ($authed && $board === 'traffic' && csrf_ok() && ($_POST['action'] ?? '') ===
     }
 }
 
+// ── Power BI: Azure AD + embed token test ───────────────────────────────────
+$powerbiTestResult = null;
+if ($authed && $board === 'powerbi' && admin_can_board('powerbi') && csrf_ok() && ($_POST['action'] ?? '') === 'powerbi_test') {
+    require_once __DIR__ . '/lib/powerbi_lib.php';
+    $testKey = trim((string)($_POST['dashboard_key'] ?? ''));
+    if ($testKey !== '') {
+        $powerbiTestResult = powerbi_test_dashboard($testKey);
+    } else {
+        $powerbiTestResult = powerbi_test_azure_connection();
+    }
+    if ($powerbiTestResult['ok']) {
+        $flash = 'Power BI test OK — ' . ($powerbiTestResult['detail'] ?? 'connected');
+    } else {
+        $flash = 'Power BI test failed — ' . ($powerbiTestResult['error'] ?? 'unknown error');
+        if (!empty($powerbiTestResult['detail'])) {
+            $flash .= ': ' . $powerbiTestResult['detail'];
+        }
+        $flashOk = false;
+    }
+}
+
+// ── Grafana: JWT signing test ───────────────────────────────────────────────
+$grafanaTestResult = null;
+if ($authed && $board === 'grafana' && admin_can_board('grafana') && csrf_ok() && ($_POST['action'] ?? '') === 'grafana_test') {
+    require_once __DIR__ . '/lib/grafana_lib.php';
+    $testKey = trim((string)($_POST['dashboard_key'] ?? ''));
+    if ($testKey !== '') {
+        $registry = grafana_dashboard_registry();
+        $dash = $registry[grafana_normalize_key($testKey)] ?? null;
+        if (!is_array($dash)) {
+            $grafanaTestResult = ['ok' => false, 'error' => 'Dashboard key not found'];
+        } else {
+            $grafanaTestResult = grafana_test_dashboard_embed($testKey, $dash);
+        }
+    } else {
+        $grafanaTestResult = grafana_test_jwt();
+    }
+    if ($grafanaTestResult['ok']) {
+        $flash = 'Grafana test OK — ' . ($grafanaTestResult['detail'] ?? 'JWT signed');
+    } else {
+        $flash = 'Grafana test failed — ' . ($grafanaTestResult['error'] ?? 'unknown error');
+        if (!empty($grafanaTestResult['detail'])) {
+            $flash .= ': ' . $grafanaTestResult['detail'];
+        }
+        $flashOk = false;
+    }
+}
+
 // ── Custom slides: upload / delete ──────────────────────────────────────────
 if ($authed && $board === 'slides' && admin_can_board('slides')) {
     $slideDir = slides_dir();
@@ -1788,7 +1836,7 @@ $navGroups = [
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
     'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
-    'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
+    'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'powerbi', 'web'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
@@ -3645,8 +3693,16 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each page is <code>kuma.php?d=<em>key</em></code> in rotation — one status page slug per tab below.
         <?php elseif ($board === 'grafana'): ?>
           Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — preview per row below.
+          For <strong>SSO-protected self-hosted Grafana</strong>, enable <strong>JWT auth for embed</strong> below and
+          configure matching <code>[auth.jwt]</code> in Grafana — see <code>docs/grafana.md</code>.
         <?php elseif ($board === 'splunkdash'): ?>
           Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
+        <?php elseif ($board === 'powerbi'): ?>
+          Each report is <code>powerbi.php?d=<em>key</em></code> in rotation — preview per row below.
+          <strong>Private reports:</strong> set Azure tenant / app / secret, add workspace + report IDs (or paste a
+          <code>reportEmbed</code> URL), mode <strong>Token</strong> or <strong>Auto</strong>.
+          <strong>Public:</strong> <code>app.powerbi.com/view?r=…</code> publish-to-web links still work with mode
+          <strong>Publish</strong> or <strong>Auto</strong>.
         <?php elseif ($board === 'web'): ?>
           Each site is <code>web.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'announce'): ?>
@@ -3656,6 +3712,53 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
         <?php elseif (!empty($b['file'])): ?>
           <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
         <?php endif; ?></div>
+
+      <?php if ($board === 'grafana'):
+        require_once __DIR__ . '/lib/grafana_lib.php';
+        $grafJwtOn = grafana_jwt_enabled();
+        $grafJwtReady = grafana_jwt_configured();
+      ?>
+      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">JWT embed auth</div>
+        <div class="video-meta">
+          <div>JWT embed: <strong><?= $grafJwtReady ? 'active' : ($grafJwtOn ? 'incomplete' : 'disabled') ?></strong>
+            <?php if ($grafJwtOn && !$grafJwtReady): ?> — enable JWT, set secret + login email, Save<?php endif; ?></div>
+          <div class="help" style="margin-top:10px">For work Grafana behind SSO: Grafana admin enables
+            <code>[auth.jwt]</code> + <code>url_login</code>; signage signs <code>auth_token</code> on each embed URL.
+            Full steps in <code>docs/grafana.md</code>.</div>
+        </div>
+        <form method="post" action="?board=grafana" style="margin-top:14px">
+          <input type="hidden" name="action" value="grafana_test">
+          <input type="hidden" name="board" value="grafana">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <button class="secondary" type="submit">Test JWT signing</button>
+        </form>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($board === 'powerbi'):
+        require_once __DIR__ . '/lib/powerbi_lib.php';
+        $pbiAzureOk = powerbi_azure_configured();
+      ?>
+      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">Azure AD connection</div>
+        <div class="video-meta">
+          <div>Credentials: <strong><?= $pbiAzureOk ? 'configured' : 'incomplete' ?></strong>
+            <?php if (!$pbiAzureOk): ?> — tenant ID, client ID, and secret required for private reports<?php endif; ?></div>
+          <div class="help" style="margin-top:10px">One-time Azure setup: see <code>docs/powerbi.md</code> in the repo (Entra app registration,
+            Power BI application permissions, admin consent, Power BI admin portal service-principal setting,
+            workspace access). Summary: app registration → client secret →
+            Report/Dataset/Dashboard/Workspace.Read.All (application) → grant admin consent →
+            Power BI admin portal allows service principals → add the app to your workspace as Member/Admin.</div>
+        </div>
+        <form method="post" action="?board=powerbi" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input type="hidden" name="action" value="powerbi_test">
+          <input type="hidden" name="board" value="powerbi">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <button class="secondary" type="submit">Test Azure + Power BI API</button>
+        </form>
+      </div>
+      <?php endif; ?>
 
       <?php if ($board === 'rotator'): ?>
       <form id="photoDeleteForm" method="post" action="?board=rotator" hidden>
@@ -5888,6 +5991,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     echo ' data-preview-script="grafana.php"';
                 } elseif ($board === 'splunkdash' && $f['key'] === 'DASHBOARDS') {
                     echo ' data-preview-script="splunkdash.php"';
+                } elseif ($board === 'powerbi' && $f['key'] === 'DASHBOARDS') {
+                    echo ' data-preview-script="powerbi.php"';
                 }
               ?>>
                 <thead><tr>
@@ -5895,7 +6000,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <?php if (($board === 'rss' && $f['key'] === 'FEEDS')
                       || ($board === 'web' && $f['key'] === 'SITES')
                       || ($board === 'webcam' && $f['key'] === 'CAMS')
-                      || (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS')): ?><th></th><?php endif; ?>
+                      || (in_array($board, ['grafana', 'splunkdash', 'powerbi'], true) && $f['key'] === 'DASHBOARDS')): ?><th></th><?php endif; ?>
                   <?php if (admin_is_super()): ?><th>Access</th><?php endif; ?>
                   <th></th>
                 </tr></thead>
@@ -5993,9 +6098,19 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $camPrev === '' ? ';display:none' : '' ?>"
                            href="<?= h($camPrev !== '' ? $camPrev : '#') ?>" target="_blank" rel="noopener">Preview ↗</a>
                       </td>
-                      <?php elseif (in_array($board, ['grafana', 'splunkdash'], true) && $f['key'] === 'DASHBOARDS'):
+                      <?php elseif (in_array($board, ['grafana', 'splunkdash', 'powerbi'], true) && $f['key'] === 'DASHBOARDS'):
                         $dashKey = trim((string)($row['_key'] ?? ''));
-                        $dashPrev = $dashKey !== '' ? ($board === 'grafana' ? grafana_preview_url($dashKey) : splunkdash_preview_url($dashKey)) : '';
+                        $dashPrev = '';
+                        if ($dashKey !== '') {
+                            if ($board === 'grafana') {
+                                $dashPrev = grafana_preview_url($dashKey);
+                            } elseif ($board === 'splunkdash') {
+                                $dashPrev = splunkdash_preview_url($dashKey);
+                            } else {
+                                require_once __DIR__ . '/lib/powerbi_lib.php';
+                                $dashPrev = powerbi_preview_url($dashKey);
+                            }
+                        }
                       ?>
                       <td>
                         <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px<?= $dashPrev === '' ? ';display:none' : '' ?>"
@@ -9257,6 +9372,8 @@ function rotationLabelFromUrl(url) {
   if (/^video\.php\?v=/.test(url)) return 'Video — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'video');
   if (/^rss\.php\?feed=/.test(url)) return 'RSS — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'feed');
   if (/^grafana\.php\?d=/.test(url)) return 'Grafana — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'dashboard');
+  if (/^splunkdash\.php\?d=/.test(url)) return 'Splunk published — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'dashboard');
+  if (/^powerbi\.php\?d=/.test(url)) return 'Power BI — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'report');
   if (/^splunk\.php/.test(url)) {
     const m = url.match(/[?&]d=([^&]+)/);
     return 'Splunk — ' + decodeURIComponent((m && m[1]) || 'main');
@@ -9275,7 +9392,7 @@ function rotationLabelFromUrl(url) {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
     'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'camwall.php': 'MDOT Cams', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'kev.php': 'CISA KEV', 'certexp.php': 'TLS cert expiry', 'ransomware.php': 'Ransomware tracker', 'phish.php': 'Phishing & brand threats', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
-    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
+    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard', 'powerbi.php': 'Power BI',
     'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'
   };
   const base = url.split('?')[0];

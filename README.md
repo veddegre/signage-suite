@@ -142,11 +142,15 @@ video.php?v=drone               slides.php?slide=birthday.png
 | **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **CISA KEV**, **TLS cert expiry**, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides (upload + **slide creator** with occasion templates — dinner menu, snow day, anniversary, …), RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
-| **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
+| **Dashboards** | Grafana, Splunk panels (REST), Splunk published, Power BI, embedded websites | Grafana JWT secret (SSO embed); Splunk token (panels); Azure app (Power BI private) |
 
 **Zabbix** — no iframe; server-side `problem.get` + host status. Problems are filtered to match the Zabbix UI (unresolved only; excludes disabled triggers/hosts/items and symptom events that `problem.get` still returns). Multiple pages (`zabbix.php?d=<key>`) filter by host group; operators can own pages per team. If the wall shows an alert you cannot find in Zabbix, run `php scripts/diagnose-zabbix.php <page_key> [--needle=substring]` on the server — **HIDDEN** rows are API-only leftovers (e.g. a Docker trigger disabled after a container was removed). See [boards → Zabbix](docs/boards.md#zabbixphp--zabbix-monitoring-json-rpc-7x).
 
 **Splunk panels** — oneshot searches server-side (port 8089), multi-page like Grafana.
+
+**Grafana** (`grafana.php?d=<key>`) — iframe with kiosk mode. For **SSO-protected self-hosted Grafana**, enable **JWT auth for embed** in admin; signage signs `auth_token` URLs validated by Grafana `[auth.jwt]`. Setup: [docs/grafana.md](docs/grafana.md).
+
+**Power BI** (`powerbi.php?d=<key>`) — publish-to-web for public reports, or **Azure AD embed tokens** for private reports on unattended players (same model as Yodeck). Step-by-step Entra and Power BI admin setup: [docs/powerbi.md](docs/powerbi.md).
 
 **Internet attacks** (`attacks.php`) — DShield (SANS ISC) works with no API key: countries under attack, top ports, top IPs, and the global Infocon level.
 
@@ -308,6 +312,8 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 | [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, CEC, cursor, freezes, updates |
 | [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
+| [docs/grafana.md](docs/grafana.md) | **Grafana JWT embed** — SSO + self-hosted, JWK file, signage auth_token, troubleshooting |
+| [docs/powerbi.md](docs/powerbi.md) | **Power BI private embed** — Entra app registration, API permissions, workspace access, RLS, troubleshooting |
 | [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, server scripts, PWA, DVR |
 | [docs/video-youtube.md](docs/video-youtube.md) | yt-dlp, cookies, headless YouTube |
 

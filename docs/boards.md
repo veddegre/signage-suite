@@ -52,9 +52,10 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Custom slides | `slides.php` | `slides.php?slide=…` | — |
 | | Video | `video.php` | `video.php?v=<key>` | — |
 | | RSS | `rss.php` | `rss.php?feed=<key>` | — |
-| Dashboards | Grafana | `grafana.php` | `grafana.php?d=<key>` | — (iframe) |
+| Dashboards | Grafana | `grafana.php` | `grafana.php?d=<key>` | JWT secret (SSO) or — |
 | | Splunk panels | `splunk.php` | `splunk.php?d=<key>` | Splunk token |
 | | Splunk published | `splunkdash.php` | `splunkdash.php?d=<key>` | — (iframe) |
+| | Power BI | `powerbi.php` | `powerbi.php?d=<key>` | Azure app (private) or — (publish) |
 | | Websites | `web.php` | `web.php?d=<key>` | — (iframe) |
 
 ---
@@ -657,11 +658,19 @@ See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
 
 ## Dashboards & integrations
 
-### grafana.php — Grafana (iframe)
+### grafana.php — Grafana (iframe + JWT)
 
-`grafana.php?d=<key>`. Registry maps keys to dashboard URLs; kiosk mode, dark theme, and refresh appended automatically. Per-dashboard **Access** (owner, users, roles) like other operator boards.
+`grafana.php?d=<key>`. Kiosk mode, theme, and refresh params are appended automatically. Per-dashboard **Access** (owner, users, roles) like other operator boards.
 
-**Grafana (one time):** `[security] allow_embedding = true`, plus either `[auth.anonymous] enabled = true` with `org_role = Viewer` **or** a public dashboard share URL.
+| Auth path | When |
+|-----------|------|
+| **JWT embed** | Self-hosted Grafana behind SSO — signage signs `auth_token` (HS256) |
+| **Public dashboard URL** | Non-sensitive; Grafana “public dashboard” share link |
+| **Anonymous Viewer** | Homelab LAN (`auth.anonymous` in grafana.ini) |
+
+**Full JWT setup (work Grafana + SSO):** [grafana.md](grafana.md) — `grafana.ini` `[auth.jwt]`, JWK file, dedicated Viewer user, signage admin fields, troubleshooting.
+
+**Diagnostics:** `php scripts/diagnose-grafana.php` · `php scripts/diagnose-grafana.php --test` · admin **Test JWT signing**
 
 ### splunk.php — Splunk panels (REST API)
 
@@ -678,6 +687,26 @@ Multi-page: `splunk.php?d=<key>` with per-page panel decks and **Access** (owner
 Splunk Enterprise 10.x / Cloud published Dashboard Studio dashboards.
 
 **Setup:** publish in Splunk, copy URL to registry. Set `x_frame_options_sameorigin = false` in Splunk `web.conf` for LAN embeds. Wrapper reloads iframe on `reload` interval (default 300s).
+
+### powerbi.php — Power BI (iframe + embed tokens)
+
+`powerbi.php?d=<key>`. Supports **publish-to-web** (public iframe) and **private embed tokens** via Azure AD service principal — the same pattern as Yodeck and other commercial signage tools.
+
+| Mode | Use case | Setup |
+|------|----------|--------|
+| **Publish** | Public reports | `app.powerbi.com/view?r=…` link (no sign-in; data is public) |
+| **Token** | Private reports on kiosk players | Azure AD app + workspace/report IDs |
+
+**Full setup guide:** [powerbi.md](powerbi.md) — detailed Entra app registration, API permissions, Power BI admin portal settings, workspace access, row configuration, RLS, rotation, and troubleshooting.
+
+**Signage admin (summary):**
+
+1. Admin → **Power BI** — **Azure tenant ID**, **client ID**, **client secret** (see [Azure setup](powerbi.md#azure-setup-one-time)).
+2. **Test Azure + Power BI API** — confirms credentials before adding reports.
+3. Per row: **Mode** `token` or `auto`, **URL** (embed link) or **Workspace ID** + **Report ID**, optional **RLS** fields.
+4. Rotation: `powerbi.php?d=<key>` or quick-add under **Dashboards**.
+
+**Diagnostics:** `php scripts/diagnose-powerbi.php` · `php scripts/diagnose-powerbi.php --test` · admin **Test Azure + Power BI API**
 
 ### web.php — Websites (iframe)
 

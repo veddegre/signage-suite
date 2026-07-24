@@ -14,7 +14,7 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video', 'webcam',
-    'grafana', 'splunk', 'splunkdash', 'zabbix', 'announce', 'calendar', 'account',
+    'grafana', 'splunk', 'splunkdash', 'powerbi', 'zabbix', 'announce', 'calendar', 'account',
 ];
 
 /** Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy — super admin and Infrastructure role only. */

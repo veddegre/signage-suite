@@ -32,7 +32,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 | **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy (Infrastructure + super admin), Zabbix, cloud outages, … |
 | **Daily** | Word of the day, This day in history, Dad jokes, Announcements, XKCD |
 | **Media** | Slides, Photo Rotator, Video, RSS |
-| **Dashboards** | Grafana, Splunk Panels, Splunk Published, Websites |
+| **Dashboards** | Grafana, Splunk Panels, Splunk Published, Power BI, Websites |
 
 **Users** and **Tools** are super-admin only. Footer: **Status**, **Account**, logout.
 
@@ -81,7 +81,7 @@ Super admins only — **Rotation → Emergency override**. Forces one of three m
 
 ## Content ownership & sharing
 
-On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Zabbix**, **Announcements**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
+On operator boards (**Slides**, **Photo Rotator**, **RSS**, **Websites**, **Video**, **Grafana**, **Splunk**, **Splunk Published**, **Power BI**, **Zabbix**, **Announcements**, **Calendar**, …), each row has an **Access** control (super admin). Three layers:
 
 | Layer | Purpose |
 |-------|---------|
@@ -101,7 +101,7 @@ Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["
 
 Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin configuration** stays **super admin** or **Infrastructure** only — operators do not see those sidebar entries or board settings, and those boards are omitted from rotation **quick-add** and hero-strip source pickers. Other monitoring walls (Cloudflare Radar, outages, Zabbix pages when shared, etc.) stay selectable in playlists. Setup/security boards (Users, Security, …) stay super-admin only. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
 
-Board-level API secrets (Splunk token, Zabbix token, TomTom key, etc.) remain super-admin only.
+Board-level API secrets (Splunk token, Zabbix token, Grafana JWT secret, Power BI Azure client secret, TomTom key, etc.) remain super-admin only. Grafana JWT setup: [grafana.md](grafana.md). Power BI Azure setup: [powerbi.md](powerbi.md).
 
 ## Concurrent saves & JSON storage
 
