@@ -113,6 +113,8 @@ function audit_action_label(string $action): string
         'users.save' => 'Users saved',
         'board.save' => 'Board saved',
         'cache.clear' => 'Cache cleared',
+        'config.backup.store' => 'Config backup stored',
+        'config.backup.export' => 'Config backup downloaded',
         'sso.jit_provision' => 'SSO user provisioned',
         'media.slide_upload' => 'Slide uploaded',
         'media.slide_delete' => 'Slide deleted',

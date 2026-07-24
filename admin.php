@@ -33,6 +33,7 @@ require_once __DIR__ . '/lib/users_lib.php';
 require_once __DIR__ . '/lib/webcam_lib.php';
 require_once __DIR__ . '/lib/sso_lib.php';
 require_once __DIR__ . '/lib/audit_lib.php';
+require_once __DIR__ . '/lib/backup_lib.php';
 require_once __DIR__ . '/lib/screen_scope_lib.php';
 require_once __DIR__ . '/lib/sports_lib.php';
 
@@ -1127,6 +1128,36 @@ if ($authed && ($_POST['action'] ?? '') === 'clearcache' && csrf_ok()) {
     }
     $flash = "Cleared $n cached file" . ($n === 1 ? '' : 's') . '.';
     audit_log('cache.clear', "Cleared $n API cache files");
+    }
+}
+
+if ($authed && ($_POST['action'] ?? '') === 'export_config' && csrf_ok()) {
+    if (!admin_can_tools()) {
+        $flash = 'Only super admins can export configuration.'; $flashOk = false;
+    } else {
+        $includeCookies = !empty($_POST['export_include_cookies']);
+        audit_log('config.backup.export', 'Downloaded config zip' . ($includeCookies ? ' (with cookies)' : ''));
+        $result = signage_config_backup_send_download(true, $includeCookies);
+        $flash = (string)($result['error'] ?? 'Export failed.'); $flashOk = false;
+    }
+}
+
+if ($authed && ($_POST['action'] ?? '') === 'store_config_backup' && csrf_ok()) {
+    if (!admin_can_tools()) {
+        $flash = 'Only super admins can store configuration backups.'; $flashOk = false;
+    } else {
+        $includeCookies = !empty($_POST['export_include_cookies']);
+        $result = signage_config_backup_store_on_disk(SIGNAGE_CONFIG_BACKUP_KEEP_DEFAULT, true, $includeCookies);
+        if ($result['ok']) {
+            $rel = (string)($result['relative'] ?? '');
+            $flash = 'Saved server backup ' . $rel . ' (' . signage_config_backup_format_bytes((int)($result['bytes'] ?? 0)) . ').';
+            if (($result['pruned'] ?? 0) > 0) {
+                $flash .= ' Removed ' . (int)$result['pruned'] . ' older zip(s).';
+            }
+            audit_log('config.backup.store', 'Stored ' . $rel);
+        } else {
+            $flash = (string)($result['error'] ?? 'Backup failed.'); $flashOk = false;
+        }
     }
 }
 
@@ -3545,8 +3576,49 @@ function admin_field(array $f, $val, string $board): void
         <button class="save">Clear API cache</button>
         <div class="help" style="margin-top:8px">Deletes everything in cache/ — boards refetch on next load. Useful after changing API keys or sources.</div>
       </form>
+
+      <?php
+      $configBackupInventory = signage_config_backup_inventory(true, false);
+      $configBackupStoreList = signage_config_backup_list_store(8);
+      ?>
+      <h2 style="font-size:22px">Config backup &amp; export</h2>
+      <div class="sub">Download or store a zip of <code>settings.json</code>, <code>users.json</code>, rotation playlist files, and matching <code>.bak</code> sidecars. Treat exports like secrets — they contain API keys and SSO client secrets.</div>
+      <div class="help" style="margin:10px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--harbor)">
+        <strong><?= (int)$configBackupInventory['file_count'] ?></strong> file(s) ·
+        <?= h(signage_config_backup_format_bytes((int)$configBackupInventory['bytes'])) ?> ·
+        <strong><?= (int)$configBackupInventory['rotation_playlists'] ?></strong> rotation playlist(s)
+        <?= !empty($configBackupInventory['has_users']) ? ' · users included' : '' ?>
+      </div>
+      <form method="post" style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <label class="check" style="margin:0"><input type="checkbox" name="export_include_cookies" value="1"> Include <code>config/cookies/</code> (YouTube export)</label>
+        <button type="submit" name="action" value="export_config" class="save">Download backup (.zip)</button>
+        <button type="submit" name="action" value="store_config_backup" class="secondary">Save copy on server</button>
+      </form>
+      <div class="help" style="margin-bottom:20px">
+        Server copies go to <code><?= h(SIGNAGE_CONFIG_BACKUP_STORE_DIR) ?>/</code> (newest <?= (int)SIGNAGE_CONFIG_BACKUP_KEEP_DEFAULT ?> kept).
+        Cron: <code>php scripts/backup-config.php --store --keep=<?= (int)SIGNAGE_CONFIG_BACKUP_KEEP_DEFAULT ?></code>.
+        Restore: unzip and copy files back into <code>config/</code>, or use per-file <code>.bak</code> restores in the docs.
+      </div>
+      <h2 style="font-size:22px">PHP health check</h2>
+      <div class="sub">After deploy or <code>git pull</code>, run on the server (SSH): <code>bash scripts/check-php.sh</code> — lints every <code>.php</code> file, loads <code>config.php</code>, <code>schema.php</code>, and all <code>lib/*.php</code>, then runs offline <code>scripts/test-*.php</code>. <code>setup-server.sh</code> runs this automatically. GitHub Actions runs the same on push/PR.</div>
+      <?php if ($configBackupStoreList !== []): ?>
+      <table class="rows" style="margin-bottom:28px">
+        <thead><tr><th>On-server backup</th><th>Size</th><th>Created (UTC)</th></tr></thead>
+        <tbody>
+          <?php foreach ($configBackupStoreList as $bk): ?>
+          <tr>
+            <td><code><?= h($bk['relative']) ?></code></td>
+            <td><?= h(signage_config_backup_format_bytes((int)$bk['bytes'])) ?></td>
+            <td><?= h(gmdate('Y-m-d H:i:s', (int)$bk['mtime'])) ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php endif; ?>
+
       <h2 style="font-size:22px">config/settings.json</h2>
-      <div class="sub">Only keys that differ from board defaults are stored. Edit by hand if you like — boards pick it up on next render.</div>
+      <div class="sub">Only keys that differ from board defaults are stored. Each save copies the previous file to <code>config/settings.json.bak</code>. Rotation playlists live in <code>config/rotation/pages/&lt;screen&gt;.json</code> with a matching <code>.json.bak</code> on each save.</div>
       <pre class="raw"><?= h(json_encode($rawConf, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}') ?></pre>
 
     <?php elseif ($auditBoard):
@@ -9428,7 +9500,8 @@ function highlightActiveRotationPlaylist() {
   });
 }
 
-function selectRotationTargetByScreenKey(screenKey) {
+function selectRotationTargetByScreenKey(screenKey, openPanel) {
+  if (openPanel === undefined) openPanel = true;
   const sel = document.getElementById('rotationTargetScreen');
   if (!sel || !screenKey) return;
   const opt = Array.from(sel.options).find(function (o) {
@@ -9443,7 +9516,7 @@ function selectRotationTargetByScreenKey(screenKey) {
     refreshBoardPickerInPlaylistMarks();
   }
   const panel = document.querySelector('.rotation-playlist-panel[data-rotation-screen="' + screenKey + '"]');
-  if (panel && !panel.open) panel.open = true;
+  if (openPanel && panel && !panel.open) panel.open = true;
 }
 
 function initRotationSetupTabs() {
@@ -9475,7 +9548,8 @@ function initRotationPlaylistSync() {
     if (summary && !summary.dataset.targetSyncBound) {
       summary.dataset.targetSyncBound = '1';
       summary.addEventListener('click', function () {
-        setTimeout(function () { selectRotationTargetByScreenKey(sk); }, 0);
+        const willOpen = !panel.open;
+        setTimeout(function () { selectRotationTargetByScreenKey(sk, willOpen); }, 0);
       });
     }
     if (!panel.dataset.targetToggleBound) {

@@ -136,7 +136,53 @@ If a lock cannot be acquired in time, admin shows: *Another admin save is in pro
 
 Sidecar `*.lock` files next to JSON files are normal during writes.
 
-**Backups:** Include `config/settings.json`, `config/users.json`, and **`config/rotation/pages/*.json`** together.
+### Automatic local backups (`.bak`)
+
+Before each successful write, the server keeps **one previous generation**:
+
+| File | Backup |
+|------|--------|
+| `config/settings.json` | `config/settings.json.bak` |
+| `config/rotation/pages/<screen>.json` | `config/rotation/pages/<screen>.json.bak` |
+
+Backups are updated on admin **Save** (settings and rotation playlists), including when a playlist file is **removed** (cleared playlist). They are not created for high-churn files like `cache/presence.json`.
+
+**Restore a display playlist from its backup:**
+
+```bash
+cp config/rotation/pages/veddersg.json.bak config/rotation/pages/veddersg.json
+# or
+php scripts/recover-rotation-pages.php --screen=veddersg --force
+```
+
+**Restore settings** (API keys, decks, rotation metadata — not playlist rows if already migrated):
+
+```bash
+cp config/settings.json.bak config/settings.json
+```
+
+The recover script also scans `settings.json.bak` and `settings.json.tmp.*` for legacy `rotation.PAGES_*` keys.
+
+### Config export (zip)
+
+Super admins: **Admin → Tools → Config backup & export**.
+
+| Action | What it does |
+|--------|----------------|
+| **Download backup (.zip)** | Browser download — `manifest.json`, settings, users, rotation playlists, `.bak` sidecars |
+| **Save copy on server** | Writes `config/backups/signage-config-*.zip` (newest **10** kept; not web-accessible) |
+
+CLI (cron-friendly):
+
+```bash
+php scripts/backup-config.php --out=/tmp/signage-config.zip
+php scripts/backup-config.php --store --keep=14
+php scripts/backup-config.php --store --cookies   # includes config/cookies/
+```
+
+**Restore:** Unzip and copy files into the install root (same paths as inside the zip). For a quick rollback of the last save, use `.bak` files instead (below).
+
+**Off-site:** Copy zips off the server — they contain API keys and SSO secrets. Slide/photo **media** are not included (only JSON config); back up `slides/` and `photos/` separately if needed.
 
 ## SSO setup (Entra ID & Authentik)
 

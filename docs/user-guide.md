@@ -410,6 +410,7 @@ Use these guides for credential setup and troubleshooting — not duplicated her
 |---------|-----|
 | Cannot save | Another save in progress on `settings.json` — wait and retry |
 | Cannot save rotation | Another save on the **same** display playlist — wait and retry (different displays use separate files) |
+| **veddersg / display playlist empty after upgrade** | Check `config/rotation/pages/<screen>.json.bak` (created on each save after upgrade), or run `php scripts/recover-rotation-pages.php --screen=veddersg --force` |
 | Board missing from sidebar | Your role lacks access |
 | Quick-add missing a board | Not shared with you, **Off wall**, or infra-only |
 | Preview works, rotation doesn’t | Wrong `?screen=` or row URL typo |

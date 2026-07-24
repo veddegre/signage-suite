@@ -18,9 +18,9 @@ Each display’s **playlist rows** are stored in **`config/rotation/pages/<scree
 | Emergency override, calendar overrides, playlist templates | `settings.json` |
 | Legacy global default playlist (rare) | `settings.json` → `rotation.PAGES` — used when **main** has no own file |
 
-**Hand-editing:** Playlist files are JSON **arrays** of objects (`url`, `dwell`, optional `from`/`to`, `weight`, …). After editing on disk, kiosks pick up changes within ~30s (rotation shell poll) or on next playlist save from admin.
+**Hand-editing:** Playlist files are JSON **arrays** of objects (`url`, `dwell`, optional `from`/`to`, `weight`, …). After editing on disk, kiosks pick up changes within ~30s (rotation shell poll) or on next playlist save from admin. Each save keeps the prior file as **`&lt;screen&gt;.json.bak`**.
 
-**Diagnostics:** `php scripts/diagnose-rotation.php <screen>` prints the playlist file path and effective rows.
+**Diagnostics:** `php scripts/recover-rotation-pages.php --screen=veddersg` restores from `.bak` or legacy settings keys. `php scripts/diagnose-rotation.php &lt;screen&gt;` prints the playlist file path.
 
 **Concurrent saves:** Operators editing **different** displays write **different** files. Two people saving the **same** display still last-write-wins on that one file.
 

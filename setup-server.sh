@@ -229,7 +229,7 @@ setup_directories() {
   for d in config cache videos slides photos bin; do
     write_deny_htaccess "$WEBROOT/$d"
   done
-  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/config/rotation/pages" "$WEBROOT/cache/yt-dlp/deno"
+  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/config/backups" "$WEBROOT/config/rotation/pages" "$WEBROOT/cache/yt-dlp/deno"
 
   # slide_backgrounds/ ships in git; ensure it exists and is readable
   mkdir -p "$WEBROOT/slide_backgrounds" "$WEBROOT/slide_backgrounds/photos"
@@ -675,6 +675,20 @@ verify_opcache_web() {
   fi
 }
 
+verify_php_checks() {
+  local script="$WEBROOT/scripts/check-php.sh"
+  if [[ ! -f "$WEBROOT/scripts/check-php.php" ]]; then
+    warn "scripts/check-php.php not in web root — skipping PHP fatal check"
+    return
+  fi
+  log "Running PHP syntax and load checks"
+  if bash "$script" --root "$WEBROOT"; then
+    log "PHP checks passed"
+  else
+    die "PHP check failed — fix syntax/load errors before serving (bash scripts/check-php.sh)"
+  fi
+}
+
 update_commands() {
   local src wr
   src="$(realpath -m "$SOURCE")"
@@ -748,6 +762,9 @@ Logs:
 
 Re-run this script safely after pulling updates:
 $(update_commands)
+
+After deploy, confirm PHP (or rely on this script’s built-in check):
+  bash $WEBROOT/scripts/check-php.sh
 ============================================================
 EOF
 }
@@ -769,6 +786,7 @@ main() {
   post_install_php
   setup_video_cron
   verify_protection
+  verify_php_checks
   verify_opcache_web
   print_summary
 }

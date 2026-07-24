@@ -78,6 +78,7 @@ function rotation_pages_store_write_file(string $screen, array $pages): bool
     $pages = rotation_pages_store_apply_url_fixes($pages);
     if ($pages === []) {
         if (is_file($path)) {
+            signage_json_backup_previous($path);
             @unlink($path);
         }
 
@@ -88,6 +89,7 @@ function rotation_pages_store_write_file(string $screen, array $pages): bool
         'default' => [],
         'pretty' => true,
         'ensure_dir' => true,
+        'backup' => true,
     ]);
 
     return (bool)($result['ok'] ?? false);
@@ -121,7 +123,16 @@ function rotation_pages_store_migrate_all_from_settings(): void
             continue;
         }
         $path = rotation_pages_store_path($screen);
-        if ($path !== null && is_file($path)) {
+        if ($path === null) {
+            continue;
+        }
+        if (is_file($path)) {
+            $existing = rotation_pages_store_read_file($screen);
+            if ($existing !== []) {
+                continue;
+            }
+        }
+        if ($val === []) {
             continue;
         }
         $toWrite[$screen] = $val;

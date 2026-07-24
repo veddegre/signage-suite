@@ -16,9 +16,23 @@ function signage_json_lock_path(string $path): string
     return $path . '.lock';
 }
 
+/** Copy the current file to path.bak before overwrite (one generation). */
+function signage_json_backup_previous(string $path, string $suffix = '.bak'): bool
+{
+    if (!is_file($path) || !is_readable($path)) {
+        return false;
+    }
+    $size = @filesize($path);
+    if ($size === false || $size < 1) {
+        return false;
+    }
+
+    return @copy($path, $path . $suffix);
+}
+
 /**
  * @param callable(array): (array|false|null) $mutator
- * @param array{default?:array,pretty?:bool|callable,lock_wait_sec?:float,ensure_dir?:bool,sort_keys?:bool|callable} $options
+ * @param array{default?:array,pretty?:bool|callable,lock_wait_sec?:float,ensure_dir?:bool,sort_keys?:bool|callable,backup?:bool|string} $options
  * @return array{ok:bool,data?:array,error?:string}
  */
 function signage_json_file_update(string $path, callable $mutator, array $options = []): array
@@ -107,6 +121,11 @@ function signage_json_file_update(string $path, callable $mutator, array $option
             $GLOBALS['__signage_json_last_error'] = 'encode';
 
             return ['ok' => false, 'error' => 'encode'];
+        }
+
+        if (!empty($options['backup']) && is_file($path)) {
+            $suffix = is_string($options['backup']) ? $options['backup'] : '.bak';
+            signage_json_backup_previous($path, $suffix);
         }
 
         $tmp = $path . '.tmp.' . getmypid();

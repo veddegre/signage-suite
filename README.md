@@ -296,7 +296,7 @@ MDOT feeds are refreshed stills, not video; thumbs are modest resolution (~720×
 |-------|------|
 | **board.php** | Crossfades playlist; persistent weather ticker (+ optional RSS headlines when no NWS alerts); polls for config changes |
 | **setup-server.sh** | Web host + PHP + hardening |
-| **setup-kiosk.sh** | Fullscreen Chromium kiosk + CEC — [guide](docs/kiosk-setup.md) |
+| **setup-kiosk.sh** | Fullscreen Chromium kiosk + CEC + nightly apt/git + scheduled reboot — [guide](docs/kiosk-setup.md) |
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
@@ -348,6 +348,8 @@ Runtime dirs: `config/`, `cache/`, `videos/`, `slides/`, `photos/`. `slide_backg
 
 - Legacy `config/admin.json` migrates to `config/users.json` on first login.
 - Legacy `rotation.PAGES_*` keys in `settings.json` migrate to `config/rotation/pages/<screen>.json` when playlists are first loaded.
+- Each successful save of `settings.json` or a playlist file keeps **`config/settings.json.bak`** or **`config/rotation/pages/<screen>.json.bak`** (one generation).
+- **Tools → Download backup** or `scripts/backup-config.php --store` keeps timestamped zips in **`config/backups/`** (config JSON only — not slide/photo media).
 - Failed API calls show a diagnostic stamp bottom-right while serving stale cache.
 - `*.lock` files beside JSON during writes are normal.
 
@@ -374,6 +376,13 @@ php scripts/diagnose-tdx.php main
 
 # Rotation: shuffle/weighted decks, eligible pages, per-slide weights, lake/sports/webcam auto-skip
 php scripts/diagnose-rotation.php veddersg
+
+# Config backup (settings, users, rotation playlists) — also Admin → Tools
+php scripts/backup-config.php --store --keep=14
+
+# PHP syntax + load-time fatals (CI, post-deploy, local dev)
+bash scripts/check-php.sh
+php scripts/check-php.php --lint-only   # faster, syntax only
 
 # Slides: time windows, weekdays, schedule summary (CI-friendly)
 php scripts/test-slide-scheduling.php

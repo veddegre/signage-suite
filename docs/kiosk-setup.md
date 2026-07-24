@@ -56,14 +56,47 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 |-------|------|
 | **cage** + **Chromium** | Fullscreen kiosk compositor + browser |
 | **signage.service** | Starts at boot; restarts Chromium if it crashes |
-| **signage-restart.timer** | Nightly restart at **04:00** to flush browser memory |
+| **signage-update.timer** | Daily **03:30** (default) — `apt upgrade` + optional `git pull` in `SIGNAGE_REPO` |
+| **signage-maint.timer** | Daily **04:00** (default) — **reboot** if updates need it, else restart browser (memory flush) |
+| **unattended-upgrades** | Security patches between nightly runs |
 | **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **Blank cursor** | Transparent theme + off-screen pointer helper (cage still draws a cursor if a USB mouse / CEC “pointer” is present) |
 
-Config written to **`/etc/signage/kiosk.conf`** (`KIOSK_URL`, `BOARDS_URL`, `SCREEN`). Launcher: **`/usr/local/bin/signage-kiosk`**.
+Config written to **`/etc/signage/kiosk.conf`** (`KIOSK_URL`, `BOARDS_URL`, `SCREEN`, scale, CEC, git repo path, update schedule). Launcher: **`/usr/local/bin/signage-kiosk`**.
+
+If you run setup from a **git clone** of signage-suite, that directory is saved as **`SIGNAGE_REPO`** so nightly `git pull` can refresh kiosk scripts and re-run `setup-kiosk.sh --skip-apt`.
 
 Chromium packaging differs by distro (Pi OS deb vs Ubuntu snap); the script tries `chromium-browser`, then `chromium`, then `snap install chromium`.
+
+### Automatic updates (default on)
+
+| Time (default) | Timer | Action |
+|----------------|-------|--------|
+| **03:30** | `signage-update.timer` | `apt update` / `apt upgrade`, optional `git pull` + re-apply `setup-kiosk.sh` |
+| **04:00** | `signage-maint.timer` | Reboot if `/var/run/reboot-required` or packages changed; otherwise `systemctl restart signage` |
+
+**Content on the TV** still comes from the **signage server** (`admin.php`) — kiosks only update **OS + local helper scripts**.
+
+```bash
+systemctl list-timers 'signage-*'
+journalctl -u signage-update -u signage-maint -n 50
+sudo /usr/local/bin/signage-kiosk-update    # manual run
+```
+
+Customize schedule when installing:
+
+```bash
+sudo bash setup-kiosk.sh "http://…/board.php?screen=garage" --update-time=02:30 --maint-time=03:15
+```
+
+Disable timers (legacy 04:00 browser-only restart):
+
+```bash
+sudo bash setup-kiosk.sh "http://…" --no-auto-update
+```
+
+**Signage server (PHP app)** updates remain on the server — `git pull` and `setup-server.sh` there, not on the Pi.
 
 ---
 
@@ -96,13 +129,13 @@ journalctl -u signage -f                    # live browser / cage logs
 sudo systemctl restart signage.service      # recover without reboot
 ```
 
-**OS updates** on the kiosk (content updates happen on the server):
+**OS updates** on the kiosk are automatic by default (`signage-update.timer` + `unattended-upgrades`). Manual check:
 
 ```bash
-sudo apt update && sudo apt full-upgrade
+sudo /usr/local/bin/signage-kiosk-update
 ```
 
-**After pulling signage-suite updates**, re-run setup on the kiosk so `/usr/local/bin/signage-kiosk` picks up new Chromium flags (e.g. `--disable-dev-shm-usage` helps on Pi):
+**After pulling signage-suite on the kiosk** (or wait for nightly git pull if `SIGNAGE_REPO` is set), scripts refresh automatically; you can still re-run setup manually:
 
 ```bash
 cd ~/signage-suite && git pull
@@ -137,7 +170,8 @@ Recovery is layered (board shell + systemd):
 | **board.php** | Unloads the hidden iframe after each crossfade (limits memory creep) |
 | **board.php watchdog** | Stall ~2× dwell (+ 90s) → next board; second trip → full shell reload |
 | **board.php** | Automatic shell reload every 8 hours |
-| **signage-restart.timer** | Nightly `systemctl restart signage` at 04:00 |
+| **signage-maint.timer** | Daily reboot-if-needed else browser restart |
+| **signage-restart.timer** | Only when `--no-auto-update` (04:00 browser restart) |
 | **signage-watchdog.timer** | Every 5 min — restarts if `board.php` HTML no longer contains `const PAGES` (3 failures) |
 
 **Quick checks**

@@ -92,6 +92,7 @@ function cfg_update(callable $mutator): bool
         'pretty' => static fn(array $conf): bool => cfg_use_pretty_json($conf),
         'sort_keys' => true,
         'ensure_dir' => true,
+        'backup' => true,
     ]);
     if ($result['ok']) {
         $GLOBALS['__cfg_cache'] = $result['data'];
