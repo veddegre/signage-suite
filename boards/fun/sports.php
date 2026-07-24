@@ -80,8 +80,9 @@ $gap = $boardH < 1080 ? 14 : 18;
 $padY = ($boardH < 1080 ? 20 : 24) * 2;
 $stampH = 22;
 $rowHead = max(72, (int)round(88 * $boardH / 1080));
-$rowRecent = $recentStrip !== [] ? max(72, (int)round(88 * $boardH / 1080)) : 0;
-$rowNext = $showNextStrip ? max(128, (int)round(148 * $boardH / 1080)) : 0;
+// Label + logo row + results line (~140px at 1080); fixed 88px was clipping .recent-item .line
+$rowRecent = $recentStrip !== [] ? max(112, (int)round(142 * $boardH / 1080)) : 0;
+$rowNext = $showNextStrip ? max(136, (int)round(162 * $boardH / 1080)) : 0;
 $extraRows = ($rowRecent > 0 ? 1 : 0) + ($rowNext > 0 ? 1 : 0);
 $rowCards = $boardH - $padY - ($gap * (2 + $extraRows)) - $stampH - $rowHead - $rowRecent - $rowNext;
 $rowCards = max(400, $rowCards);
@@ -195,17 +196,22 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .standings { margin-top:auto; padding-top:8px; font-size:<?= $boardH < 1080 ? 17 : 20 ?>px;
                color:var(--beacon); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  .recent { grid-area:recent; padding:<?= $boardH < 1080 ? '4px 0' : '6px 0' ?>; min-height:0; overflow:hidden; }
-  .recent .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
-  .recent-grid { display:grid; grid-template-columns:repeat(<?= max(1, count($recentStrip)) ?>,1fr); gap:10px; }
-  .recent-item { border-radius:12px; padding:8px 12px; min-width:0;
+  .recent { grid-area:recent; padding:<?= $boardH < 1080 ? '2px 0' : '4px 0' ?>; min-height:0;
+            display:flex; flex-direction:column; overflow:hidden; }
+  .recent .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);
+               margin-bottom:6px; flex-shrink:0; line-height:1.2; }
+  .recent-grid { display:grid; grid-template-columns:repeat(<?= max(1, count($recentStrip)) ?>,1fr);
+                 gap:10px; flex:1; min-height:0; align-items:stretch; }
+  .recent-item { border-radius:12px; padding:8px 12px; min-width:0; min-height:0;
+                 display:flex; flex-direction:column; justify-content:center;
                  background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent); }
   .recent-item .top { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .recent-item .mini-logo { width:28px; height:28px; flex:0 0 28px; display:flex; align-items:center; justify-content:center; }
   .recent-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; }
   .recent-item .n { font-family:'Big Shoulders Display'; font-weight:600; font-size:20px; }
   .recent-item .streak { margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:16px; color:var(--beacon); }
-  .recent-item .line { font-size:15px; color:var(--mist); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .recent-item .line { font-size:15px; color:var(--mist); line-height:1.35;
+                       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   .nextup { grid-area:next; padding:<?= $boardH < 1080 ? '4px 0' : '6px 0' ?>; min-height:0; overflow:hidden;
             display:flex; flex-direction:column; gap:8px; }
