@@ -2039,7 +2039,7 @@ if ($authed && in_array($board, ['slides', 'status'], true)) {
     $slidesDeckFullConf = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
     $slidesDeckForUser = admin_filter_list_for_deploy_scope($slidesDeckFullConf);
     $slidesDeckStats = slides_deck_stats($slidesDeckForUser);
-    if ($board === 'status' || ($board === 'slides' && $slidesTab === 'deploy')) {
+    if ($board === 'status' || $board === 'slides') {
         $slidesDeployStatus = admin_filter_deploy_status(slides_deploy_status(
             admin_is_super() ? $slidesDeckFullConf : $slidesDeckForUser
         ));
@@ -2064,7 +2064,7 @@ $rotatorDeckStats = ['total' => 0, 'enabled' => 0, 'on_disk' => 0, 'active_now' 
 $rotatorDeployStatus = [];
 if ($authed && in_array($board, ['rotator', 'status'], true)) {
     $rotatorDeckStats = rotator_deck_stats($rotatorDeckForUser);
-    if ($board === 'status' || ($board === 'rotator' && $rotatorTab === 'deploy')) {
+    if ($board === 'status' || $board === 'rotator') {
         $rotatorDeployStatus = admin_filter_deploy_status(rotator_deploy_status($rotatorDeckForUser));
     }
 }
