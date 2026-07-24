@@ -1136,7 +1136,7 @@ $gap = $compact ? 12 : 16;
   .verdict { grid-area:verdict; border-radius:14px; border:1px solid var(--hairline);
              padding:<?= $compact ? '14px 20px' : '18px 24px' ?>; display:flex;
              align-items:baseline; justify-content:space-between; gap:20px;
-             background:linear-gradient(90deg, rgba(20,31,51,.95), rgba(12,20,34,.95)); min-height:0; }
+             background:color-mix(in srgb,var(--harbor) 94%, var(--lake-night)); min-height:0; }
   .verdict .t { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 32 : 40 ?>px;
                 color:<?= h($verdictColor) ?>; letter-spacing:1px; }
   .verdict .s { font-size:<?= $compact ? 18 : 22 ?>px; color:var(--mist); text-align:right;
