@@ -311,6 +311,14 @@ $nwsWarningCount = (int)$nwsMapAlerts['warnings'];
 $nwsWatchCount = (int)$nwsMapAlerts['watches'];
 $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 $weekRowH = max(188, (int)round(206 * $frameH / 1080));
+$boardPadY = 56;
+$boardGaps = 48;
+$metaRowH = 28;
+$mainRowH = $frameH - $boardPadY - $boardGaps - $metaRowH - $weekRowH;
+if ($mainRowH < 500) {
+    $weekRowH = max(176, $weekRowH - (500 - $mainRowH));
+    $mainRowH = 500;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -345,22 +353,28 @@ $weekRowH = max(188, (int)round(206 * $frameH / 1080));
     overflow: hidden;
     display: grid;
     grid-template-columns: 700px 1fr;
-    grid-template-rows: minmax(0, 1fr) <?= (int)$weekRowH ?>px auto;
+    grid-template-rows: <?= (int)$mainRowH ?>px <?= (int)$weekRowH ?>px auto;
     grid-template-areas:
       "now   radar"
-      "now   week"
+      "week  week"
       "meta  meta";
     gap: 24px;
     padding: 28px 32px;
   }
 
-  /* ── Left column: now (spans forecast row — keeps sun path off day tiles) ─ */
   .now {
     grid-area: now;
     display: flex;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+  }
+  .now-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .clock-line { display: flex; align-items: baseline; gap: 20px; }
@@ -411,14 +425,14 @@ $weekRowH = max(188, (int)round(206 * $frameH / 1080));
   .feels { font-size: 23px; color: var(--mist); margin-top: 4px; }
 
   .stats {
-    margin-top: 16px;
+    margin-top: auto;
     flex-shrink: 1;
     min-height: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px 32px;
     border-top: 1px solid var(--hairline);
-    padding-top: 20px;
+    padding-top: 16px;
   }
   .stat { display: flex; justify-content: space-between; align-items: baseline; }
   .stat .k { font-size: 20px; color: var(--mist); letter-spacing: 1px; text-transform: uppercase; }
@@ -427,8 +441,8 @@ $weekRowH = max(188, (int)round(206 * $frameH / 1080));
   /* Sun arc — sunrise → sunset with live position */
   .sun {
     flex-shrink: 0;
-    margin-top: auto;
-    padding: 10px 16px 6px;
+    margin-top: 10px;
+    padding: 10px 16px 8px;
     border-radius: 12px;
     background: color-mix(in srgb, var(--harbor) 82%, var(--lake-night));
     border: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
@@ -649,6 +663,7 @@ $weekRowH = max(188, (int)round(206 * $frameH / 1080));
 
   <!-- NOW -->
   <section class="now">
+    <div class="now-body">
     <?php if ($showClock): ?><div class="clock-line"><div id="clock">--:--<span class="ampm">--</span></div></div><?php endif; ?>
     <div id="dateline">&nbsp;</div>
     <div class="location"><?= h(LOCATION) ?></div>
@@ -668,6 +683,7 @@ $weekRowH = max(188, (int)round(206 * $frameH / 1080));
       <div class="stat"><span class="k">Humidity</span><span class="v"><?= $cw['humidity'] ?>%</span></div>
       <div class="stat"><span class="k">Pressure</span><span class="v"><?= number_format($cw['pressure'], 2) ?> inHg</span></div>
       <div class="stat"><span class="k">Visibility</span><span class="v"><?= $cw['visibility'] ?> mi</span></div>
+    </div>
     </div>
 
     <div class="sun">
