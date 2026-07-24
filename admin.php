@@ -381,7 +381,7 @@ if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()
             $flash = 'Template not saved — check the name and playlist pages.';
             $flashOk = false;
         }
-        header('Location: admin.php?board=rotation');
+        header('Location: ' . admin_rotation_board_url());
         exit;
     }
     if ($tplAct === 'rotation_template_delete') {
@@ -400,7 +400,7 @@ if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()
             $flash = 'Could not delete template.';
             $flashOk = false;
         }
-        header('Location: admin.php?board=rotation');
+        header('Location: ' . admin_rotation_board_url());
         exit;
     }
 }
@@ -2097,6 +2097,10 @@ if ($board === 'zabbix') {
 }
 $kumaPages = [];
 $kumaActivePage = 'main';
+$rotationAdminFocusScreen = null;
+if ($authed && $board === 'rotation') {
+    $rotationAdminFocusScreen = admin_rotation_focus_screen_key(admin_filter_screens(rotation_screens()));
+}
 if ($board === 'kuma') {
     $kumaPages = admin_filter_owned_map(kuma_admin_pages($rawConf));
     $kumaActivePage = kuma_normalize_page_key((string)($_GET['page'] ?? ''));
@@ -2387,6 +2391,47 @@ function admin_deploy_picker_pending_screens(array $deployStatus): array
     }
 
     return $out;
+}
+
+/** Which display the Rotation admin UI should focus (picker, kiosk tab, playlist panel). @param array<string,mixed> $rotationScreens */
+function admin_rotation_focus_screen_key(array $rotationScreens): string
+{
+    require_once __DIR__ . '/lib/rotation_lib.php';
+    if ($rotationScreens === []) {
+        return 'main';
+    }
+    if (admin_operator_screen_locked()) {
+        $sk = admin_operator_screen_key();
+        if ($sk !== null && $sk !== '' && isset($rotationScreens[$sk])) {
+            return $sk;
+        }
+    }
+    foreach ([(string)($_POST['rotation_focus_screen'] ?? ''), (string)($_GET['screen'] ?? '')] as $raw) {
+        $nk = rotation_normalize_screen_key($raw);
+        if ($nk !== '' && isset($rotationScreens[$nk])) {
+            return $nk;
+        }
+    }
+    if (isset($rotationScreens['main'])) {
+        return 'main';
+    }
+
+    return (string)array_key_first($rotationScreens);
+}
+
+function admin_rotation_board_url(): string
+{
+    $url = 'admin.php?board=rotation';
+    $focus = rotation_normalize_screen_key((string)($_POST['rotation_focus_screen'] ?? $_GET['screen'] ?? ''));
+    if ($focus === '') {
+        return $url;
+    }
+    $allowed = admin_filter_screens(rotation_screens());
+    if (isset($allowed[$focus])) {
+        $url .= '&screen=' . rawurlencode($focus);
+    }
+
+    return $url;
 }
 
 /** Default Deploy tab selection: displays that have slides assigned in the deck. @param list<array<string,mixed>> $deck */
@@ -3868,10 +3913,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
       <div class="sub">Changes save to <code>config/settings.json</code>.
         <?php if ($board === 'rotation'):
           $rotationHeaderScreen = admin_is_super()
-              ? 'main'
+              ? (string)($rotationAdminFocusScreen ?? 'main')
               : (string)(admin_allowed_screen_keys()[0] ?? '');
           if ($rotationHeaderScreen !== ''): ?>
-          <a href="<?= h(rotation_screen_preview_url($rotationHeaderScreen)) ?>" target="_blank" rel="noopener"><?= admin_operator_screen_locked() ? 'Preview your rotation ↗' : (admin_is_super() ? 'Preview main rotation ↗' : 'Preview your rotation ↗') ?></a>
+          <a href="<?= h(rotation_screen_preview_url($rotationHeaderScreen)) ?>" target="_blank" rel="noopener">Preview rotation ↗</a>
           · kiosk URL <code><?= h(rotation_screen_kiosk_url($rotationHeaderScreen)) ?></code>
           <?php else: ?>
           <span class="help" style="margin:0">No display assigned — ask a super admin under <strong>Users</strong>.</span>
@@ -4195,9 +4240,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
         if ($board === 'rotation'):
           $rotationScreens = admin_filter_screens(rotation_screens());
-          $rotationDefaultScreenKey = array_key_exists('main', $rotationScreens)
-              ? 'main'
-              : (string)array_key_first($rotationScreens);
+          $rotationDefaultScreenKey = (string)($rotationAdminFocusScreen ?? admin_rotation_focus_screen_key($rotationScreens));
           $presenceAll = signage_presence_read_all();
           if (!admin_is_super()) {
               $allowedKeys = array_flip(admin_allowed_screen_keys());
@@ -4221,6 +4264,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               $emergencyCfg['pages'] = [['url' => 'emergency.php', 'dwell' => 60]];
           }
         ?>
+          <input type="hidden" name="rotation_focus_screen" id="rotationFocusScreen" value="<?= h($rotationDefaultScreenKey) ?>">
           <?php if (emergency_active() && !admin_is_super()): ?>
           <div class="help" style="margin:0 0 16px;padding:14px 16px;border:2px solid var(--warn);border-radius:10px;background:rgba(255,93,93,.08);color:var(--warn)">
             <strong>Emergency override active</strong> — <?= h(emergency_status_label()) ?>. Playlist edits are disabled until a super admin releases it.
@@ -4605,11 +4649,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     $summaryNote .= ' · stale (deck does not target this display)';
                 }
             }
-            $playlistOpen = admin_operator_screen_locked()
-                ? $screenKey === admin_operator_screen_key()
-                : (admin_is_super()
-                    ? ($screenKey === 'main' && $pageCount <= 6)
-                    : in_array($screenKey, admin_allowed_screen_keys(), true));
+            $playlistOpen = ($screenKey === $rotationDefaultScreenKey);
           ?>
           <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $playlistOpen ? ' open' : '' ?>>
             <summary>
@@ -9411,6 +9451,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
       if (document.querySelector('.rotation-playlist[data-field]')) serializeRotationPlaylistsForSave();
       if (document.getElementById('rotationCalendarOverridePanels')) serializeRotationCalendarOverridesForSave();
+      syncRotationFocusScreenField();
     });
   }
   initScreenPickers(document);
@@ -9655,9 +9696,27 @@ function initRotationGlobalAdd() {
     syncKioskSettingsPanel();
     highlightActiveRotationPlaylist();
     refreshBoardPickerInPlaylistMarks();
+    syncRotationFocusScreenField();
   }
   sel.addEventListener('change', syncTargetDisplay);
   syncTargetDisplay();
+}
+
+function syncRotationFocusScreenField() {
+  const sel = document.getElementById('rotationTargetScreen');
+  const hidden = document.getElementById('rotationFocusScreen');
+  if (!sel || !hidden) return;
+  const opt = sel.options[sel.selectedIndex];
+  const sk = opt ? (opt.getAttribute('data-screen-key') || '') : '';
+  if (sk) hidden.value = sk;
+}
+
+function rotationAdminPageUrl() {
+  syncRotationFocusScreenField();
+  const sk = (document.getElementById('rotationFocusScreen') || {}).value || '';
+  let u = 'admin.php?board=rotation';
+  if (sk) u += '&screen=' + encodeURIComponent(sk);
+  return u;
 }
 
 const ROTATION_STARTER = <?= json_encode($rotationStarterPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
@@ -9684,8 +9743,11 @@ function rotationTemplatePost(action, fields) {
   fd.append('board', 'rotation');
   fd.append('csrf', form.querySelector('[name="csrf"]').value);
   Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
+  syncRotationFocusScreenField();
+  const focus = document.getElementById('rotationFocusScreen');
+  if (focus && focus.value) fd.append('rotation_focus_screen', focus.value);
   return fetch('admin.php?board=rotation', { method: 'POST', body: fd, credentials: 'same-origin' })
-    .then(function () { window.location.href = 'admin.php?board=rotation'; });
+    .then(function () { window.location.href = rotationAdminPageUrl(); });
 }
 
 function loadRotationTemplate(deckId) {
