@@ -29,8 +29,10 @@ if (signage_theme_preset('forest') === null) {
     $fail++;
 }
 $gvsu = signage_theme_preset('gvsu_lakers');
-if ($gvsu === null || stripos((string)($gvsu['beacon'] ?? ''), 'b497') === false) {
-    fwrite(STDERR, "FAIL: gvsu_lakers preset or Laker Gold accent\n");
+if ($gvsu === null
+    || stripos((string)($gvsu['beacon'] ?? ''), 'dec197') === false
+    || strtolower((string)($gvsu['harbor'] ?? '')) === '#141f33') {
+    fwrite(STDERR, "FAIL: gvsu_lakers should use official GVSU palette (GVSU Blue panels + Archway accent)\n");
     $fail++;
 }
 $key = signage_active_theme_key();

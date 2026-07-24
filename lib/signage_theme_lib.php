@@ -188,17 +188,14 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
             );
         }
     }
-    $beacon = trim((string)($preset['subtitle'] ?? '#ffb347'));
-    $accent = $preset['accent'] ?? null;
-    if (is_array($accent) && ($accent['color'] ?? '') !== '') {
-        $beacon = (string)$accent['color'];
-    }
+    $beacon = trim((string)($preset['highlight'] ?? $preset['subtitle'] ?? '#ffb347'));
+    $harborTint = trim((string)($preset['harbor_tint'] ?? $beacon));
     $light = !empty($preset['light']);
     if ($key === 'lake_night') {
         $harbor = '#141f33';
         $hairline = $light ? '#c8d4e8' : '#26344d';
     } else {
-        $harbor = signage_theme_derive_harbor($lakeNight, $beacon, $light);
+        $harbor = signage_theme_derive_harbor($lakeNight, $harborTint, $light);
         $hairline = signage_theme_derive_hairline($lakeNight, $harbor, $light);
     }
     $panelDim = signage_theme_derive_panel_dim($lakeNight, $harbor);

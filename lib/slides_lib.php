@@ -735,17 +735,19 @@ function slide_theme_background_presets(): array
             'accent' => ['type' => 'glow', 'color' => '#ffd089', 'opacity' => 0.2],
             'thumb' => 'golden_hour.png',
         ],
-        // GVSU brand: Laker Blue #0065A4, Laker Gold #B4975A (dark palette for signage).
+        // GVSU visual identity — https://www.gvsu.edu/identity/color-2
         'gvsu_lakers' => [
-            'label' => 'GVSU Lakers',
-            'title' => '#f4f8fc',
-            'subtitle' => '#B4975A',
-            'body' => '#8eb0cc',
-            'footer' => '#8eb0cc',
+            'label' => 'GVSU',
+            'title' => '#FFFFFF',
+            'subtitle' => '#DEC197',
+            'highlight' => '#DEC197',
+            'harbor_tint' => '#0032A0',
+            'body' => '#b8c8e8',
+            'footer' => '#8aa0c0',
             'bg' => ['type' => 'linear', 'angle' => 145, 'stops' => [
-                [0, '#001526'], [0.45, '#003558'], [1, '#000d18'],
+                [0, '#13155C'], [0.5, '#0032A0'], [1, '#000814'],
             ]],
-            'accent' => ['type' => 'bar', 'color' => '#B4975A', 'width' => 12],
+            'accent' => ['type' => 'bar', 'color' => '#0032A0', 'width' => 12],
             'thumb' => 'gvsu_lakers.png',
         ],
         'rose' => [
