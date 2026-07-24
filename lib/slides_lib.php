@@ -735,17 +735,19 @@ function slide_theme_background_presets(): array
             'accent' => ['type' => 'glow', 'color' => '#ffd089', 'opacity' => 0.2],
             'thumb' => 'golden_hour.png',
         ],
-        // GVSU visual identity — https://www.gvsu.edu/identity/color-2
+        // Primary palette only: GVSU Blue, black, white — https://www.gvsu.edu/identity/color-2
         'gvsu_lakers' => [
             'label' => 'GVSU',
             'title' => '#FFFFFF',
-            'subtitle' => '#DEC197',
-            'highlight' => '#DEC197',
-            'harbor_tint' => '#0032A0',
-            'body' => '#b8c8e8',
-            'footer' => '#8aa0c0',
+            'subtitle' => '#FFFFFF',
+            'highlight' => '#FFFFFF',
+            'signage_page' => '#000000',
+            'signage_harbor' => '#0032A0',
+            'signage_beacon' => '#FFFFFF',
+            'body' => '#e8ecf5',
+            'footer' => '#d0d8e8',
             'bg' => ['type' => 'linear', 'angle' => 145, 'stops' => [
-                [0, '#13155C'], [0.5, '#0032A0'], [1, '#000814'],
+                [0, '#000000'], [0.5, '#0032A0'], [1, '#000000'],
             ]],
             'accent' => ['type' => 'bar', 'color' => '#0032A0', 'width' => 12],
             'thumb' => 'gvsu_lakers.png',
