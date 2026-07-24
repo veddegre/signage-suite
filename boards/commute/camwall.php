@@ -85,14 +85,15 @@ $heightPx = $boardH . 'px';
           border-radius:<?= $compact ? 8 : 10 ?>px; overflow:hidden; }
   .tile.empty { opacity:.35; }
   .tile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center;
-              background:#0a1018; display:block; }
+              background:var(--lake-night); display:block; }
   .tile img.err { opacity:.15; }
   .cap { position:absolute; left:0; right:0; top:0; z-index:2; display:flex; align-items:center; gap:8px;
          padding:<?= $compact ? '6px 10px' : '8px 12px' ?>;
-         background:linear-gradient(180deg, rgba(12,20,34,.92) 0%, rgba(12,20,34,.72) 70%, transparent 100%);
+         <?= signage_cam_cap_gradient_css() ?>
          pointer-events:none; }
   .route { font-size:<?= $compact ? 10 : 11 ?>px; font-weight:600; letter-spacing:.7px; text-transform:uppercase;
-           color:var(--beacon); background:rgba(255,179,71,.14); border:1px solid rgba(255,179,71,.35);
+           color:var(--beacon); background:color-mix(in srgb,var(--beacon) 14%, transparent);
+           border:1px solid color-mix(in srgb,var(--beacon) 38%, transparent);
            border-radius:999px; padding:2px 7px; white-space:nowrap; flex:0 0 auto; }
   .name { font-size:<?= $compact ? 14 : 15 ?>px; font-weight:500; color:var(--snow);
           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }

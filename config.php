@@ -220,6 +220,23 @@ function signage_stamp_css(): string
          . '.board>.stamp{grid-column:1/-1;align-self:end;}';
 }
 
+/** Frosted title/clock chips on photo and webcam boards (uses active theme). */
+function signage_glass_panel_css(): string
+{
+    return 'background:color-mix(in srgb,var(--harbor) 88%, transparent);'
+         . 'border:1px solid color-mix(in srgb,var(--hairline) 60%, transparent);'
+         . 'backdrop-filter:blur(8px);';
+}
+
+/** Top fade on camera tile captions (cam wall grid). */
+function signage_cam_cap_gradient_css(): string
+{
+    return 'background:linear-gradient(180deg,'
+         . 'color-mix(in srgb,var(--harbor) 94%, transparent) 0%,'
+         . 'color-mix(in srgb,var(--harbor) 62%, transparent) 68%,'
+         . 'transparent 100%);';
+}
+
 /** Hide the mouse pointer on kiosk displays (shell + signage boards). */
 function signage_kiosk_cursor_css(): string
 {

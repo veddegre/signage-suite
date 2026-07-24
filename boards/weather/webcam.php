@@ -72,8 +72,7 @@ $camJson['streamIframe'] = (string)$cam['url'];
                                object-fit:cover; object-position:center; background:var(--lake-night); }
   .overlay { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 24 : 32 ?>px;
              z-index:2; pointer-events:none;
-             padding:12px 18px; border-radius:12px; background:rgba(12,20,34,.72);
-             border:1px solid var(--hairline); backdrop-filter:blur(6px); }
+             padding:12px 18px; border-radius:12px; <?= signage_glass_panel_css() ?> }
   .overlay h1 { font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:700;
                 font-size:<?= $boardH < 1080 ? 40 : 48 ?>px; letter-spacing:.5px; }
   .overlay .sub { display:block; margin-top:4px; font-size:<?= $boardH < 1080 ? 17 : 19 ?>px;
@@ -81,8 +80,8 @@ $camJson['streamIframe'] = (string)$cam['url'];
   #clock { position:fixed; top:36px; right:48px; z-index:9000; pointer-events:none;
            font-family:'Big Shoulders Display',system-ui,sans-serif; font-weight:600; font-size:48px;
            color:var(--snow); font-variant-numeric:tabular-nums;
-           padding:6px 18px; border-radius:10px; background:rgba(12,20,34,.78);
-           box-shadow:0 2px 24px rgba(0,0,0,.55); }
+           padding:6px 18px; border-radius:10px; <?= signage_glass_panel_css() ?>
+           box-shadow:0 2px 24px color-mix(in srgb, var(--lake-night) 45%, transparent); }
   .stamp { position:absolute; right:<?= $boardH < 1080 ? 20 : 28 ?>px; bottom:<?= $boardH < 1080 ? 10 : 14 ?>px;
            z-index:2; text-align:right; font-size:15px; color:var(--mist); opacity:.85;
            pointer-events:none; max-width:70%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
