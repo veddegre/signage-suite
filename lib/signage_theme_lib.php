@@ -26,6 +26,99 @@ function signage_normalize_theme_key(string $raw): string
     return $key;
 }
 
+/** @return array{0:int,1:int,2:int}|null */
+function signage_theme_hex_rgb(string $hex): ?array
+{
+    $hex = trim($hex);
+    if ($hex === '') {
+        return null;
+    }
+    if ($hex[0] === '#') {
+        $hex = substr($hex, 1);
+    }
+    if (strlen($hex) === 3) {
+        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+    }
+    if (strlen($hex) !== 6 || !ctype_xdigit($hex)) {
+        return null;
+    }
+
+    return [
+        hexdec(substr($hex, 0, 2)),
+        hexdec(substr($hex, 2, 2)),
+        hexdec(substr($hex, 4, 2)),
+    ];
+}
+
+function signage_theme_rgb_hex(int $r, int $g, int $b): string
+{
+    return sprintf('#%02x%02x%02x', max(0, min(255, $r)), max(0, min(255, $g)), max(0, min(255, $b)));
+}
+
+/** @param array{0:int,1:int,2:int} $a @param array{0:int,1:int,2:int} $b */
+function signage_theme_mix_rgb(array $a, array $b, float $weightB): string
+{
+    $weightB = max(0.0, min(1.0, $weightB));
+    $weightA = 1.0 - $weightB;
+
+    return signage_theme_rgb_hex(
+        (int)round($a[0] * $weightA + $b[0] * $weightB),
+        (int)round($a[1] * $weightA + $b[1] * $weightB),
+        (int)round($a[2] * $weightA + $b[2] * $weightB)
+    );
+}
+
+/** Card/panel fill — tinted from page background + accent, not legacy slide gradient mid-stop. */
+function signage_theme_derive_harbor(string $lakeNight, string $beacon, bool $light): string
+{
+    $base = signage_theme_hex_rgb($lakeNight);
+    $accent = signage_theme_hex_rgb($beacon);
+    $white = signage_theme_hex_rgb('#ffffff');
+    if ($base === null) {
+        return '#141f33';
+    }
+    if ($light) {
+        return $white !== null ? signage_theme_mix_rgb($base, $white, 0.12) : $lakeNight;
+    }
+    $lifted = $white !== null ? signage_theme_mix_rgb($base, $white, 0.07) : $lakeNight;
+    $liftedRgb = signage_theme_hex_rgb($lifted) ?? $base;
+    if ($accent !== null) {
+        return signage_theme_mix_rgb($liftedRgb, $accent, 0.06);
+    }
+
+    return $lifted;
+}
+
+function signage_theme_derive_hairline(string $lakeNight, string $harbor, bool $light): string
+{
+    if ($light) {
+        return '#c8d4e8';
+    }
+    if (strtolower($harbor) === '#141f33') {
+        return '#26344d';
+    }
+    $harborRgb = signage_theme_hex_rgb($harbor);
+    $white = signage_theme_hex_rgb('#ffffff');
+    if ($harborRgb !== null && $white !== null) {
+        return signage_theme_mix_rgb($harborRgb, $white, 0.14);
+    }
+    $lake = signage_theme_hex_rgb($lakeNight);
+
+    return $lake !== null ? signage_theme_mix_rgb($lake, $white ?? [255, 255, 255], 0.18) : '#26344d';
+}
+
+/** Inset tiles on cards (weather stats, map rows, etc.). */
+function signage_theme_derive_panel_dim(string $lakeNight, string $harbor): string
+{
+    $a = signage_theme_hex_rgb($lakeNight);
+    $b = signage_theme_hex_rgb($harbor);
+    if ($a === null || $b === null) {
+        return $lakeNight;
+    }
+
+    return signage_theme_mix_rgb($a, $b, 0.42);
+}
+
 /** @return array<string,array<string,string>>|null */
 function signage_theme_preset(string $key): ?array
 {
@@ -86,7 +179,14 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
     $harbor = '#141f33';
     if ($stops !== []) {
         $lakeNight = (string)($stops[0][1] ?? $lakeNight);
-        $harbor = (string)($stops[min(1, count($stops) - 1)][1] ?? $harbor);
+        $lastStop = (string)($stops[count($stops) - 1][1] ?? '');
+        if ($lastStop !== '' && strtolower($lastStop) !== strtolower($lakeNight)) {
+            $lakeNight = signage_theme_mix_rgb(
+                signage_theme_hex_rgb($lakeNight) ?? [12, 20, 34],
+                signage_theme_hex_rgb($lastStop) ?? [12, 20, 34],
+                0.35
+            );
+        }
     }
     $beacon = trim((string)($preset['subtitle'] ?? '#ffb347'));
     $accent = $preset['accent'] ?? null;
@@ -94,7 +194,14 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
         $beacon = (string)$accent['color'];
     }
     $light = !empty($preset['light']);
-    $hairline = $light ? '#c8d4e8' : '#26344d';
+    if ($key === 'lake_night') {
+        $harbor = '#141f33';
+        $hairline = $light ? '#c8d4e8' : '#26344d';
+    } else {
+        $harbor = signage_theme_derive_harbor($lakeNight, $beacon, $light);
+        $hairline = signage_theme_derive_hairline($lakeNight, $harbor, $light);
+    }
+    $panelDim = signage_theme_derive_panel_dim($lakeNight, $harbor);
     $snow = trim((string)($preset['title'] ?? '#edf2fb'));
     $mist = trim((string)($preset['body'] ?? '#8aa0c0'));
 
@@ -103,6 +210,7 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
         'lake-night' => $lakeNight,
         'harbor' => $harbor,
         'hairline' => $hairline,
+        'panel-dim' => $panelDim,
         'snow' => $snow,
         'mist' => $mist,
         'beacon' => $beacon,
@@ -159,6 +267,7 @@ function signage_theme_css_block(string $key): string
         '--up' => $preset['up'],
         '--down' => $preset['down'],
         '--gold' => $preset['gold'],
+        '--panel-dim' => $preset['panel-dim'] ?? $preset['harbor'],
     ];
     $parts = [];
     foreach ($pairs as $name => $value) {
@@ -169,6 +278,15 @@ function signage_theme_css_block(string $key): string
     }
 
     return ':root{' . implode(';', $parts) . ';}';
+}
+
+/** Optional rules for nested tiles — safe to append after signage_theme_css_block on any board. */
+function signage_theme_inset_surface_css(): string
+{
+    return <<<'CSS'
+  .weather-stat{background:color-mix(in srgb,var(--panel-dim) 78%, var(--lake-night));
+    border:1px solid color-mix(in srgb,var(--hairline) 92%, transparent);}
+CSS;
 }
 
 /** Standard NWS ticker colors (watch/advisory/warning) — not tied to wall palette. */

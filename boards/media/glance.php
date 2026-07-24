@@ -147,7 +147,7 @@ $compact = $boardH < 1080;
   .cal-legend .leg { display:flex; align-items:center; gap:8px; font-size:17px; color:var(--snow); }
   .cal-legend .dot { width:12px; height:12px; border-radius:50%; flex-shrink:0;
                      box-shadow:0 0 0 2px rgba(255,255,255,.12); }
-  .tev { display:flex; gap:14px; align-items:baseline; padding:10px 0; border-bottom:1px solid rgba(38,52,77,.55); }
+  .tev { display:flex; gap:14px; align-items:baseline; padding:10px 0; border-bottom:1px solid color-mix(in srgb, var(--hairline) 55%, transparent); }
   .tev:last-child { border-bottom:none; }
   .tev .who { font-size:16px; font-weight:600; letter-spacing:1px; text-transform:uppercase;
               min-width:48px; flex-shrink:0; }
@@ -180,7 +180,7 @@ $compact = $boardH < 1080;
   .weather-desc { font-size:<?= $compact ? 24 : 28 ?>px; color:var(--snow); margin-top:6px; text-transform:capitalize; }
   .weather-feels { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); margin-top:6px; }
   .weather-meta { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:<?= $compact ? 10 : 12 ?>px; min-height:0; }
-  .weather-stat { background:rgba(12,20,34,.55); border:1px solid rgba(38,52,77,.85); border-radius:12px;
+  .weather-stat { border-radius:12px;
                   padding:<?= $compact ? 14 : 18 ?>px <?= $compact ? 16 : 22 ?>px; display:flex; flex-direction:column;
                   justify-content:space-between; min-height:0; }
   .weather-meta .lab { font-size:<?= $compact ? 13 : 14 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }

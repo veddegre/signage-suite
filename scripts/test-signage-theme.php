@@ -16,6 +16,11 @@ if ($css === '' || !str_contains($css, '--beacon:')) {
     fwrite(STDERR, "FAIL: css block empty\n");
     $fail++;
 }
+$lilac = signage_theme_preset('lilac');
+if ($lilac === null || strtolower((string)$lilac['harbor']) === '#141f33') {
+    fwrite(STDERR, "FAIL: lilac harbor should follow theme, not default navy\n");
+    $fail++;
+}
 if (signage_normalize_theme_key('Lake-Night!') !== 'lakenight') {
     // keys use underscores in slide presets
 }

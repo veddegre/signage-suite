@@ -195,8 +195,9 @@ function signage_viewport_css(): string
 function signage_theme_css(): string
 {
     require_once __DIR__ . '/lib/signage_theme_lib.php';
+    $key = signage_active_theme_key();
 
-    return signage_theme_css_block(signage_active_theme_key());
+    return signage_theme_css_block($key) . signage_theme_inset_surface_css();
 }
 
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */
