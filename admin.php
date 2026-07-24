@@ -1786,7 +1786,7 @@ $navGroups = [
     'Setup'           => ['security', 'rotation', 'ticker'],
     'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'meals', 'traffic', 'camwall'],
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
-    'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'ransomware', 'phish', 'signaltrace', 'zabbix'],
+    'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
     'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'web'],
 ];
@@ -4323,6 +4323,45 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) is how many slots it gets in each shuffled cycle. Higher weight = more airtime, but every board still plays at least once per cycle.</div>
           <?php endif; ?>
 
+          <?php
+          $playsNow = rotation_schedule_snapshot($screenKey);
+          $playsStatusLabel = [
+              'playing' => 'Now',
+              'skipped' => 'Skip',
+              'scheduled' => 'Later',
+              'filtered' => 'Hidden',
+          ];
+          ?>
+          <div class="rotation-plays-now" style="margin:12px 0;padding:14px 16px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
+            <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px">
+              <strong>Plays now</strong>
+              <span class="help" style="margin:0"><?= h((string)$playsNow['now']) ?> · <?= h((string)$playsNow['weekday']) ?> · <?= h((string)$playsNow['timezone']) ?></span>
+              <?php if (!empty($playsNow['blank'])): ?><span class="pill warn">Blank hours</span><?php endif; ?>
+              <?php if (!empty($playsNow['calendar_override'])): ?><span class="pill ok">Calendar override</span><?php endif; ?>
+              <span class="pill ok"><?= (int)$playsNow['eligible_count'] ?> eligible</span>
+            </div>
+            <?php if (($playsNow['rows'] ?? []) === []): ?>
+            <div class="help" style="margin:0">No playlist entries on this display.</div>
+            <?php else: ?>
+            <div class="rotation-plays-now-list" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
+              <?php foreach ($playsNow['rows'] as $snapRow):
+                $st = (string)($snapRow['status'] ?? '');
+                $pillClass = match ($st) {
+                    'playing' => 'ok',
+                    'scheduled' => 'warn',
+                    default => '',
+                };
+              ?>
+              <div style="display:flex;gap:10px;align-items:baseline;font-size:13px">
+                <span class="pill <?= h($pillClass) ?>" style="min-width:72px;justify-content:center"><?= h($playsStatusLabel[$st] ?? $st) ?></span>
+                <span><strong><?= h((string)($snapRow['label'] ?? '')) ?></strong><?php if (($snapRow['schedule'] ?? '') !== ''): ?>
+                  <span class="help" style="margin:0"> · <?= h((string)$snapRow['schedule']) ?></span><?php endif; ?></span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+          </div>
+
           <div class="rotation-screen-tools">
             <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px"
                href="<?= h(rotation_screen_preview_url($screenKey)) ?>" target="_blank" rel="noopener">Preview ↗</a>
@@ -5460,6 +5499,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               $fileOk = $safeFile !== null && isset($slideFilesOnDisk[$safeFile]);
               $activeNow = empty($row['off']) && $fileOk && slide_schedule_active($row, $slideNow);
               $schedSummary = slide_schedule_summary($row);
+              $slideWindowRows = slide_windows_form_rows($row);
+              $slideTimeWeekdays = slide_time_weekdays($row);
               $highlightCard = $slideHighlight !== null
                   && slide_safe_filename($fileLabel) === $slideHighlight;
               $thumbUrl = $fileOk ? slide_thumb_url($fileLabel) : null;
@@ -5558,13 +5599,25 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <label class="mini">Weekdays</label>
                   <input type="text" name="SLIDES[<?= h((string)$ri) ?>][weekdays]" value="<?= h((string)($row['weekdays'] ?? '')) ?>" placeholder="Mon,Wed or Saturday,Sunday">
                 </div>
-                <div>
-                  <label class="mini">Hour from</label>
-                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][hour_from]" value="<?= h((string)($row['hour_from'] ?? '')) ?>" placeholder="0-23">
+                <div class="rotation-windows slide-time-windows" data-slide-windows style="grid-column:1 / -1">
+                  <label class="mini">Time windows</label>
+                  <div class="help" style="margin:0 0 6px">Leave blank for all day. Whole hours (<code>7</code>) or minutes (<code>7:30</code>). Multiple ranges OK (e.g. commute times).</div>
+                  <?php foreach ($slideWindowRows as $wi => $win): ?>
+                  <div class="rotation-window-row" data-slide-window-row>
+                    <input type="text" name="SLIDES[<?= h((string)$ri) ?>][windows][<?= (int)$wi ?>][from]"
+                           value="<?= h((string)($win['from'] ?? '')) ?>" placeholder="7 or 7:30" aria-label="From time">
+                    <span class="help" style="margin:0">–</span>
+                    <input type="text" name="SLIDES[<?= h((string)$ri) ?>][windows][<?= (int)$wi ?>][to]"
+                           value="<?= h((string)($win['to'] ?? '')) ?>" placeholder="9 or 9:00" aria-label="To time">
+                    <button type="button" class="rowdel slide-window-remove" title="Remove window"<?= count($slideWindowRows) <= 1 ? ' hidden' : '' ?>>×</button>
+                  </div>
+                  <?php endforeach; ?>
+                  <button type="button" class="secondary slide-window-add">+ Add window</button>
                 </div>
-                <div>
-                  <label class="mini">Hour to</label>
-                  <input type="text" name="SLIDES[<?= h((string)$ri) ?>][hour_to]" value="<?= h((string)($row['hour_to'] ?? '')) ?>" placeholder="0-23">
+                <div class="rotation-page-weekdays" style="grid-column:1 / -1">
+                  <label class="mini">Active days (time windows)</label>
+                  <div class="help" style="margin:0 0 6px">Optional — separate from weekly date schedule above.</div>
+                  <?php slide_admin_time_weekdays_html('SLIDES[' . (int)$ri . ']', $slideTimeWeekdays); ?>
                 </div>
               </div>
                 <div class="slide-card-flags">
@@ -6438,6 +6491,8 @@ function syncSlideCard(card) {
       if (type === 'yearly_range' && md && md.value) parts.push(md.value + ' → ' + (mde?.value || '?'));
       if (type === 'monthly' && dom && dom.value) parts.push('day ' + dom.value);
       if (type === 'weekly' && wd && wd.value) parts.push(wd.value);
+      const timeLabel = slideTimeWindowsSummary(card);
+      if (timeLabel) parts.push(timeLabel);
       summary.textContent = parts.join(' · ');
     }
   }
@@ -6453,6 +6508,106 @@ function reindexSlideDeck() {
       inp.name = inp.name.replace(new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\[[^\\]]+\\]'), field + '[' + i + ']');
     });
   });
+}
+
+function slideTimeWindowsSummary(card) {
+  if (!card) return '';
+  const parts = [];
+  card.querySelectorAll('[data-slide-window-row]').forEach(function (row) {
+    const fromInp = row.querySelector('input[name*="[from]"]');
+    const toInp = row.querySelector('input[name*="[to]"]');
+    const from = fromInp ? fromInp.value.trim() : '';
+    const to = toInp ? toInp.value.trim() : '';
+    if (from !== '' && to !== '') parts.push(from + '–' + to);
+  });
+  const time = parts.join(', ');
+  const twAll = card.querySelectorAll('input[name*="[time_weekdays]"]');
+  const twChecked = card.querySelectorAll('input[name*="[time_weekdays]"]:checked');
+  let days = '';
+  if (twAll.length && twChecked.length < twAll.length && twChecked.length > 0) {
+    days = Array.from(twChecked).map(function (cb) {
+      return (cb.parentElement ? cb.parentElement.textContent : cb.value).trim();
+    }).join('');
+  }
+  if (time && days) return time + ' · ' + days;
+  return time || days;
+}
+
+function appendSlideWindowRow(container, fieldPrefix) {
+  if (!container) return null;
+  const addBtn = container.querySelector('.slide-window-add');
+  const idx = container.querySelectorAll('[data-slide-window-row]').length;
+  const row = document.createElement('div');
+  row.className = 'rotation-window-row';
+  row.setAttribute('data-slide-window-row', '');
+  row.innerHTML =
+    '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][from]" placeholder="7 or 7:30" aria-label="From time">' +
+    '<span class="help" style="margin:0">–</span>' +
+    '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][to]" placeholder="9 or 9:00" aria-label="To time">' +
+    '<button type="button" class="rowdel slide-window-remove" title="Remove window">×</button>';
+  if (addBtn) container.insertBefore(row, addBtn);
+  else container.appendChild(row);
+  row.querySelector('.slide-window-remove').addEventListener('click', function () {
+    const card = row.closest('[data-slide-card]');
+    row.remove();
+    if (card) reindexSlideWindowRows(card);
+  });
+  return row;
+}
+
+function reindexSlideWindowRows(card) {
+  const container = card.querySelector('[data-slide-windows]');
+  if (!container) return;
+  container.querySelectorAll('[data-slide-window-row]').forEach(function (row, wi) {
+    row.querySelectorAll('input[name*="[windows]"]').forEach(function (inp) {
+      inp.name = inp.name.replace(/\[windows\]\[\d+\]/, '[windows][' + wi + ']');
+    });
+  });
+  const rows = container.querySelectorAll('[data-slide-window-row]');
+  rows.forEach(function (row) {
+    const btn = row.querySelector('.slide-window-remove');
+    if (btn) btn.hidden = rows.length <= 1;
+  });
+}
+
+function bindSlideWindows(card) {
+  const container = card.querySelector('[data-slide-windows]');
+  if (!container || container.dataset.bound) return;
+  container.dataset.bound = '1';
+  const addBtn = container.querySelector('.slide-window-add');
+  if (addBtn) {
+    addBtn.addEventListener('click', function () {
+      const fieldPrefix = (function () {
+        const inp = container.querySelector('input[name*="[windows]"]');
+        if (!inp || !inp.name) return '';
+        return inp.name.replace(/\[windows\]\[\d+\]\[(from|to)\]/, '');
+      })();
+      appendSlideWindowRow(container, fieldPrefix);
+      reindexSlideWindowRows(card);
+    });
+  }
+  container.querySelectorAll('.slide-window-remove').forEach(function (btn) {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', function () {
+      const row = btn.closest('[data-slide-window-row]');
+      if (row) {
+        row.remove();
+        reindexSlideWindowRows(card);
+      }
+    });
+  });
+  container.querySelectorAll('input[type="text"]').forEach(function (inp) {
+    if (inp.dataset.summaryBound) return;
+    inp.dataset.summaryBound = '1';
+    inp.addEventListener('input', function () { syncSlideCard(card); });
+  });
+  card.querySelectorAll('input[name*="[time_weekdays]"]').forEach(function (cb) {
+    if (cb.dataset.summaryBound) return;
+    cb.dataset.summaryBound = '1';
+    cb.addEventListener('change', function () { syncSlideCard(card); });
+  });
+  reindexSlideWindowRows(card);
 }
 
 function collectMediaDeckRow(card, includeSchedule) {
@@ -6480,6 +6635,25 @@ function collectMediaDeckRow(card, includeSchedule) {
       const v = intVal('[' + k + ']');
       if (v !== null && !isNaN(v)) row[k] = v;
     });
+    const windowRows = [];
+    card.querySelectorAll('[data-slide-window-row]').forEach(function (winRow) {
+      const fromInp = winRow.querySelector('input[name*="[from]"]');
+      const toInp = winRow.querySelector('input[name*="[to]"]');
+      const from = fromInp ? fromInp.value.trim() : '';
+      const to = toInp ? toInp.value.trim() : '';
+      if (from !== '' && to !== '') windowRows.push({ from: from, to: to });
+    });
+    if (windowRows.length === 1) {
+      row.from = windowRows[0].from;
+      row.to = windowRows[0].to;
+    } else if (windowRows.length > 1) {
+      row.windows = windowRows;
+    }
+    const twAll = card.querySelectorAll('input[name*="[time_weekdays]"]');
+    const twChecked = card.querySelectorAll('input[name*="[time_weekdays]"]:checked');
+    if (twAll.length && twChecked.length < twAll.length) {
+      row.time_weekdays = Array.from(twChecked).map(function (cb) { return cb.value; });
+    }
     if (card.querySelector('[name*="[priority]"]:checked')) row.priority = true;
   } else {
     const v = intVal('[dwell]');
@@ -6780,6 +6954,7 @@ function bindSlideCard(card) {
       applySlideDeckFilters();
     });
   }
+  bindSlideWindows(card);
 }
 
 function initSlideDeck() {
@@ -7552,6 +7727,7 @@ function initSlideDeckToolbar() {
   const deck = document.getElementById('slideDeck');
   if (!deck) return;
   deck.querySelectorAll('[data-slide-card]').forEach(function (card) {
+    bindSlideCard(card);
     syncSlideCardScreenMeta(card, true);
     syncSlideCardAccessMeta(card);
     bindSlideCardSelection(card);
@@ -8842,7 +9018,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
-    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'camwall.php': 'MDOT Cams', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'ransomware.php': 'Ransomware tracker', 'phish.php': 'Phishing & brand threats', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
+    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'camwall.php': 'MDOT Cams', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'kev.php': 'CISA KEV', 'certexp.php': 'TLS cert expiry', 'ransomware.php': 'Ransomware tracker', 'phish.php': 'Phishing & brand threats', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard',
     'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'

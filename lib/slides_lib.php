@@ -490,6 +490,16 @@ function slides_parse_post_rows(array $rows, array $existingSlides = []): array
                 $obj[$k] = (int)$v;
             }
         }
+        $windows = slide_parse_time_windows_from_row($row);
+        if ($windows !== []) {
+            $obj = array_merge($obj, rotation_store_window_fields($windows));
+        }
+        if (isset($row['time_weekdays']) && is_array($row['time_weekdays'])) {
+            $days = rotation_normalize_weekdays_list($row['time_weekdays']);
+            if ($days !== []) {
+                $obj['time_weekdays'] = $days;
+            }
+        }
         if (!empty($row['priority'])) {
             $obj['priority'] = true;
         }
@@ -1489,9 +1499,89 @@ function slide_yearly_range_active(string $startRaw, string $endRaw, DateTimeInt
     return $today >= $s || $today <= $e;
 }
 
-/** Optional hour_from / hour_to (0–23). Empty = all day. Overnight windows supported. */
+/** @return list<array{from:mixed,to:mixed}> */
+function slide_windows_form_rows(array $slide): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    if (!empty($slide['windows']) && is_array($slide['windows'])) {
+        return rotation_page_windows_form_rows(['windows' => $slide['windows']]);
+    }
+    $from = $slide['hour_from'] ?? '';
+    $to = $slide['hour_to'] ?? '';
+    if ($from !== '' && $from !== null && $to !== '' && $to !== null) {
+        return [['from' => (string)$from, 'to' => (string)$to]];
+    }
+
+    return [['from' => '', 'to' => '']];
+}
+
+/** @return list<string>|null */
+function slide_time_weekdays(array $slide): ?array
+{
+    if (empty($slide['time_weekdays']) || !is_array($slide['time_weekdays'])) {
+        return null;
+    }
+    require_once __DIR__ . '/rotation_lib.php';
+    $normalized = rotation_normalize_weekdays_list($slide['time_weekdays']);
+
+    return $normalized === [] ? null : $normalized;
+}
+
+/** Map slide time fields to rotation playlist shape for rotation_page_in_window(). */
+function slide_time_schedule_page(array $slide): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $page = rotation_store_window_fields(rotation_parse_page_windows_from_row($slide));
+    $days = slide_time_weekdays($slide);
+    if ($days !== null) {
+        $page['weekdays'] = $days;
+    }
+
+    return $page;
+}
+
+/**
+ * Parse time windows from a posted slide row.
+ *
+ * @return list<array{from_min:int,to_min:int}>
+ */
+function slide_parse_time_windows_from_row(array $row): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+
+    return rotation_parse_page_windows_from_row($row);
+}
+
+/** @param list<string>|null $selected Full weekday names; null = all days */
+function slide_admin_time_weekdays_html(string $namePrefix, ?array $selected): void
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $allSelected = $selected === null;
+    $selSet = [];
+    if (is_array($selected)) {
+        foreach ($selected as $day) {
+            $selSet[(string)$day] = true;
+        }
+    }
+    echo '<div class="rotation-weekdays" title="Limit time windows to these weekdays only. All seven = every day.">';
+    foreach (rotation_weekday_options() as $opt) {
+        $full = $opt['full'];
+        $checked = $allSelected || !empty($selSet[$full]);
+        echo '<label class="rotation-weekday"><input type="checkbox" name="' . h($namePrefix . '[time_weekdays][]') . '" value="' . h($full) . '"'
+            . ($checked ? ' checked' : '') . '> ' . h($opt['short']) . '</label>';
+    }
+    echo '</div>';
+}
+
+/** Optional time windows + time_weekdays (matches rotation). Legacy hour_from/hour_to still supported. */
 function slide_time_window_active(array $slide, DateTimeInterface $now): bool
 {
+    if (!empty($slide['windows']) || !empty($slide['time_weekdays'])) {
+        require_once __DIR__ . '/rotation_lib.php';
+
+        return rotation_page_in_window(slide_time_schedule_page($slide), $now);
+    }
+
     $hasFrom = isset($slide['hour_from']) && $slide['hour_from'] !== '' && $slide['hour_from'] !== null;
     $hasTo = isset($slide['hour_to']) && $slide['hour_to'] !== '' && $slide['hour_to'] !== null;
     if (!$hasFrom && !$hasTo) {
@@ -1503,6 +1593,7 @@ function slide_time_window_active(array $slide, DateTimeInterface $now): bool
     if ($from <= $to) {
         return $h >= $from && $h <= $to;
     }
+
     return $h >= $from || $h <= $to;
 }
 
@@ -1587,7 +1678,13 @@ function slide_schedule_summary(array $slide): string
         $sched = 'always';
     }
     $hour = '';
-    if (($slide['hour_from'] ?? '') !== '' || ($slide['hour_to'] ?? '') !== '') {
+    if (!empty($slide['windows']) || !empty($slide['time_weekdays'])) {
+        require_once __DIR__ . '/rotation_lib.php';
+        $label = rotation_page_schedule_label(slide_time_schedule_page($slide));
+        if ($label !== '') {
+            $hour = ' · ' . $label;
+        }
+    } elseif (($slide['hour_from'] ?? '') !== '' || ($slide['hour_to'] ?? '') !== '') {
         $hour = ' · ' . ($slide['hour_from'] ?? '0') . '–' . ($slide['hour_to'] ?? '23') . 'h';
     }
     return match ($sched) {

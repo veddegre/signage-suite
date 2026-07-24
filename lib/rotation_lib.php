@@ -1052,6 +1052,103 @@ function rotation_page_in_window(array $page, DateTimeInterface|int|null $now = 
     return false;
 }
 
+/**
+ * Admin “Plays now” snapshot — which saved playlist rows are eligible at this moment.
+ *
+ * @return array{
+ *   screen:string,
+ *   now:string,
+ *   timezone:string,
+ *   weekday:string,
+ *   blank:bool,
+ *   calendar_override:?array<string,mixed>,
+ *   weighted:bool,
+ *   shuffle:bool,
+ *   eligible_count:int,
+ *   rows:list<array<string,mixed>>,
+ *   playing_labels:list<string>
+ * }
+ */
+function rotation_schedule_snapshot(string $screen = 'main', ?DateTimeInterface $now = null): array
+{
+    require_once __DIR__ . '/slides_lib.php';
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+
+    $screen = rotation_normalize_screen_key($screen);
+    $now = $now ?? rotation_now();
+    $settings = rotation_screen_settings($screen);
+    $calOverride = rotation_calendar_override_status($screen, $now);
+    $effective = rotation_screen_effective_pages($screen);
+    $active = rotation_screen_active_pages($screen);
+    $activeUrls = [];
+    foreach ($active as $p) {
+        if (!is_array($p)) {
+            continue;
+        }
+        $u = trim((string)($p['url'] ?? ''));
+        if ($u !== '') {
+            $activeUrls[$u] = true;
+        }
+    }
+
+    $rows = [];
+    $playingLabels = [];
+    foreach ($effective as $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+        if ($url === '') {
+            continue;
+        }
+        $skipped = !empty($page['off']);
+        $inWindow = rotation_page_in_window($page, $now);
+        $onWall = isset($activeUrls[$url]);
+        $schedLabel = rotation_page_schedule_label($page);
+        $status = 'idle';
+        $reason = '';
+        if ($skipped) {
+            $status = 'skipped';
+            $reason = 'Skip checked';
+        } elseif (!$onWall) {
+            $status = 'filtered';
+            $reason = 'Not on wall (slide schedule, missing file, or seasonal skip)';
+        } elseif (!$inWindow) {
+            $status = 'scheduled';
+            $reason = $schedLabel !== '' ? "Outside window ({$schedLabel})" : 'Outside time window';
+        } else {
+            $status = 'playing';
+            $label = rotation_page_label($url);
+            $playingLabels[] = $label;
+        }
+        $rows[] = [
+            'label' => rotation_page_label($url),
+            'url' => $url,
+            'dwell' => rotation_page_dwell($page),
+            'weight' => max(1, min(20, (int)($page['weight'] ?? 1) ?: 1)),
+            'schedule' => $schedLabel,
+            'status' => $status,
+            'reason' => $reason,
+            'in_window' => $inWindow,
+            'on_wall' => $onWall,
+        ];
+    }
+
+    return [
+        'screen' => $screen,
+        'now' => $now->format('g:i A'),
+        'timezone' => rotation_timezone(),
+        'weekday' => $now->format('l'),
+        'blank' => rotation_screen_blank_active($screen),
+        'calendar_override' => $calOverride,
+        'weighted' => !empty($settings['weighted']),
+        'shuffle' => !empty($settings['shuffle']),
+        'eligible_count' => count($playingLabels),
+        'rows' => $rows,
+        'playing_labels' => $playingLabels,
+    ];
+}
+
 /** Inside the configured off window (supports overnight, e.g. off 23 / on 6). */
 function rotation_in_off_window(int $offHour, int $onHour, ?int $hour = null): bool
 {
@@ -2171,6 +2268,8 @@ function rotation_quick_add_items(): array
         ['label' => 'Data breaches', 'url' => 'hibp.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'New CVEs', 'url' => 'cve.php', 'dwell' => 45, 'group' => 'Boards'],
         ['label' => 'Ransomware tracker', 'url' => 'ransomware.php', 'dwell' => 60, 'group' => 'Boards'],
+        ['label' => 'CISA KEV', 'url' => 'kev.php', 'dwell' => 60, 'group' => 'Boards'],
+        ['label' => 'TLS cert expiry', 'url' => 'certexp.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Phishing & brand threats', 'url' => 'phish.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'SignalTrace', 'url' => 'signaltrace.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Photo rotator', 'url' => 'rotator.php', 'dwell' => 300, 'group' => 'Media'],

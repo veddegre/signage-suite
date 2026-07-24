@@ -130,6 +130,7 @@ zabbix.php?d=network            splunk.php?d=soc
 webcam.php?cam=grpm             webcam.php?cam=grandhaven
 camwall.php                     traffic.php
 ransomware.php                  phish.php
+kev.php                         certexp.php
 video.php?v=drone               slides.php?slide=birthday.png
 ```
 
@@ -138,7 +139,7 @@ video.php?v=drone               slides.php?slide=birthday.png
 | Group | Highlights | Keys |
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, **MDOT cams**, Mackinac Bridge cam, photo, air, UV index, sports, calendar, **today at a glance**, meal calendar, traffic | OWM, TomTom, Google Pollen (optional) |
-| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
+| **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **CISA KEV**, **TLS cert expiry**, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
 | **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic | — |
 | **Media** | Photo rotator, scheduled slides (upload + **slide creator** with occasion templates — dinner menu, snow day, anniversary, …), RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, embedded websites | Splunk token (panels) |
@@ -168,6 +169,10 @@ video.php?v=drone               slides.php?slide=birthday.png
 If you previously saved a token under **Internet Attacks**, it is still read until you move it to **Cloudflare Radar**.
 
 **Internet infrastructure** (`internet.php`) — BGP/ASN outages via IODA (no key) and DNS root probes via `dig` (`dnsutils` package; installed by `setup-server.sh`).
+
+**CISA KEV** (`kev.php`) — [Known Exploited Vulnerabilities](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) catalog with remediation due dates, optional vendor filters, and ransomware-use flags. Free JSON feed (default cache 1 h). Admin → **CISA KEV**; add to rotation (~60s).
+
+**TLS cert expiry** (`certexp.php`) — Direct TLS probes of configured HTTPS hosts; highlights certs expiring within your warn window. Admin → **TLS Cert Expiry** — add host rows; LAN endpoints must be reachable from PHP on the signage server.
 
 **Ransomware tracker** (`ransomware.php`) — Recent **extortion-site victim claims** from [Ransomware.live](https://www.ransomware.live/) (group, sector, country, optional infostealer counts). Strategic awareness — **not** homelab alerts. Claims are **unverified** until press corroboration; the board never links to `.onion` URLs.
 

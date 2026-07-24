@@ -38,6 +38,8 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | L3 attack map | `l3map.php` | `l3map.php` | Radar API token (shared) |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
+| | CISA KEV | `kev.php` | `kev.php` | — |
+| | TLS cert expiry | `certexp.php` | `certexp.php` | Host list |
 | | Ransomware tracker | `ransomware.php` | `ransomware.php` | — |
 | | Phishing & brand threats | `phish.php` | `phish.php` | URLhaus Auth-Key |
 | | Homelab ops | `homelab.php` | `homelab.php` | Proxmox, AdGuard |
@@ -404,6 +406,22 @@ Latest published CVE hero plus a list of recent vulnerabilities — ID, CVSS sco
 **Data:** [NIST NVD API 2.0](https://nvd.nist.gov/developers/vulnerabilities) — free without a key (5 requests / 30s); optional API key for higher limits.
 
 **Setup:** admin → **New CVEs** — lookback window (default 7 days), CVE count (default 8), cache TTL (default 1 hour).
+
+### kev.php — CISA Known Exploited Vulnerabilities
+
+Federal **KEV catalog** — hero CVE with remediation due date, vendor/product, ransomware-use flag, and required action text.
+
+**Data:** [CISA KEV JSON feed](https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json) — free, no API key (default cache 1 hour).
+
+**Setup:** admin → **CISA KEV** — due-soon window (default 14 days), optional **Watch vendors** filter, hide ransomware-linked entries if desired. Add `kev.php` to rotation (~60s dwell).
+
+### certexp.php — TLS Certificate Expiry
+
+Direct **TLS probes** of configured HTTPS hosts — surfaces expired, failing, and soon-to-expire certificates.
+
+**Data:** OpenSSL handshake from the signage server to each configured host/port (default cache 1 hour per host).
+
+**Setup:** admin → **TLS Cert Expiry** — add **Hosts** rows (`host`, optional `label`, `port`). Set warn window (default 30 days). LAN hosts must be reachable from PHP on the server.
 
 ### ransomware.php — Ransomware Tracker (Ransomware.live)
 
