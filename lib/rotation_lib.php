@@ -51,6 +51,7 @@ function rotation_screen_transition_from_scr(?array $scr): array
 /** @return array{name:string,shuffle:bool,show_ticker:bool,show_clock:bool,show_debug:bool,keyboard_nav:bool,weighted:bool,fade_ms:int,settle_ms:int,hang_ms:int,schedule:array{enabled:bool,off:int,on:int},cec:array{enabled:bool,off:int,on:int,device:int}} */
 function rotation_screen_settings(string $screen = 'main'): array
 {
+    require_once __DIR__ . '/signage_theme_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     $screensCfg = cfg('rotation.SCREENS', ['main' => 'Main Display']);
     $scr = null;

@@ -288,6 +288,9 @@ function signage_theme_swatch_background_style(string $key): string
 function admin_rotation_theme_picker(string $screenKey, string $savedTheme): void
 {
     require_once __DIR__ . '/slides_lib.php';
+    $esc = static function (?string $s): string {
+        return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+    };
     $presets = signage_theme_presets();
     $savedTheme = signage_normalize_theme_key($savedTheme);
     if ($savedTheme === '' || signage_theme_preset($savedTheme) === null) {
@@ -301,19 +304,19 @@ function admin_rotation_theme_picker(string $screenKey, string $savedTheme): voi
       $bgUrl = slide_background_url($tid);
       $checked = $tid === $savedTheme;
   ?>
-  <label title="<?= h($tp['label']) ?>">
-    <input type="radio" name="<?= h($name) ?>" value="<?= h($tid) ?>" <?= $checked ? 'checked' : '' ?>>
+  <label title="<?= $esc($tp['label']) ?>">
+    <input type="radio" name="<?= $esc($name) ?>" value="<?= $esc($tid) ?>" <?= $checked ? 'checked' : '' ?>>
     <div class="rotation-theme-swatch">
       <?php if ($bgUrl): ?>
-      <img src="<?= h($bgUrl) ?>" alt="" loading="lazy">
+      <img src="<?= $esc($bgUrl) ?>" alt="" loading="lazy">
       <?php else: ?>
-      <span class="rotation-theme-fallback" style="<?= h(signage_theme_swatch_background_style($tid)) ?>"></span>
+      <span class="rotation-theme-fallback" style="<?= $esc(signage_theme_swatch_background_style($tid)) ?>"></span>
       <?php endif; ?>
-      <span class="rotation-theme-label"><?= h($tp['label']) ?></span>
+      <span class="rotation-theme-label"><?= $esc($tp['label']) ?></span>
       <div class="rotation-theme-ticker-samples" aria-hidden="true">
-        <span class="tt-bar" style="background:<?= h($tp['harbor']) ?>;border-color:<?= h($tp['beacon']) ?>" title="RSS / themed bar"></span>
-        <span class="tt-bar tt-yellow" style="background:<?= h($nws['yellow-bar']) ?>;border-color:<?= h($nws['yellow-border']) ?>" title="Watch / advisory"></span>
-        <span class="tt-bar tt-red" style="background:<?= h($nws['warning-bar']) ?>;border-color:<?= h($nws['warning-border']) ?>" title="Warning"></span>
+        <span class="tt-bar" style="background:<?= $esc($tp['harbor']) ?>;border-color:<?= $esc($tp['beacon']) ?>" title="RSS / themed bar"></span>
+        <span class="tt-bar tt-yellow" style="background:<?= $esc($nws['yellow-bar']) ?>;border-color:<?= $esc($nws['yellow-border']) ?>" title="Watch / advisory"></span>
+        <span class="tt-bar tt-red" style="background:<?= $esc($nws['warning-bar']) ?>;border-color:<?= $esc($nws['warning-border']) ?>" title="Warning"></span>
       </div>
     </div>
   </label>

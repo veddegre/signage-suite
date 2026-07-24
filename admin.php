@@ -2565,6 +2565,7 @@ function admin_rotation_kiosk_settings_panel(
     array $sportsCatalogGroups,
     bool $visible = false
 ): void {
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
     $screenSettings = rotation_screen_settings($screenKey);
     $scrValOpts = current_val($rawConf, $board, 'SCREENS');
     $scrRaw = is_array($scrValOpts[$screenKey] ?? null) ? $scrValOpts[$screenKey] : [];
@@ -2628,7 +2629,6 @@ function admin_rotation_kiosk_settings_panel(
     }
     $hintSummary = implode(' · ', $hints);
     $savedTheme = (string)($screenSettings['theme'] ?? 'lake_night');
-    require_once __DIR__ . '/lib/signage_theme_lib.php';
     ?>
 <div class="rotation-display-options-wrap" data-display-options-screen="<?= h($screenKey) ?>"<?= $visible ? '' : ' hidden' ?>>
   <div class="rotation-display-options">
