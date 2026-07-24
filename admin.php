@@ -848,6 +848,11 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         $screenOpts = $_POST['SCREEN_OPTS'] ?? [];
         if (!$rotationSaveLocked && is_array($screenOpts) && $screenOpts !== []) {
             $screens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
+            $superScreensTablePosted = admin_is_super()
+                && is_array($_POST['SCREENS'] ?? null)
+                && ($_POST['SCREENS'] ?? []) !== [];
+            $rotationKioskTabSave = (string)($_POST['rotation_setup_tab'] ?? '') === 'kiosk';
+            $rotationFocusSk = admin_rotation_focus_screen_key(admin_filter_screens(rotation_screens()));
             foreach ($screenOpts as $sk => $opts) {
                 if (!is_array($opts)) {
                     continue;
@@ -856,13 +861,20 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if ($sk === '' || !admin_can_screen($sk)) {
                     continue;
                 }
+                if ($superScreensTablePosted && $sk !== $rotationFocusSk) {
+                    continue;
+                }
                 $entry = is_array($screens[$sk] ?? null) ? $screens[$sk] : ['name' => rotation_screen_display_name($sk, rotation_screens())];
                 if (!is_array($entry)) {
                     $entry = ['name' => (string)$entry];
                 }
                 $prevEditors = is_array($existingScreens[$sk]['shared_editors'] ?? null)
                     ? $existingScreens[$sk]['shared_editors'] : null;
-                $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false);
+                if ($superScreensTablePosted && !$rotationKioskTabSave) {
+                    $screens[$sk] = rotation_apply_screen_kiosk_extras_post_row($entry, $opts);
+                } else {
+                    $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false);
+                }
                 if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
                     $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
                     if ($editors !== []) {
@@ -9452,6 +9464,19 @@ document.addEventListener('DOMContentLoaded', function () {
       if (document.querySelector('.rotation-playlist[data-field]')) serializeRotationPlaylistsForSave();
       if (document.getElementById('rotationCalendarOverridePanels')) serializeRotationCalendarOverridesForSave();
       syncRotationFocusScreenField();
+      const rotationSetupTabs = document.getElementById('rotationSetupTabs');
+      if (rotationSetupTabs) {
+        const activeSetupTab = rotationSetupTabs.querySelector('.rotation-setup-tab.is-active');
+        const tabName = activeSetupTab ? (activeSetupTab.getAttribute('data-rotation-tab') || '') : '';
+        let setupTabInp = boardForm.querySelector('input[name="rotation_setup_tab"]');
+        if (!setupTabInp) {
+          setupTabInp = document.createElement('input');
+          setupTabInp.type = 'hidden';
+          setupTabInp.name = 'rotation_setup_tab';
+          boardForm.appendChild(setupTabInp);
+        }
+        setupTabInp.value = tabName;
+      }
     });
   }
   initScreenPickers(document);

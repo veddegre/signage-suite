@@ -435,12 +435,74 @@ function rotation_blank_hours_from_post_row(array $row): array
 }
 
 /**
+ * Kiosk-tab-only fields (hero bar, location, sports, glance, RSS ticker fallback) — not the Display settings table.
+ *
+ * @param array<string,mixed> $entry
+ * @param array<string,mixed> $row SCREEN_OPTS[] row
+ */
+function rotation_apply_screen_kiosk_extras_post_row(array $entry, array $row): array
+{
+    if (empty($row['_screen_opts_form'])) {
+        return $entry;
+    }
+
+    return rotation_apply_screen_post_row($entry, $row, false, true);
+}
+
+/**
  * Merge admin POST fields for one display onto a screen registry entry.
  * @param array<string,mixed> $entry
  * @param array<string,mixed> $row SCREENS[] or SCREEN_OPTS[] row
  */
-function rotation_apply_screen_post_row(array $entry, array $row, bool $includeIdentity = false): array
+function rotation_apply_screen_post_row(array $entry, array $row, bool $includeIdentity = false, bool $kioskExtrasOnly = false): array
 {
+    if ($kioskExtrasOnly) {
+        if (isset($row['hero_strip'])) {
+            $entry['hero_strip'] = true;
+            $slots = rotation_hero_strip_slots_from_post($row);
+            if ($slots !== []) {
+                $entry['hero_strip_slots'] = $slots;
+                unset($entry['hero_strip_source'], $entry['hero_strip_key']);
+            } else {
+                unset($entry['hero_strip_slots']);
+                $source = strtolower(trim((string)($row['hero_strip_source'] ?? '')));
+                if (
+                    in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)
+                    && (!function_exists('admin_can_hero_strip_source') || admin_can_hero_strip_source($source))
+                ) {
+                    $entry['hero_strip_source'] = $source;
+                } else {
+                    unset($entry['hero_strip_source']);
+                }
+                $heroKey = trim((string)($row['hero_strip_key'] ?? ''));
+                if ($heroKey !== '') {
+                    $entry['hero_strip_key'] = $heroKey;
+                } else {
+                    unset($entry['hero_strip_key']);
+                }
+            }
+            $heroHeight = trim((string)($row['hero_strip_height'] ?? ''));
+            if ($heroHeight !== '') {
+                $entry['hero_strip_height'] = max(60, min(240, (int)$heroHeight));
+            } else {
+                unset($entry['hero_strip_height']);
+            }
+        } elseif (array_key_exists('hero_strip', $row)) {
+            unset(
+                $entry['hero_strip'],
+                $entry['hero_strip_source'],
+                $entry['hero_strip_key'],
+                $entry['hero_strip_height'],
+                $entry['hero_strip_slots']
+            );
+        }
+        require_once __DIR__ . '/screen_scope_lib.php';
+        $entry = rotation_apply_screen_scope_post_row($entry, $row);
+        unset($entry['_screen_opts_form']);
+
+        return $entry;
+    }
+
     if ($includeIdentity) {
         $name = trim((string)($row['name'] ?? ''));
         if ($name !== '') {
