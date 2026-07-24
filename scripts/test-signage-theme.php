@@ -30,10 +30,10 @@ if (signage_theme_preset('forest') === null) {
 }
 $gvsu = signage_theme_preset('gvsu_lakers');
 if ($gvsu === null
-    || stripos((string)($gvsu['beacon'] ?? ''), 'ffffff') === false
-    || stripos((string)($gvsu['harbor'] ?? ''), '0032a0') === false
-    || stripos((string)($gvsu['lake-night'] ?? ''), '000000') === false) {
-    fwrite(STDERR, "FAIL: gvsu_lakers should use primary palette (black, GVSU Blue #0032A0, white)\n");
+    || stripos((string)($gvsu['lake-night'] ?? ''), '0032a0') === false
+    || stripos((string)($gvsu['harbor'] ?? ''), '13155c') === false
+    || stripos((string)($gvsu['beacon'] ?? ''), '0ecbf0') === false) {
+    fwrite(STDERR, "FAIL: gvsu_lakers should use GVSU Blue background with secondary panel/accent colors\n");
     $fail++;
 }
 $key = signage_active_theme_key();
