@@ -3,17 +3,10 @@
  * GRAFANA BOARD — 1920×1080 signage
  * Wraps a Grafana dashboard in kiosk mode for rotation + ticker overlay.
  *
- * Auth options (pick one on the Grafana side):
- *   1. JWT (recommended for work Grafana behind SSO) — enable JWT in admin;
- *      signage signs short-lived tokens and appends auth_token=… (Grafana auth.jwt url_login).
- *   2. Public dashboard share URL — no login.
- *   3. Anonymous Viewer (LAN-only homelab) — grafana.ini auth.anonymous.
- *
- * Grafana.ini (JWT path):
- *   [security] allow_embedding = true
- *   [auth.jwt] enabled = true, url_login = true, jwk_set_file = …, email_claim = email
- *
- * See docs/grafana.md for full self-hosted SSO setup.
+ * Auth options:
+ *   1. JWT — HS256 (self-hosted) or RS256 + grafana-jwks.php (Cloud) — docs/grafana.md / grafana-cloud.md
+ *   2. Public dashboard URL — no JWT; data is public
+ *   3. Anonymous Viewer (LAN homelab) — grafana.ini auth.anonymous
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';

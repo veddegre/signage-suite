@@ -74,11 +74,19 @@ foreach ($registry as $key => $dash) {
     $built = grafana_dashboard_iframe_src((string)$key, $dash);
     echo "\n  {$key}: {$title}\n";
     echo '    rotation: ' . grafana_page_url((string)$key) . "\n";
-    echo '    embed: ' . (empty($built['ok']) ? 'NOT READY — ' . ($built['error'] ?? '') : (string)($built['auth'] ?? 'url')) . "\n";
+    echo '    embed: ' . (empty($built['ok']) ? 'NOT READY — ' . ($built['error'] ?? '') : (string)($built['auth'] ?? 'url'));
+    if (!empty($built['cloud'])) {
+        echo ' (Grafana Cloud)';
+    }
+    if (!empty($built['public'])) {
+        echo ' (public URL)';
+    }
+    echo "\n";
     $email = grafana_jwt_login_email($dash);
     if ($email !== '') {
         echo '    jwt user: ' . $email . "\n";
     }
 }
 
-echo "\nSSO Grafana setup: docs/grafana.md\n";
+echo "\nSelf-hosted JWT: docs/grafana.md\n";
+echo "Grafana Cloud: docs/grafana-cloud.md\n";

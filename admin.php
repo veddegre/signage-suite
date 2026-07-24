@@ -3723,9 +3723,13 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
         <div class="video-meta">
           <div>JWT embed: <strong><?= $grafJwtReady ? 'active' : ($grafJwtOn ? 'incomplete' : 'disabled') ?></strong>
             <?php if ($grafJwtOn && !$grafJwtReady): ?> — enable JWT, set secret + login email, Save<?php endif; ?></div>
-          <div class="help" style="margin-top:10px">For work Grafana behind SSO: Grafana admin enables
-            <code>[auth.jwt]</code> + <code>url_login</code>; signage signs <code>auth_token</code> on each embed URL.
-            Full steps in <code>docs/grafana.md</code>.</div>
+          <div class="help" style="margin-top:10px"><strong>Self-hosted:</strong> HS256 + <code>[auth.jwt]</code> — see <code>docs/grafana.md</code>.
+            <strong>Grafana Cloud:</strong> RS256 + <code>grafana-jwks.php</code> — see <code>docs/grafana-cloud.md</code>
+            (authenticated embed requires Grafana Labs support; public dashboards need JWT off).</div>
+          <?php if ($grafJwtReady && grafana_jwt_algorithm() === 'rs256'): ?>
+          <div class="video-meta" style="margin-top:10px">JWKS URL for Cloud support:
+            <code><?= h(grafana_jwks_public_url()) ?></code></div>
+          <?php endif; ?>
         </div>
         <form method="post" action="?board=grafana" style="margin-top:14px">
           <input type="hidden" name="action" value="grafana_test">

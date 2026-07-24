@@ -148,7 +148,7 @@ video.php?v=drone               slides.php?slide=birthday.png
 
 **Splunk panels** — oneshot searches server-side (port 8089), multi-page like Grafana.
 
-**Grafana** (`grafana.php?d=<key>`) — iframe with kiosk mode. For **SSO-protected self-hosted Grafana**, enable **JWT auth for embed** in admin; signage signs `auth_token` URLs validated by Grafana `[auth.jwt]`. Setup: [docs/grafana.md](docs/grafana.md).
+**Grafana** (`grafana.php?d=<key>`) — iframe with kiosk mode. **Self-hosted + SSO:** JWT with HS256 ([docs/grafana.md](docs/grafana.md)). **Grafana Cloud:** JWT with RS256 + `grafana-jwks.php` — requires Grafana Labs embed enablement ([docs/grafana-cloud.md](docs/grafana-cloud.md)). Public Cloud dashboards work without JWT when data is non-sensitive.
 
 **Power BI** (`powerbi.php?d=<key>`) — publish-to-web for public reports, or **Azure AD embed tokens** for private reports on unattended players (same model as Yodeck). Step-by-step Entra and Power BI admin setup: [docs/powerbi.md](docs/powerbi.md).
 
@@ -312,7 +312,8 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 | [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, CEC, cursor, freezes, updates |
 | [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
-| [docs/grafana.md](docs/grafana.md) | **Grafana JWT embed** — SSO + self-hosted, JWK file, signage auth_token, troubleshooting |
+| [docs/grafana.md](docs/grafana.md) | **Grafana JWT embed (self-hosted)** — HS256, grafana.ini, JWK file |
+| [docs/grafana-cloud.md](docs/grafana-cloud.md) | **Grafana Cloud** — RS256, JWKS URL, public dashboards, support enablement |
 | [docs/powerbi.md](docs/powerbi.md) | **Power BI private embed** — Entra app registration, API permissions, workspace access, RLS, troubleshooting |
 | [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, server scripts, PWA, DVR |
 | [docs/video-youtube.md](docs/video-youtube.md) | yt-dlp, cookies, headless YouTube |

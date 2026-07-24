@@ -664,11 +664,12 @@ See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
 
 | Auth path | When |
 |-----------|------|
-| **JWT embed** | Self-hosted Grafana behind SSO — signage signs `auth_token` (HS256) |
-| **Public dashboard URL** | Non-sensitive; Grafana “public dashboard” share link |
+| **JWT embed (HS256)** | Self-hosted — `auth.jwt` + local JWK file |
+| **JWT embed (RS256)** | Grafana Cloud — `grafana-jwks.php` + support enablement |
+| **Public dashboard URL** | `…/public-dashboards/…` — JWT off; data is public |
 | **Anonymous Viewer** | Homelab LAN (`auth.anonymous` in grafana.ini) |
 
-**Full JWT setup (work Grafana + SSO):** [grafana.md](grafana.md) — `grafana.ini` `[auth.jwt]`, JWK file, dedicated Viewer user, signage admin fields, troubleshooting.
+**Guides:** [grafana.md](grafana.md) (self-hosted) · [grafana-cloud.md](grafana-cloud.md) (Cloud)
 
 **Diagnostics:** `php scripts/diagnose-grafana.php` · `php scripts/diagnose-grafana.php --test` · admin **Test JWT signing**
 

@@ -1,8 +1,10 @@
 # Grafana — JWT embed for SSO-protected dashboards
 
-Use this when **self-hosted Grafana** requires SSO for humans, but **signage players** must show private dashboards without an interactive login (same idea as Power BI embed tokens).
+Use this for **self-hosted Grafana** when staff authenticate via SSO but signage players must show private dashboards without a login prompt.
 
-Signage signs a short-lived **HS256 JWT** and appends it to the kiosk iframe URL as `auth_token=…`. Grafana validates the token via `[auth.jwt]` and starts a session as a dedicated **Viewer** user.
+For **Grafana Cloud** (`*.grafana.net`), use **[grafana-cloud.md](grafana-cloud.md)** instead (RS256 + JWKS + Grafana Labs support).
+
+Signage signs a short-lived **HS256 JWT** (self-hosted) and appends it to the iframe URL as `auth_token=…`. Grafana validates via `[auth.jwt]` and a local JWK file.
 
 ---
 
@@ -10,8 +12,9 @@ Signage signs a short-lived **HS256 JWT** and appends it to the kiosk iframe URL
 
 | Path | When to use |
 |------|-------------|
-| **JWT embed** (this guide) | Work Grafana behind SSO; private dashboards on wall players |
-| **Public dashboard URL** | Non-sensitive data; no auth |
+| **JWT embed (HS256)** | Self-hosted Grafana behind SSO (this guide) |
+| **JWT embed (RS256)** | Grafana Cloud — [grafana-cloud.md](grafana-cloud.md) |
+| **Public dashboard URL** | Non-sensitive data; no JWT |
 | **Anonymous Viewer** | Homelab / LAN-only Grafana without SSO |
 
 ---
@@ -21,9 +24,10 @@ Signage signs a short-lived **HS256 JWT** and appends it to the kiosk iframe URL
 1. Complete [Grafana server setup](#grafana-server-setup) below.
 2. Admin → **Dashboards → Grafana**:
    - Enable **JWT auth for embed**
-   - **JWT signing secret** — same raw secret encoded in Grafana’s JWK file
+   - **JWT algorithm** — `hs256` (self-hosted) or `rs256` (Cloud — see [grafana-cloud.md](grafana-cloud.md))
+   - **JWT signing secret** (HS256) *or* **JWT private key PEM** (RS256)
    - **JWT key ID (kid)** — default `signage`; must match JWK
-   - **JWT login email** — Grafana user for walls (e.g. `signage-wall@yourorg.com`)
+   - **JWT login email** — Grafana Viewer user (e.g. `signage-wall@yourorg.com`)
 3. **Save** → **Test JWT signing**
 4. Add a **Dashboards** row with the normal `/d/…` URL from your browser (while logged in via SSO).
 5. **Preview ↗**, then add `grafana.php?d=<key>` to rotation.
