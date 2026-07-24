@@ -310,6 +310,7 @@ $nwsMapGeoJson = $nwsMapAlerts['geojson'];
 $nwsWarningCount = (int)$nwsMapAlerts['warnings'];
 $nwsWatchCount = (int)$nwsMapAlerts['watches'];
 $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
+$weekRowH = max(188, (int)round(206 * $frameH / 1080));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -340,23 +341,26 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   .board {
     width: 1920px;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
     display: grid;
     grid-template-columns: 700px 1fr;
-    grid-template-rows: minmax(0, 1fr) 210px auto;
+    grid-template-rows: minmax(0, 1fr) <?= (int)$weekRowH ?>px auto;
     grid-template-areas:
       "now   radar"
-      "week  week"
+      "now   week"
       "meta  meta";
     gap: 24px;
     padding: 28px 32px;
   }
 
-  /* ── Left column: now ─────────────────────────────────────────────────── */
+  /* ── Left column: now (spans forecast row — keeps sun path off day tiles) ─ */
   .now {
     grid-area: now;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
   }
 
   .clock-line { display: flex; align-items: baseline; gap: 20px; }
@@ -407,7 +411,9 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   .feels { font-size: 23px; color: var(--mist); margin-top: 4px; }
 
   .stats {
-    margin-top: 22px;
+    margin-top: 16px;
+    flex-shrink: 1;
+    min-height: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px 32px;
@@ -427,7 +433,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     background: color-mix(in srgb, var(--harbor) 82%, var(--lake-night));
     border: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
   }
-  .sun svg { width: 100%; height: 104px; display: block; overflow: visible; }
+  .sun svg { width: 100%; height: 92px; display: block; overflow: visible; }
   .sun-horizon { stroke: var(--sun-track); stroke-width: 2; }
   .sun-arc { stroke: var(--sun-track); stroke-width: 3; stroke-dasharray: 5 8; }
   .sun-trail {
@@ -445,9 +451,10 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   .sun-times {
     display: flex;
     justify-content: space-between;
-    font-size: 22px;
+    font-size: 20px;
     color: var(--mist);
-    margin-top: -4px;
+    margin-top: 6px;
+    padding-bottom: 2px;
     font-variant-numeric: tabular-nums;
   }
   .sun-times b { color: var(--snow); font-weight: 600; }
@@ -455,6 +462,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   /* ── Right column: radar ──────────────────────────────────────────────── */
   .radar {
     grid-area: radar;
+    min-height: 0;
     background: var(--harbor);
     border: 1px solid var(--hairline);
     border-radius: 14px;
@@ -556,6 +564,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   /* ── Bottom strip: 5-day outlook ──────────────────────────────────────── */
   .week {
     grid-area: week;
+    min-height: 0;
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 24px;
