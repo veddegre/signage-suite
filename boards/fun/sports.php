@@ -109,7 +109,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
+  .board { width:1920px; height:<?= $heightCss ?>; min-height:0; overflow:hidden;
+           padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
            display:grid; gap:<?= $gap ?>px; min-height:0;
            grid-template-columns:1fr 1fr;
            grid-template-rows: <?= $rowHead ?>px <?= $rowCards ?>px<?= $rowRecent ? ' ' . $rowRecent . 'px' : '' ?><?= $rowNext ? ' ' . $rowNext . 'px' : '' ?> auto;
@@ -118,10 +119,12 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
              "cards cards"<?= $rowRecent ? "\n             \"recent recent\"" : '' ?><?= $rowNext ? "\n             \"next next\"" : '' ?>
              "meta meta"; }
 
-  .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; min-height:0; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; }
-  .head h1 span { color:var(--beacon); }
-  .head .sub { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); margin-left:16px; }
+  .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; min-height:0;
+          gap:16px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 54 : 62 ?>px;
+             min-width:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .head h1 .sub { color:var(--mist); font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; margin-left:16px;
+                  font-weight:400; font-family:'IBM Plex Sans',sans-serif; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; }
 
@@ -144,8 +147,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .card-row { display:flex; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0; flex:1; align-items:stretch; }
   .logo-wrap { flex:0 0 <?= $boardH < 1080 ? 92 : 108 ?>px; display:flex; align-items:center; justify-content:center;
-               background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px; padding:10px;
-               overflow:hidden; }
+               border-radius:12px; padding:10px; overflow:hidden;
+               background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
+               border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent); }
   .logo-wrap img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
   .logo-wrap .sport-fallback { width:100%; height:100%; color:var(--mist); opacity:.55; display:flex;
                                align-items:center; justify-content:center; }
@@ -159,7 +163,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .pill { font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--mist);
           border:1px solid var(--hairline); border-radius:999px; padding:3px 9px; }
   .badge { font-size:12px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600;
-           border-radius:999px; padding:4px 10px; background:var(--lake-night); color:var(--mist); }
+           border-radius:999px; padding:4px 10px; color:var(--mist);
+           background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 80%, var(--harbor)); }
   .badge.live { background:rgba(255,93,93,.18); color:var(--down); animation:pulse 1.6s ease-in-out infinite; }
   .badge.next { background:rgba(255,179,71,.12); color:var(--beacon); }
   .badge.final { background:rgba(57,196,109,.12); color:var(--up); }
@@ -191,8 +196,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
             padding:<?= $boardH < 1080 ? '10px 16px' : '12px 20px' ?>; min-height:0; overflow:hidden; }
   .recent .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
   .recent-grid { display:grid; grid-template-columns:repeat(<?= max(1, count($recentStrip)) ?>,1fr); gap:10px; }
-  .recent-item { background:var(--lake-night); border:1px solid var(--hairline); border-radius:10px;
-                 padding:8px 12px; min-width:0; }
+  .recent-item { border-radius:10px; padding:8px 12px; min-width:0;
+                 background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
+                 border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent); }
   .recent-item .top { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .recent-item .mini-logo { width:28px; height:28px; flex:0 0 28px; display:flex; align-items:center; justify-content:center; }
   .recent-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; }
@@ -206,9 +212,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .nextup .k { font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); flex-shrink:0; }
   .next-grid { display:grid; grid-template-columns:repeat(<?= max(1, $teamCount) ?>,1fr); gap:<?= $boardH < 1080 ? 10 : 12 ?>px;
                flex:1; min-height:0; align-items:stretch; }
-  .next-item { background:var(--lake-night); border:1px solid var(--hairline); border-radius:10px;
-               padding:<?= $boardH < 1080 ? '8px 10px' : '10px 12px' ?>; display:flex; align-items:center;
-               gap:10px; min-width:0; min-height:0; overflow:hidden; }
+  .next-item { border-radius:10px; padding:<?= $boardH < 1080 ? '8px 10px' : '10px 12px' ?>; display:flex; align-items:center;
+               gap:10px; min-width:0; min-height:0; overflow:hidden;
+               background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
+               border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent); }
   .next-item .mini-logo { flex:0 0 38px; width:38px; height:38px; display:flex; align-items:center;
                           justify-content:center; }
   .next-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; display:block; }

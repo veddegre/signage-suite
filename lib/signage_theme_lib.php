@@ -273,6 +273,7 @@ function signage_theme_css_block(string $key): string
         '--down' => $preset['down'],
         '--gold' => $preset['gold'],
         '--panel-dim' => $preset['panel-dim'] ?? $preset['harbor'],
+        '--inset-surface' => $preset['panel-dim'] ?? $preset['harbor'],
     ];
     $parts = [];
     foreach ($pairs as $name => $value) {
@@ -291,6 +292,8 @@ function signage_theme_inset_surface_css(): string
     return <<<'CSS'
   .weather-stat{background:color-mix(in srgb,var(--panel-dim) 78%, var(--lake-night));
     border:1px solid color-mix(in srgb,var(--hairline) 92%, transparent);}
+  .board .inset-surface{background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
+    border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent);}
 CSS;
 }
 

@@ -1071,6 +1071,14 @@ foreach (COUNTDOWNS as $label => $date) {
 usort($counts, fn($a, $b) => $a[1] <=> $b[1]);
 $showCountdownStrip = $counts !== [] || $showTrash;
 
+$boardH = $frameH;
+$heightCss = signage_viewport_height();
+$padY = 56;
+$gridGap = 24;
+$stripH = $showCountdownStrip ? 150 : 0;
+$metaH = 26;
+$gridRows = max(420, $boardH - $padY - $stripH - $metaH - ($showCountdownStrip ? $gridGap * 2 : $gridGap));
+
 $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 ?>
 <!DOCTYPE html>
@@ -1088,20 +1096,23 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
-  .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
+  .board { width:1920px; height:<?= $heightCss ?>; min-height:0; overflow:hidden;
+           padding:28px 32px; display:grid; gap:<?= $gridGap ?>px;
            grid-template-columns: 600px 1fr;
-           grid-template-rows: <?= $showCountdownStrip ? 'minmax(0,1fr) 150px auto' : 'minmax(0,1fr) auto' ?>;
+           grid-template-rows: <?= (int)$gridRows ?>px<?= $stripH ? ' ' . (int)$stripH . 'px' : '' ?> <?= (int)$metaH ?>px;
            grid-template-areas: <?= $showCountdownStrip
                ? '"today week" "strip strip" "meta meta"'
                : '"today week" "meta meta"' ?>; }
 
   .today { grid-area:today; background:var(--harbor); border:1px solid var(--hairline);
-           border-radius:14px; padding:38px 42px; display:flex; flex-direction:column; min-height:0; }
+           border-radius:14px; padding:38px 42px; display:flex; flex-direction:column;
+           min-height:0; overflow:hidden; }
   #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:110px; line-height:1; }
   #clock span { font-size:44px; color:var(--mist); }
   .dateline { font-size:30px; color:var(--mist); margin-top:6px; }
   .today .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);
-              margin:30px 0 8px; border-top:1px solid var(--hairline); padding-top:24px; }
+              margin:30px 0 8px; border-top:1px solid var(--hairline); padding-top:24px; flex-shrink:0; }
+  .today-events { flex:1; min-height:0; overflow:hidden; }
   .cal-legend { display:flex; flex-wrap:wrap; gap:18px 28px; margin-top:22px; }
   .cal-legend .leg { display:flex; align-items:center; gap:10px; font-size:20px; color:var(--snow); }
   .cal-legend .dot { width:14px; height:14px; border-radius:50%; flex-shrink:0;
@@ -1114,7 +1125,8 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
   .tev .s { font-size:28px; }
   .free { font-size:28px; color:var(--mist); padding:14px 0; }
 
-  .week { grid-area:week; display:grid; grid-template-columns:repeat(6,1fr); gap:16px; min-height:0; }
+  .week { grid-area:week; display:grid; grid-template-columns:repeat(6,1fr); gap:16px;
+          min-height:0; overflow:hidden; }
   .day { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
          padding:18px; overflow:hidden; display:flex; flex-direction:column; }
   .day .n { font-family:'Big Shoulders Display'; font-weight:600; font-size:34px;
@@ -1128,15 +1140,15 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
   .more { font-size:18px; color:var(--mist); margin-top:auto; }
   .nothing { font-size:19px; color:var(--mist); opacity:.6; }
 
-  .strip { grid-area:strip; display:flex; gap:24px; }
-  .chip { flex:1; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
+  .strip { grid-area:strip; display:flex; gap:24px; min-height:0; overflow:hidden; align-items:stretch; }
+  .chip { flex:1; min-width:0; background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
           padding:20px 28px; display:flex; align-items:center; justify-content:space-between; }
   .chip .k { font-size:20px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
   .chip .v { font-family:'Big Shoulders Display'; font-weight:700; font-size:50px; }
   .chip .v small { font-size:26px; color:var(--mist); font-weight:600; }
   .chip.trash .v { color:var(--beacon); }
   .setup { font-size:24px; color:var(--mist); line-height:1.6; }
-  .setup code { background:var(--lake-night); padding:2px 8px; border-radius:6px; color:var(--snow); }
+  .setup code { background:var(--inset-surface,var(--panel-dim)); padding:2px 8px; border-radius:6px; color:var(--snow); }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>
@@ -1154,6 +1166,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
     </div>
     <?php endif; ?>
     <div class="k">Today</div>
+    <div class="today-events">
     <?php $todayKey = date('Y-m-d');
     if (ICS_FEEDS === []) : ?>
       <div class="setup">Add calendar feeds in admin — iCal subscription URLs or WebDAV/CalDAV
@@ -1167,6 +1180,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
     <?php endforeach; else: ?>
       <div class="free">Nothing on the calendar — enjoy it.</div>
     <?php endif; ?>
+    </div>
   </section>
 
   <section class="week">
