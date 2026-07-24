@@ -28,6 +28,11 @@ if (signage_theme_preset('forest') === null) {
     fwrite(STDERR, "FAIL: forest preset\n");
     $fail++;
 }
+$gvsu = signage_theme_preset('gvsu_lakers');
+if ($gvsu === null || stripos((string)($gvsu['beacon'] ?? ''), 'b497') === false) {
+    fwrite(STDERR, "FAIL: gvsu_lakers preset or Laker Gold accent\n");
+    $fail++;
+}
 $key = signage_active_theme_key();
 if ($key === '') {
     fwrite(STDERR, "FAIL: active theme empty\n");
