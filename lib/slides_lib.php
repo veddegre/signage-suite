@@ -2532,7 +2532,7 @@ function slides_effective_rotation_pages(?array $deck = null, ?string $screen = 
 }
 
 /** Active slides that exist on disk, in configured order. */
-function slides_active_entries(?array $entries = null, ?string $dir = null): array
+function slides_active_entries(?array $entries = null, ?string $dir = null, ?string $screen = null): array
 {
     static $cache = [];
 
@@ -2541,7 +2541,8 @@ function slides_active_entries(?array $entries = null, ?string $dir = null): arr
     if (!is_array($entries)) {
         return [];
     }
-    $cacheKey = md5($dir . "\0" . json_encode($entries, JSON_UNESCAPED_SLASHES));
+    $screenKey = $screen !== null && $screen !== '' ? rotation_normalize_screen_key($screen) : '';
+    $cacheKey = md5($dir . "\0" . $screenKey . "\0" . json_encode($entries, JSON_UNESCAPED_SLASHES));
     if (isset($cache[$cacheKey])) {
         return $cache[$cacheKey];
     }
@@ -2565,8 +2566,109 @@ function slides_active_entries(?array $entries = null, ?string $dir = null): arr
         $candidates[] = $slide;
     }
 
+    if ($screenKey !== '') {
+        require_once __DIR__ . '/rotation_calendar_lib.php';
+        $calFilter = rotation_calendar_slide_filter($screenKey, $now);
+        if (is_array($calFilter) && $calFilter !== []) {
+            $allowed = array_flip($calFilter);
+            $candidates = array_values(array_filter(
+                $candidates,
+                static fn(array $slide): bool => isset($allowed[(string)($slide['file'] ?? '')])
+            ));
+        }
+    }
+
     $priority = array_values(array_filter($candidates, 'slide_is_priority'));
     $cache[$cacheKey] = $priority !== [] ? $priority : $candidates;
 
     return $cache[$cacheKey];
+}
+
+/**
+ * Admin “Active now” snapshot for the slide deck on one display.
+ *
+ * @return array{
+ *   screen:string,
+ *   now:string,
+ *   timezone:string,
+ *   weekday:string,
+ *   calendar_slide_filter:?list<string>,
+ *   active_count:int,
+ *   rows:list<array<string,mixed>>
+ * }
+ */
+function slides_schedule_snapshot(?array $deck = null, ?string $screen = null, ?DateTimeInterface $now = null): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+
+    $deck = is_array($deck) ? $deck : cfg('slides.SLIDES', []);
+    if (!is_array($deck)) {
+        $deck = [];
+    }
+    $screen = rotation_normalize_screen_key($screen ?? 'main');
+    $tz = new DateTimeZone(slides_timezone());
+    $now = $now ?? new DateTime('now', $tz);
+    $dir = slides_dir();
+    $calStatus = rotation_calendar_override_status($screen, $now);
+    $calSlideFilter = ($calStatus['mode'] ?? '') === 'slides' ? ($calStatus['slide_files'] ?? []) : null;
+
+    $rows = [];
+    $activeCount = 0;
+    foreach ($deck as $slide) {
+        if (!is_array($slide)) {
+            continue;
+        }
+        $file = slide_safe_filename((string)($slide['file'] ?? ''));
+        $label = trim((string)($slide['caption'] ?? ''));
+        if ($label === '') {
+            $label = $file !== null ? $file : 'Untitled';
+        }
+        $fileOk = $file !== null && is_file($dir . '/' . $file);
+        $onScreen = slide_on_screen($slide, $screen);
+        $disabled = !empty($slide['off']);
+        $dateActive = slide_schedule_active($slide, $now);
+        $schedLabel = slide_schedule_summary($slide);
+
+        $status = 'idle';
+        $reason = '';
+        if ($disabled) {
+            $status = 'disabled';
+            $reason = 'Disabled';
+        } elseif (!$onScreen) {
+            $status = 'hidden';
+            $reason = 'Not targeted to this display';
+        } elseif (!$fileOk) {
+            $status = 'missing';
+            $reason = 'File missing on disk';
+        } elseif (is_array($calSlideFilter) && $calSlideFilter !== [] && ($file === null || !in_array($file, $calSlideFilter, true))) {
+            $status = 'filtered';
+            $reason = 'Calendar slide set active — not in override list';
+        } elseif (!$dateActive) {
+            $status = 'later';
+            $reason = $schedLabel !== '' ? "Outside schedule ({$schedLabel})" : 'Outside schedule';
+        } else {
+            $status = 'active';
+            $activeCount++;
+        }
+
+        $rows[] = [
+            'label' => $label,
+            'file' => $file ?? (string)($slide['file'] ?? ''),
+            'schedule' => $schedLabel,
+            'status' => $status,
+            'reason' => $reason,
+            'dwell' => slide_dwell($slide),
+        ];
+    }
+
+    return [
+        'screen' => $screen,
+        'now' => $now->format('g:i A'),
+        'timezone' => slides_timezone(),
+        'weekday' => $now->format('l'),
+        'calendar_slide_filter' => is_array($calSlideFilter) && $calSlideFilter !== [] ? $calSlideFilter : null,
+        'active_count' => $activeCount,
+        'rows' => $rows,
+    ];
 }

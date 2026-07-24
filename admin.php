@@ -3063,7 +3063,9 @@ function admin_field(array $f, $val, string $board): void
                                   color:var(--mist); margin-bottom:4px; }
   .video-card-grid input, .rotation-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
                             background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
-  .rotation-windows { grid-column:1 / -1; }
+  .rotation-plays-now-list { display:flex; flex-direction:column; gap:6px; }
+  .slide-plays-row { display:flex; gap:10px; align-items:baseline; font-size:13px; }
+  .slide-bulk-time-panel[hidden] { display:none !important; }
   .rotation-window-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px; }
   .rotation-window-row input { width:4.5em; flex:0 0 auto; }
   .rotation-window-row .rowdel { flex:0 0 auto; }
@@ -4174,10 +4176,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <button type="button" class="secondary" onclick="saveRotationTemplate()">Save current playlist</button>
                   <button type="button" class="secondary" onclick="deleteRotationTemplate()">Delete template</button>
                 </div>
-                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — meal calendar, weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. Create the dinner slide from Slides → Create → Dinner menu template; plan the week on <strong>Meal calendar</strong>.</p>
+                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — meal calendar, weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. <strong>Security wall</strong> — KEV, CVE, cert expiry, phish, ransomware, HIBP (~45–60s each). Create the dinner slide from Slides → Create → Dinner menu template; plan the week on <strong>Meal calendar</strong>.</p>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="calendar" role="tabpanel" hidden>
-                <p class="help" style="margin:0 0 10px">Swap the selected display’s playlist while a matching calendar event is underway — e.g. title contains <strong>party</strong> from 5:30–10pm uses a party playlist. Feeds come from <strong>Calendar → ICS feeds</strong>. Overrides beat the normal playlist but not emergency mode.</p>
+                <p class="help" style="margin:0 0 10px">During a matching calendar event, either swap the whole playlist or limit the slide deck to specific files while other rotation boards keep playing. Feeds come from <strong>Calendar → ICS feeds</strong>. Full-playlist overrides beat the normal playlist; slide sets filter the deck only. Emergency mode beats both.</p>
                 <?php if ($rotationCalendarFeedKeys === []): ?>
                 <div class="flash bad" style="margin:0">Add at least one ICS feed under <strong>Calendar</strong> before configuring overrides.</div>
                 <?php else: ?>
@@ -4207,6 +4209,15 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                           <input type="text" data-cal-match value="<?= h((string)($crow['match'] ?? '')) ?>" placeholder="party">
                         </div>
                       </div>
+                      <?php $calMode = (string)($crow['mode'] ?? 'playlist'); ?>
+                      <div class="field" style="margin:0 0 8px">
+                        <label class="mini">Override mode</label>
+                        <select data-cal-mode onchange="syncCalendarOverrideMode(this.closest('[data-calendar-override]'))">
+                          <option value="playlist" <?= $calMode !== 'slides' ? 'selected' : '' ?>>Full playlist replace</option>
+                          <option value="slides" <?= $calMode === 'slides' ? 'selected' : '' ?>>Slide set only</option>
+                        </select>
+                      </div>
+                      <div data-cal-playlist-block<?= $calMode === 'slides' ? ' hidden' : '' ?>>
                       <div class="help" style="margin:0 0 6px">Override playlist (event start → end):</div>
                       <div data-cal-pages>
                         <?php foreach (($crow['pages'] ?? []) as $pi => $page): ?>
@@ -4218,6 +4229,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                         <?php endforeach; ?>
                       </div>
                       <button type="button" class="secondary" style="padding:4px 10px;font-size:12px" onclick="addCalendarOverridePage(this)">+ Add page</button>
+                      </div>
+                      <div data-cal-slides-block<?= $calMode === 'slides' ? '' : ' hidden' ?>>
+                        <div class="help" style="margin:0 0 6px">Slide files from the deck (one per line or comma-separated). Normal rotation boards keep playing.</div>
+                        <textarea data-cal-slide-files rows="3" placeholder="party.png&#10;welcome.png" style="width:100%;min-height:72px"><?= h(implode("\n", (array)($crow['slide_files'] ?? []))) ?></textarea>
+                      </div>
                     </div>
                     <?php endforeach; ?>
                     <button type="button" class="addrow" onclick="addCalendarOverride('<?= h((string)$screenKey) ?>')">+ Calendar override</button>
@@ -4355,7 +4371,12 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <div style="display:flex;gap:10px;align-items:baseline;font-size:13px">
                 <span class="pill <?= h($pillClass) ?>" style="min-width:72px;justify-content:center"><?= h($playsStatusLabel[$st] ?? $st) ?></span>
                 <span><strong><?= h((string)($snapRow['label'] ?? '')) ?></strong><?php if (($snapRow['schedule'] ?? '') !== ''): ?>
-                  <span class="help" style="margin:0"> · <?= h((string)$snapRow['schedule']) ?></span><?php endif; ?></span>
+                  <span class="help" style="margin:0"> · <?= h((string)$snapRow['schedule']) ?></span><?php endif; ?>
+                  <?php if ($st === 'playing' && !empty($playsNow['weighted']) && isset($snapRow['weight_pct'])): ?>
+                  <span class="help" style="margin:0"> · ~<?= h((string)$snapRow['weight_pct']) ?>% picks</span>
+                  <?php elseif ($st === 'playing' && !empty($playsNow['weighted']) && (int)($snapRow['weight'] ?? 1) > 1): ?>
+                  <span class="help" style="margin:0"> · weight <?= (int)$snapRow['weight'] ?></span>
+                  <?php endif; ?></span>
               </div>
               <?php endforeach; ?>
             </div>
@@ -5414,6 +5435,22 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           $slideDeckLarge = count($slideRows) > 24;
           $slideFilesOnDisk = array_flip(slides_list_files());
           $slideScreenOptions = admin_screen_options($rotationScreens);
+          $slideActiveNowScreen = admin_operator_screen_locked()
+              ? admin_operator_screen_key()
+              : (array_key_first($rotationScreens) ?: 'main');
+          $slidesPlaysNow = slides_schedule_snapshot($slideRows, $slideActiveNowScreen, $slideNow);
+          $slidesPlaysNowByScreen = [];
+          foreach (array_keys($rotationScreens) as $sk) {
+              $slidesPlaysNowByScreen[$sk] = slides_schedule_snapshot($slideRows, (string)$sk, $slideNow);
+          }
+          $slidesActiveStatusLabel = [
+              'active' => 'Now',
+              'later' => 'Later',
+              'disabled' => 'Off',
+              'hidden' => 'Hidden',
+              'missing' => 'Missing',
+              'filtered' => 'Cal filter',
+          ];
           ?>
           <div class="deck-toolbar" id="slideDeckToolbar">
             <input type="search" id="slideDeckSearch" class="deck-toolbar-search" placeholder="Search by label or filename…" autocomplete="off">
@@ -5432,6 +5469,40 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <button type="button" class="secondary" id="slideDeckAllDisplays" style="padding:6px 12px;font-size:13px" title="Every slide in the deck plays on all displays">All displays (deck)</button>
             <span class="deck-toolbar-count" id="slideDeckCount"></span>
           </div>
+          <div class="rotation-plays-now slides-plays-now" id="slidePlaysNowPanel" style="margin:0 0 14px;padding:14px 16px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
+            <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px">
+              <strong>Active now</strong>
+              <label class="mini" style="margin:0;display:flex;gap:6px;align-items:center">Display
+                <select id="slidePlaysNowScreen" class="deck-toolbar-select" aria-label="Active now display">
+                  <?php foreach ($slideScreenOptions as $opt): ?>
+                  <option value="<?= h($opt['key']) ?>" <?= ($opt['key'] ?? '') === $slideActiveNowScreen ? 'selected' : '' ?>><?= h($opt['name']) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </label>
+              <span class="help" style="margin:0" id="slidePlaysNowMeta"><?= h((string)$slidesPlaysNow['now']) ?> · <?= h((string)$slidesPlaysNow['weekday']) ?> · <?= h((string)$slidesPlaysNow['timezone']) ?></span>
+              <?php if (!empty($slidesPlaysNow['calendar_slide_filter'])): ?>
+              <span class="pill ok" title="Calendar slide set override">Cal slide set</span>
+              <?php endif; ?>
+              <span class="pill ok" id="slidePlaysNowCount"><?= (int)$slidesPlaysNow['active_count'] ?> active</span>
+            </div>
+            <div class="rotation-plays-now-list" id="slidePlaysNowList" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto">
+              <?php foreach ($slidesPlaysNow['rows'] as $snapRow):
+                $st = (string)($snapRow['status'] ?? '');
+                $pillClass = match ($st) {
+                    'active' => 'ok',
+                    'later' => 'warn',
+                    default => '',
+                };
+              ?>
+              <div class="slide-plays-row" data-slide-plays-status="<?= h($st) ?>">
+                <span class="pill <?= h($pillClass) ?>" style="min-width:72px;justify-content:center"><?= h($slidesActiveStatusLabel[$st] ?? $st) ?></span>
+                <span><strong><?= h((string)($snapRow['label'] ?? '')) ?></strong><?php if (($snapRow['schedule'] ?? '') !== '' && $st !== 'disabled'): ?>
+                  <span class="help" style="margin:0"> · <?= h((string)$snapRow['schedule']) ?></span><?php endif; ?></span>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <script>window.SLIDES_PLAYS_NOW_BY_SCREEN = <?= json_encode($slidesPlaysNowByScreen, JSON_UNESCAPED_UNICODE) ?>;</script>
           <div class="deck-selection-bar" id="slideDeckSelectionBar">
             <span class="deck-selection-count" id="slideDeckSelectionCount">0 selected</span>
             <button type="button" class="secondary" id="slideDeckSelectVisible" style="padding:6px 12px;font-size:13px">Select visible</button>
@@ -5449,6 +5520,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <button type="button" class="secondary" id="slideDeckSelectedOnly" style="padding:6px 12px;font-size:13px">Only this display</button>
             <button type="button" class="secondary" id="slideDeckSelectedAll" style="padding:6px 12px;font-size:13px">All displays</button>
             <button type="button" class="secondary deck-bulk-remove" id="slideDeckSelectedRemove" style="padding:6px 12px;font-size:13px">Remove from display</button>
+            <span class="deck-selection-sep" aria-hidden="true">|</span>
+            <button type="button" class="secondary" id="slideDeckBulkTimeWindows" style="padding:6px 12px;font-size:13px">Set time windows…</button>
             <?php if ($sharingUserOptions !== []): ?>
             <span class="deck-selection-sep" aria-hidden="true">|</span>
             <label class="deck-selection-assign">Share with
@@ -5477,6 +5550,33 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             </label>
             <button type="button" class="secondary" id="slideDeckReclaimFromUser" style="padding:6px 12px;font-size:13px">Reclaim all</button>
             <?php endif; ?>
+          </div>
+          <div class="slide-bulk-time-panel" id="slideBulkTimePanel" hidden style="margin:0 0 14px;padding:14px 16px;border:1px solid var(--hairline);border-radius:10px;background:var(--lake-night)">
+            <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px">
+              <strong>Bulk time windows</strong>
+              <span class="help" style="margin:0">Applies to selected slide cards. Replaces existing time windows on those cards.</span>
+              <button type="button" class="secondary" id="slideBulkTimeApply" style="padding:6px 12px;font-size:13px;margin-left:auto">Apply to selected</button>
+              <button type="button" class="secondary" id="slideBulkTimeCancel" style="padding:6px 12px;font-size:13px">Cancel</button>
+            </div>
+            <div class="rotation-windows slide-time-windows" data-slide-bulk-windows style="margin-bottom:10px">
+              <div class="rotation-window-row" data-slide-bulk-window-row>
+                <input type="text" data-bulk-from placeholder="7 or 7:30" aria-label="From time">
+                <span class="help" style="margin:0">–</span>
+                <input type="text" data-bulk-to placeholder="9 or 9:00" aria-label="To time">
+                <button type="button" class="rowdel slide-bulk-window-remove" hidden>×</button>
+              </div>
+              <button type="button" class="secondary slide-bulk-window-add">+ Add window</button>
+            </div>
+            <div>
+              <label class="mini">Active days (optional)</label>
+              <div class="rotation-weekdays" id="slideBulkTimeWeekdays">
+                <?php
+                foreach (rotation_weekday_options() as $opt): ?>
+                <label class="rotation-weekday"><input type="checkbox" value="<?= h($opt['full']) ?>" checked> <?= h($opt['short']) ?></label>
+                <?php endforeach; ?>
+              </div>
+              <div class="help" style="margin:6px 0 0">All seven checked = every day. Uncheck days to limit the windows.</div>
+            </div>
           </div>
           <div class="deck-bulk-bar" id="slideDeckBulkBar" hidden>
             <span id="slideDeckBulkLabel">Bulk assign visible slides:</span>
@@ -6799,6 +6899,8 @@ function collectCalendarOverrideRow(rowEl) {
   const match = rowEl.querySelector('[data-cal-match]');
   const enabled = rowEl.querySelector('[data-cal-enabled]');
   const label = rowEl.querySelector('[data-cal-label]');
+  const modeEl = rowEl.querySelector('[data-cal-mode]');
+  const mode = modeEl ? modeEl.value : 'playlist';
   const pages = [];
   rowEl.querySelectorAll('[data-cal-pages] .rotation-calendar-page-row').forEach(function (prow) {
     const urlInp = prow.querySelector('[data-cal-url]');
@@ -6807,13 +6909,33 @@ function collectCalendarOverrideRow(rowEl) {
     if (url === '') return;
     pages.push({ url: url, dwell: dwellInp ? dwellInp.value.trim() : '60' });
   });
+  const slideFilesRaw = rowEl.querySelector('[data-cal-slide-files]');
+  const slideFiles = [];
+  if (slideFilesRaw) {
+    slideFilesRaw.value.split(/[\s,;]+/).forEach(function (part) {
+      part = part.trim();
+      if (part !== '') slideFiles.push(part);
+    });
+  }
   return {
     enabled: enabled && enabled.checked ? '1' : '',
     label: label ? label.value.trim() : '',
     feed: feed ? feed.value.trim() : '',
     match: match ? match.value.trim() : '',
+    mode: mode,
     pages: pages,
+    slide_files: slideFiles,
   };
+}
+
+function syncCalendarOverrideMode(rowEl) {
+  if (!rowEl) return;
+  const modeEl = rowEl.querySelector('[data-cal-mode]');
+  const mode = modeEl ? modeEl.value : 'playlist';
+  const playlistBlock = rowEl.querySelector('[data-cal-playlist-block]');
+  const slidesBlock = rowEl.querySelector('[data-cal-slides-block]');
+  if (playlistBlock) playlistBlock.hidden = mode === 'slides';
+  if (slidesBlock) slidesBlock.hidden = mode !== 'slides';
 }
 
 function serializeRotationCalendarOverridesForSave() {
@@ -6827,7 +6949,10 @@ function serializeRotationCalendarOverridesForSave() {
     const rows = [];
     panel.querySelectorAll('[data-calendar-override]').forEach(function (rowEl) {
       const row = collectCalendarOverrideRow(rowEl);
-      if ((row.feed || '') !== '' && (row.match || '') !== '' && row.pages.length) {
+      if ((row.feed || '') === '' || (row.match || '') === '') return;
+      if (row.mode === 'slides') {
+        if ((row.slide_files || []).length) rows.push(row);
+      } else if (row.pages.length) {
         rows.push(row);
       }
     });
@@ -6881,6 +7006,11 @@ function addCalendarOverride(screenKey) {
       + '<div class="field"><label class="mini">Title contains</label>'
       + '<input type="text" data-cal-match placeholder="party"></div>'
     + '</div>'
+    + '<div class="field" style="margin:0 0 8px"><label class="mini">Override mode</label>'
+    + '<select data-cal-mode onchange="syncCalendarOverrideMode(this.closest(\'[data-calendar-override]\'))">'
+    + '<option value="playlist" selected>Full playlist replace</option>'
+    + '<option value="slides">Slide set only</option></select></div>'
+    + '<div data-cal-playlist-block>'
     + '<div class="help" style="margin:0 0 6px">Override playlist (event start → end):</div>'
     + '<div data-cal-pages>'
       + '<div class="field-grid rotation-calendar-page-row" style="grid-template-columns:1fr 90px auto;margin-bottom:6px">'
@@ -6889,9 +7019,15 @@ function addCalendarOverride(screenKey) {
         + '<button type="button" class="rowdel" onclick="this.closest(\'.rotation-calendar-page-row\').remove()">×</button>'
       + '</div>'
     + '</div>'
-    + '<button type="button" class="secondary" style="padding:4px 10px;font-size:12px" onclick="addCalendarOverridePage(this)">+ Add page</button>';
+    + '<button type="button" class="secondary" style="padding:4px 10px;font-size:12px" onclick="addCalendarOverridePage(this)">+ Add page</button>'
+    + '</div>'
+    + '<div data-cal-slides-block hidden>'
+    + '<div class="help" style="margin:0 0 6px">Slide files from the deck (one per line or comma-separated). Normal rotation boards keep playing.</div>'
+    + '<textarea data-cal-slide-files rows="3" placeholder="party.png" style="width:100%;min-height:72px"></textarea>'
+    + '</div>';
   if (addBtn) panel.insertBefore(block, addBtn);
   else panel.appendChild(block);
+  syncCalendarOverrideMode(block);
 }
 
 function removeCalendarOverride(btn) {
@@ -7723,6 +7859,123 @@ function bindSlideCardSelection(card) {
   }
 }
 
+function renderSlidePlaysNowPanel(screenKey) {
+  const data = (window.SLIDES_PLAYS_NOW_BY_SCREEN || {})[screenKey];
+  const list = document.getElementById('slidePlaysNowList');
+  const meta = document.getElementById('slidePlaysNowMeta');
+  const countEl = document.getElementById('slidePlaysNowCount');
+  if (!list || !data) return;
+  const labels = { active: 'Now', later: 'Later', disabled: 'Off', hidden: 'Hidden', missing: 'Missing', filtered: 'Cal filter' };
+  if (meta) meta.textContent = (data.now || '') + ' · ' + (data.weekday || '') + ' · ' + (data.timezone || '');
+  if (countEl) countEl.textContent = (data.active_count || 0) + ' active';
+  list.innerHTML = (data.rows || []).map(function (row) {
+    const st = row.status || '';
+    const pillClass = st === 'active' ? 'ok' : (st === 'later' ? 'warn' : '');
+    const sched = row.schedule && st !== 'disabled' ? ' · ' + row.schedule : '';
+    return '<div class="slide-plays-row" data-slide-plays-status="' + st + '">'
+      + '<span class="pill ' + pillClass + '" style="min-width:72px;justify-content:center">' + (labels[st] || st) + '</span>'
+      + '<span><strong>' + String(row.label || '').replace(/</g, '&lt;') + '</strong>'
+      + '<span class="help" style="margin:0">' + sched.replace(/</g, '&lt;') + '</span></span></div>';
+  }).join('');
+}
+
+function applyBulkSlideTimeWindows() {
+  const selected = slideDeckSelectedCards();
+  if (!selected.length) {
+    alert('Select one or more slides using the checkboxes on the left.');
+    return;
+  }
+  const bulk = document.querySelector('[data-slide-bulk-windows]');
+  if (!bulk) return;
+  const windowRows = [];
+  bulk.querySelectorAll('[data-slide-bulk-window-row]').forEach(function (row) {
+    const from = row.querySelector('[data-bulk-from]')?.value.trim() || '';
+    const to = row.querySelector('[data-bulk-to]')?.value.trim() || '';
+    if (from !== '' && to !== '') windowRows.push({ from: from, to: to });
+  });
+  const wdAll = document.querySelectorAll('#slideBulkTimeWeekdays input[type="checkbox"]');
+  const wdChecked = document.querySelectorAll('#slideBulkTimeWeekdays input[type="checkbox"]:checked');
+  const allDays = wdAll.length && wdChecked.length === wdAll.length;
+  const weekdays = allDays ? null : Array.from(wdChecked).map(function (cb) { return cb.value; });
+  selected.forEach(function (card) {
+    const container = card.querySelector('[data-slide-windows]');
+    if (!container) return;
+    container.querySelectorAll('[data-slide-window-row]').forEach(function (r) { r.remove(); });
+    const fieldPrefix = (function () {
+      const inp = card.querySelector('input[name*="[file]"]');
+      if (!inp || !inp.name) return '';
+      return inp.name.replace(/\[file\]$/, '');
+    })();
+    const rowsToAdd = windowRows.length ? windowRows : [{ from: '', to: '' }];
+    rowsToAdd.forEach(function (w, wi) {
+      const row = document.createElement('div');
+      row.className = 'rotation-window-row';
+      row.setAttribute('data-slide-window-row', '');
+      row.innerHTML =
+        '<input type="text" name="' + fieldPrefix + '[windows][' + wi + '][from]" placeholder="7 or 7:30" aria-label="From time" value="' + String(w.from).replace(/"/g, '&quot;') + '">'
+        + '<span class="help" style="margin:0">–</span>'
+        + '<input type="text" name="' + fieldPrefix + '[windows][' + wi + '][to]" placeholder="9 or 9:00" aria-label="To time" value="' + String(w.to).replace(/"/g, '&quot;') + '">'
+        + '<button type="button" class="rowdel slide-window-remove" title="Remove window"' + (rowsToAdd.length <= 1 ? ' hidden' : '') + '>×</button>';
+      const addBtn = container.querySelector('.slide-window-add');
+      if (addBtn) container.insertBefore(row, addBtn);
+      else container.appendChild(row);
+    });
+    card.querySelectorAll('input[name*="[time_weekdays]"]').forEach(function (cb) {
+      if (weekdays === null) {
+        cb.checked = true;
+      } else {
+        cb.checked = weekdays.indexOf(cb.value) >= 0;
+      }
+    });
+    bindSlideWindows(card);
+    syncSlideCard(card);
+  });
+  document.getElementById('slideBulkTimePanel')?.setAttribute('hidden', '');
+}
+
+function initSlideBulkTimePanel() {
+  const panel = document.getElementById('slideBulkTimePanel');
+  const openBtn = document.getElementById('slideDeckBulkTimeWindows');
+  const applyBtn = document.getElementById('slideBulkTimeApply');
+  const cancelBtn = document.getElementById('slideBulkTimeCancel');
+  const bulk = document.querySelector('[data-slide-bulk-windows]');
+  if (openBtn && panel) {
+    openBtn.addEventListener('click', function () {
+      if (slideDeckSelectedCards().length === 0) {
+        alert('Select slides first, then set time windows.');
+        return;
+      }
+      panel.removeAttribute('hidden');
+    });
+  }
+  cancelBtn?.addEventListener('click', function () { panel?.setAttribute('hidden', ''); });
+  applyBtn?.addEventListener('click', applyBulkSlideTimeWindows);
+  bulk?.querySelector('.slide-bulk-window-add')?.addEventListener('click', function () {
+    const idx = bulk.querySelectorAll('[data-slide-bulk-window-row]').length;
+    const row = document.createElement('div');
+    row.className = 'rotation-window-row';
+    row.setAttribute('data-slide-bulk-window-row', '');
+    row.innerHTML =
+      '<input type="text" data-bulk-from placeholder="7 or 7:30" aria-label="From time">'
+      + '<span class="help" style="margin:0">–</span>'
+      + '<input type="text" data-bulk-to placeholder="9 or 9:00" aria-label="To time">'
+      + '<button type="button" class="rowdel slide-bulk-window-remove" title="Remove window">×</button>';
+    const addBtn = bulk.querySelector('.slide-bulk-window-add');
+    if (addBtn) bulk.insertBefore(row, addBtn);
+    row.querySelector('.slide-bulk-window-remove')?.addEventListener('click', function () {
+      row.remove();
+      const rows = bulk.querySelectorAll('[data-slide-bulk-window-row]');
+      rows.forEach(function (r) {
+        const btn = r.querySelector('.slide-bulk-window-remove');
+        if (btn) btn.hidden = rows.length <= 1;
+      });
+    });
+  });
+  document.getElementById('slidePlaysNowScreen')?.addEventListener('change', function (e) {
+    renderSlidePlaysNowPanel(e.target.value);
+  });
+}
+
 function initSlideDeckToolbar() {
   const deck = document.getElementById('slideDeck');
   if (!deck) return;
@@ -7803,6 +8056,8 @@ function initSlideDeckToolbar() {
   document.getElementById('slideDeckShareAllOperators')?.addEventListener('click', slideDeckShareAllOperators);
   document.getElementById('slideDeckReclaimSelected')?.addEventListener('click', slideDeckReclaimSelected);
   document.getElementById('slideDeckReclaimFromUser')?.addEventListener('click', slideDeckReclaimFromUser);
+  initSlideBulkTimePanel();
+  document.querySelectorAll('[data-calendar-override]').forEach(syncCalendarOverrideMode);
   updateSlideDeckSelectionUI();
   applySlideDeckFilters();
 }

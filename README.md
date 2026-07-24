@@ -292,7 +292,7 @@ Playlist features: per-page dwell, time windows (multiple ranges, optional weekd
 
 **Auto-skip (saved playlist unchanged):** **`lake.php`** when its buoy has been offline 24h+; **`sports.php`** when every team is off-season; **`webcam.php?cam=…`** per camera when that feed fails probes for 24h+. Boards return automatically when data is back.
 
-Under **Rotation**, each display playlist has three setup tabs: **Add boards** (searchable quick-add), **Kiosk settings** (location, sports teams, glance headlines, hero strip, ticker, rotation mode, news fallback), and **Templates** — built-in **Kitchen weeknight** and **Weekly planner** presets, plus save/load your own (`rotation.PLAYLIST_TEMPLATES`). Use **Add to display** before quick-adding so the board lands on the right playlist (e.g. `veddersg`, not `main`).
+Under **Rotation**, each display playlist has three setup tabs: **Add boards** (searchable quick-add), **Kiosk settings** (location, sports teams, glance headlines, hero strip, ticker, rotation mode, news fallback), and **Templates** — built-in **Kitchen weeknight**, **Weekly planner**, and **Security wall** presets, plus save/load your own (`rotation.PLAYLIST_TEMPLATES`). Expanded playlists show a **Plays now** panel (eligible rows + weighted pick %). Use **Add to display** before quick-adding so the board lands on the right playlist (e.g. `veddersg`, not `main`).
 
 Operators with **multiple displays** assigned (see [Admin & security](#admin--security)) see and edit every playlist they own; **shared editors** get the same control on displays they are invited to. Deploy pickers (slides, photos, RSS, video) target any display they may fully edit.
 
@@ -353,6 +353,14 @@ php scripts/diagnose-zabbix.php network --needle=signaltrace
 
 # Rotation: shuffle/weighted decks, eligible pages, per-slide weights, lake/sports/webcam auto-skip
 php scripts/diagnose-rotation.php veddersg
+
+# Slides: time windows, weekdays, schedule summary (CI-friendly)
+php scripts/test-slide-scheduling.php
+
+# CISA KEV / TLS cert expiry / phishing feeds
+php scripts/diagnose-kev.php
+php scripts/diagnose-certexp.php
+php scripts/diagnose-phish.php
 
 # Air & Pollen: AirNow key, EPA monitor AQI, NWS alerts, Open-Meteo model
 php scripts/diagnose-air.php --root=/var/www/html/boards

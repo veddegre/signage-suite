@@ -612,7 +612,16 @@ Upload JPG/PNG/WebP or build slides in the **Slide creator** (templates, photo s
 | **Priority** | When any priority slide is active, only priority slides show |
 | **Off** | Bench without deleting |
 
-Optional **Hr from / Hr to** (0–23, overnight 22→6 works). Board reloads every 5 minutes for schedule boundaries.
+**Time windows** (optional, any schedule mode):
+
+| Field | Behavior |
+|-------|----------|
+| **Time windows** | One or more ranges — whole hours (`7`) or minutes (`7:30`). End time is **exclusive** (matches rotation). Overnight `22→6` works. Leave blank for all day. |
+| **Active days (time windows)** | Optional weekday checkboxes — separate from the **weekly** date schedule above. Limits when the time windows apply. |
+
+Legacy **`hour_from` / `hour_to`** (0–23, inclusive end) still works on saved rows until you migrate to time windows. Board reloads every 5 minutes for schedule boundaries.
+
+**Calendar slide sets:** under **Rotation → Calendar overrides**, choose **Slide set only** to limit which deck files play during a matching ICS event while the rest of the rotation playlist continues.
 
 **Access:** super admins set owner, individual users, and roles on each slide card (**Access** popover in the deck, or bulk **Share with** / **All operators** in the deck toolbar). Operators see slides they own, that are shared with them, or that are shared with the **Operators** role.
 

@@ -1134,6 +1134,24 @@ function rotation_schedule_snapshot(string $screen = 'main', ?DateTimeInterface 
         ];
     }
 
+    $weighted = !empty($settings['weighted']);
+    if ($weighted && $playingLabels !== []) {
+        $totalWeight = 0;
+        foreach ($rows as $row) {
+            if (($row['status'] ?? '') === 'playing') {
+                $totalWeight += (int)($row['weight'] ?? 1);
+            }
+        }
+        if ($totalWeight > 0) {
+            foreach ($rows as $i => $row) {
+                if (($row['status'] ?? '') !== 'playing') {
+                    continue;
+                }
+                $rows[$i]['weight_pct'] = round(((int)($row['weight'] ?? 1) / $totalWeight) * 100, 1);
+            }
+        }
+    }
+
     return [
         'screen' => $screen,
         'now' => $now->format('g:i A'),
@@ -1627,7 +1645,7 @@ function rotation_screen_active_pages(string $screen = 'main', bool $applySeason
     if ($scopeUid !== null) {
         $slideDeck = admin_filter_list_for_scope($slideDeck, $scopeUid);
     }
-    $activeSlides = slides_active_entries($slideDeck);
+    $activeSlides = slides_active_entries($slideDeck, null, $screen);
     $activeFiles = [];
     foreach ($activeSlides as $slide) {
         if (!slide_on_screen($slide, $screen)) {
@@ -3659,6 +3677,14 @@ function rotation_playlist_builtin_templates(): array
             ['url' => 'glance.php', 'dwell' => 90, 'from' => 6, 'to' => 21],
             ['url' => 'calendar.php', 'dwell' => 90, 'from' => 6, 'to' => 21],
             ['url' => 'index.php', 'dwell' => 120],
+        ],
+        'Security wall' => [
+            ['url' => 'kev.php', 'dwell' => 60],
+            ['url' => 'cve.php', 'dwell' => 45],
+            ['url' => 'certexp.php', 'dwell' => 60],
+            ['url' => 'phish.php', 'dwell' => 60],
+            ['url' => 'ransomware.php', 'dwell' => 60],
+            ['url' => 'hibp.php', 'dwell' => 45],
         ],
     ];
 }

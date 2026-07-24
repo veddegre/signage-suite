@@ -9,7 +9,7 @@
  *   yearly_range — month_day … month_day_end every year (Dec 24–Jan 6)
  *   monthly      — day_of_month (1–31)
  *   weekly       — weekday and/or weekdays (Mon,Wed,Fri)
- *   hour_from/to — optional 0–23 window on any schedule (overnight OK)
+ *   time windows — optional ranges (7 or 7:30) + active weekdays; legacy hour_from/to still supported
  *   priority     — when any priority slide is active, only those show
  *
  * Add each slide to the rotation from admin (Deploy to displays) — one playlist entry per slide with its own dwell.
@@ -17,6 +17,7 @@
 
 require_once dirname(__DIR__, 2) . '/lib/slides_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/rotation_lib.php';
 
 define('DEFAULT_DWELL', cfg('slides.DEFAULT_DWELL', 12));
 define('SHUFFLE', cfg('slides.SHUFFLE', false));
@@ -172,7 +173,8 @@ $deck = cfg('slides.SLIDES', []);
 if (!is_array($deck)) {
     $deck = [];
 }
-$entries = slides_active_entries(admin_filter_list_for_display($deck), $dir);
+$slideScreen = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
+$entries = slides_active_entries(admin_filter_list_for_display($deck), $dir, $slideScreen);
 if (SHUFFLE) {
     shuffle($entries);
 }

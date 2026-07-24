@@ -12,9 +12,9 @@ The **Playlists** section uses a **Which display** picker at the top. Three tabs
 |-----|---------|
 | **Add boards** | Searchable board list — adds to the selected display’s playlist (rows already on that playlist are dimmed) |
 | **Kiosk settings** | Whole-TV options: rotation mode, weather ticker + RSS fallback, hero status bar, location, sports teams, blank hours |
-| **Templates** | Load built-in presets (**Kitchen weeknight**, **Weekly planner**) or save/load your own (`rotation.PLAYLIST_TEMPLATES` in settings) |
+| **Templates** | Load built-in presets (**Kitchen weeknight**, **Weekly planner**, **Security wall**) or save/load your own (`rotation.PLAYLIST_TEMPLATES` in settings) |
 
-Opening a playlist panel below syncs the **Which display** picker and highlights that panel. Playlist headers show **On wall: …** from live kiosk heartbeats when online.
+Opening a playlist panel below syncs the **Which display** picker and highlights that panel. Playlist headers show **On wall: …** from live kiosk heartbeats when online. Each expanded playlist includes a **Plays now** panel — which saved rows are eligible right now (Skip / Later / Hidden), with approximate **weighted pick %** when weighted mode is on.
 
 Some boards auto-skip from rotation when off-season or unreachable for 24h+: **lake.php** (NDBC buoy), **sports.php** (all teams off-season), **webcam.php** (per-camera embed/image probe — `?cam=` aware). They stay on the saved playlist and return when data is back.
 
@@ -70,7 +70,7 @@ Each screen *is* a playlist:
 - Per-page hour windows — one or more ranges (e.g. 7–9 and 16–18 for commute times). Leave blank for all day. Overnight 22→6 supported.
 - Optional **weekdays** per playlist row (e.g. traffic Mon–Fri only).
 - **Minute precision** — use `7:30`–`9:00` instead of whole hours when needed.
-- **Calendar overrides** (Rotation → Calendar overrides) — swap the playlist while a matching ICS event is active (title contains + feed key).
+- **Calendar overrides** (Rotation → Calendar overrides) — swap the playlist while a matching ICS event is active (title contains + feed key), or **Slide set only** — keep the normal playlist but show only selected slide files from the deck during the event.
 - **Skip** — bench a page without deleting (settings preserved)
 
 Screens need not map to hardware: define `ambient` or `guests` and point any display at it.
