@@ -1,6 +1,6 @@
 # Board reference
 
-Every board is a **1920×1080** PHP page with shared styling. Configure all boards in **admin.php**; settings save to `config/settings.json`.
+Every board is a **1920×1080** PHP page with shared styling. Configure all boards in **admin.php**. Most settings save to **`config/settings.json`**; each display’s **rotation playlist** saves to **`config/rotation/pages/<screen>.json`** (see [rotation-and-deployment.md](rotation-and-deployment.md)).
 
 On operator-editable boards, super admins set **Access** per row: **owner**, **shared with users**, and **shared with roles** (e.g. all Operators). See [admin-and-security.md → Content ownership & sharing](admin-and-security.md#content-ownership--sharing). Operator-facing overview: [user-guide.md](user-guide.md).
 

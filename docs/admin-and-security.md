@@ -1,13 +1,13 @@
 # Admin & security
 
-All configuration flows through **admin.php** into `config/settings.json`. Board PHP files are never edited on disk; the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
+All configuration flows through **admin.php**. Most values land in **`config/settings.json`**; **rotation playlist rows** (URL, dwell, hours, weights, …) live in **`config/rotation/pages/<screen>.json`** — one file per display. Board PHP files are never edited on disk; the web server only needs write access to `config/`, `cache/`, `videos/`, `slides/`, and `photos/`.
 
 ## How settings work
 
 - Each board has built-in defaults (the old `const` values).
 - A **blank field** in admin means “use the default.”
 - **Password and API-key fields** left blank on save mean “unchanged” — secrets are never echoed back into HTML.
-- **Tools** (super admin) can clear the API cache and view or edit raw JSON.
+- **Tools** (super admin) can clear the API cache and view or edit raw JSON for **`settings.json` only** — playlists are not shown there; edit them under **Rotation** or by hand in `config/rotation/pages/`.
 
 ## Accounts & roles
 
@@ -109,13 +109,34 @@ Board-level API secrets (Splunk token, Zabbix token, TeamDynamix BEID/key, Grafa
 
 Settings, accounts, audit history, and kiosk presence are stored as JSON on disk — no database required. That fits teams on the order of dozens of users.
 
-**Simultaneous admin saves** use file locking across read → merge → write. If two people save different boards at once, the second request waits, reads the latest file, and merges on top — one save no longer silently overwrites another. The same protection applies to deploy-to-rotation actions, SSO linking, JIT provisioning, and kiosk heartbeats.
+### Where data lives
 
-If a lock cannot be acquired in time, admin shows: *Another admin save is in progress — wait a moment and try again.*
+| Data | Path | Notes |
+|------|------|--------|
+| Board settings, API secrets, slide/photo decks, multi-page registries (Zabbix, TDX, …) | `config/settings.json` | Locked read → merge → write |
+| **Rotation playlist rows** per display | `config/rotation/pages/<screen>.json` | e.g. `main.json`, `lobby.json` — **separate lock per display** |
+| Display names, shared editors, kiosk options, emergency override, playlist templates | `config/settings.json` | Saved with **Rotation** (non-playlist fields) |
+| Accounts | `config/users.json` | Super admin **Users** page |
+| Kiosk heartbeats | `cache/presence.json` | Written by `board.php` |
+| Audit log | `cache/admin_audit.json` | Not cleared with API cache |
+
+Legacy installs may still have `rotation.PAGES_<screen>` keys inside `settings.json` until playlists are loaded once; the server **migrates** those keys into `config/rotation/pages/` automatically and removes them from settings.
+
+### Concurrent edits
+
+**Rotation playlists:** Two operators saving **different** displays lock **different** JSON files — they do not queue on the whole settings file.
+
+**Other admin saves:** Still use locking on `settings.json` (and `users.json` for accounts). If two people save **different** boards at once, the second request waits, reads the latest file, and merges on top — one save no longer silently overwrites another. The same protection applies to deploy-to-rotation actions (playlist file + optional slide deck in settings), SSO linking, JIT provisioning, and kiosk heartbeats.
+
+**Same display, two editors:** Last completed **Rotation → Save** wins for that display’s playlist file — coordinate shared editors on one TV.
 
 **Users page caveat:** that screen posts the entire user table on each save. Two super admins editing **Users** at the same time means whoever saves last wins the whole table (not corruption — just full-form replace). Coordinate user changes.
 
+If a lock cannot be acquired in time, admin shows: *Another admin save is in progress — wait a moment and try again.*
+
 Sidecar `*.lock` files next to JSON files are normal during writes.
+
+**Backups:** Include `config/settings.json`, `config/users.json`, and **`config/rotation/pages/*.json`** together.
 
 ## SSO setup (Entra ID & Authentik)
 
@@ -184,7 +205,7 @@ On first successful SSO sign-in the account **links** (“Linked” status). Unt
 
 ## Security hardening
 
-- `config/settings.json` and `config/users.json` hold secrets. Admin drops deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` (Apache). **nginx:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }`
+- `config/settings.json`, `config/users.json`, and **`config/rotation/pages/`** hold configuration and secrets. Admin drops deny-all `.htaccess` into `config/`, `cache/`, `slides/`, and `photos/` (Apache). **nginx:** `location ^~ /boards/(config|cache|slides|photos)/ { deny all; }`
 - Login uses CSRF protection, strict session cookies, configurable idle timeout (**Security → Admin idle timeout**), and lockout after failures
 - **Outbound fetch policy:** RSS/ICS URLs block private IPs unless **Security → Allow private URL fetches** is enabled (required for LAN Zabbix, homelab, UniFi, some RSS feeds)
 - YouTube downloads only accept `youtube.com` / `youtu.be`; yt-dlp updates verify SHA-256 from official GitHub releases

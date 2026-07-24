@@ -229,7 +229,7 @@ setup_directories() {
   for d in config cache videos slides photos bin; do
     write_deny_htaccess "$WEBROOT/$d"
   done
-  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/cache/yt-dlp/deno"
+  mkdir -p "$WEBROOT/config/cookies" "$WEBROOT/config/rotation/pages" "$WEBROOT/cache/yt-dlp/deno"
 
   # slide_backgrounds/ ships in git; ensure it exists and is readable
   mkdir -p "$WEBROOT/slide_backgrounds" "$WEBROOT/slide_backgrounds/photos"

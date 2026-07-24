@@ -413,7 +413,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     $errors = [];
     $saveWarnFlash = null;
     $saveWarnFlashOk = true;
-    $applyBoardSave = function (array $conf) use ($board, $schema, $rotationSuperFieldKeys, &$errors, &$saveWarnFlash, &$saveWarnFlashOk) {
+    $rotationPageWrites = [];
+    $applyBoardSave = function (array $conf) use ($board, $schema, $rotationSuperFieldKeys, &$errors, &$saveWarnFlash, &$saveWarnFlashOk, &$rotationPageWrites) {
     foreach ($schema[$board]['fields'] as $f) {
         if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
             continue;
@@ -894,7 +895,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     if (!is_array($rows)) {
                         continue;
                     }
-                    $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
+                    $rotationPageWrites[$screenKey] = rotation_merge_pages_from_post($screenKey, $rows);
+                    require_once __DIR__ . '/lib/rotation_pages_store_lib.php';
+                    if (!rotation_pages_store_write_file($screenKey, $rotationPageWrites[$screenKey])) {
+                        $errors[] = 'Could not save playlist for display "' . $screenKey . '".';
+                    }
+                    unset($conf['rotation.PAGES_' . $screenKey]);
                 }
             }
         }
@@ -929,7 +935,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if (!admin_is_super() && !admin_can_screen($screenKey)) {
                     continue;
                 }
-                $conf = rotation_merge_pages_from_post($conf, $screenKey, $rows);
+                $rotationPageWrites[$screenKey] = rotation_merge_pages_from_post($screenKey, $rows);
+                require_once __DIR__ . '/lib/rotation_pages_store_lib.php';
+                if (!rotation_pages_store_write_file($screenKey, $rotationPageWrites[$screenKey])) {
+                    $errors[] = 'Could not save playlist for display "' . $screenKey . '".';
+                }
+                unset($conf['rotation.PAGES_' . $screenKey]);
             }
         }
         if (admin_is_super()) {

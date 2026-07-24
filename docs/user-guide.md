@@ -29,10 +29,10 @@ Manual for **super admins**, **infrastructure** staff, and **operators** who con
 | Layer | What it is | You edit it in |
 |-------|------------|----------------|
 | **Boards** | Individual 1920×1080 pages (weather, Zabbix, slides, …) | Admin sidebar → each board |
-| **Rotation** | Playlist that crossfades boards on a physical display | **Setup → Rotation** |
+| **Rotation** | Playlist that crossfades boards on a physical display | **Setup → Rotation** (rows in `config/rotation/pages/<screen>.json`) |
 | **Kiosk** | Browser or Pi running `board.php?screen=<key>` fullscreen | [kiosk-setup.md](kiosk-setup.md) |
 
-All settings save to **`config/settings.json`** on the server. Board PHP files are never edited — only configuration changes.
+Most settings save to **`config/settings.json`**. **Playlist rows** (URLs, dwell, hours, weights) save to **`config/rotation/pages/<screen>.json`** — one file per display. Board PHP files are never edited — only configuration changes.
 
 ### Display URL
 
@@ -57,7 +57,10 @@ Secrets (API tokens, passwords, BEID keys) **never** reach the display browser.
 
 - **Blank field** on save = keep default or unchanged (password fields never echo back).
 - **Save** at the bottom of each admin page applies that board’s changes.
-- Concurrent saves on **different** boards merge safely (file locking). **Users** page is the exception — last save wins.
+- **Rotation playlist rows** write to `config/rotation/pages/<screen>.json`; display names and kiosk options still go to `settings.json`.
+- Concurrent saves on **different** admin boards merge safely on `settings.json` (file locking). **Different displays’ playlists** use separate files — two operators saving **different** TVs do not block each other.
+- **Same display, two editors** — last **Rotation → Save** wins for that playlist file.
+- **Users** page is the exception on settings — last save wins if two super admins edit accounts at once.
 
 ---
 
@@ -113,6 +116,7 @@ Same as operator, plus admin access to **Homelab**, **UniFi**, **SignalTrace**, 
 | See which kiosks are online | **Status** |
 | Audit who changed what | **Audit** (if enabled under Security) |
 | Clear stuck API cache | **Tools → Clear cache** |
+| Back up configuration | Copy `config/settings.json`, `config/users.json`, and `config/rotation/pages/` |
 
 ### API secrets — who sets them
 
@@ -304,6 +308,8 @@ Full per-board setup: [boards.md](boards.md).
 
 ## 7. Rotation playbook
 
+Each display’s playlist is stored in **`config/rotation/pages/<screen>.json`**. Saving **Rotation** updates that file (plus display options in `settings.json`). After upgrading the server, open **Rotation** once or load each kiosk URL so legacy `rotation.PAGES_*` keys migrate out of `settings.json`.
+
 ### Add a board to one display
 
 1. **Rotation** → select display tab (e.g. `garage`).
@@ -402,7 +408,8 @@ Use these guides for credential setup and troubleshooting — not duplicated her
 
 | Symptom | Try |
 |---------|-----|
-| Cannot save | Another save in progress — wait and retry |
+| Cannot save | Another save in progress on `settings.json` — wait and retry |
+| Cannot save rotation | Another save on the **same** display playlist — wait and retry (different displays use separate files) |
 | Board missing from sidebar | Your role lacks access |
 | Quick-add missing a board | Not shared with you, **Off wall**, or infra-only |
 | Preview works, rotation doesn’t | Wrong `?screen=` or row URL typo |
@@ -416,9 +423,11 @@ php scripts/diagnose-zabbix.php main
 php scripts/diagnose-tdx.php helpdesk --timing
 php scripts/diagnose-powerbi.php --test --key=ops
 php scripts/diagnose-grafana.php
-php scripts/diagnose-rotation.php SCREEN_KEY
+php scripts/diagnose-rotation.php SCREEN_KEY   # shows playlist file path
 php scripts/diagnose-kev.php
 ```
+
+Inspect a display playlist on disk: `config/rotation/pages/<screen>.json`.
 
 Clear board cache: delete specific files under `cache/` or **Tools → Clear cache**.
 
@@ -434,6 +443,7 @@ If Zabbix, TDX, Grafana, homelab, or UniFi use an internal IP/hostname, enable *
 |------|------------|
 | **Board** | Single full-screen PHP page (e.g. `lake.php`) |
 | **Display / screen** | A physical TV identified by `?screen=` in rotation |
+| **Playlist file** | `config/rotation/pages/<screen>.json` — saved rotation rows for one display |
 | **Dwell** | Seconds a playlist row stays visible |
 | **Quick-add** | Rotation helper that inserts common board URLs |
 | **Page key** | Short name in `?d=` for multi-page boards (Zabbix, TDX, Splunk, Kuma, Grafana, …) |

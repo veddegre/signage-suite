@@ -1476,15 +1476,16 @@ function video_rotation_url(string $key): string
 /** @return list<array<string,mixed>> */
 function video_rotation_screen_pages(string $screen = 'main'): array
 {
-    $screen = preg_replace('/[^a-z0-9_\-]/i', '', $screen);
-    if ($screen === '') {
-        $screen = 'main';
-    }
-    $pages = cfg("rotation.PAGES_$screen", null);
-    if (!is_array($pages) || $pages === []) {
-        $pages = cfg('rotation.PAGES_main', cfg('rotation.PAGES', []));
-    }
-    return is_array($pages) ? $pages : [];
+    require_once __DIR__ . '/rotation_lib.php';
+
+    return rotation_sync_source_pages($screen);
+}
+
+function video_rotation_pages_write(string $screen, array $pages): bool
+{
+    require_once __DIR__ . '/rotation_lib.php';
+
+    return rotation_pages_write($screen, $pages);
 }
 
 function video_in_rotation(string $key, string $screen = 'main'): bool
@@ -1546,17 +1547,6 @@ function video_sync_rotation(string $screen = 'main'): array
         }
     }
     return ['pages' => $pages, 'added' => $added, 'updated' => $updated, 'screen' => $screen];
-}
-
-function video_rotation_pages_write(string $screen, array $pages): bool
-{
-    $key = 'rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', $screen);
-
-    return cfg_update(function (array $conf) use ($key, $pages): array {
-        $conf[$key] = $pages;
-
-        return $conf;
-    });
 }
 
 function video_normalize_key(string $key): ?string

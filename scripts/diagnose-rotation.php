@@ -9,6 +9,7 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 require_once $root . '/config.php';
 require_once $root . '/lib/rotation_lib.php';
+require_once $root . '/lib/rotation_pages_store_lib.php';
 require_once $root . '/lib/slides_lib.php';
 
 $screen = rotation_normalize_screen_key($argv[1] ?? 'main');
@@ -30,6 +31,12 @@ foreach ($active as $p) {
 }
 
 echo "Screen: {$screen}\n";
+$playlistPath = rotation_pages_store_path($screen);
+if ($playlistPath !== null && is_file($playlistPath)) {
+    echo 'Playlist file: ' . $playlistPath . "\n";
+} else {
+    echo "Playlist file: (none — mirrors main or uses starter pages)\n";
+}
 echo 'Timezone: ' . $tz . ' (now ' . rotation_format_time_label($minute) . ", weekday {$now->format('l')})\n";
 echo 'Weighted mode: ' . (!empty($settings['weighted']) ? 'ON' : 'OFF — weights are ignored') . "\n";
 echo 'Shuffle: ' . (!empty($settings['shuffle']) ? 'on' : 'off') . "\n";

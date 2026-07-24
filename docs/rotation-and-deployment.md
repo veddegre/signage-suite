@@ -6,6 +6,24 @@ Point each kiosk at `board.php?screen=<key>`. Plain `board.php` = **main** scree
 
 Screens, playlists, dwell times, and hour windows (0–23, overnight 22→6 supported) are edited in **admin.php → Rotation** — no file edits.
 
+Each display’s **playlist rows** are stored in **`config/rotation/pages/<screen>.json`** (not in `settings.json`). On upgrade, existing `rotation.PAGES_*` keys in settings are moved automatically the first time playlists are loaded (open **Rotation** or load `board.php?screen=…`). Screen names, kiosk options, emergency override, and saved templates stay in settings.
+
+### Configuration storage (rotation)
+
+| What | Where |
+|------|--------|
+| Playlist URL rows, dwell, hours, skip, weight | `config/rotation/pages/<screen>.json` |
+| Screen list, display names, shared editors | `settings.json` → `rotation.SCREENS` |
+| Per-display kiosk options (ticker, location, hero strip, shuffle, …) | `settings.json` (on each screen entry) |
+| Emergency override, calendar overrides, playlist templates | `settings.json` |
+| Legacy global default playlist (rare) | `settings.json` → `rotation.PAGES` — used when **main** has no own file |
+
+**Hand-editing:** Playlist files are JSON **arrays** of objects (`url`, `dwell`, optional `from`/`to`, `weight`, …). After editing on disk, kiosks pick up changes within ~30s (rotation shell poll) or on next playlist save from admin.
+
+**Diagnostics:** `php scripts/diagnose-rotation.php <screen>` prints the playlist file path and effective rows.
+
+**Concurrent saves:** Operators editing **different** displays write **different** files. Two people saving the **same** display still last-write-wins on that one file.
+
 The **Playlists** section uses a **Which display** picker at the top. Three tabs organize setup:
 
 | Tab | Purpose |
@@ -156,7 +174,7 @@ sudo bash setup-server.sh --domain signage.lan
 sudo bash setup-server.sh --nginx
 ```
 
-**Installs:** Apache or nginx, PHP 8.x + opcache, ffmpeg, dnsutils (`dig`), yt-dlp (pipx), writable dirs, deny rules for secrets, 1-hour timeouts for YouTube downloads, slide backgrounds.
+**Installs:** Apache or nginx, PHP 8.x + opcache, ffmpeg, dnsutils (`dig`), yt-dlp (pipx), writable dirs (including **`config/rotation/pages/`** for per-display playlists), deny rules for secrets, 1-hour timeouts for YouTube downloads, slide backgrounds.
 
 **Re-run after updates:**
 

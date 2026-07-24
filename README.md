@@ -6,17 +6,20 @@ PHP wall displays at **1920×1080**, one shared dark-navy/amber theme. Run on **
 |---|---|
 | **Server** | Ubuntu, Debian, or Raspberry Pi OS — VM, NUC, Pi, VPS |
 | **Display** | Any browser → `board.php`, or `setup-kiosk.sh` for a dedicated TV |
-| **Config** | **admin.php** → `config/settings.json` (board PHP files are never edited) |
+| **Config** | **admin.php** → `config/settings.json` + per-display playlists in `config/rotation/pages/` |
 
 ```mermaid
 flowchart LR
   subgraph server [Signage server]
     Admin[admin.php]
     Settings[(settings.json)]
+    Playlists[(rotation/pages)]
     Shell[board.php]
     Boards[lake.php · zabbix.php · …]
     Admin --> Settings
+    Admin --> Playlists
     Shell --> Boards
+    Shell --> Playlists
     Boards --> Cache[(cache/)]
   end
   Kiosk[Wall display] --> Shell
@@ -114,7 +117,7 @@ The admin **sidebar groups** (Setup, Weather & home, Monitoring, …) are **coll
 
 **Users** assigns each display to **one operator** (primary owner). Enable **Security → Operators may manage multiple displays** (default on) to give one person several screens; the display picker then lists only **unassigned** displays and that operator’s **current** assignments — screens owned by someone else are hidden so you cannot accidentally assign the same TV twice. Toggle the same setting on the **Users** page when saving accounts.
 
-Settings use file locking so concurrent saves on different boards merge safely. The **Users** page is the exception — last save wins if two super admins edit it at once.
+Settings use file locking on **`settings.json`** so concurrent saves on different boards merge safely. **Rotation playlist rows** use **one JSON file per display** (`config/rotation/pages/<screen>.json`), so two operators saving **different** displays do not block each other. The **Users** page is the exception — last save wins if two super admins edit it at once. Two editors on the **same** display playlist still last-write-wins on that file.
 
 → **[Admin, SSO, and hardening](docs/admin-and-security.md)** — Entra ID, Authentik, JIT provisioning, troubleshooting
 
@@ -297,7 +300,7 @@ MDOT feeds are refreshed stills, not video; thumbs are modest resolution (~720×
 | **player.php** | PWA — scale rotation to any screen size |
 | **Status** | Which kiosks are online, deploy sync |
 
-Playlist features: per-page dwell, time windows (multiple ranges, optional weekdays, `7:30` minute precision), **calendar overrides** from ICS events, **Skip**, **Shuffle** (random order — every in-window board once per cycle), **Weighted** rotation (weight = slots per shuffled cycle; every board at least once before repeat), multiple displays (`?screen=`). The shell **polls for config changes every ~30s** and reloads when the playlist or display options change.
+Playlist features: per-page dwell, time windows (multiple ranges, optional weekdays, `7:30` minute precision), **calendar overrides** from ICS events, **Skip**, **Shuffle** (random order — every in-window board once per cycle), **Weighted** rotation (weight = slots per shuffled cycle; every board at least once before repeat), multiple displays (`?screen=`). Playlist rows live in **`config/rotation/pages/<screen>.json`**; see [rotation guide → Configuration storage](docs/rotation-and-deployment.md#configuration-storage-rotation). The shell **polls for config changes every ~30s** and reloads when the playlist or display options change.
 
 **Auto-skip (saved playlist unchanged):** **`lake.php`** when its buoy has been offline 24h+; **`sports.php`** when every team is off-season; **`webcam.php?cam=…`** per camera when that feed fails probes for 24h+. Boards return automatically when data is back.
 
@@ -337,13 +340,14 @@ Board entry URLs stay at the web root (`index.php`, `unifi.php`, `traffic.php`, 
 |------|---------|
 | `lib/` | `*_lib.php` — API clients, rotation, users, slides, etc. |
 | `boards/weather/`, `boards/monitoring/`, `boards/media/`, … | Board implementations |
-| `config/` | `settings.json`, `users.json` (not web-accessible) |
+| `config/` | `settings.json`, `users.json`, `rotation/pages/*.json` (not web-accessible) |
 | `cache/` | API response cache |
 | `videos/`, `slides/`, `photos/` | Uploaded media |
 
 Runtime dirs: `config/`, `cache/`, `videos/`, `slides/`, `photos/`. `slide_backgrounds/` ships theme PNGs.
 
 - Legacy `config/admin.json` migrates to `config/users.json` on first login.
+- Legacy `rotation.PAGES_*` keys in `settings.json` migrate to `config/rotation/pages/<screen>.json` when playlists are first loaded.
 - Failed API calls show a diagnostic stamp bottom-right while serving stale cache.
 - `*.lock` files beside JSON during writes are normal.
 

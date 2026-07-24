@@ -1279,17 +1279,11 @@ function rotation_screens(): array
 /** @return list<array<string,mixed>> Saved pages for one screen only (no fallback). */
 function rotation_screen_own_pages(string $screen = 'main'): array
 {
+    require_once __DIR__ . '/rotation_pages_store_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    $key = 'rotation.PAGES_' . $screen;
-    if (!isset($GLOBALS['__cfg_cache']) || $GLOBALS['__cfg_cache'] === null) {
-        cfg('_', null);
-    }
-    $conf = $GLOBALS['__cfg_cache'] ?? [];
-    if (!array_key_exists($key, $conf) || !is_array($conf[$key])) {
-        return [];
-    }
+    rotation_pages_store_migrate_all_from_settings();
 
-    return $conf[$key];
+    return rotation_pages_store_read($screen);
 }
 
 /** URLs managed by slide/photo deploy sync (not standalone board pages). */
@@ -1436,29 +1430,31 @@ function rotation_sync_source_pages(string $screen = 'main'): array
 }
 
 /**
- * Apply posted playlist rows for one screen onto settings (rotation board save).
- * @param array<string,mixed> $conf
+ * Build playlist rows from admin POST for one screen.
+ *
  * @param array<string,mixed> $rawRows raw $_POST rows keyed by index
- * @return array<string,mixed>
+ * @return list<array<string,mixed>>
  */
-function rotation_merge_pages_from_post(array $conf, string $screen, array $rawRows): array
+function rotation_merge_pages_from_post(string $screen, array $rawRows): array
 {
     require_once __DIR__ . '/users_lib.php';
     $screen = rotation_normalize_screen_key($screen);
     if ($screen === '') {
-        return $conf;
+        return [];
     }
-    $cfgKey = 'rotation.PAGES_' . $screen;
-    $existing = is_array($conf[$cfgKey] ?? null) ? $conf[$cfgKey] : [];
+    require_once __DIR__ . '/rotation_pages_store_lib.php';
+    $existing = rotation_pages_store_read_file($screen);
+    if ($existing === []) {
+        cfg('_', null);
+        $legacyKey = 'rotation.PAGES_' . $screen;
+        $conf = $GLOBALS['__cfg_cache'] ?? [];
+        if (is_array($conf) && is_array($conf[$legacyKey] ?? null)) {
+            $existing = rotation_pages_store_apply_url_fixes($conf[$legacyKey]);
+        }
+    }
     $parsed = rotation_parse_pages_rows($rawRows);
     if (admin_is_super()) {
-        if ($parsed === []) {
-            unset($conf[$cfgKey]);
-        } else {
-            $conf[$cfgKey] = $parsed;
-        }
-
-        return $conf;
+        return $parsed;
     }
     $out = [];
     foreach ($parsed as $row) {
@@ -1485,13 +1481,8 @@ function rotation_merge_pages_from_post(array $conf, string $screen, array $rawR
         }
         $out[] = admin_finalize_entry($row, $prev, $postRow ?? $row);
     }
-    if ($out === []) {
-        unset($conf[$cfgKey]);
-    } else {
-        $conf[$cfgKey] = $out;
-    }
 
-    return $conf;
+    return $out;
 }
 
 /** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
@@ -2600,41 +2591,68 @@ function rotation_screen_display_name(string $screenKey, array $screens): string
 
 function rotation_pages_write(string $screen, array $pages): bool
 {
-    $key = 'rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', $screen);
+    require_once __DIR__ . '/rotation_pages_store_lib.php';
+    $screen = rotation_normalize_screen_key($screen);
+    if (!rotation_pages_store_write_file($screen, $pages)) {
+        return false;
+    }
+    $key = 'rotation.PAGES_' . $screen;
+    cfg_update(static function (array $c) use ($key): array {
+        unset($c[$key]);
 
-    return cfg_update(function (array $conf) use ($key, $pages): array {
-        $conf[$key] = $pages;
-
-        return $conf;
+        return $c;
     });
+    cfg_reload();
+
+    return true;
 }
 
 /**
- * Write several display playlists (and optionally the slide deck) in one settings pass.
+ * Write several display playlists (and optionally the slide deck).
  * @param array<string,list<array<string,mixed>>> $screenPages screen key => playlist rows
  * @param list<array<string,mixed>>|null $slideDeck when set, replaces slides.SLIDES
  */
 function rotation_pages_write_batch(array $screenPages, ?array $slideDeck = null): bool
 {
-    if ($screenPages === [] && $slideDeck === null) {
-        return true;
-    }
-
-    return cfg_update(function (array $conf) use ($screenPages, $slideDeck): array {
-        if ($slideDeck !== null) {
+    require_once __DIR__ . '/rotation_pages_store_lib.php';
+    if ($slideDeck !== null) {
+        if (!cfg_update(function (array $conf) use ($slideDeck): array {
             if ($slideDeck === []) {
                 unset($conf['slides.SLIDES']);
             } else {
                 $conf['slides.SLIDES'] = $slideDeck;
             }
-        }
-        foreach ($screenPages as $screen => $pages) {
-            $key = 'rotation.PAGES_' . preg_replace('/[^a-z0-9_\-]/i', '', (string)$screen);
-            $conf[$key] = $pages;
-        }
 
-        return $conf;
-    });
+            return $conf;
+        })) {
+            return false;
+        }
+    }
+    if ($screenPages === []) {
+        return true;
+    }
+    ksort($screenPages);
+    foreach ($screenPages as $screen => $pages) {
+        if (!is_array($pages)) {
+            continue;
+        }
+        if (!rotation_pages_store_write_file(rotation_normalize_screen_key((string)$screen), $pages)) {
+            return false;
+        }
+    }
+
+    if ($screenPages !== []) {
+        cfg_update(static function (array $conf) use ($screenPages): array {
+            foreach (array_keys($screenPages) as $screen) {
+                unset($conf['rotation.PAGES_' . rotation_normalize_screen_key((string)$screen)]);
+            }
+
+            return $conf;
+        });
+        cfg_reload();
+    }
+
+    return true;
 }
 
 /**
