@@ -225,6 +225,18 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
     ]);
 }
 
+/** Sun arc guide lines — contrast with page/harbor on every palette. */
+function signage_theme_sun_track_color(array $preset): string
+{
+    $snow = signage_theme_hex_rgb((string)($preset['snow'] ?? '#edf2fb'));
+    $hairline = signage_theme_hex_rgb((string)($preset['hairline'] ?? '#26344d'));
+    if ($snow === null || $hairline === null) {
+        return '#8aa0c0';
+    }
+
+    return signage_theme_mix_rgb($snow, $hairline, 0.4);
+}
+
 /** Saved theme for a rotation display (defaults to lake_night). */
 function signage_theme_for_screen(string $screen): string
 {
@@ -276,6 +288,9 @@ function signage_theme_css_block(string $key): string
         '--gold' => $preset['gold'],
         '--panel-dim' => $preset['panel-dim'] ?? $preset['harbor'],
         '--inset-surface' => $preset['panel-dim'] ?? $preset['harbor'],
+        '--sun-track' => signage_theme_sun_track_color($preset),
+        '--sun-trail' => $preset['beacon'],
+        '--sun-dot-ring' => $preset['snow'],
     ];
     $parts = [];
     foreach ($pairs as $name => $value) {

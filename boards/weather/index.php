@@ -420,10 +420,28 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 
   /* Sun arc — sunrise → sunset with live position */
   .sun {
+    flex-shrink: 0;
     margin-top: auto;
-    padding-top: 16px;
+    padding: 10px 16px 6px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--harbor) 82%, var(--lake-night));
+    border: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
   }
-  .sun svg { width: 100%; height: 118px; display: block; }
+  .sun svg { width: 100%; height: 104px; display: block; overflow: visible; }
+  .sun-horizon { stroke: var(--sun-track); stroke-width: 2; }
+  .sun-arc { stroke: var(--sun-track); stroke-width: 3; stroke-dasharray: 5 8; }
+  .sun-trail {
+    stroke: var(--sun-trail);
+    stroke-width: 4;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--sun-trail) 50%, transparent));
+  }
+  .sun-dot {
+    fill: var(--sun-trail);
+    stroke: var(--sun-dot-ring);
+    stroke-width: 3;
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--sun-trail) 45%, transparent));
+  }
   .sun-times {
     display: flex;
     justify-content: space-between;
@@ -645,13 +663,10 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 
     <div class="sun">
       <svg viewBox="0 0 640 170" aria-hidden="true">
-        <!-- horizon -->
-        <line x1="20" y1="150" x2="620" y2="150" stroke="var(--hairline)" stroke-width="2"/>
-        <!-- arc: half-ellipse from sunrise (60,150) to sunset (580,150) -->
-        <path d="M 60 150 A 260 130 0 0 1 580 150"
-              fill="none" stroke="var(--hairline)" stroke-width="3" stroke-dasharray="2 8"/>
-        <path id="sunTrail" d="" fill="none" stroke="var(--beacon)" stroke-width="3"/>
-        <circle id="sunDot" cx="60" cy="150" r="11" fill="var(--beacon)"/>
+        <line class="sun-horizon" x1="20" y1="150" x2="620" y2="150"/>
+        <path class="sun-arc" d="M 60 150 A 260 130 0 0 1 580 150" fill="none"/>
+        <path id="sunTrail" class="sun-trail" d="" fill="none"/>
+        <circle id="sunDot" class="sun-dot" cx="60" cy="150" r="11"/>
       </svg>
       <div class="sun-times">
         <span>Sunrise <b><?= date('g:i A', $cw['sunrise']) ?></b></span>
@@ -745,7 +760,9 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     }
     // Dim the dot at night
     const night = Date.now() < SUNRISE || Date.now() > SUNSET;
-    dot.setAttribute('opacity', night ? '0.25' : '1');
+    const fade = night ? '0.35' : '1';
+    dot.setAttribute('opacity', fade);
+    trail.setAttribute('opacity', fade);
   }
   placeSun();
   setInterval(placeSun, 60 * 1000);
