@@ -1706,8 +1706,12 @@ function rotation_config_revision(string $screen = 'main'): string
     $screen = rotation_normalize_screen_key($screen);
     $settings = rotation_screen_settings($screen);
     $mtime = is_file(cfg_path()) ? (int)filemtime(cfg_path()) : 0;
+    require_once __DIR__ . '/rotation_pages_store_lib.php';
+    $pagesPath = rotation_pages_store_path($screen);
+    $pagesMtime = ($pagesPath !== null && is_file($pagesPath)) ? (int)filemtime($pagesPath) : 0;
     $blob = json_encode([
         'mtime' => $mtime,
+        'pages_mtime' => $pagesMtime,
         'screen' => $screen,
         'pages' => rotation_screen_active_pages($screen),
         'shuffle' => $settings['shuffle'] && !$settings['weighted'],

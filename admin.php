@@ -895,9 +895,16 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     if (!is_array($rows)) {
                         continue;
                     }
-                    $rotationPageWrites[$screenKey] = rotation_merge_pages_from_post($screenKey, $rows);
+                    $pages = rotation_merge_pages_from_post($screenKey, $rows);
+                    $rotationPageWrites[$screenKey] = $pages;
                     require_once __DIR__ . '/lib/rotation_pages_store_lib.php';
-                    if (!rotation_pages_store_write_file($screenKey, $rotationPageWrites[$screenKey])) {
+                    $onDisk = rotation_pages_store_read_file($screenKey);
+                    if ($pages === [] && $onDisk !== []) {
+                        $errors[] = 'Playlist for display "' . $screenKey . '" looked empty in the form but a saved file still has '
+                            . count($onDisk) . ' row(s) — reload Rotation and try again (not saved).';
+                        continue;
+                    }
+                    if (!rotation_pages_store_write_file($screenKey, $pages)) {
                         $errors[] = 'Could not save playlist for display "' . $screenKey . '".';
                     }
                     unset($conf['rotation.PAGES_' . $screenKey]);
@@ -935,9 +942,16 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if (!admin_is_super() && !admin_can_screen($screenKey)) {
                     continue;
                 }
-                $rotationPageWrites[$screenKey] = rotation_merge_pages_from_post($screenKey, $rows);
+                $pages = rotation_merge_pages_from_post($screenKey, $rows);
+                $rotationPageWrites[$screenKey] = $pages;
                 require_once __DIR__ . '/lib/rotation_pages_store_lib.php';
-                if (!rotation_pages_store_write_file($screenKey, $rotationPageWrites[$screenKey])) {
+                $onDisk = rotation_pages_store_read_file($screenKey);
+                if ($pages === [] && $onDisk !== []) {
+                    $errors[] = 'Playlist for display "' . $screenKey . '" looked empty in the form but a saved file still has '
+                        . count($onDisk) . ' row(s) — reload Rotation and try again (not saved).';
+                    continue;
+                }
+                if (!rotation_pages_store_write_file($screenKey, $pages)) {
                     $errors[] = 'Could not save playlist for display "' . $screenKey . '".';
                 }
                 unset($conf['rotation.PAGES_' . $screenKey]);
@@ -4467,8 +4481,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <?php foreach ($rotationScreens as $screenKey => $screenMeta):
             $fieldKey = 'PAGES_' . $screenKey;
-            $pagesVal = current_val($rawConf, $board, $fieldKey);
-            $storedRows = is_array($pagesVal) ? $pagesVal : [];
+            $storedRows = rotation_screen_own_pages($screenKey);
             $pageRows = $storedRows;
             if ($storedRows !== [] && !rotation_playlist_has_board_pages($storedRows)) {
                 $pageRows = rotation_resolved_playlist_pages($screenKey);
