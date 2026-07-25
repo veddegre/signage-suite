@@ -216,8 +216,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     },
     _resize() {
       const size = this._map.getSize();
-      const topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(this._canvas, topLeft);
+      this._topLeft = this._map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(this._canvas, this._topLeft);
       const dpr = window.devicePixelRatio || 1;
       this._canvas.width = Math.round(size.x * dpr);
       this._canvas.height = Math.round(size.y * dpr);
@@ -244,8 +244,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       ctx.clearRect(0, 0, w / dpr, h / dpr);
 
       const pulse = 0.92 + 0.08 * Math.sin(now / 900);
+      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
       for (const c of COUNTRIES) {
-        const pt = this._map.latLngToContainerPoint([c.lat, c.lng]);
+        const lp = this._map.latLngToLayerPoint([c.lat, c.lng]);
+        const pt = { x: lp.x - tl.x, y: lp.y - tl.y };
         const t = c.intensity;
         const radius = (10 + t * 46) * (c.rank === 1 ? pulse : 1);
         const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius);

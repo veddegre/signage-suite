@@ -174,7 +174,8 @@ function iodamap_format_score(float $score): string
       this._tick=this._tick.bind(this); requestAnimationFrame(this._tick); },
     onRemove(m) { cancelAnimationFrame(this._raf); m.off('move resize viewreset zoomend', this._resize, this);
       L.DomUtil.remove(this._canvas); },
-    _resize() { const sz=this._map.getSize(); L.DomUtil.setPosition(this._canvas, this._map.containerPointToLayerPoint([0,0]));
+    _resize() { const sz=this._map.getSize(); this._topLeft=this._map.containerPointToLayerPoint([0,0]);
+      L.DomUtil.setPosition(this._canvas, this._topLeft);
       const dpr=window.devicePixelRatio||1; this._canvas.width=Math.round(sz.x*dpr); this._canvas.height=Math.round(sz.y*dpr);
       this._canvas.style.width=sz.x+'px'; this._canvas.style.height=sz.y+'px'; this._dpr=dpr; },
     _heatRgb(t, alpha, ongoing) {
@@ -187,8 +188,11 @@ function iodamap_format_score(float $score): string
     _draw(now) {
       const ctx=this._canvas.getContext('2d'), dpr=this._dpr||1;
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,this._canvas.width/dpr,this._canvas.height/dpr);
+      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
       for (const c of COUNTRIES) {
-        const pt=this._map.latLngToContainerPoint([c.lat,c.lng]), t=c.intensity;
+        const lp = this._map.latLngToLayerPoint([c.lat, c.lng]);
+        const pt = { x: lp.x - tl.x, y: lp.y - tl.y };
+        const t=c.intensity;
         const pulse = c.ongoing ? (0.92 + 0.08 * Math.sin(now / 520)) : 1;
         const radius = (10 + t * 44) * (c.rank === 1 ? pulse : (c.ongoing ? pulse : 1));
         const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,radius);
