@@ -37,13 +37,12 @@ date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
 $showClock = signage_show_clock();
 $compact = $frameH < 1008;
-$boardPad = $compact ? '20px 24px' : '28px 32px';
-$boardGap = $compact ? 16 : 24;
-$weekRowH = $compact ? 186 : 210;
-$sunRowH = $compact ? 142 : 154;
-$nowCol = $compact ? 640 : 700;
-$weekGap = $compact ? 12 : 18;
-$dayIcon = $compact ? 68 : 80;
+$boardPad = $compact ? '18px 22px' : '24px 28px';
+$boardGap = $compact ? 14 : 20;
+$nowCol = $compact ? 660 : 700;
+$weekGap = $compact ? 10 : 16;
+$dayIcon = $compact ? 64 : 76;
+$sunSvgH = $compact ? 112 : 124;
 
 // ── Data layer ───────────────────────────────────────────────────────────────
 
@@ -347,14 +346,14 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   .board {
     width: 1920px;
     height: 100%;
+    max-height: 100%;
     min-height: 0;
     overflow: hidden;
     display: grid;
     grid-template-columns: <?= (int)$nowCol ?>px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) <?= (int)$sunRowH ?>px <?= (int)$weekRowH ?>px auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
     grid-template-areas:
       "now   radar"
-      "sun   radar"
       "week  week"
       "meta  meta";
     gap: <?= (int)$boardGap ?>px;
@@ -369,16 +368,23 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     min-height: 0;
     overflow: hidden;
   }
+  .now-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 
   .clock-line { display: flex; align-items: baseline; gap: 20px; }
   #clock {
     font-family: 'Big Shoulders Display', sans-serif;
     font-weight: 700;
-    font-size: 104px;
+    font-size: <?= $compact ? 88 : 104 ?>px;
     line-height: 1;
     letter-spacing: 1px;
   }
-  #clock .ampm { font-size: 40px; font-weight: 600; color: var(--mist); margin-left: 8px; }
+  #clock .ampm { font-size: <?= $compact ? 34 : 40 ?>px; font-weight: 600; color: var(--mist); margin-left: 8px; }
   #dateline {
     margin-top: 4px;
     font-size: 26px;
@@ -398,66 +404,64 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 14px;
+    margin-top: <?= $compact ? 8 : 14 ?>px;
   }
-  .temp-row img { width: 150px; height: 150px; margin: -20px 0 -20px -20px; }
+  .temp-row img { width: <?= $compact ? 120 : 150 ?>px; height: <?= $compact ? 120 : 150 ?>px; margin: -16px 0 -16px -16px; }
   .big-temp {
     font-family: 'Big Shoulders Display', sans-serif;
     font-weight: 700;
-    font-size: 190px;
+    font-size: <?= $compact ? 158 : 190 ?>px;
     line-height: 0.9;
     color: var(--beacon);
   }
-  .big-temp sup { font-size: 76px; font-weight: 600; vertical-align: 52px; }
+  .big-temp sup { font-size: <?= $compact ? 64 : 76 ?>px; font-weight: 600; vertical-align: 52px; }
   .condition {
-    font-size: 32px;
+    font-size: <?= $compact ? 28 : 32 ?>px;
     font-weight: 500;
     text-transform: capitalize;
-    margin-top: 10px;
+    margin-top: 8px;
   }
-  .feels { font-size: 23px; color: var(--mist); margin-top: 4px; }
+  .feels { font-size: <?= $compact ? 20 : 23 ?>px; color: var(--mist); margin-top: 4px; }
 
   .stats {
-    margin-top: 22px;
+    margin-top: <?= $compact ? 12 : 18 ?>px;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px 32px;
+    gap: <?= $compact ? '8px 20px' : '12px 32px' ?>;
     border-top: 1px solid var(--hairline);
-    padding-top: 20px;
+    padding-top: <?= $compact ? 12 : 16 ?>px;
   }
   .stat { display: flex; justify-content: space-between; align-items: baseline; }
   .stat .k { font-size: 20px; color: var(--mist); letter-spacing: 1px; text-transform: uppercase; }
   .stat .v { font-size: 27px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-  /* Sun arc — dedicated row (times stay above forecast strip) */
+  /* Sun arc + sunrise/sunset labels (single block — no extra grid row) */
   .sun {
-    grid-area: sun;
-    align-self: end;
-    min-height: 0;
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: <?= $compact ? 6 : 10 ?>px;
     min-width: 0;
-    padding-top: 4px;
   }
-  .sun svg {
+  .board .sun svg {
     display: block;
     width: 100%;
-    height: <?= $compact ? 108 : 118 ?>px;
+    height: <?= (int)$sunSvgH ?>px;
     overflow: visible;
   }
-  .sun-times {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    font-size: <?= $compact ? 19 : 22 ?>px;
-    color: var(--mist);
-    margin-top: 2px;
+  .sun .sun-time-lbl {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: <?= $compact ? 17 : 19 ?>px;
+    fill: var(--mist);
     font-variant-numeric: tabular-nums;
   }
-  .sun-times b { color: var(--snow); font-weight: 600; }
+  .sun .sun-time-lbl .time {
+    fill: var(--snow);
+    font-weight: 600;
+  }
 
   /* ── Right column: radar ──────────────────────────────────────────────── */
   .radar {
     grid-area: radar;
-    grid-row: 1 / 3;
     min-height: 0;
     background: var(--harbor);
     border: 1px solid var(--hairline);
@@ -648,6 +652,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 
   <!-- NOW -->
   <section class="now">
+    <div class="now-body">
     <?php if ($showClock): ?><div class="clock-line"><div id="clock">--:--<span class="ampm">--</span></div></div><?php endif; ?>
     <div id="dateline">&nbsp;</div>
     <div class="location"><?= h(LOCATION) ?></div>
@@ -668,25 +673,23 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
       <div class="stat"><span class="k">Pressure</span><span class="v"><?= number_format($cw['pressure'], 2) ?> inHg</span></div>
       <div class="stat"><span class="k">Visibility</span><span class="v"><?= $cw['visibility'] ?> mi</span></div>
     </div>
+    </div>
 
-  </section>
-
-  <section class="sun" aria-label="Sunrise and sunset">
-      <?php
-      $sunriseLbl = date('g:i A', $cw['sunrise']);
-      $sunsetLbl = date('g:i A', $cw['sunset']);
-      ?>
-      <svg viewBox="-16 -14 672 198" aria-hidden="true" preserveAspectRatio="xMidYMax meet">
+    <?php
+    $sunriseLbl = date('g:i A', $cw['sunrise']);
+    $sunsetLbl = date('g:i A', $cw['sunset']);
+    ?>
+    <div class="sun">
+      <svg viewBox="-16 -14 672 208" aria-label="Sun path, sunrise <?= h($sunriseLbl) ?>, sunset <?= h($sunsetLbl) ?>" preserveAspectRatio="xMidYMax meet">
         <line x1="20" y1="150" x2="620" y2="150" stroke="var(--sun-track)" stroke-width="2"/>
         <path d="M 60 150 A 260 130 0 0 1 580 150"
               fill="none" stroke="var(--sun-track)" stroke-width="3" stroke-dasharray="2 8"/>
         <path id="sunTrail" d="" fill="none" stroke="var(--sun-trail)" stroke-width="3" stroke-linecap="round"/>
         <circle id="sunDot" cx="60" cy="150" r="11" fill="var(--sun-trail)"/>
+        <text class="sun-time-lbl" x="60" y="184" text-anchor="middle">Sunrise <tspan class="time"><?= h($sunriseLbl) ?></tspan></text>
+        <text class="sun-time-lbl" x="580" y="184" text-anchor="middle">Sunset <tspan class="time"><?= h($sunsetLbl) ?></tspan></text>
       </svg>
-      <div class="sun-times">
-        <span>Sunrise <b><?= h($sunriseLbl) ?></b></span>
-        <span>Sunset <b><?= h($sunsetLbl) ?></b></span>
-      </div>
+    </div>
   </section>
 
   <!-- RADAR -->
