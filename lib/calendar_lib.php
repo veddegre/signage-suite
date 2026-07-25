@@ -346,6 +346,157 @@ function calendar_feeds_for_signage(?string $screen = null): array
     return array_values($feeds);
 }
 
+/** @return list<string> Countdown labels defined in calendar config. */
+function calendar_configured_countdown_keys(): array
+{
+    $raw = cfg('calendar.COUNTDOWNS', []);
+    if (!is_array($raw)) {
+        return [];
+    }
+    $keys = [];
+    foreach ($raw as $label => $v) {
+        $label = trim((string)$label);
+        if ($label !== '') {
+            $keys[] = $label;
+        }
+    }
+
+    return calendar_normalize_feed_key_list($keys);
+}
+
+/**
+ * Countdown labels allowed on unauthenticated kiosks (plain board.php / main). Empty when unset.
+ *
+ * @return list<string>
+ */
+function calendar_public_countdown_keys(): array
+{
+    $conf = cfg_all();
+    $cfgKey = 'calendar.PUBLIC_COUNTDOWN_KEYS';
+    if (!array_key_exists($cfgKey, $conf)) {
+        return [];
+    }
+    $raw = $conf[$cfgKey];
+    if (!is_array($raw)) {
+        return [];
+    }
+
+    return calendar_normalize_feed_key_list($raw);
+}
+
+/**
+ * Countdown labels an operator may pick for their display (owned/shared rows only).
+ *
+ * @return list<string>
+ */
+function calendar_admin_selectable_countdown_keys(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    $raw = cfg('calendar.COUNTDOWNS', []);
+    if (!is_array($raw)) {
+        return [];
+    }
+    if (admin_is_super()) {
+        return calendar_configured_countdown_keys();
+    }
+    $filtered = admin_filter_scalar_map_for_display($raw);
+    $keys = [];
+    foreach ($filtered as $label => $v) {
+        $label = trim((string)$label);
+        if ($label !== '') {
+            $keys[] = $label;
+        }
+    }
+
+    return calendar_normalize_feed_key_list($keys);
+}
+
+/**
+ * @param list<mixed> $posted
+ * @param array<string,mixed> $countdowns
+ * @return list<string>
+ */
+function calendar_normalize_public_countdown_keys_from_post(array $posted, array $countdowns): array
+{
+    $catalog = [];
+    foreach ($countdowns as $label => $v) {
+        $label = trim((string)$label);
+        if ($label === '') {
+            continue;
+        }
+        $catalog[strtolower($label)] = $label;
+    }
+    $out = [];
+    foreach ($posted as $key) {
+        $id = strtolower(trim((string)$key));
+        if ($id === '' || !isset($catalog[$id])) {
+            continue;
+        }
+        $out[] = $catalog[$id];
+    }
+
+    return calendar_normalize_feed_key_list($out);
+}
+
+/** @param array<string,mixed> $map @param list<string> $allowedKeys @return array<string,mixed> */
+function calendar_filter_countdowns_by_keys(array $map, array $allowedKeys): array
+{
+    $allowedKeys = calendar_normalize_feed_key_list($allowedKeys);
+    if ($allowedKeys === []) {
+        return [];
+    }
+    $want = [];
+    foreach ($allowedKeys as $key) {
+        $want[strtolower($key)] = true;
+    }
+    $out = [];
+    foreach ($map as $label => $v) {
+        $id = strtolower(trim((string)$label));
+        if ($id === '' || !isset($want[$id])) {
+            continue;
+        }
+        $out[(string)$label] = $v;
+    }
+
+    return $out;
+}
+
+/**
+ * Countdown rows for calendar.php — operator scope, public allowlist, and per-display picks.
+ *
+ * @return array<string,mixed>
+ */
+function calendar_countdowns_for_signage(?string $screen = null): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    require_once __DIR__ . '/screen_scope_lib.php';
+
+    if ($screen === null || $screen === '') {
+        $screen = signage_request_screen();
+    } else {
+        $screen = rotation_normalize_screen_key($screen);
+    }
+
+    $raw = cfg('calendar.COUNTDOWNS', []);
+    if (!is_array($raw)) {
+        $raw = [];
+    }
+
+    $map = admin_filter_scalar_map_for_display($raw);
+
+    if (admin_display_scope_user_id() === null) {
+        $map = calendar_filter_countdowns_by_keys($map, calendar_public_countdown_keys());
+    }
+
+    $screenKeys = rotation_screen_calendar_countdown_keys($screen);
+    if ($screenKeys !== []) {
+        $map = calendar_filter_countdowns_by_keys($map, $screenKeys);
+    }
+
+    return $map;
+}
+
 /** @return list<array{key:string,hex:string}> */
 function calendar_legend(array $feeds): array
 {

@@ -467,6 +467,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 break;
             case 'calendar_public_feeds':
                 break;
+            case 'calendar_public_countdowns':
+                break;
             case 'rows':
                 $rows = $_POST[$name] ?? [];
                 if (!is_array($rows)) $rows = [];
@@ -585,6 +587,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
         $feeds = is_array($conf['calendar.ICS_FEEDS'] ?? null) ? $conf['calendar.ICS_FEEDS'] : [];
         $conf['calendar.PUBLIC_FEED_KEYS'] = calendar_normalize_public_feed_keys_from_post($posted, $feeds);
+        $postedCd = $_POST['PUBLIC_COUNTDOWN_KEYS'] ?? [];
+        if (!is_array($postedCd)) {
+            $postedCd = [];
+        }
+        $countdowns = is_array($conf['calendar.COUNTDOWNS'] ?? null) ? $conf['calendar.COUNTDOWNS'] : [];
+        $conf['calendar.PUBLIC_COUNTDOWN_KEYS'] = calendar_normalize_public_countdown_keys_from_post($postedCd, $countdowns);
     }
     if ($board === 'slides') {
         require_once __DIR__ . '/lib/slides_lib.php';
@@ -2593,7 +2601,9 @@ function admin_rotation_kiosk_settings_panel(
     $locationFields = rotation_screen_location_fields($screenKey);
     $sportsTeamKeys = rotation_screen_sports_team_keys($screenKey);
     $screenCalendarFeedKeys = rotation_screen_calendar_feed_keys($screenKey);
+    $screenCalendarCountdownKeys = rotation_screen_calendar_countdown_keys($screenKey);
     $catalogCalendarFeedKeys = calendar_admin_selectable_feed_keys();
+    $catalogCalendarCountdownKeys = calendar_admin_selectable_countdown_keys();
     $canEditDisplayCalendarFeeds = calendar_admin_may_edit_display_feeds($screenKey);
     $sportsSlots = $sportsTeamKeys;
     while (count($sportsSlots) < 4) {
@@ -2639,6 +2649,9 @@ function admin_rotation_kiosk_settings_panel(
     }
     if ($screenCalendarFeedKeys !== []) {
         $hints[] = 'Custom calendar feeds';
+    }
+    if ($screenCalendarCountdownKeys !== []) {
+        $hints[] = 'Custom calendar countdowns';
     }
     if ($glanceH1Off || $glanceH1Title !== '' || $glanceH1PageUrl !== '' || $glanceH1Rss !== ''
         || $glanceH2Off || $glanceH2Title !== '' || $glanceH2Rss !== '') {
@@ -2865,7 +2878,7 @@ function admin_rotation_kiosk_settings_panel(
         <div class="field span-2 rotation-section">
           <span class="mini">Calendar &amp; glance feeds</span>
           <?php if (!$canEditDisplayCalendarFeeds): ?>
-          <div class="help" style="margin:6px 0 0">Main-display calendar feeds are set by a super admin under <strong>Calendar → Signage wall feeds</strong>.</div>
+          <div class="help" style="margin:6px 0 0">Main-display calendar feeds and countdowns are set by a super admin under <strong>Calendar → Signage wall feeds / countdowns</strong>.</div>
           <?php else: ?>
           <div class="help" style="margin:6px 0 10px">Feeds on <code>calendar.php</code> and <code>glance.php</code> for this display only. Leave all unchecked to use the site list from <strong>Calendar → Signage wall feeds</strong> (main / unassigned kiosks).</div>
           <?php if ($catalogCalendarFeedKeys === []): ?>
@@ -2882,6 +2895,24 @@ function admin_rotation_kiosk_settings_panel(
             <label class="check" style="margin:0">
               <input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][calendar_feeds][]" value="<?= h($fk) ?>"
                 <?= isset($screenCalChecked[strtolower($fk)]) ? 'checked' : '' ?>>
+              <?= h($fk) ?>
+            </label>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+          <?php if ($catalogCalendarCountdownKeys !== []): ?>
+          <div class="help" style="margin:12px 0 8px">Countdown strip labels (optional — checked only on this display)</div>
+          <div class="cal-public-feed-picks" style="display:flex;flex-wrap:wrap;gap:10px 18px">
+            <?php
+            $screenCdChecked = [];
+            foreach ($screenCalendarCountdownKeys as $ck) {
+                $screenCdChecked[strtolower($ck)] = true;
+            }
+            foreach ($catalogCalendarCountdownKeys as $fk):
+            ?>
+            <label class="check" style="margin:0">
+              <input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][calendar_countdowns][]" value="<?= h($fk) ?>"
+                <?= isset($screenCdChecked[strtolower($fk)]) ? 'checked' : '' ?>>
               <?= h($fk) ?>
             </label>
             <?php endforeach; ?>
@@ -3002,6 +3033,31 @@ function admin_field(array $f, $val, string $board): void
                 <?php endforeach; ?>
               </div>
               <div class="help" style="margin-top:8px">Only checked feeds appear on plain <code>board.php</code> / main (no assigned operator). Default is none until you opt in. Super admin only.</div>
+              <?php if (!empty($f['help'])): ?><div class="help" style="margin-top:8px"><?= h($f['help']) ?></div><?php endif; ?>
+              <?php endif;
+    elseif ($f['type'] === 'calendar_public_countdowns'):
+              require_once __DIR__ . '/lib/calendar_lib.php';
+              $cdKeys = calendar_configured_countdown_keys();
+              $savedPublicCd = calendar_public_countdown_keys();
+              $checkedCdIds = [];
+              foreach ($savedPublicCd as $ck) {
+                  $checkedCdIds[strtolower($ck)] = true;
+              }
+              ?>
+              <label class="l"><?= h($f['label']) ?></label>
+              <?php if ($cdKeys === []): ?>
+              <div class="help">Add countdown rows above first, then choose which may appear on the main kiosk strip.</div>
+              <?php else: ?>
+              <div class="cal-public-feed-picks" style="display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:8px">
+                <?php foreach ($cdKeys as $fk): ?>
+                <label class="check" style="margin:0">
+                  <input type="checkbox" name="PUBLIC_COUNTDOWN_KEYS[]" value="<?= h($fk) ?>"
+                    <?= isset($checkedCdIds[strtolower($fk)]) ? 'checked' : '' ?>>
+                  <?= h($fk) ?>
+                </label>
+                <?php endforeach; ?>
+              </div>
+              <div class="help" style="margin-top:8px">Only checked labels appear on plain <code>board.php</code> / main. Default is none. Super admin only.</div>
               <?php if (!empty($f['help'])): ?><div class="help" style="margin-top:8px"><?= h($f['help']) ?></div><?php endif; ?>
               <?php endif;
     else: ?>
@@ -6502,7 +6558,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
               continue;
           }
-          if ($board === 'calendar' && ($f['type'] ?? '') === 'calendar_public_feeds' && !admin_is_super()) {
+          if ($board === 'calendar' && in_array($f['type'] ?? '', ['calendar_public_feeds', 'calendar_public_countdowns'], true) && !admin_is_super()) {
               continue;
           }
           $val = current_val($rawConf, $board, $f['key']); ?>

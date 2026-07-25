@@ -154,6 +154,32 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
         } else {
             $entry['calendar_feeds'] = $calKeys;
         }
+
+        $cdPosted = $row['calendar_countdowns'] ?? null;
+        $cdKeys = [];
+        if (is_array($cdPosted)) {
+            $allowedCd = array_flip(array_map(
+                static fn(string $k): string => strtolower($k),
+                calendar_admin_selectable_countdown_keys()
+            ));
+            foreach ($cdPosted as $key) {
+                $key = trim((string)$key);
+                if ($key === '') {
+                    continue;
+                }
+                $id = strtolower($key);
+                if (!isset($allowedCd[$id])) {
+                    continue;
+                }
+                $cdKeys[$id] = $key;
+            }
+        }
+        $cdKeys = array_values($cdKeys);
+        if ($cdKeys === []) {
+            unset($entry['calendar_countdowns']);
+        } else {
+            $entry['calendar_countdowns'] = $cdKeys;
+        }
     }
 
     $sportsTitle = trim((string)($row['sports_title'] ?? ''));
@@ -243,6 +269,34 @@ function rotation_screen_calendar_feed_keys(string $screen): array
     }
     $out = [];
     foreach ($scr['calendar_feeds'] as $key) {
+        $key = trim((string)$key);
+        if ($key === '') {
+            continue;
+        }
+        $id = strtolower($key);
+        if (!isset($catalog[$id])) {
+            continue;
+        }
+        $out[$id] = $key;
+    }
+
+    return array_values($out);
+}
+
+/** @return list<string> Selected countdown labels, or empty = no per-display override. */
+function rotation_screen_calendar_countdown_keys(string $screen): array
+{
+    $scr = rotation_screen_raw_entry($screen);
+    if (!is_array($scr) || !isset($scr['calendar_countdowns']) || !is_array($scr['calendar_countdowns'])) {
+        return [];
+    }
+    require_once __DIR__ . '/calendar_lib.php';
+    $catalog = [];
+    foreach (calendar_configured_countdown_keys() as $k) {
+        $catalog[strtolower($k)] = $k;
+    }
+    $out = [];
+    foreach ($scr['calendar_countdowns'] as $key) {
         $key = trim((string)$key);
         if ($key === '') {
             continue;

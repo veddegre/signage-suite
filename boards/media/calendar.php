@@ -26,11 +26,7 @@ require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 define('ICS_FEEDS', calendar_feeds_for_signage(signage_request_screen()));
 define('TRASH_WEEKDAY', cfg('calendar.TRASH_WEEKDAY', ''));
 define('RECYCLE_ANCHOR', cfg('calendar.RECYCLE_ANCHOR', ''));
-$countdowns = cfg('calendar.COUNTDOWNS', []);
-if (!is_array($countdowns)) {
-    $countdowns = [];
-}
-define('COUNTDOWNS', admin_filter_scalar_map_for_display($countdowns));
+define('COUNTDOWNS', calendar_countdowns_for_signage(signage_request_screen()));
 define('TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit'));
 const CACHE_DIR = SIGNAGE_ROOT . '/cache';
 define('CACHE_TTL', cfg('calendar.CACHE_TTL', 600));

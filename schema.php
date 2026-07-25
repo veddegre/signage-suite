@@ -712,6 +712,8 @@ function admin_schema(): array
                      . 'LAN/private hosts need Security → Allow private URL fetches.'],
             ['key' => 'PUBLIC_FEED_KEYS', 'label' => 'Signage wall feeds (main kiosk)', 'type' => 'calendar_public_feeds',
              'help' => 'Super admin only. calendar.php / glance.php on plain board.php (no assigned operator) show only checked keys. Default: none. Operators manage feeds on their own displays under Rotation → Kiosk settings.'],
+            ['key' => 'PUBLIC_COUNTDOWN_KEYS', 'label' => 'Signage wall countdowns (main kiosk)', 'type' => 'calendar_public_countdowns',
+             'help' => 'Super admin only. Bottom countdown strip on calendar.php for main / unauthenticated kiosks — only checked labels. Default: none.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
              'help' => 'Leave as (default) to hide — e.g. apartment living'],

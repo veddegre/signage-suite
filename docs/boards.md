@@ -247,7 +247,8 @@ Expect **200** and `Content-Type: image/png`. Errors logged to `cache/traffic_ti
 
 - **ICS feeds:** one row per calendar — key (legend label), color, URL
 - **Signage wall feeds:** super admin only — which feed keys may appear on **main** / plain `board.php` (no assigned operator). **Default is none** until you check feeds and save
-- **Per display:** operators with an assigned screen use **Rotation → Kiosk settings → Calendar & glance feeds** for that display only (their own feed rows)
+- **Signage wall countdowns:** super admin only — same for the bottom countdown strip on `calendar.php` (default none)
+- **Per display:** operators with an assigned screen use **Rotation → Kiosk settings → Calendar & glance feeds** for that display only (their own feed rows and countdown labels)
 - **Trash/recycle:** `TRASH_WEEKDAY`, `RECYCLE_ANCHOR` (any past recycle date). Leave trash day as default to hide the chip
 - **Countdowns:** label → `YYYY-MM-DD`
 
