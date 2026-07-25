@@ -73,7 +73,7 @@ function iodamap_format_score(float $score): string
   #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--ioda-muted); }
   #heatMap .leaflet-control-attribution a { color:var(--ioda-muted); }
-  .heat-canvas { pointer-events:none; z-index:450; }
+  .heat-canvas { pointer-events:none; position:absolute; left:0; top:0; z-index:450; }
   .side { position:absolute; top:20px; right:28px; width:400px; max-height:calc(100% - 88px); z-index:600;
           display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; color:var(--ioda-text); }
   .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ioda-muted);
@@ -168,16 +168,29 @@ function iodamap_format_score(float $score): string
     map.setView([18, 0], Math.log(Math.max(256, s.x - 12) / 256) / Math.LN2, { animate:false });
   }
   const HeatCanvas = L.Layer.extend({
-    onAdd(m) { this._map=m; this._canvas=L.DomUtil.create('canvas','heat-canvas');
-      m.getPanes().overlayPane.appendChild(this._canvas);
-      m.on('move resize viewreset zoomend', this._resize, this); this._resize();
-      this._tick=this._tick.bind(this); requestAnimationFrame(this._tick); },
-    onRemove(m) { cancelAnimationFrame(this._raf); m.off('move resize viewreset zoomend', this._resize, this);
-      L.DomUtil.remove(this._canvas); },
-    _resize() { const sz=this._map.getSize(); this._topLeft=this._map.containerPointToLayerPoint([0,0]);
-      L.DomUtil.setPosition(this._canvas, this._topLeft);
-      const dpr=window.devicePixelRatio||1; this._canvas.width=Math.round(sz.x*dpr); this._canvas.height=Math.round(sz.y*dpr);
-      this._canvas.style.width=sz.x+'px'; this._canvas.style.height=sz.y+'px'; this._dpr=dpr; },
+    onAdd(m) {
+      this._map = m;
+      this._canvas = L.DomUtil.create('canvas', 'heat-canvas');
+      m.getContainer().appendChild(this._canvas);
+      m.on('move resize viewreset zoomend', this._resize, this);
+      this._resize();
+      this._tick = this._tick.bind(this);
+      requestAnimationFrame(this._tick);
+    },
+    onRemove(m) {
+      cancelAnimationFrame(this._raf);
+      m.off('move resize viewreset zoomend', this._resize, this);
+      L.DomUtil.remove(this._canvas);
+    },
+    _resize() {
+      const sz = this._map.getSize();
+      const dpr = window.devicePixelRatio || 1;
+      this._canvas.width = Math.round(sz.x * dpr);
+      this._canvas.height = Math.round(sz.y * dpr);
+      this._canvas.style.width = sz.x + 'px';
+      this._canvas.style.height = sz.y + 'px';
+      this._dpr = dpr;
+    },
     _heatRgb(t, alpha, ongoing) {
       const r = Math.round(45 + t * 200 + (ongoing ? 25 : 0));
       const g = Math.round(55 + t * 70);
@@ -188,10 +201,8 @@ function iodamap_format_score(float $score): string
     _draw(now) {
       const ctx=this._canvas.getContext('2d'), dpr=this._dpr||1;
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,this._canvas.width/dpr,this._canvas.height/dpr);
-      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
       for (const c of COUNTRIES) {
-        const lp = this._map.latLngToLayerPoint([c.lat, c.lng]);
-        const pt = { x: lp.x - tl.x, y: lp.y - tl.y };
+        const pt = this._map.latLngToContainerPoint([c.lat, c.lng]);
         const t=c.intensity;
         const pulse = c.ongoing ? (0.92 + 0.08 * Math.sin(now / 520)) : 1;
         const radius = (10 + t * 44) * (c.rank === 1 ? pulse : (c.ongoing ? pulse : 1));
@@ -207,7 +218,8 @@ function iodamap_format_score(float $score): string
           ctx.font = '600 11px IBM Plex Mono, monospace';
           ctx.fillStyle = 'rgba(237,242,251,0.92)';
           ctx.textAlign = 'center';
-          ctx.fillText(c.code, pt.x, pt.y - radius - 6);
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(c.code, pt.x, pt.y - radius - 4);
         }
         if (c.ongoing) {
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 + t * 2, 0, Math.PI * 2);

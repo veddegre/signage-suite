@@ -67,7 +67,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--src-muted); }
   #heatMap .leaflet-control-attribution a { color:var(--src-muted); }
-  .heat-canvas { pointer-events:none; z-index:450; }
+  .heat-canvas { pointer-events:none; position:absolute; left:0; top:0; z-index:450; }
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - 88px); z-index:600;
           display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none;
@@ -149,59 +149,84 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     subdomains:'abcd', maxZoom:6, minZoom:0, noWrap:true,
     attribution:'&copy; OpenStreetMap &copy; CARTO &middot; sources &copy; SANS DShield'
   }).addTo(map);
-  function fitWorld() {
-    const s = map.getSize(); if (!s.x) return;
-    map.setView([18, 0], Math.log(Math.max(256, s.x - 12) / 256) / Math.LN2, { animate:false });
+  function fitWorldFullWidth() {
+    const size = map.getSize();
+    if (!size.x || !size.y) return;
+    const padX = 6;
+    const w = Math.max(256, size.x - padX * 2);
+    const zoom = Math.log(w / 256) / Math.LN2;
+    map.setView([18, 0], zoom, { animate: false });
   }
   const HeatCanvas = L.Layer.extend({
-    onAdd(m) { this._map=m; this._canvas=L.DomUtil.create('canvas','heat-canvas');
-      m.getPanes().overlayPane.appendChild(this._canvas);
-      m.on('move resize viewreset zoomend', this._resize, this); this._resize();
-      this._tick=this._tick.bind(this); requestAnimationFrame(this._tick); },
-    onRemove(m) { cancelAnimationFrame(this._raf); m.off('move resize viewreset zoomend', this._resize, this);
-      L.DomUtil.remove(this._canvas); },
-    _resize() { const sz=this._map.getSize(); this._topLeft=this._map.containerPointToLayerPoint([0,0]);
-      L.DomUtil.setPosition(this._canvas, this._topLeft);
-      const dpr=window.devicePixelRatio||1; this._canvas.width=Math.round(sz.x*dpr); this._canvas.height=Math.round(sz.y*dpr);
-      this._canvas.style.width=sz.x+'px'; this._canvas.style.height=sz.y+'px'; this._dpr=dpr; },
+    onAdd(m) {
+      this._map = m;
+      this._canvas = L.DomUtil.create('canvas', 'heat-canvas');
+      m.getContainer().appendChild(this._canvas);
+      m.on('move resize viewreset zoomend', this._resize, this);
+      this._resize();
+      this._tick = this._tick.bind(this);
+      requestAnimationFrame(this._tick);
+    },
+    onRemove(m) {
+      cancelAnimationFrame(this._raf);
+      m.off('move resize viewreset zoomend', this._resize, this);
+      L.DomUtil.remove(this._canvas);
+    },
+    _resize() {
+      const sz = this._map.getSize();
+      const dpr = window.devicePixelRatio || 1;
+      this._canvas.width = Math.round(sz.x * dpr);
+      this._canvas.height = Math.round(sz.y * dpr);
+      this._canvas.style.width = sz.x + 'px';
+      this._canvas.style.height = sz.y + 'px';
+      this._dpr = dpr;
+    },
     _heatRgb(t, alpha) {
       const r = Math.round(25 + t * 65);
       const g = Math.round(55 + t * 145);
       const b = Math.round(100 + t * 155);
       return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
     },
-    _tick(now) { this._draw(now||performance.now()); this._raf=requestAnimationFrame(this._tick); },
+    _tick(now) { this._draw(now || performance.now()); this._raf = requestAnimationFrame(this._tick); },
     _draw(now) {
-      const ctx=this._canvas.getContext('2d'), dpr=this._dpr||1;
-      ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,this._canvas.width/dpr,this._canvas.height/dpr);
-      const pulse=0.92+0.08*Math.sin(now/900);
-      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
+      const ctx = this._canvas.getContext('2d');
+      const dpr = this._dpr || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, this._canvas.width / dpr, this._canvas.height / dpr);
+      const pulse = 0.92 + 0.08 * Math.sin(now / 900);
       for (const c of COUNTRIES) {
-        const lp = this._map.latLngToLayerPoint([c.lat, c.lng]);
-        const pt = { x: lp.x - tl.x, y: lp.y - tl.y };
-        const t=c.intensity;
-        const r=(10+t*46)*(c.rank===1?pulse:1);
-        const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,r);
-        g.addColorStop(0,this._heatRgb(t,0.34+t*0.26));
-        g.addColorStop(0.42,this._heatRgb(t,0.12+t*0.14));
-        g.addColorStop(1,this._heatRgb(t,0));
-        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(pt.x,pt.y,r,0,Math.PI*2); ctx.fill();
+        const pt = this._map.latLngToContainerPoint([c.lat, c.lng]);
+        const t = c.intensity;
+        const r = (10 + t * 46) * (c.rank === 1 ? pulse : 1);
+        const g = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r);
+        g.addColorStop(0, this._heatRgb(t, 0.34 + t * 0.26));
+        g.addColorStop(0.42, this._heatRgb(t, 0.12 + t * 0.14));
+        g.addColorStop(1, this._heatRgb(t, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+        ctx.fill();
         if (c.rank <= 8 || t > 0.45) {
-          ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5 + t * 2.5, 0, Math.PI * 2);
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 3.5 + t * 2.5, 0, Math.PI * 2);
           ctx.fillStyle = this._heatRgb(t, 0.88);
           ctx.fill();
           ctx.font = '600 11px "IBM Plex Mono", monospace';
           ctx.fillStyle = 'rgba(237,242,251,0.92)';
           ctx.textAlign = 'center';
-          ctx.fillText(c.code, pt.x, pt.y - r - 6);
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(c.code, pt.x, pt.y - r - 4);
         }
       }
     }
   });
-  COUNTRIES.forEach((c,i)=>{c.rank=i+1;});
-  map.addLayer(new HeatCanvas()); fitWorld();
-  setTimeout(()=>{map.invalidateSize();fitWorld();},50);
-  setTimeout(()=>{map.invalidateSize();fitWorld();},250);
+  COUNTRIES.forEach((c, i) => { c.rank = i + 1; });
+  fitWorldFullWidth();
+  map.addLayer(new HeatCanvas());
+  setTimeout(() => { map.invalidateSize(); fitWorldFullWidth(); }, 50);
+  setTimeout(() => { map.invalidateSize(); fitWorldFullWidth(); }, 250);
+  window.addEventListener('load', () => { map.invalidateSize(); fitWorldFullWidth(); });
+  window.addEventListener('resize', () => { map.invalidateSize(); fitWorldFullWidth(); });
   if (RELOAD>0) setTimeout(()=>location.reload(),RELOAD);
 })();
 </script>

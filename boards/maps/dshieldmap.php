@@ -74,7 +74,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   #heatMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--dshield-muted); }
   #heatMap .leaflet-control-attribution a { color:var(--dshield-muted); }
-  .heat-canvas { pointer-events:none; z-index:450; }
+  .heat-canvas { pointer-events:none; position:absolute; left:0; top:0; z-index:450; }
 
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $boardH < 1080 ? 88 : 96 ?>px);
@@ -203,7 +203,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     onAdd(m) {
       this._map = m;
       this._canvas = L.DomUtil.create('canvas', 'heat-canvas');
-      m.getPanes().overlayPane.appendChild(this._canvas);
+      m.getContainer().appendChild(this._canvas);
       m.on('move resize viewreset zoomend', this._resize, this);
       this._resize();
       this._tick = this._tick.bind(this);
@@ -216,8 +216,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     },
     _resize() {
       const size = this._map.getSize();
-      this._topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(this._canvas, this._topLeft);
       const dpr = window.devicePixelRatio || 1;
       this._canvas.width = Math.round(size.x * dpr);
       this._canvas.height = Math.round(size.y * dpr);
@@ -244,10 +242,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       ctx.clearRect(0, 0, w / dpr, h / dpr);
 
       const pulse = 0.92 + 0.08 * Math.sin(now / 900);
-      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
       for (const c of COUNTRIES) {
-        const lp = this._map.latLngToLayerPoint([c.lat, c.lng]);
-        const pt = { x: lp.x - tl.x, y: lp.y - tl.y };
+        const pt = this._map.latLngToContainerPoint([c.lat, c.lng]);
         const t = c.intensity;
         const radius = (10 + t * 46) * (c.rank === 1 ? pulse : 1);
         const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius);
@@ -267,7 +263,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           ctx.font = '600 11px "IBM Plex Mono", monospace';
           ctx.fillStyle = 'rgba(237,242,251,0.92)';
           ctx.textAlign = 'center';
-          ctx.fillText(c.code, pt.x, pt.y - radius - 6);
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(c.code, pt.x, pt.y - radius - 4);
         }
       }
     },

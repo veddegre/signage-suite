@@ -218,8 +218,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     },
     _resize() {
       const size = this._map.getSize();
-      const topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(this._canvas, topLeft);
+      this._topLeft = this._map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(this._canvas, this._topLeft);
       const dpr = window.devicePixelRatio || 1;
       this._canvas.width = Math.round(size.x * dpr);
       this._canvas.height = Math.round(size.y * dpr);
@@ -227,10 +227,15 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       this._canvas.style.height = size.y + 'px';
       this._dpr = dpr;
     },
+    _layerPoint(lat, lng) {
+      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
+      const lp = this._map.latLngToLayerPoint([lat, lng]);
+      return { x: lp.x - tl.x, y: lp.y - tl.y };
+    },
     _arcPoints(o, t, steps) {
       const mapW = this._map.getSize().x;
-      const p0 = this._map.latLngToContainerPoint([o.lat, o.lng]);
-      let p1 = this._map.latLngToContainerPoint([t.lat, t.lng]);
+      const p0 = this._layerPoint(o.lat, o.lng);
+      let p1 = this._layerPoint(t.lat, t.lng);
       let dLng = t.lng - o.lng;
       if (dLng > 180) dLng -= 360;
       else if (dLng < -180) dLng += 360;
@@ -264,6 +269,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       const h = this._canvas.height;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w / dpr, h / dpr);
+
+      this._topLeft = this._map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(this._canvas, this._topLeft);
 
       for (const flow of FLOWS) {
         const arc = this._arcPoints(flow.origin, flow.target, 56);
