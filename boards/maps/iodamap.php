@@ -73,7 +73,7 @@ function iodamap_format_score(float $score): string
   #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--ioda-muted); }
   #heatMap .leaflet-control-attribution a { color:var(--ioda-muted); }
-  .heat-canvas { pointer-events:none; position:absolute; left:0; top:0; z-index:450; }
+  .heat-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
   .side { position:absolute; top:20px; right:28px; width:400px; max-height:calc(100% - 88px); z-index:600;
           display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; color:var(--ioda-text); }
   .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ioda-muted);
@@ -157,15 +157,34 @@ function iodamap_format_score(float $score): string
 (function () {
   const COUNTRIES = <?= json_encode($countries, JSON_UNESCAPED_UNICODE) ?>;
   const RELOAD = <?= max(0, (int)RELOAD_SEC) ?> * 1000;
+  function heatMapPoint(map, lat, lng) {
+    const p = map.latLngToContainerPoint([lat, lng]);
+    return { x: p.x, y: p.y };
+  }
+  function heatDrawCode(ctx, code, x, y) {
+    ctx.font = '600 10px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(8,14,24,0.9)';
+    ctx.strokeText(code, x, y);
+    ctx.fillStyle = 'rgba(237,242,251,0.95)';
+    ctx.fillText(code, x, y);
+  }
   const map = L.map('heatMap', { zoomControl:false, dragging:false, scrollWheelZoom:false, doubleClickZoom:false,
     boxZoom:false, keyboard:false, touchZoom:false, attributionControl:true, worldCopyJump:false, zoomSnap:0 });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     subdomains:'abcd', maxZoom:6, minZoom:0, noWrap:true,
     attribution:'&copy; OpenStreetMap &copy; CARTO &middot; outages &copy; IODA'
   }).addTo(map);
-  function fitWorld() {
-    const s = map.getSize(); if (!s.x) return;
-    map.setView([18, 0], Math.log(Math.max(256, s.x - 12) / 256) / Math.LN2, { animate:false });
+  function fitWorldFullWidth() {
+    const size = map.getSize();
+    if (!size.x || !size.y) return;
+    const padX = 6;
+    const w = Math.max(256, size.x - padX * 2);
+    const zoom = Math.log(w / 256) / Math.LN2;
+    map.setView([18, 0], zoom, { animate: false });
   }
   const HeatCanvas = L.Layer.extend({
     onAdd(m) {
@@ -202,7 +221,7 @@ function iodamap_format_score(float $score): string
       const ctx=this._canvas.getContext('2d'), dpr=this._dpr||1;
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,this._canvas.width/dpr,this._canvas.height/dpr);
       for (const c of COUNTRIES) {
-        const pt = this._map.latLngToContainerPoint([c.lat, c.lng]);
+        const pt = heatMapPoint(this._map, c.lat, c.lng);
         const t=c.intensity;
         const pulse = c.ongoing ? (0.92 + 0.08 * Math.sin(now / 520)) : 1;
         const radius = (10 + t * 44) * (c.rank === 1 ? pulse : (c.ongoing ? pulse : 1));
@@ -215,11 +234,7 @@ function iodamap_format_score(float $score): string
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5 + t * 2, 0, Math.PI * 2);
           ctx.fillStyle = this._heatRgb(t, 0.85, c.ongoing);
           ctx.fill();
-          ctx.font = '600 11px IBM Plex Mono, monospace';
-          ctx.fillStyle = 'rgba(237,242,251,0.92)';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(c.code, pt.x, pt.y - radius - 4);
+          heatDrawCode(ctx, c.code, pt.x, pt.y);
         }
         if (c.ongoing) {
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 + t * 2, 0, Math.PI * 2);
@@ -229,9 +244,12 @@ function iodamap_format_score(float $score): string
     }
   });
   COUNTRIES.forEach((c,i)=>{c.rank=i+1;});
-  map.addLayer(new HeatCanvas()); fitWorld();
-  setTimeout(()=>{map.invalidateSize();fitWorld();},50);
-  setTimeout(()=>{map.invalidateSize();fitWorld();},250);
+  fitWorldFullWidth();
+  map.addLayer(new HeatCanvas());
+  setTimeout(()=>{map.invalidateSize();fitWorldFullWidth();},50);
+  setTimeout(()=>{map.invalidateSize();fitWorldFullWidth();},250);
+  window.addEventListener('load', () => { map.invalidateSize(); fitWorldFullWidth(); });
+  window.addEventListener('resize', () => { map.invalidateSize(); fitWorldFullWidth(); });
   if (RELOAD>0) setTimeout(()=>location.reload(),RELOAD);
 })();
 </script>

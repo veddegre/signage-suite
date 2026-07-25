@@ -74,7 +74,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   #heatMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--dshield-muted); }
   #heatMap .leaflet-control-attribution a { color:var(--dshield-muted); }
-  .heat-canvas { pointer-events:none; position:absolute; left:0; top:0; z-index:450; }
+  .heat-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
 
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $boardH < 1080 ? 88 : 96 ?>px);
@@ -179,6 +179,22 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   const COUNTRIES = <?= json_encode($countries, JSON_UNESCAPED_UNICODE) ?>;
   const RELOAD = <?= max(0, (int)RELOAD_SEC) ?> * 1000;
 
+  function heatMapPoint(map, lat, lng) {
+    const p = map.latLngToContainerPoint([lat, lng]);
+    return { x: p.x, y: p.y };
+  }
+  function heatDrawCode(ctx, code, x, y) {
+    ctx.font = '600 10px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(8,14,24,0.9)';
+    ctx.strokeText(code, x, y);
+    ctx.fillStyle = 'rgba(237,242,251,0.95)';
+    ctx.fillText(code, x, y);
+  }
+
   const map = L.map('heatMap', {
     zoomControl: false, dragging: false, scrollWheelZoom: false,
     doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false,
@@ -243,7 +259,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
       const pulse = 0.92 + 0.08 * Math.sin(now / 900);
       for (const c of COUNTRIES) {
-        const pt = this._map.latLngToContainerPoint([c.lat, c.lng]);
+        const pt = heatMapPoint(this._map, c.lat, c.lng);
         const t = c.intensity;
         const radius = (10 + t * 46) * (c.rank === 1 ? pulse : 1);
         const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius);
@@ -260,17 +276,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           ctx.arc(pt.x, pt.y, 3.5 + t * 2.5, 0, Math.PI * 2);
           ctx.fillStyle = this._heatRgb(t, 0.88);
           ctx.fill();
-          ctx.font = '600 11px "IBM Plex Mono", monospace';
-          ctx.fillStyle = 'rgba(237,242,251,0.92)';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText(c.code, pt.x, pt.y - radius - 4);
+          heatDrawCode(ctx, c.code, pt.x, pt.y);
         }
       }
     },
   });
 
   COUNTRIES.forEach((c, i) => { c.rank = i + 1; });
+  fitWorldFullWidth();
   map.addLayer(new HeatCanvas());
   fitWorldFullWidth();
 

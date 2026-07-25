@@ -69,7 +69,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   #attackMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
   #attackMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--l3-muted); }
   #attackMap .leaflet-control-attribution a { color:var(--l3-muted); }
-  .attack-canvas { pointer-events:none; z-index:450; }
+  .attack-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
 
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $boardH < 1080 ? 88 : 96 ?>px);
@@ -204,8 +204,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     onAdd(m) {
       this._map = m;
       this._canvas = L.DomUtil.create('canvas', 'attack-canvas');
-      const pane = m.getPanes().overlayPane;
-      pane.appendChild(this._canvas);
+      m.getContainer().appendChild(this._canvas);
       m.on('move resize viewreset zoomend', this._resize, this);
       this._resize();
       this._tick = this._tick.bind(this);
@@ -218,8 +217,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     },
     _resize() {
       const size = this._map.getSize();
-      this._topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(this._canvas, this._topLeft);
       const dpr = window.devicePixelRatio || 1;
       this._canvas.width = Math.round(size.x * dpr);
       this._canvas.height = Math.round(size.y * dpr);
@@ -228,9 +225,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       this._dpr = dpr;
     },
     _layerPoint(lat, lng) {
-      const tl = this._topLeft || this._map.containerPointToLayerPoint([0, 0]);
-      const lp = this._map.latLngToLayerPoint([lat, lng]);
-      return { x: lp.x - tl.x, y: lp.y - tl.y };
+      const p = this._map.latLngToContainerPoint([lat, lng]);
+      return { x: p.x, y: p.y };
     },
     _arcPoints(o, t, steps) {
       const mapW = this._map.getSize().x;
@@ -269,9 +265,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       const h = this._canvas.height;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w / dpr, h / dpr);
-
-      this._topLeft = this._map.containerPointToLayerPoint([0, 0]);
-      L.DomUtil.setPosition(this._canvas, this._topLeft);
 
       for (const flow of FLOWS) {
         const arc = this._arcPoints(flow.origin, flow.target, 56);
