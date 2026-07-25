@@ -557,7 +557,7 @@ function admin_rotation_theme_picker(string $screenKey, string $savedTheme): voi
       <?php else: ?>
       <span class="rotation-theme-fallback" style="<?= $esc(signage_theme_swatch_background_style($tid)) ?>"></span>
       <?php endif; ?>
-      <span class="rotation-theme-label"><?= $esc($tp['label']) ?></span>
+      <span class="rotation-theme-label"><?= $esc(slide_curated_theme_label($tid, $tp)) ?></span>
       <div class="rotation-theme-ticker-samples" aria-hidden="true">
         <span class="tt-bar" style="background:<?= $esc($tp['harbor']) ?>;border-color:<?= $esc($tp['beacon']) ?>" title="RSS / themed bar"></span>
         <span class="tt-bar tt-yellow" style="background:<?= $esc($nws['yellow-bar']) ?>;border-color:<?= $esc($nws['yellow-border']) ?>" title="Watch / advisory"></span>

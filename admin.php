@@ -2650,7 +2650,7 @@ function admin_rotation_kiosk_settings_panel(
         <div class="field span-2">
           <span class="l">Wall palette</span>
           <?php admin_rotation_theme_picker($screenKey, $savedTheme); ?>
-          <div class="help" style="margin-top:8px">Each swatch shows the wall look and three ticker strips: <strong>themed</strong> (RSS fallback), <strong>yellow</strong> (watch/advisory), <strong>red</strong> (warning). Native boards and the rotation shell use the palette; Grafana, Splunk, and similar embeds keep their own themes.</div>
+          <div class="help" style="margin-top:8px">Themes are listed A–Z. <strong>Lake Night (default)</strong> is used for new displays unless you pick another. Each swatch shows the wall look and three ticker strips: <strong>themed</strong> (RSS fallback), <strong>yellow</strong> (watch/advisory), <strong>red</strong> (warning). Native boards and the rotation shell use the palette; Grafana, Splunk, and similar embeds keep their own themes.</div>
         </div>
         <div class="field span-2 rotation-section">
           <span class="mini">Rotation behavior</span>
@@ -6820,15 +6820,15 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     </div>
                     <div class="bg-section">
                       <div class="bg-section-title">Theme colors</div>
-                      <p class="field-hint" style="margin:0 0 8px">Six wall palettes — Lake Night, Beacon Bar, Harbor Glow, Frost (light), Slate, and GVSU. Photo scenes below are separate.</p>
+                      <p class="field-hint" style="margin:0 0 8px">Five wall palettes (A–Z): Beacon Bar, GVSU, Harbor Glow, Lake Night (default), Slate. Photo scenes below are separate.</p>
                       <div class="bg-pick" id="bgPickTheme">
                         <?php foreach (slide_theme_background_presets() as $id => $preset):
                           $bgUrl = slide_background_url($id); ?>
-                          <label title="<?= h($preset['label']) ?>">
+                          <label title="<?= h(slide_curated_theme_label($id, $preset)) ?>">
                             <input type="radio" name="creator_bg" value="<?= h($id) ?>" <?= $id === 'lake_night' ? 'checked' : '' ?>>
                             <div class="bg-swatch" data-bg="<?= h($id) ?>">
                               <?php if ($bgUrl): ?><img src="<?= h($bgUrl) ?>" alt="" loading="lazy"><?php endif; ?>
-                              <span><?= h($preset['label']) ?></span>
+                              <span><?= h(slide_curated_theme_label($id, $preset)) ?></span>
                             </div>
                           </label>
                         <?php endforeach; ?>

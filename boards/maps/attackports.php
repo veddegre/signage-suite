@@ -28,7 +28,26 @@ unset($p);
 $embedded = isset($_GET['noticker']);
 $heightCss = signage_viewport_height();
 $boardH = signage_frame_height();
-$topBar = max(96, (int)round(104 * $boardH / 1080));
+$topBar = max(72, (int)round(104 * $boardH / 1080));
+$sideW = $boardH < 1008 ? 340 : 400;
+$sidePorts = array_slice($ports, 0, min(count($ports), $boardH < 960 ? 6 : ($boardH < 1008 ? 7 : 8)));
+$sideCount = max(1, count($sidePorts));
+$dense = $boardH < 1008 || $sideCount >= 7;
+$rowPad = $dense ? '7px 10px' : '10px 12px';
+$rowPortSz = $dense ? 18 : 22;
+$rowValSz = $dense ? 24 : 30;
+$rowMetaSz = $dense ? 12 : 13;
+$sideGap = $dense ? 6 : 10;
+$vizPad = $dense ? 14 : ($boardH < 1080 ? 20 : 28);
+
+function attackports_list_grid_style(int $count): string
+{
+    if ($count <= 0) {
+        return '';
+    }
+
+    return 'grid-template-rows:repeat(' . $count . ',minmax(0,1fr));';
+}
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -46,36 +65,41 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  .board { width:1920px; height:<?= $heightCss ?>; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+  .board { width:1920px; height:<?= $heightCss ?>; display:grid; grid-template-rows:auto minmax(0,1fr) auto;
+           min-height:0; overflow:hidden; }
   .topbar { flex-shrink:0; height:<?= $topBar ?>px; display:flex; align-items:center; justify-content:space-between;
-            gap:24px; padding:0 32px; background:var(--harbor); border-bottom:1px solid var(--hairline); }
-  .topbar h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:54px; line-height:1; }
-  .topbar .sub { display:block; font-size:22px; color:var(--beacon); margin-top:6px; }
+            gap:24px; padding:0 <?= $boardH < 1080 ? 28 : 32 ?>px; background:var(--harbor); border-bottom:1px solid var(--hairline); }
+  .topbar h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 48 : 54 ?>px; line-height:1; }
+  .topbar .sub { display:block; font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; color:var(--beacon); margin-top:6px; }
   .topbar .sub .infocon.ok { color:var(--ok); }
   .topbar .sub .infocon.warn { color:var(--warn); }
   .topbar .sub .infocon.crit { color:var(--crit); }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:52px; color:var(--mist); font-variant-numeric:tabular-nums; }
-  .main { flex:1; min-height:0; display:grid; grid-template-columns:1fr <?= $boardH < 1080 ? 360 : 400 ?>px; gap:0;
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; color:var(--mist); font-variant-numeric:tabular-nums; }
+  .main { min-height:0; display:grid; grid-template-columns:minmax(0,1fr) <?= (int)$sideW ?>px; grid-template-rows:minmax(0,1fr);
+          gap:0; overflow:hidden;
           --ports-text:#edf2fb; --ports-muted:#9eb0cc; --ports-accent:#ffb347;
           --ports-panel:rgba(10,16,28,.92); --ports-border:rgba(148,163,198,.35); }
-  .viz { position:relative; background:#0a101a; padding:<?= $boardH < 1080 ? 20 : 28 ?>px; min-height:0; }
+  .viz { position:relative; background:#0a101a; padding:<?= (int)$vizPad ?>px; min-height:0; min-width:0; overflow:hidden; height:100%; }
   #treemap { width:100%; height:100%; display:block; border-radius:12px; }
-  .side { background:var(--ports-panel); border-left:1px solid var(--ports-border); padding:20px 20px 16px;
-          display:flex; flex-direction:column; gap:10px; overflow:hidden; color:var(--ports-text); }
-  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ports-muted); }
-  .row { background:rgba(8,14,24,.55); border:1px solid var(--ports-border); border-radius:10px; padding:10px 12px;
-         color:var(--ports-text); }
+  .side { background:var(--ports-panel); border-left:1px solid var(--ports-border); padding:<?= $dense ? '12px 14px 10px' : '16px 18px 14px' ?>;
+          display:flex; flex-direction:column; gap:<?= (int)$sideGap ?>px; overflow:hidden; min-height:0; min-width:0;
+          color:var(--ports-text); }
+  .side .k { font-size:<?= $dense ? 13 : 14 ?>px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ports-muted); flex-shrink:0; }
+  .side-rows { flex:1; min-height:0; display:grid; gap:<?= (int)$sideGap ?>px; overflow:hidden; align-content:stretch; }
+  .row { background:rgba(8,14,24,.55); border:1px solid var(--ports-border); border-radius:10px; padding:<?= h($rowPad) ?>;
+         color:var(--ports-text); min-height:0; overflow:hidden; display:flex; flex-direction:column; justify-content:center; }
   .row.hero { border-color:rgba(255,179,71,.5); }
-  .row .port { font-family:'IBM Plex Mono',monospace; font-size:22px; color:var(--ports-accent); font-weight:600; }
-  .row .port .lbl { font-size:15px; font-weight:500; color:var(--ports-muted); margin-left:6px; }
-  .row .val { font-family:'Big Shoulders Display'; font-size:30px; margin-top:4px; color:var(--ports-text); line-height:1.05; }
-  .row .meta { font-size:13px; color:var(--ports-muted); margin-top:2px; }
+  .row .port { font-family:'IBM Plex Mono',monospace; font-size:<?= (int)$rowPortSz ?>px; color:var(--ports-accent); font-weight:600;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .port .lbl { font-size:<?= $dense ? 13 : 15 ?>px; font-weight:500; color:var(--ports-muted); margin-left:6px; }
+  .row .val { font-family:'Big Shoulders Display'; font-size:<?= (int)$rowValSz ?>px; margin-top:<?= $dense ? 2 : 4 ?>px; color:var(--ports-text); line-height:1.05; }
+  .row .meta { font-size:<?= (int)$rowMetaSz ?>px; color:var(--ports-muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .setup, .empty { grid-column:1/-1; display:flex; align-items:center; justify-content:center; flex-direction:column;
                    gap:18px; padding:40px; background:var(--tile-bg); }
   .setup h2, .empty h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p, .empty p { font-size:22px; color:var(--mist); }
   <?= signage_stamp_css() ?>
-  .stamp { padding:8px 32px 12px; text-align:right; flex-shrink:0; }
+  .stamp { padding:<?= $dense ? '4px 28px 8px' : '6px 32px 10px' ?>; text-align:right; flex-shrink:0; font-size:<?= $dense ? 14 : 15 ?>px; }
 </style>
 </head>
 <body>
@@ -97,13 +121,15 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     <div class="viz"><canvas id="treemap"></canvas></div>
     <div class="side">
       <div class="k">Most targeted ports</div>
-      <?php foreach (array_slice($ports, 0, min(8, count($ports))) as $i => $p): ?>
+      <div class="side-rows" style="<?= h(attackports_list_grid_style($sideCount)) ?>">
+      <?php foreach ($sidePorts as $i => $p): ?>
       <div class="row<?= $i === 0 ? ' hero' : '' ?>">
         <div class="port"><?= h((string)$p['port']) ?><?php if ($p['label']): ?> <span class="lbl"><?= h((string)$p['label']) ?></span><?php endif; ?></div>
         <div class="val"><?= h(attacks_format_count((int)$p['records'])) ?></div>
         <div class="meta"><?= h(attacks_format_count((int)$p['targets'])) ?> targets · <?= h(attacks_format_count((int)$p['sources'])) ?> sources</div>
       </div>
       <?php endforeach; ?>
+      </div>
     </div>
   </div>
   <div class="stamp"><?= h(implode(' · ', array_filter(['isc.sans.edu', $hero ? 'Port ' . $hero['port'] . ' leads' : '']))) ?></div>
@@ -196,7 +222,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         }
         ctx.font = '600 ' + Math.min(28, r.h * 0.22) + 'px "IBM Plex Mono",monospace';
         ctx.fillStyle = '#ffb347';
-        ctx.fillText(formatN(p.records), r.x + 14, r.y + r.h - 16);
+        ctx.fillText(formatN(p.records), r.x + 14, r.y + r.h - Math.max(10, Math.min(16, r.h * 0.12)));
       } else if (r.w > 48 && r.h > 32) {
         ctx.fillStyle = '#edf2fb';
         ctx.font = '700 ' + Math.min(26, Math.max(14, r.h * 0.42)) + 'px "Big Shoulders Display",sans-serif';

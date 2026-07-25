@@ -11,12 +11,16 @@ $fail = 0;
 $warn = 0;
 
 $presets = signage_theme_presets();
-if (count($presets) !== 6) {
-    fwrite(STDERR, 'FAIL: expected 6 curated signage themes, got ' . count($presets) . "\n");
+if (count($presets) !== 5) {
+    fwrite(STDERR, 'FAIL: expected 5 curated signage themes, got ' . count($presets) . "\n");
+    $fail++;
+}
+if (isset($presets['frost'])) {
+    fwrite(STDERR, "FAIL: frost must not be a curated theme\n");
     $fail++;
 }
 $requiredTokens = ['--tile-bg', '--data-accent', '--inset-muted', '--map-accent'];
-foreach (['lake_night', 'frost', 'gvsu_lakers'] as $key) {
+foreach (['lake_night', 'gvsu_lakers', 'slate'] as $key) {
     $css = signage_theme_css_block($key);
     foreach ($requiredTokens as $tok) {
         if (!str_contains($css, $tok . ':')) {

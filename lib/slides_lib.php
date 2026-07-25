@@ -791,17 +791,27 @@ function slide_theme_background_presets_all(): array
     ];
 }
 
-/** Themes offered in admin (rotation + slide creator). */
+/** Themes offered in admin (rotation + slide creator), alphabetical by label. */
 function slide_curated_theme_keys(): array
 {
     return [
-        'lake_night',
         'beacon_bar',
-        'harbor_glow',
-        'frost',
-        'slate',
         'gvsu_lakers',
+        'harbor_glow',
+        'lake_night',
+        'slate',
     ];
+}
+
+/** Display label for curated theme pickers. */
+function slide_curated_theme_label(string $key, array $preset): string
+{
+    $label = trim((string)($preset['label'] ?? $key));
+    if ($key === 'lake_night') {
+        return $label . ' (default)';
+    }
+
+    return $label;
 }
 
 /** Curated gradient themes for new picks (see slide_theme_background_presets_all for legacy render). */
