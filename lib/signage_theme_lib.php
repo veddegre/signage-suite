@@ -287,7 +287,6 @@ function signage_theme_sun_widget_css(): string
 {
     return <<<'CSS'
   .sun{overflow:visible;flex-shrink:0;}
-  .sun svg{display:block;width:100%;height:118px;overflow:visible;}
   .sun #sunDot{stroke:var(--sun-dot-ring);stroke-width:2;paint-order:stroke fill;}
 CSS;
 }
