@@ -444,13 +444,13 @@ function rotation_blank_hours_from_post_row(array $row): array
  * @param array<string,mixed> $entry
  * @param array<string,mixed> $row SCREEN_OPTS[] row
  */
-function rotation_apply_screen_kiosk_extras_post_row(array $entry, array $row): array
+function rotation_apply_screen_kiosk_extras_post_row(array $entry, array $row, string $screenKey = ''): array
 {
     if (empty($row['_screen_opts_form'])) {
         return $entry;
     }
 
-    return rotation_apply_screen_post_row($entry, $row, false, true);
+    return rotation_apply_screen_post_row($entry, $row, false, true, $screenKey);
 }
 
 /**
@@ -458,7 +458,7 @@ function rotation_apply_screen_kiosk_extras_post_row(array $entry, array $row): 
  * @param array<string,mixed> $entry
  * @param array<string,mixed> $row SCREENS[] or SCREEN_OPTS[] row
  */
-function rotation_apply_screen_post_row(array $entry, array $row, bool $includeIdentity = false, bool $kioskExtrasOnly = false): array
+function rotation_apply_screen_post_row(array $entry, array $row, bool $includeIdentity = false, bool $kioskExtrasOnly = false, string $screenKey = ''): array
 {
     if ($kioskExtrasOnly) {
         if (isset($row['hero_strip'])) {
@@ -501,7 +501,7 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
             );
         }
         require_once __DIR__ . '/screen_scope_lib.php';
-        $entry = rotation_apply_screen_scope_post_row($entry, $row);
+        $entry = rotation_apply_screen_scope_post_row($entry, $row, $screenKey);
         unset($entry['_screen_opts_form']);
         $entry = rotation_apply_screen_theme_from_post_row($entry, $row);
 
@@ -617,7 +617,7 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
 
     if ($includeIdentity || !empty($row['_screen_opts_form'])) {
         require_once __DIR__ . '/screen_scope_lib.php';
-        $entry = rotation_apply_screen_scope_post_row($entry, $row);
+        $entry = rotation_apply_screen_scope_post_row($entry, $row, $screenKey);
     }
 
     unset($entry['schedule_enabled'], $entry['cec_enabled'], $entry['cec_off'], $entry['cec_on'], $entry['_screen_opts_form']);

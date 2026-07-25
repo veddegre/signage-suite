@@ -3,8 +3,8 @@
  * TODAY AT A GLANCE — 1920×1080 signage
  * Today's calendar (from Calendar board feeds), weather summary, and headline panels.
  *
- * Setup: configure ICS feeds on the Calendar board (calendar.ICS_FEEDS).
- * Headlines: per-display under Rotation → Kiosk settings (site defaults on Today at a Glance in admin).
+ * Setup: Calendar feeds under Calendar in admin; wall visibility under Signage wall feeds.
+ * Per-display feed picks: Rotation → Kiosk settings. Headlines: site defaults + kiosk overrides.
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
@@ -22,11 +22,6 @@ define('SHOW_TOMORROW', (bool)cfg('glance.SHOW_TOMORROW', true));
 define('SHOW_WEATHER', (bool)cfg('glance.SHOW_WEATHER', true));
 define('RELOAD_SEC', max(60, (int)cfg('glance.RELOAD_SEC', 300)));
 define('TIMEZONE', cfg('glance.TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit')));
-
-$icsFeeds = cfg('calendar.ICS_FEEDS', []);
-if (!is_array($icsFeeds)) {
-    $icsFeeds = [];
-}
 
 define('SIGNAGE_CALENDAR_LIB_ONLY', true);
 require_once __DIR__ . '/calendar.php';

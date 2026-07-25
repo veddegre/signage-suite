@@ -21,12 +21,9 @@ require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/security_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/calendar_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 
-$icsFeeds = cfg('calendar.ICS_FEEDS', []);
-if (!is_array($icsFeeds)) {
-    $icsFeeds = [];
-}
-define('ICS_FEEDS', admin_filter_list_for_display($icsFeeds));
+define('ICS_FEEDS', calendar_feeds_for_signage(signage_request_screen()));
 define('TRASH_WEEKDAY', cfg('calendar.TRASH_WEEKDAY', ''));
 define('RECYCLE_ANCHOR', cfg('calendar.RECYCLE_ANCHOR', ''));
 $countdowns = cfg('calendar.COUNTDOWNS', []);

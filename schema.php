@@ -710,6 +710,8 @@ function admin_schema(): array
                      . '(webcal:// is converted to https:// automatically). '
                      . 'webdav: CalDAV (Fastmail, Nextcloud, …) with app password — not for iCloud public links. '
                      . 'LAN/private hosts need Security → Allow private URL fetches.'],
+            ['key' => 'PUBLIC_FEED_KEYS', 'label' => 'Signage wall feeds (main kiosk)', 'type' => 'calendar_public_feeds',
+             'help' => 'Super admin only. calendar.php / glance.php on plain board.php (no assigned operator) show only checked keys. Default: none. Operators manage feeds on their own displays under Rotation → Kiosk settings.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
              'options' => ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
              'help' => 'Leave as (default) to hide — e.g. apartment living'],

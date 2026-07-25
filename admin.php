@@ -465,6 +465,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if (!is_array($dec)) { $errors[] = "{$f['label']}: invalid JSON — not saved."; break; }
                 $conf[$cfgKey] = $dec;
                 break;
+            case 'calendar_public_feeds':
+                break;
             case 'rows':
                 $rows = $_POST[$name] ?? [];
                 if (!is_array($rows)) $rows = [];
@@ -574,6 +576,15 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $raw = trim((string)($_POST[$name] ?? ''));
                 if ($raw === '') unset($conf[$cfgKey]); else $conf[$cfgKey] = $raw;
         }
+    }
+    if ($board === 'calendar' && admin_is_super()) {
+        require_once __DIR__ . '/lib/calendar_lib.php';
+        $posted = $_POST['PUBLIC_FEED_KEYS'] ?? [];
+        if (!is_array($posted)) {
+            $posted = [];
+        }
+        $feeds = is_array($conf['calendar.ICS_FEEDS'] ?? null) ? $conf['calendar.ICS_FEEDS'] : [];
+        $conf['calendar.PUBLIC_FEED_KEYS'] = calendar_normalize_public_feed_keys_from_post($posted, $feeds);
     }
     if ($board === 'slides') {
         require_once __DIR__ . '/lib/slides_lib.php';
@@ -810,7 +821,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             $entry = rotation_apply_screen_post_row(
                 ['name' => $name !== '' ? $name : ($key === 'main' ? 'Main Display' : $key)],
                 $row,
-                true
+                true,
+                false,
+                $key
             );
             $screensOut[$key] = $entry;
         }
@@ -871,9 +884,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 $prevEditors = is_array($existingScreens[$sk]['shared_editors'] ?? null)
                     ? $existingScreens[$sk]['shared_editors'] : null;
                 if ($superScreensTablePosted && !$rotationKioskTabSave) {
-                    $screens[$sk] = rotation_apply_screen_kiosk_extras_post_row($entry, $opts);
+                    $screens[$sk] = rotation_apply_screen_kiosk_extras_post_row($entry, $opts, $sk);
                 } else {
-                    $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false);
+                    $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false, false, $sk);
                 }
                 if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
                     $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
@@ -2566,6 +2579,7 @@ function admin_rotation_kiosk_settings_panel(
     bool $visible = false
 ): void {
     require_once __DIR__ . '/lib/signage_theme_lib.php';
+    require_once __DIR__ . '/lib/rotation_calendar_lib.php';
     $screenSettings = rotation_screen_settings($screenKey);
     $scrValOpts = current_val($rawConf, $board, 'SCREENS');
     $scrRaw = is_array($scrValOpts[$screenKey] ?? null) ? $scrValOpts[$screenKey] : [];
@@ -2578,6 +2592,9 @@ function admin_rotation_kiosk_settings_panel(
         ? $heroCfg['slots'] : [['source' => (string)($heroCfg['source'] ?? ''), 'key' => (string)($heroCfg['key'] ?? '')]];
     $locationFields = rotation_screen_location_fields($screenKey);
     $sportsTeamKeys = rotation_screen_sports_team_keys($screenKey);
+    $screenCalendarFeedKeys = rotation_screen_calendar_feed_keys($screenKey);
+    $catalogCalendarFeedKeys = calendar_admin_selectable_feed_keys();
+    $canEditDisplayCalendarFeeds = calendar_admin_may_edit_display_feeds($screenKey);
     $sportsSlots = $sportsTeamKeys;
     while (count($sportsSlots) < 4) {
         $sportsSlots[] = '';
@@ -2619,6 +2636,9 @@ function admin_rotation_kiosk_settings_panel(
     }
     if (array_filter($sportsTeamKeys)) {
         $hints[] = 'Custom sports teams';
+    }
+    if ($screenCalendarFeedKeys !== []) {
+        $hints[] = 'Custom calendar feeds';
     }
     if ($glanceH1Off || $glanceH1Title !== '' || $glanceH1PageUrl !== '' || $glanceH1Rss !== ''
         || $glanceH2Off || $glanceH2Title !== '' || $glanceH2Rss !== '') {
@@ -2843,6 +2863,33 @@ function admin_rotation_kiosk_settings_panel(
           </div>
         </div>
         <div class="field span-2 rotation-section">
+          <span class="mini">Calendar &amp; glance feeds</span>
+          <?php if (!$canEditDisplayCalendarFeeds): ?>
+          <div class="help" style="margin:6px 0 0">Main-display calendar feeds are set by a super admin under <strong>Calendar → Signage wall feeds</strong>.</div>
+          <?php else: ?>
+          <div class="help" style="margin:6px 0 10px">Feeds on <code>calendar.php</code> and <code>glance.php</code> for this display only. Leave all unchecked to use the site list from <strong>Calendar → Signage wall feeds</strong> (main / unassigned kiosks).</div>
+          <?php if ($catalogCalendarFeedKeys === []): ?>
+          <div class="help">No calendar feeds you can use — add feeds under <strong>Calendar</strong> (your rows only).</div>
+          <?php else: ?>
+          <div class="cal-public-feed-picks" style="display:flex;flex-wrap:wrap;gap:10px 18px">
+            <?php
+            $screenCalChecked = [];
+            foreach ($screenCalendarFeedKeys as $ck) {
+                $screenCalChecked[strtolower($ck)] = true;
+            }
+            foreach ($catalogCalendarFeedKeys as $fk):
+            ?>
+            <label class="check" style="margin:0">
+              <input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][calendar_feeds][]" value="<?= h($fk) ?>"
+                <?= isset($screenCalChecked[strtolower($fk)]) ? 'checked' : '' ?>>
+              <?= h($fk) ?>
+            </label>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+          <?php endif; ?>
+        </div>
+        <div class="field span-2 rotation-section">
           <span class="mini">Today at a glance — headline columns</span>
           <div class="help" style="margin:6px 0 10px">Left and right headline boxes on <code>glance.php</code> for this display. Blank fields use site defaults from <strong>Today at a Glance</strong> in admin. RSS keys come from <strong>RSS Stories</strong>.</div>
           <div class="rotation-subgrid location-subgrid">
@@ -2931,6 +2978,32 @@ function admin_field(array $f, $val, string $board): void
               <textarea name="<?= h($f['key']) ?>" spellcheck="false"><?=
                 $val !== null ? h(json_encode($val, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) : '' ?></textarea>
               <?php if (!empty($f['help'])): ?><div class="help"><?= h($f['help']) ?></div><?php endif;
+    elseif ($f['type'] === 'calendar_public_feeds'):
+              require_once __DIR__ . '/lib/calendar_lib.php';
+              require_once __DIR__ . '/lib/rotation_calendar_lib.php';
+              $feedKeys = rotation_calendar_feed_keys();
+              $savedPublic = calendar_public_feed_keys();
+              $checkedIds = [];
+              foreach ($savedPublic as $ck) {
+                  $checkedIds[strtolower($ck)] = true;
+              }
+              ?>
+              <label class="l"><?= h($f['label']) ?></label>
+              <?php if ($feedKeys === []): ?>
+              <div class="help">Add calendar feeds above first, then choose which may appear on unauthenticated kiosks.</div>
+              <?php else: ?>
+              <div class="cal-public-feed-picks" style="display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:8px">
+                <?php foreach ($feedKeys as $fk): ?>
+                <label class="check" style="margin:0">
+                  <input type="checkbox" name="PUBLIC_FEED_KEYS[]" value="<?= h($fk) ?>"
+                    <?= isset($checkedIds[strtolower($fk)]) ? 'checked' : '' ?>>
+                  <?= h($fk) ?>
+                </label>
+                <?php endforeach; ?>
+              </div>
+              <div class="help" style="margin-top:8px">Only checked feeds appear on plain <code>board.php</code> / main (no assigned operator). Default is none until you opt in. Super admin only.</div>
+              <?php if (!empty($f['help'])): ?><div class="help" style="margin-top:8px"><?= h($f['help']) ?></div><?php endif; ?>
+              <?php endif;
     else: ?>
               <label class="l"><?= h($f['label']) ?></label>
               <input type="<?= $f['type'] === 'password' ? 'password' : ($f['type'] === 'number' ? 'number' : 'text') ?>"
@@ -6427,6 +6500,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
         <?php else: foreach ($b['fields'] as $f):
           if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
+              continue;
+          }
+          if ($board === 'calendar' && ($f['type'] ?? '') === 'calendar_public_feeds' && !admin_is_super()) {
               continue;
           }
           $val = current_val($rawConf, $board, $f['key']); ?>

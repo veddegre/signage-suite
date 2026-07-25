@@ -82,7 +82,7 @@ function rotation_screen_location_fields(string $screen): array
 }
 
 /** Apply location, sports, ticker, and glance headline fields from SCREEN_OPTS POST onto a screen registry entry. */
-function rotation_apply_screen_scope_post_row(array $entry, array $row): array
+function rotation_apply_screen_scope_post_row(array $entry, array $row, string $screenKey = ''): array
 {
     $place = trim((string)($row['location_place'] ?? ''));
     $lat = trim((string)($row['location_lat'] ?? ''));
@@ -124,6 +124,36 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row): array
         unset($entry['sports_teams']);
     } else {
         $entry['sports_teams'] = $keys;
+    }
+
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+    require_once __DIR__ . '/calendar_lib.php';
+    if (calendar_admin_may_edit_display_feeds($screenKey)) {
+        $calPosted = $row['calendar_feeds'] ?? null;
+        $calKeys = [];
+        if (is_array($calPosted)) {
+            $allowedPick = array_flip(array_map(
+                static fn(string $k): string => strtolower($k),
+                calendar_admin_selectable_feed_keys()
+            ));
+            foreach ($calPosted as $key) {
+                $key = trim((string)$key);
+                if ($key === '') {
+                    continue;
+                }
+                $id = strtolower($key);
+                if (!isset($allowedPick[$id])) {
+                    continue;
+                }
+                $calKeys[$id] = $key;
+            }
+        }
+        $calKeys = array_values($calKeys);
+        if ($calKeys === []) {
+            unset($entry['calendar_feeds']);
+        } else {
+            $entry['calendar_feeds'] = $calKeys;
+        }
     }
 
     $sportsTitle = trim((string)($row['sports_title'] ?? ''));
@@ -197,6 +227,34 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row): array
     }
 
     return $entry;
+}
+
+/** @return list<string> Selected calendar feed keys, or empty = no per-display override. */
+function rotation_screen_calendar_feed_keys(string $screen): array
+{
+    $scr = rotation_screen_raw_entry($screen);
+    if (!is_array($scr) || !isset($scr['calendar_feeds']) || !is_array($scr['calendar_feeds'])) {
+        return [];
+    }
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+    $catalog = [];
+    foreach (rotation_calendar_feed_keys() as $k) {
+        $catalog[strtolower($k)] = $k;
+    }
+    $out = [];
+    foreach ($scr['calendar_feeds'] as $key) {
+        $key = trim((string)$key);
+        if ($key === '') {
+            continue;
+        }
+        $id = strtolower($key);
+        if (!isset($catalog[$id])) {
+            continue;
+        }
+        $out[$id] = $key;
+    }
+
+    return array_values($out);
 }
 
 /** @return list<string> Selected catalog keys, or empty = use site default teams. */

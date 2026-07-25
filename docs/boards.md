@@ -246,6 +246,8 @@ Expect **200** and `Content-Type: image/png`. Errors logged to `cache/traffic_ti
 **Setup:**
 
 - **ICS feeds:** one row per calendar — key (legend label), color, URL
+- **Signage wall feeds:** super admin only — which feed keys may appear on **main** / plain `board.php` (no assigned operator). **Default is none** until you check feeds and save
+- **Per display:** operators with an assigned screen use **Rotation → Kiosk settings → Calendar & glance feeds** for that display only (their own feed rows)
 - **Trash/recycle:** `TRASH_WEEKDAY`, `RECYCLE_ANCHOR` (any past recycle date). Leave trash day as default to hide the chip
 - **Countdowns:** label → `YYYY-MM-DD`
 
@@ -257,7 +259,7 @@ Compact **today + tomorrow** calendar (left), **weather summary** (top right), a
 
 **Layout:** Clock, date, and calendar legend; today’s events (with optional tomorrow preview); OpenWeatherMap current conditions with hi/lo, **precip chance**, wind, and tomorrow outlook. Headline columns sit side-by-side when both are enabled.
 
-**Admin:** **Today at a Glance** — site-wide defaults for title, event count, tomorrow preview, weather on/off, headline column titles, GVNext URL, RSS keys, max headlines, cache TTL. Per-display overrides: **Rotation → Kiosk settings** (same pattern as sports teams and ticker RSS). Calendar data comes from **Calendar** board feeds (`calendar.ICS_FEEDS`).
+**Admin:** **Today at a Glance** — site-wide defaults for title, event count, tomorrow preview, weather on/off, headline column titles, GVNext URL, RSS keys, max headlines, cache TTL. Per-display overrides: **Rotation → Kiosk settings** (same pattern as sports teams, **calendar feed picks**, and ticker RSS). Calendar events use the same filtered feeds as **Calendar** (`calendar.PUBLIC_FEED_KEYS` + per-display picks).
 
 **Headlines (left, site default):** [GVNext](https://www.gvsu.edu/gvnext/) — scrapes `preview-title` story titles; autodiscovers RSS when the page links a feed. Per display: override page URL, column title, or RSS fallback (used when scrape returns nothing).
 

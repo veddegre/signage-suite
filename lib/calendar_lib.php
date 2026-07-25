@@ -167,6 +167,185 @@ function ics_rrule_interval(array $ev): int
     return 1;
 }
 
+/**
+ * Feed keys allowed on unauthenticated kiosks (plain board.php / main). Empty when unset.
+ *
+ * @return list<string>
+ */
+function calendar_public_feed_keys(): array
+{
+    $conf = cfg_all();
+    $cfgKey = 'calendar.PUBLIC_FEED_KEYS';
+    if (!array_key_exists($cfgKey, $conf)) {
+        return [];
+    }
+    $raw = $conf[$cfgKey];
+    if (!is_array($raw)) {
+        return [];
+    }
+
+    return calendar_normalize_feed_key_list($raw);
+}
+
+/**
+ * Feed keys an operator may pick for their display kiosk settings (owned/shared feeds only).
+ *
+ * @return list<string>
+ */
+function calendar_admin_selectable_feed_keys(): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    require_once __DIR__ . '/rotation_calendar_lib.php';
+
+    $raw = cfg('calendar.ICS_FEEDS', []);
+    if (!is_array($raw)) {
+        return [];
+    }
+    if (admin_is_super()) {
+        return rotation_calendar_feed_keys();
+    }
+    $feeds = admin_filter_list_for_display($raw);
+    $keys = [];
+    $i = 0;
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        $meta = calendar_feed_meta($feed, $i++);
+        $keys[] = $meta['key'];
+    }
+
+    return calendar_normalize_feed_key_list($keys);
+}
+
+/** Whether kiosk settings may change calendar_feeds (operators never on main). */
+function calendar_admin_may_edit_display_feeds(string $screen): bool
+{
+    require_once __DIR__ . '/users_lib.php';
+    require_once __DIR__ . '/rotation_lib.php';
+
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === '') {
+        return false;
+    }
+    if ($screen === 'main') {
+        return admin_is_super();
+    }
+
+    return admin_is_super() || admin_has_full_screen_edit($screen);
+}
+
+/** @param list<mixed> $keys @return list<string> */
+function calendar_normalize_feed_key_list(array $keys): array
+{
+    $out = [];
+    $seen = [];
+    foreach ($keys as $key) {
+        $key = trim((string)$key);
+        if ($key === '') {
+            continue;
+        }
+        $id = strtolower($key);
+        if (isset($seen[$id])) {
+            continue;
+        }
+        $seen[$id] = true;
+        $out[] = $key;
+    }
+
+    return $out;
+}
+
+/**
+ * @param list<mixed> $posted
+ * @param list<array<string,mixed>> $feeds
+ * @return list<string>
+ */
+function calendar_normalize_public_feed_keys_from_post(array $posted, array $feeds): array
+{
+    $catalog = [];
+    $i = 0;
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        $meta = calendar_feed_meta($feed, $i++);
+        $catalog[strtolower($meta['key'])] = $meta['key'];
+    }
+    $out = [];
+    foreach ($posted as $key) {
+        $id = strtolower(trim((string)$key));
+        if ($id === '' || !isset($catalog[$id])) {
+            continue;
+        }
+        $out[] = $catalog[$id];
+    }
+
+    return calendar_normalize_feed_key_list($out);
+}
+
+/** @param list<array<string,mixed>> $feeds @param list<string> $allowedKeys @return list<array<string,mixed>> */
+function calendar_filter_feeds_by_keys(array $feeds, array $allowedKeys): array
+{
+    $allowedKeys = calendar_normalize_feed_key_list($allowedKeys);
+    if ($allowedKeys === []) {
+        return [];
+    }
+    $want = [];
+    foreach ($allowedKeys as $key) {
+        $want[strtolower($key)] = true;
+    }
+    $out = [];
+    $i = 0;
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        $meta = calendar_feed_meta($feed, $i);
+        if (isset($want[strtolower($meta['key'])])) {
+            $out[] = $feed;
+        }
+        $i++;
+    }
+
+    return $out;
+}
+
+/**
+ * ICS feeds for calendar.php / glance.php — respects operator scope, public allowlist, and per-display picks.
+ *
+ * @return list<array<string,mixed>>
+ */
+function calendar_feeds_for_signage(?string $screen = null): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    require_once __DIR__ . '/screen_scope_lib.php';
+
+    if ($screen === null || $screen === '') {
+        $screen = signage_request_screen();
+    } else {
+        $screen = rotation_normalize_screen_key($screen);
+    }
+
+    $raw = cfg('calendar.ICS_FEEDS', []);
+    if (!is_array($raw)) {
+        $raw = [];
+    }
+
+    $feeds = admin_filter_list_for_display($raw);
+
+    if (admin_display_scope_user_id() === null) {
+        $feeds = calendar_filter_feeds_by_keys($feeds, calendar_public_feed_keys());
+    }
+
+    $screenKeys = rotation_screen_calendar_feed_keys($screen);
+    if ($screenKeys !== []) {
+        $feeds = calendar_filter_feeds_by_keys($feeds, $screenKeys);
+    }
+
+    return array_values($feeds);
+}
+
 /** @return list<array{key:string,hex:string}> */
 function calendar_legend(array $feeds): array
 {
