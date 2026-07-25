@@ -36,13 +36,13 @@ define('CACHE_TTL', cfg('index.CACHE_TTL', 600));
 date_default_timezone_set(TIMEZONE);
 $frameH = signage_frame_height();
 $showClock = signage_show_clock();
-$compact = $frameH < 1008;
-$boardPad = $compact ? '18px 22px' : '24px 28px';
-$boardGap = $compact ? 14 : 20;
-$nowCol = $compact ? 660 : 700;
-$weekGap = $compact ? 10 : 16;
-$dayIcon = $compact ? 64 : 76;
-$sunSvgH = $compact ? 112 : 124;
+$compact = $frameH < 992;
+$boardPad = $compact ? '20px 26px' : '26px 32px';
+$boardGap = $compact ? 16 : 22;
+$nowCol = 700;
+$weekGap = $compact ? 14 : 18;
+$dayIcon = $compact ? 72 : 80;
+$sunSvgH = $compact ? 118 : 128;
 
 // ── Data layer ───────────────────────────────────────────────────────────────
 
@@ -369,7 +369,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     overflow: hidden;
   }
   .now-body {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -435,11 +435,11 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   .stat .k { font-size: 20px; color: var(--mist); letter-spacing: 1px; text-transform: uppercase; }
   .stat .v { font-size: 27px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-  /* Sun arc + sunrise/sunset labels (single block — no extra grid row) */
+  /* Sun sits directly under stats (no flex gap to cell bottom) */
   .sun {
     flex: 0 0 auto;
-    margin-top: auto;
-    padding-top: <?= $compact ? 6 : 10 ?>px;
+    margin-top: <?= $compact ? 14 : 18 ?>px;
+    padding-top: 0;
     min-width: 0;
   }
   .board .sun svg {
@@ -569,39 +569,57 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     gap: <?= (int)$weekGap ?>px;
     min-height: 0;
     min-width: 0;
+    align-items: stretch;
   }
   .day {
     background: var(--harbor);
     border: 1px solid var(--hairline);
     border-radius: 14px;
-    padding: <?= $compact ? '10px 12px' : '14px 16px' ?>;
-    display: flex;
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: <?= (int)$dayIcon ?>px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
     align-items: center;
-    gap: <?= $compact ? 8 : 12 ?>px;
     min-width: 0;
     overflow: hidden;
   }
   .day.today { border-color: var(--beacon); }
-  .day img { width: <?= (int)$dayIcon ?>px; height: <?= (int)$dayIcon ?>px; margin: -4px; flex: none; }
-  .day .meta { flex: 1; min-width: 0; overflow: hidden; }
+  .day img { width: <?= (int)$dayIcon ?>px; height: <?= (int)$dayIcon ?>px; margin: 0; flex: none;
+             grid-row: 1 / 3; grid-column: 1; align-self: center; }
+  .day .meta { grid-column: 2; grid-row: 1 / 3; min-width: 0; overflow: hidden; align-self: center; }
   .day .name {
     font-family: 'Big Shoulders Display', sans-serif;
-    font-size: <?= $compact ? 28 : 32 ?>px;
+    font-size: <?= $compact ? 26 : 30 ?>px;
     font-weight: 600;
     letter-spacing: 1px;
     text-transform: uppercase;
+    line-height: 1.05;
   }
   .day.today .name { color: var(--beacon); }
-  .day .sub { font-size: 17px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+  .day .sub {
+    font-size: <?= $compact ? 15 : 16 ?>px;
+    color: var(--mist);
+    line-height: 1.25;
+    margin-top: 3px;
+    text-transform: capitalize;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
   .day .range {
+    grid-column: 3;
+    grid-row: 1 / 3;
     text-align: right;
     font-variant-numeric: tabular-nums;
-    flex: none;
-    white-space: nowrap;
+    align-self: center;
+    padding-left: 6px;
   }
-  .day .hi { font-size: <?= $compact ? 30 : 36 ?>px; font-weight: 600; }
-  .day .lo { font-size: <?= $compact ? 18 : 22 ?>px; color: var(--mist); }
-  .day .pop { font-size: <?= $compact ? 15 : 17 ?>px; color: var(--beacon); margin-top: 2px; }
+  .day .hi { font-size: <?= $compact ? 32 : 34 ?>px; font-weight: 600; line-height: 1.05; }
+  .day .lo { font-size: <?= $compact ? 19 : 21 ?>px; color: var(--mist); }
+  .day .pop { font-size: <?= $compact ? 14 : 16 ?>px; color: var(--beacon); margin-top: 2px; white-space: nowrap; }
 
   /* ── Footer / error states ─────────────────────────────────────────────── */
   <?= signage_stamp_css() ?>
