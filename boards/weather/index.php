@@ -310,15 +310,6 @@ $nwsMapGeoJson = $nwsMapAlerts['geojson'];
 $nwsWarningCount = (int)$nwsMapAlerts['warnings'];
 $nwsWatchCount = (int)$nwsMapAlerts['watches'];
 $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
-$weekRowH = max(188, (int)round(206 * $frameH / 1080));
-$boardPadY = 56;
-$boardGaps = 48;
-$metaRowH = 28;
-$mainRowH = $frameH - $boardPadY - $boardGaps - $metaRowH - $weekRowH;
-if ($mainRowH < 500) {
-    $weekRowH = max(176, $weekRowH - (500 - $mainRowH));
-    $mainRowH = 500;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -332,7 +323,6 @@ if ($mainRowH < 500) {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   <?= signage_theme_css() ?>
-
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -349,11 +339,9 @@ if ($mainRowH < 500) {
   .board {
     width: 1920px;
     height: 100%;
-    min-height: 0;
-    overflow: hidden;
     display: grid;
     grid-template-columns: 700px 1fr;
-    grid-template-rows: <?= (int)$mainRowH ?>px <?= (int)$weekRowH ?>px auto;
+    grid-template-rows: minmax(0, 1fr) 210px auto;
     grid-template-areas:
       "now   radar"
       "week  week"
@@ -362,19 +350,12 @@ if ($mainRowH < 500) {
     padding: 28px 32px;
   }
 
+  /* ── Left column: now ─────────────────────────────────────────────────── */
   .now {
     grid-area: now;
     display: flex;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden;
-  }
-  .now-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
   }
 
   .clock-line { display: flex; align-items: baseline; gap: 20px; }
@@ -425,14 +406,12 @@ if ($mainRowH < 500) {
   .feels { font-size: 23px; color: var(--mist); margin-top: 4px; }
 
   .stats {
-    margin-top: auto;
-    flex-shrink: 1;
-    min-height: 0;
+    margin-top: 22px;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px 32px;
     border-top: 1px solid var(--hairline);
-    padding-top: 16px;
+    padding-top: 20px;
   }
   .stat { display: flex; justify-content: space-between; align-items: baseline; }
   .stat .k { font-size: 20px; color: var(--mist); letter-spacing: 1px; text-transform: uppercase; }
@@ -440,35 +419,16 @@ if ($mainRowH < 500) {
 
   /* Sun arc — sunrise → sunset with live position */
   .sun {
-    flex-shrink: 0;
-    margin-top: 10px;
-    padding: 10px 16px 8px;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--harbor) 82%, var(--lake-night));
-    border: 1px solid color-mix(in srgb, var(--hairline) 55%, transparent);
+    margin-top: auto;
+    padding-top: 16px;
   }
-  .sun svg { width: 100%; height: 92px; display: block; overflow: visible; }
-  .sun-horizon { stroke: var(--sun-track); stroke-width: 2; }
-  .sun-arc { stroke: var(--sun-track); stroke-width: 3; stroke-dasharray: 5 8; }
-  .sun-trail {
-    stroke: var(--sun-trail);
-    stroke-width: 4;
-    stroke-linecap: round;
-    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--sun-trail) 50%, transparent));
-  }
-  .sun-dot {
-    fill: var(--sun-trail);
-    stroke: var(--sun-dot-ring);
-    stroke-width: 3;
-    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--sun-trail) 45%, transparent));
-  }
+  .sun svg { width: 100%; height: 118px; display: block; }
   .sun-times {
     display: flex;
     justify-content: space-between;
-    font-size: 20px;
+    font-size: 22px;
     color: var(--mist);
-    margin-top: 6px;
-    padding-bottom: 2px;
+    margin-top: -4px;
     font-variant-numeric: tabular-nums;
   }
   .sun-times b { color: var(--snow); font-weight: 600; }
@@ -476,7 +436,6 @@ if ($mainRowH < 500) {
   /* ── Right column: radar ──────────────────────────────────────────────── */
   .radar {
     grid-area: radar;
-    min-height: 0;
     background: var(--harbor);
     border: 1px solid var(--hairline);
     border-radius: 14px;
@@ -578,7 +537,6 @@ if ($mainRowH < 500) {
   /* ── Bottom strip: 5-day outlook ──────────────────────────────────────── */
   .week {
     grid-area: week;
-    min-height: 0;
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 24px;
@@ -663,7 +621,6 @@ if ($mainRowH < 500) {
 
   <!-- NOW -->
   <section class="now">
-    <div class="now-body">
     <?php if ($showClock): ?><div class="clock-line"><div id="clock">--:--<span class="ampm">--</span></div></div><?php endif; ?>
     <div id="dateline">&nbsp;</div>
     <div class="location"><?= h(LOCATION) ?></div>
@@ -684,14 +641,16 @@ if ($mainRowH < 500) {
       <div class="stat"><span class="k">Pressure</span><span class="v"><?= number_format($cw['pressure'], 2) ?> inHg</span></div>
       <div class="stat"><span class="k">Visibility</span><span class="v"><?= $cw['visibility'] ?> mi</span></div>
     </div>
-    </div>
 
     <div class="sun">
       <svg viewBox="0 0 640 170" aria-hidden="true">
-        <line class="sun-horizon" x1="20" y1="150" x2="620" y2="150"/>
-        <path class="sun-arc" d="M 60 150 A 260 130 0 0 1 580 150" fill="none"/>
-        <path id="sunTrail" class="sun-trail" d="" fill="none"/>
-        <circle id="sunDot" class="sun-dot" cx="60" cy="150" r="11"/>
+        <!-- horizon -->
+        <line x1="20" y1="150" x2="620" y2="150" stroke="var(--sun-track)" stroke-width="2"/>
+        <!-- arc: half-ellipse from sunrise (60,150) to sunset (580,150) -->
+        <path d="M 60 150 A 260 130 0 0 1 580 150"
+              fill="none" stroke="var(--sun-track)" stroke-width="3" stroke-dasharray="2 8"/>
+        <path id="sunTrail" d="" fill="none" stroke="var(--sun-trail)" stroke-width="3"/>
+        <circle id="sunDot" cx="60" cy="150" r="11" fill="var(--sun-trail)"/>
       </svg>
       <div class="sun-times">
         <span>Sunrise <b><?= date('g:i A', $cw['sunrise']) ?></b></span>
@@ -785,9 +744,7 @@ if ($mainRowH < 500) {
     }
     // Dim the dot at night
     const night = Date.now() < SUNRISE || Date.now() > SUNSET;
-    const fade = night ? '0.35' : '1';
-    dot.setAttribute('opacity', fade);
-    trail.setAttribute('opacity', fade);
+    dot.setAttribute('opacity', night ? '0.25' : '1');
   }
   placeSun();
   setInterval(placeSun, 60 * 1000);
