@@ -602,9 +602,9 @@ function slide_creator_finish(string $filename): void
 }
 
 /**
- * Gradient / color theme backgrounds for the slide creator.
+ * Gradient / color theme backgrounds for the slide creator (full catalog — includes retired themes for existing slides).
  */
-function slide_theme_background_presets(): array
+function slide_theme_background_presets_all(): array
 {
     return [
         'lake_night' => [
@@ -791,6 +791,33 @@ function slide_theme_background_presets(): array
     ];
 }
 
+/** Themes offered in admin (rotation + slide creator). */
+function slide_curated_theme_keys(): array
+{
+    return [
+        'lake_night',
+        'beacon_bar',
+        'harbor_glow',
+        'frost',
+        'slate',
+        'gvsu_lakers',
+    ];
+}
+
+/** Curated gradient themes for new picks (see slide_theme_background_presets_all for legacy render). */
+function slide_theme_background_presets(): array
+{
+    $all = slide_theme_background_presets_all();
+    $out = [];
+    foreach (slide_curated_theme_keys() as $key) {
+        if (isset($all[$key])) {
+            $out[$key] = $all[$key];
+        }
+    }
+
+    return $out;
+}
+
 /** Default vignette overlay so photo backgrounds stay readable with text on top. */
 function slide_photo_overlay_vignette(float $top = 0.74, float $mid = 0.38, float $bottom = 0.8): array
 {
@@ -924,7 +951,7 @@ function slide_photo_background_presets(): array
 /** All slide creator backgrounds (themes + photo scenes). */
 function slide_background_presets(): array
 {
-    return slide_theme_background_presets() + slide_photo_background_presets();
+    return slide_theme_background_presets_all() + slide_photo_background_presets();
 }
 
 function slide_background_is_photo(array $preset): bool

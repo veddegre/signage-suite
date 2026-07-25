@@ -356,6 +356,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: visible;
   }
 
   .clock-line { display: flex; align-items: baseline; gap: 20px; }
@@ -422,7 +423,6 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     margin-top: auto;
     padding-top: 16px;
   }
-  .sun svg { width: 100%; height: 118px; display: block; }
   .sun-times {
     display: flex;
     justify-content: space-between;
@@ -643,13 +643,13 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     </div>
 
     <div class="sun">
-      <svg viewBox="0 0 640 170" aria-hidden="true">
+      <svg viewBox="-16 -14 672 198" aria-hidden="true" preserveAspectRatio="xMidYMax meet">
         <!-- horizon -->
         <line x1="20" y1="150" x2="620" y2="150" stroke="var(--sun-track)" stroke-width="2"/>
         <!-- arc: half-ellipse from sunrise (60,150) to sunset (580,150) -->
         <path d="M 60 150 A 260 130 0 0 1 580 150"
               fill="none" stroke="var(--sun-track)" stroke-width="3" stroke-dasharray="2 8"/>
-        <path id="sunTrail" d="" fill="none" stroke="var(--sun-trail)" stroke-width="3"/>
+        <path id="sunTrail" d="" fill="none" stroke="var(--sun-trail)" stroke-width="3" stroke-linecap="round"/>
         <circle id="sunDot" cx="60" cy="150" r="11" fill="var(--sun-trail)"/>
       </svg>
       <div class="sun-times">

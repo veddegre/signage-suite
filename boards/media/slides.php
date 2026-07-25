@@ -142,7 +142,7 @@ if (isset($_GET['slide'])) {
            background-color:#000; background-size:<?= $fit === 'cover' ? 'cover' : 'contain' ?>; }
   <?= slides_clock_css() ?>
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-           flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
+           flex-direction:column; gap:16px; color:var(--mist); background:var(--tile-bg); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
   .empty p { font-size:26px; line-height:1.5; max-width:900px; }
 </style>
@@ -205,7 +205,7 @@ $playlist = array_map(fn($s) => [
   @media (prefers-reduced-motion: reduce) { .layer { transition:none; } }
   <?= slides_clock_css() ?>
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-           flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
+           flex-direction:column; gap:16px; color:var(--mist); background:var(--tile-bg); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
   .empty p { font-size:26px; line-height:1.5; max-width:900px; }
   .empty code { color:var(--snow); background:#141f33; padding:2px 10px; border-radius:6px; }

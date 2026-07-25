@@ -574,7 +574,7 @@ $gap = $compact ? 12 : 16;
                   flex:0 1 auto; min-height:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
   .cloudbar { margin-top:<?= $compact ? 10 : 14 ?>px; flex:0 0 auto; }
   .cloudbar .lab { display:flex; justify-content:space-between; font-size:18px; color:var(--mist); margin-bottom:6px; }
-  .cloudbar .track { height:16px; background:var(--lake-night); border:1px solid var(--hairline); border-radius:11px; overflow:hidden; position:relative; }
+  .cloudbar .track { height:16px; background:var(--tile-bg); border:1px solid var(--hairline); border-radius:11px; overflow:hidden; position:relative; }
   .cloudbar .fill { height:100%; background:var(--beacon); border-radius:11px; }
   .cloudbar.smoke .fill { background:linear-gradient(90deg, #ffb347, #e07040); }
   .cloudbar .marks { display:flex; justify-content:space-between; margin-top:4px; font-size:14px; letter-spacing:1px; text-transform:uppercase; color:var(--mist); }

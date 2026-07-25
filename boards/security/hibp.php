@@ -203,7 +203,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .hero { grid-area:hero; display:grid; grid-template-columns: <?= $hero && $hero['logo'] ? '200px 1fr' : '1fr' ?>;
           gap:<?= $boardH < 1080 ? 18 : 24 ?>px; align-items:start; min-height:0; }
   .hero-logo { width:<?= $boardH < 1080 ? 180 : 200 ?>px; height:<?= $boardH < 1080 ? 180 : 200 ?>px;
-               border-radius:12px; background:var(--lake-night); border:1px solid var(--hairline);
+               border-radius:12px; background:var(--tile-bg); border:1px solid var(--hairline);
                display:flex; align-items:center; justify-content:center; overflow:hidden; }
   .hero-logo img { max-width:88%; max-height:88%; object-fit:contain; }
   .hero-body { min-height:0; }
@@ -211,7 +211,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
                   line-height:1.1; margin-bottom:10px; }
   .hero-meta { display:flex; flex-wrap:wrap; gap:10px 18px; margin-bottom:14px; }
   .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
-          border:1px solid var(--hairline); background:var(--lake-night); font-size:<?= $boardH < 1080 ? 17 : 19 ?>px;
+          border:1px solid var(--hairline); background:var(--tile-bg); font-size:<?= $boardH < 1080 ? 17 : 19 ?>px;
           color:var(--mist); }
   .pill strong { color:var(--snow); font-weight:600; }
   .pill.alert strong { color:var(--alert); }
@@ -222,7 +222,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .side { grid-area:side; display:flex; flex-direction:column; min-height:0; }
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row .name { font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; font-weight:600; white-space:nowrap;
                overflow:hidden; text-overflow:ellipsis; }

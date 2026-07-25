@@ -44,6 +44,37 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
     }
     return array_values(array_filter($rows, static fn($r) => ($r['code'] ?? '') !== ($heroRow['code'] ?? '')));
 }
+
+$l3TargetRows = radar_show_l3_targets()
+    ? radar_panel_rows($l3Targets, ($hero['layer'] ?? '') === 'L3' && ($hero['role'] ?? '') === 'target' ? $hero : null, '%')
+    : [];
+$l3OriginRows = radar_show_l3_origins()
+    ? radar_panel_rows($l3Origins, ($hero['layer'] ?? '') === 'L3' && ($hero['role'] ?? '') === 'origin' ? $hero : null, '%')
+    : [];
+$l7TargetRows = radar_show_l7_targets()
+    ? radar_panel_rows($l7Targets, ($hero['layer'] ?? '') === 'L7' ? $hero : null, '%')
+    : [];
+$maxListRows = max(1, count($l3TargetRows), count($l3OriginRows), count($l7TargetRows));
+$denseList = $maxListRows >= 8 || $boardH < 1008;
+$listGap = $denseList ? 6 : ($boardH < 1080 ? 8 : 10);
+$rowPad = $denseList ? '7px 10px' : ($boardH < 1080 ? '10px 12px' : '12px 14px');
+$rowTitleSz = $denseList ? 15 : ($boardH < 1080 ? 17 : 18);
+$rowSideSz = $denseList ? 24 : ($boardH < 1080 ? 28 : 32);
+$rowMetaSz = $denseList ? 12 : ($boardH < 1080 ? 13 : 14);
+$barH = $denseList ? 5 : 6;
+$barMt = $denseList ? 5 : 8;
+$panelPad = $denseList ? '14px 16px' : ($boardH < 1080 ? '18px 20px' : '22px 24px');
+$heroPctSz = ($denseList || $boardH < 1080) ? 58 : 76;
+$heroTitleSz = ($denseList || $boardH < 1080) ? 40 : 52;
+
+function radar_list_grid_style(int $count): string
+{
+    if ($count <= 0) {
+        return '';
+    }
+
+    return 'grid-template-rows:repeat(' . $count . ',minmax(0,1fr));';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -62,7 +93,7 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
   .board { width:1920px; height:<?= $heightCss ?>; padding:<?= $boardH < 1080 ? '20px 28px' : '24px 32px' ?>;
            display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
            grid-template-rows: <?= $rowHead ?>px auto minmax(0, 1fr) auto;
-           grid-template-areas: "head" "summary" "main" "meta"; min-height:0; }
+           grid-template-areas: "head" "summary" "main" "meta"; min-height:0; overflow:hidden; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; gap:24px; }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 54 : 62 ?>px; }
   .head h1 span { color:var(--beacon); }
@@ -81,10 +112,11 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
   .main { grid-area:main; min-height:0; display:grid; gap:<?= $boardH < 1080 ? 16 : 20 ?>px;
           grid-template-columns: repeat(<?= (int)$mainCols ?>, minmax(0, 1fr));
           grid-template-rows: <?= $hero ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)' ?>;
-          min-width:0; align-content:stretch; }
+          min-width:0; align-content:stretch; overflow:hidden; }
+  .main > .panel:not(.hero-panel) { min-height:0; height:100%; max-height:100%; }
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
-           padding:<?= $boardH < 1080 ? '18px 20px' : '22px 24px' ?>; min-height:0; overflow:hidden;
-           display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 14 ?>px; }
+           padding:<?= h($panelPad) ?>; min-height:0; overflow:hidden;
+           display:flex; flex-direction:column; gap:<?= $denseList ? 8 : ($boardH < 1080 ? 12 : 14) ?>px; }
   .panel.hero-panel { grid-column: 1 / -1; flex-shrink:0; }
   .panel h2 { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 30 : 34 ?>px; font-weight:600;
               line-height:1.1; flex-shrink:0; }
@@ -96,7 +128,7 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
   .hero .tag { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; color:var(--beacon);
                flex-shrink:0; }
   .hero-body { min-width:0; }
-  .hero-title { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; line-height:1.05;
+  .hero-title { font-family:'Big Shoulders Display'; font-size:<?= (int)$heroTitleSz ?>px; line-height:1.05;
                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .hero-meta { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
   .hero-meta .chip { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; padding:6px 14px; border-radius:999px;
@@ -106,19 +138,23 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
               color:var(--beacon); text-align:right; line-height:1; font-variant-numeric:tabular-nums;
               flex-shrink:0; white-space:nowrap; }
 
-  .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
-  .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
-         border:1px solid var(--hairline); border-radius:10px; min-width:0; }
+  .hero-pct { font-family:'Big Shoulders Display'; font-size:<?= (int)$heroPctSz ?>px;
+              color:var(--beacon); text-align:right; line-height:1; font-variant-numeric:tabular-nums;
+              flex-shrink:0; white-space:nowrap; }
+
+  .list { flex:1; min-height:0; min-width:0; display:grid; gap:<?= (int)$listGap ?>px; overflow:hidden; align-content:stretch; }
+  .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center; min-height:0;
+         padding:<?= h($rowPad) ?>; background:var(--tile-bg);
+         border:1px solid var(--hairline); border-radius:10px; min-width:0; overflow:hidden; }
   .row.us { border-color:rgba(255,179,71,.45); }
-  .row .title { font-size:<?= $boardH < 1080 ? 17 : 18 ?>px; font-weight:500;
+  .row .title { font-size:<?= (int)$rowTitleSz ?>px; font-weight:500;
                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .code { font-family:'IBM Plex Mono',monospace; color:var(--beacon); margin-right:8px; }
-  .bar { height:6px; border-radius:999px; background:var(--hairline); margin-top:8px; overflow:hidden; }
+  .bar { height:<?= (int)$barH ?>px; border-radius:999px; background:var(--hairline); margin-top:<?= (int)$barMt ?>px; overflow:hidden; }
   .bar > i { display:block; height:100%; background:var(--beacon); border-radius:999px; }
   .row .side { text-align:right; white-space:nowrap; font-family:'Big Shoulders Display';
-               font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; color:var(--snow); }
-  .row .side span { display:block; font-family:'IBM Plex Sans',sans-serif; font-size:<?= $boardH < 1080 ? 13 : 14 ?>px; color:var(--mist); }
+               font-size:<?= (int)$rowSideSz ?>px; color:var(--snow); line-height:1.05; }
+  .row .side span { display:block; font-family:'IBM Plex Sans',sans-serif; font-size:<?= (int)$rowMetaSz ?>px; color:var(--mist); }
 
   .empty, .notcfg { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; color:var(--mist); line-height:1.55; }
   .notcfg { grid-area:main; padding:20px 0; }
@@ -169,12 +205,10 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
     <?php if (radar_show_l3_targets()): ?>
     <section class="panel">
       <h2>L3 DDoS targets<span class="panel-sub">Countries under attack</span></h2>
-      <div class="list">
-        <?php
-        $rows = radar_panel_rows($l3Targets, ($hero['layer'] ?? '') === 'L3' && ($hero['role'] ?? '') === 'target' ? $hero : null, '%');
-        if ($rows === []): ?>
+      <div class="list" style="<?= h(radar_list_grid_style(count($l3TargetRows))) ?>">
+        <?php if ($l3TargetRows === []): ?>
         <div class="empty">No L3 target data for <?= h($range) ?>.</div>
-        <?php else: foreach ($rows as $c): ?>
+        <?php else: foreach ($l3TargetRows as $c): ?>
         <div class="row <?= ($c['code'] ?? '') === 'US' ? 'us' : '' ?>">
           <div>
             <div class="title"><span class="code"><?= h((string)$c['code']) ?></span><?= h((string)$c['name']) ?></div>
@@ -190,12 +224,10 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
     <?php if (radar_show_l3_origins()): ?>
     <section class="panel">
       <h2>L3 attack origins<span class="panel-sub">Source countries</span></h2>
-      <div class="list">
-        <?php
-        $rows = radar_panel_rows($l3Origins, ($hero['layer'] ?? '') === 'L3' && ($hero['role'] ?? '') === 'origin' ? $hero : null, '%');
-        if ($rows === []): ?>
+      <div class="list" style="<?= h(radar_list_grid_style(count($l3OriginRows))) ?>">
+        <?php if ($l3OriginRows === []): ?>
         <div class="empty">No L3 origin data for <?= h($range) ?>.</div>
-        <?php else: foreach ($rows as $c): ?>
+        <?php else: foreach ($l3OriginRows as $c): ?>
         <div class="row <?= ($c['code'] ?? '') === 'US' ? 'us' : '' ?>">
           <div>
             <div class="title"><span class="code"><?= h((string)$c['code']) ?></span><?= h((string)$c['name']) ?></div>
@@ -211,12 +243,10 @@ function radar_panel_rows(array $rows, ?array $heroRow, string $unit): array
     <?php if (radar_show_l7_targets()): ?>
     <section class="panel">
       <h2>L7 attack targets<span class="panel-sub">Application layer</span></h2>
-      <div class="list">
-        <?php
-        $rows = radar_panel_rows($l7Targets, ($hero['layer'] ?? '') === 'L7' ? $hero : null, '%');
-        if ($rows === []): ?>
+      <div class="list" style="<?= h(radar_list_grid_style(count($l7TargetRows))) ?>">
+        <?php if ($l7TargetRows === []): ?>
         <div class="empty">No L7 target data for <?= h($range) ?>.</div>
-        <?php else: foreach ($rows as $c): ?>
+        <?php else: foreach ($l7TargetRows as $c): ?>
         <div class="row <?= ($c['code'] ?? '') === 'US' ? 'us' : '' ?>">
           <div>
             <div class="title"><span class="code"><?= h((string)$c['code']) ?></span><?= h((string)$c['name']) ?></div>

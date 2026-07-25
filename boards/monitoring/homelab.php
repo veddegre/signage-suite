@@ -180,7 +180,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
 
   .meter { margin-top:<?= $boardH < 1080 ? 10 : 16 ?>px; }
   .meter .lab { display:flex; justify-content:space-between; font-size:<?= $boardH < 1080 ? 18 : 21 ?>px; color:var(--mist); margin-bottom:6px; }
-  .meter .track { height:16px; background:var(--lake-night); border-radius:8px; overflow:hidden; }
+  .meter .track { height:16px; background:var(--tile-bg); border-radius:8px; overflow:hidden; }
   .meter .fill { height:100%; background:var(--beacon); border-radius:8px; }
   .meter .fill.hot { background:var(--down); }
 
@@ -203,7 +203,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .svcrow .ms { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 20 : 23 ?>px; color:var(--mist); }
   .storagebars { margin-top:<?= $boardH < 1080 ? 8 : 14 ?>px; }
   .notcfg { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:14px; line-height:1.5; }
-  .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
+  .notcfg code { background:var(--tile-bg); padding:2px 8px; border-radius:6px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>

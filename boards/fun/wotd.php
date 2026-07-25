@@ -326,7 +326,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
               color:var(--snow); padding-left:<?= $boardH < 1080 ? '36px' : '44px' ?>; max-width:1100px; }
 
   .side { display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 14 ?>px; min-height:0; }
-  .side-block { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
+  .side-block { background:var(--tile-bg); border:1px solid var(--hairline); border-radius:12px;
                 padding:<?= $boardH < 1080 ? '16px 18px' : '18px 22px' ?>; flex:1; min-height:0; overflow:hidden; }
   .side-block .k { margin-bottom:8px; font-size:14px; }
   .etym { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; line-height:1.5; color:var(--snow); }
@@ -339,7 +339,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .quote { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 26 : 30 ?>px; line-height:1.45;
            font-style:italic; color:var(--snow); }
   .cite { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; color:var(--mist); margin-top:12px; line-height:1.4; }
-  .thought { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.45; color:var(--lilac); }
+  .thought { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.45; color:var(--data-accent); }
 
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; }
   <?= signage_stamp_css() ?>

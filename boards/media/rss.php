@@ -236,6 +236,7 @@ $payload = array_map(fn($i) => [
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   <?= signage_theme_css() ?>
+  <?= signage_rss_overlay_css() ?>
 
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night);
@@ -272,26 +273,25 @@ $payload = array_map(fn($i) => [
             display:flex; justify-content:space-between; align-items:flex-start; }
   .brand-block { display:flex; flex-direction:column; gap:6px; max-width:70%; }
   .brand { font-family:'Big Shoulders Display'; font-weight:700; font-size:52px; letter-spacing:1px; }
-  .brand span { color:var(--beacon); }
-  .stamp { font-size:15px; color:var(--mist); opacity:.7; white-space:nowrap;
+  .stamp { font-size:15px; opacity:.7; white-space:nowrap;
            overflow:hidden; text-overflow:ellipsis; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px;
            font-variant-numeric:tabular-nums; text-shadow:0 1px 12px rgba(0,0,0,.6); }
 
   .text { position:absolute; left:48px; bottom:120px; width:1080px; z-index:5;
           opacity:0; transform:translateY(14px); transition:opacity .9s ease, transform .9s ease; }
   .text.show { opacity:1; transform:none; }
-  .meta { font-size:24px; letter-spacing:2px; text-transform:uppercase; color:var(--beacon);
+  .meta { font-size:24px; letter-spacing:2px; text-transform:uppercase;
           margin-bottom:18px; font-weight:600; }
-  .meta span { color:var(--mist); font-weight:400; letter-spacing:1px; text-transform:none; }
+  .meta span { font-weight:400; letter-spacing:1px; text-transform:none; }
   h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:84px; line-height:1.02;
        text-wrap:balance; text-shadow:0 2px 24px rgba(0,0,0,.55); }
-  .syn { font-size:32px; line-height:1.5; color:var(--snow); opacity:.92; margin-top:24px;
+  .syn { font-size:32px; line-height:1.5; margin-top:24px;
          max-width:1000px; text-shadow:0 1px 14px rgba(0,0,0,.6); }
 
   .dots { position:absolute; left:48px; bottom:52px; z-index:5; display:flex; gap:12px; }
-  .dot { width:46px; height:7px; border-radius:4px; background:var(--hairline); overflow:hidden; }
-  .dot .p { display:block; height:100%; width:0; background:var(--beacon); }
+  .dot { width:46px; height:7px; border-radius:4px; overflow:hidden; }
+  .dot .p { display:block; height:100%; width:0; }
   .dot.done .p { width:100%; }
   .dot.active .p { animation:fillbar linear forwards; }
   @keyframes fillbar { from { width:0 } to { width:100% } }
@@ -302,7 +302,7 @@ $payload = array_map(fn($i) => [
   .empty p { font-size:28px; }
 </style>
 </head>
-<body>
+<body class="rss-story-page">
 <div class="photo" id="photoA"><span class="photo-blur" aria-hidden="true"></span><span class="photo-main" aria-hidden="true"></span></div>
 <div class="photo" id="photoB"><span class="photo-blur" aria-hidden="true"></span><span class="photo-main" aria-hidden="true"></span></div>
 

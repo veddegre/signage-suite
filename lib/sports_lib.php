@@ -713,15 +713,53 @@ function sports_format_game_time(string $iso, DateTimeZone $tz): string
     }
 }
 
-/** Prefer scoreboard/dark logos — readable on navy signage backgrounds. */
-function sports_team_logo_url(array $teamNode): ?string
+function sports_team_logo_is_dark_variant(string $href): bool
 {
+    return (bool) preg_match('#(?:scoreboard|500-dark|/dark/|on-dark|-dark\.(?:png|svg|gif|webp))#i', $href);
+}
+
+/** Map ESPN white/scoreboard asset URLs to full-color marks for light backgrounds. */
+function sports_team_logo_color_from_dark(string $href): ?string
+{
+    $candidates = [
+        preg_replace('#/500-dark/scoreboard/#i', '/500/', $href),
+        preg_replace('#/500/scoreboard/#i', '/500/', $href),
+        str_replace('/500-dark/', '/500/', $href),
+        preg_replace('#500-dark#i', '500', $href),
+    ];
+    foreach ($candidates as $url) {
+        if (!is_string($url) || $url === '' || $url === $href) {
+            continue;
+        }
+        if (!sports_team_logo_is_dark_variant($url)) {
+            return $url;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Pick a team logo for the active signage theme.
+ * Dark themes: white scoreboard marks. Light themes: full-color logos.
+ */
+function sports_team_logo_url(array $teamNode, ?bool $lightSignage = null): ?string
+{
+    if ($lightSignage === null) {
+        if (!function_exists('signage_active_theme_key')) {
+            require_once __DIR__ . '/signage_theme_lib.php';
+        }
+        $preset = signage_theme_preset(signage_active_theme_key());
+        $lightSignage = $preset !== null && ($preset['light'] ?? '0') === '1';
+    }
+
     $logos = $teamNode['logos'] ?? [];
     if (!is_array($logos)) {
         return null;
     }
-    $preferred = [];
-    $fallback = null;
+    $color = [];
+    $dark = [];
+    $all = [];
     foreach ($logos as $logo) {
         if (!is_array($logo)) {
             continue;
@@ -730,14 +768,33 @@ function sports_team_logo_url(array $teamNode): ?string
         if ($href === '') {
             continue;
         }
-        if ($fallback === null) {
-            $fallback = $href;
-        }
-        if (str_contains($href, 'scoreboard') || str_contains($href, '500-dark')) {
-            $preferred[] = $href;
+        $all[] = $href;
+        if (sports_team_logo_is_dark_variant($href)) {
+            $dark[] = $href;
+        } else {
+            $color[] = $href;
         }
     }
-    return $preferred[0] ?? $fallback;
+
+    if ($lightSignage) {
+        if ($color !== []) {
+            return $color[0];
+        }
+        foreach ($dark as $href) {
+            $converted = sports_team_logo_color_from_dark($href);
+            if ($converted !== null) {
+                return $converted;
+            }
+        }
+
+        return $all[0] ?? null;
+    }
+
+    if ($dark !== []) {
+        return $dark[0];
+    }
+
+    return $all[0] ?? null;
 }
 
 function sports_standings_line(string $record, string $standing): string

@@ -10,6 +10,10 @@
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/sports_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/signage_theme_lib.php';
+
+$themePreset = signage_theme_preset(signage_active_theme_key());
+$themeLight = $themePreset !== null && ($themePreset['light'] ?? '0') === '1';
 
 const SPORTS_CACHE_DIR = SIGNAGE_ROOT . '/cache';
 
@@ -152,7 +156,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .card-row { display:flex; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; min-height:0; flex:1; align-items:stretch; }
   .logo-wrap { flex:0 0 <?= $boardH < 1080 ? 92 : 108 ?>px; display:flex; align-items:center; justify-content:center;
                border-radius:12px; padding:10px; overflow:hidden;
-               background:var(--surface-inset);
+               background:var(--logo-plate, var(--surface-inset));
                border:1px solid color-mix(in srgb, var(--hairline) 55%, transparent); }
   .logo-wrap img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
   .logo-wrap .sport-fallback { width:100%; height:100%; color:var(--mist); opacity:.55; display:flex;
@@ -179,6 +183,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .score-team { display:flex; align-items:center; gap:12px; min-width:0; }
   .score-team.opp { flex-direction:row-reverse; }
   .score-logo { width:<?= $boardH < 1080 ? 44 : 52 ?>px; height:<?= $boardH < 1080 ? 44 : 52 ?>px; object-fit:contain; }
+  .board[data-light="1"] .score-logo { filter:drop-shadow(0 0 1px color-mix(in srgb, var(--mist) 70%, #0c1422)); }
   .score-num { font-family:'Big Shoulders Display'; font-weight:700;
                font-size:<?= $boardH < 1080 ? 52 : 64 ?>px; line-height:1; font-variant-numeric:tabular-nums; }
   .card.result-win .score-num { color:var(--up); }
@@ -206,7 +211,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                  display:flex; flex-direction:column; justify-content:center;
                  background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent); }
   .recent-item .top { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
-  .recent-item .mini-logo { width:28px; height:28px; flex:0 0 28px; display:flex; align-items:center; justify-content:center; }
+  .recent-item .mini-logo { width:28px; height:28px; flex:0 0 28px; display:flex; align-items:center; justify-content:center;
+                            border-radius:8px; padding:2px; background:var(--logo-plate, transparent); }
   .recent-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; }
   .recent-item .n { font-family:'Big Shoulders Display'; font-weight:600; font-size:20px; }
   .recent-item .streak { margin-left:auto; font-family:'IBM Plex Mono',monospace; font-size:16px; color:var(--beacon); }
@@ -222,7 +228,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                gap:10px; min-width:0; min-height:0; overflow:hidden;
                background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent); }
   .next-item .mini-logo { flex:0 0 38px; width:38px; height:38px; display:flex; align-items:center;
-                          justify-content:center; }
+                          justify-content:center; border-radius:10px; padding:3px;
+                          background:var(--logo-plate, transparent); }
   .next-item .mini-logo img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
   .next-item .mini-logo .sport-fallback { width:100%; height:100%; color:var(--mist); opacity:.55; display:flex;
                                           align-items:center; justify-content:center; }
@@ -241,7 +248,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 </style>
 </head>
 <body>
-<div class="board">
+<div class="board" data-light="<?= $themeLight ? '1' : '0' ?>">
   <div class="head">
     <h1><?= h(TITLE) ?><span class="sub"><?= h(SUBTITLE) ?></span></h1>
     <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>

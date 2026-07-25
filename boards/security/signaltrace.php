@@ -195,7 +195,7 @@ if (is_array($clicks)) {
   .panel .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:18px; }
   .bar { display:grid; grid-template-columns:130px 1fr 80px; align-items:center; gap:14px; margin-bottom:14px; }
   .bar .n { font-size:24px; }
-  .bar .track { height:18px; background:var(--lake-night); border-radius:9px; overflow:hidden; }
+  .bar .track { height:18px; background:var(--tile-bg); border-radius:9px; overflow:hidden; }
   .bar .fill { height:100%; border-radius:9px; }
   .bar .c { font-size:26px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
 
@@ -220,7 +220,7 @@ if (is_array($clicks)) {
            text-transform:uppercase; padding:3px 12px; border-radius:7px; color:var(--lake-night); }
   .dim { color:var(--mist); }
   .setupmsg { font-size:30px; color:var(--mist); line-height:1.6; padding:30px; }
-  .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
+  .setupmsg code { color:var(--snow); background:var(--code-bg); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>

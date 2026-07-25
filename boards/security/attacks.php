@@ -79,7 +79,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .k { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist); }
 
   .hero { display:grid; grid-template-columns:auto 1fr; gap:<?= $boardH < 1080 ? 16 : 20 ?>px; align-items:start;
-          padding:<?= $boardH < 1080 ? '14px 16px' : '16px 18px' ?>; background:var(--lake-night);
+          padding:<?= $boardH < 1080 ? '14px 16px' : '16px 18px' ?>; background:var(--tile-bg);
           border:1px solid var(--hairline); border-radius:12px; min-width:0; }
   .hero.us { border-color:var(--beacon); }
   .hero .tag { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 22 : 24 ?>px; color:var(--beacon);
@@ -93,7 +93,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row.us { border-color:rgba(255,179,71,.45); }
   .row .title { font-size:<?= $boardH < 1080 ? 18 : 19 ?>px; font-weight:500; }

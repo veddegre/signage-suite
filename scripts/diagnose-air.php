@@ -154,4 +154,66 @@ if ($omBody !== false) {
     }
 }
 
+if ($googleKey === '') {
+    echo "\nGoogle Pollen skipped — add air.GOOGLE_POLLEN_API_KEY in admin for US pollen (Grass / Tree / Weed UPI).\n";
+} else {
+    $pollenUrl = 'https://pollen.googleapis.com/v1/forecast:lookup?' . http_build_query([
+        'key' => $googleKey,
+        'location.latitude' => $lat,
+        'location.longitude' => $lon,
+        'days' => 3,
+    ]);
+    $ch = curl_init($pollenUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_USERAGENT => 'HomeSignage/DiagnoseAir/1.0',
+    ]);
+    $pb = curl_exec($ch);
+    $pc = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+    echo "\nGoogle Pollen HTTP {$pc}\n";
+    if ($pb === false) {
+        echo "  request failed\n";
+    } else {
+        $pdata = json_decode($pb, true);
+        if (!is_array($pdata)) {
+            echo "  invalid JSON\n";
+        } elseif (isset($pdata['error'])) {
+            echo '  API error: ' . (string)($pdata['error']['message'] ?? 'unknown') . "\n";
+        } elseif (!isset($pdata['dailyInfo']) || !is_array($pdata['dailyInfo']) || $pdata['dailyInfo'] === []) {
+            echo "  empty dailyInfo — board will not use Google pollen\n";
+        } else {
+            date_default_timezone_set((string)cfg('air.TIMEZONE', 'America/Detroit'));
+            $today = date('Y-m-d');
+            echo "  Today (local): {$today}\n";
+            foreach ($pdata['dailyInfo'] as $day) {
+                if (!is_array($day)) {
+                    continue;
+                }
+                $date = $day['date'] ?? [];
+                $y = (int)($date['year'] ?? 0);
+                $m = (int)($date['month'] ?? 0);
+                $d = (int)($date['day'] ?? 0);
+                $dayKey = ($y > 0 && $m > 0 && $d > 0) ? sprintf('%04d-%02d-%02d', $y, $m, $d) : '?';
+                $tag = $dayKey === $today ? ' ← today' : '';
+                echo "  {$dayKey}{$tag}\n";
+                foreach ($day['pollenTypeInfo'] ?? [] as $pt) {
+                    if (!is_array($pt)) {
+                        continue;
+                    }
+                    $code = (string)($pt['code'] ?? '?');
+                    $inSeason = !empty($pt['inSeason']) ? 'in season' : 'off season flag';
+                    $idx = is_array($pt['indexInfo'] ?? null) ? $pt['indexInfo'] : [];
+                    $upi = $idx['value'] ?? '—';
+                    $cat = (string)($idx['category'] ?? '—');
+                    echo "    {$code}: {$inSeason}, UPI {$upi} ({$cat})\n";
+                }
+            }
+            echo "  Note: board shows \"Off season\" only when UPI data is missing for that type (Tree often low/off in late July; Grass should usually have UPI).\n";
+        }
+    }
+}
+
 echo "\nDone.\n";

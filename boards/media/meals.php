@@ -128,7 +128,7 @@ $compact = $boardH < 1080;
   .slot.hero .slot-v { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 44 : 52 ?>px; line-height:1.08; }
   .note, .hero-note { font-size:<?= $compact ? 22 : 24 ?>px; color:var(--seafoam); line-height:1.35; margin-top:8px; }
   .empty, .setup { font-size:<?= $compact ? 24 : 26 ?>px; color:var(--mist); line-height:1.5; }
-  .setup code { background:var(--lake-night); padding:2px 8px; border-radius:6px; color:var(--snow); }
+  .setup code { background:var(--tile-bg); padding:2px 8px; border-radius:6px; color:var(--snow); }
 
   .week { grid-area:week; display:grid; grid-template-columns:repeat(6,1fr); gap:16px; min-height:0; }
   .day { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;

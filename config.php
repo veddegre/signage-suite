@@ -197,7 +197,10 @@ function signage_theme_css(): string
     require_once __DIR__ . '/lib/signage_theme_lib.php';
     $key = signage_active_theme_key();
 
-    return signage_theme_css_block($key) . signage_theme_inset_surface_css();
+    return signage_theme_css_block($key)
+        . signage_theme_inset_surface_css()
+        . signage_theme_board_shell_css()
+        . signage_theme_sun_widget_css();
 }
 
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */
@@ -226,6 +229,54 @@ function signage_glass_panel_css(): string
     return 'background:color-mix(in srgb,var(--harbor) 88%, transparent);'
          . 'border:1px solid color-mix(in srgb,var(--hairline) 60%, transparent);'
          . 'backdrop-filter:blur(8px);';
+}
+
+/**
+ * Full-bleed photo / rotator overlays — always light text on imagery (not theme --snow/--mist).
+ * Echo inside rotator (or any board with text over photos).
+ */
+function signage_photo_overlay_css(): string
+{
+    return <<<'CSS'
+  body.photo-overlay-page { --photo-text:#edf2fb; --photo-muted:#b8c8de; --photo-accent:#ffb347; }
+  body.photo-overlay-page::after {
+    content:''; position:absolute; left:0; right:0; bottom:0; height:160px; z-index:5; pointer-events:none;
+    background:linear-gradient(180deg, transparent 0%, rgba(0,0,0,.42) 55%, rgba(0,0,0,.72) 100%);
+  }
+  body.photo-overlay-page .brand {
+    color:var(--photo-text); opacity:1;
+    text-shadow:0 0 2px rgba(0,0,0,.95), 0 2px 14px rgba(0,0,0,.85), 0 1px 28px rgba(0,0,0,.55);
+  }
+  body.photo-overlay-page .brand b { color:var(--photo-accent); }
+  body.photo-overlay-page .caption {
+    color:var(--photo-muted);
+    text-shadow:0 0 2px rgba(0,0,0,.95), 0 2px 12px rgba(0,0,0,.8);
+  }
+  body.photo-overlay-page #clock {
+    color:var(--photo-text); opacity:1;
+    text-shadow:0 0 2px rgba(0,0,0,.95), 0 2px 14px rgba(0,0,0,.85);
+  }
+CSS;
+}
+
+/** RSS story board — text always on dark photo scrim (not theme --snow/--mist). */
+function signage_rss_overlay_css(): string
+{
+    return <<<'CSS'
+  body.rss-story-page {
+    --rss-text:#edf2fb; --rss-muted:#b8c8de; --rss-accent:#ffb347; --rss-line:rgba(148,163,198,.42);
+  }
+  body.rss-story-page .brand { color:var(--rss-text); }
+  body.rss-story-page .brand span { color:var(--rss-accent); }
+  body.rss-story-page .stamp { color:var(--rss-muted); opacity:.85; }
+  body.rss-story-page #clock { color:var(--rss-text); text-shadow:0 1px 12px rgba(0,0,0,.65); }
+  body.rss-story-page .meta { color:var(--rss-accent); }
+  body.rss-story-page .meta span { color:var(--rss-muted); }
+  body.rss-story-page h1 { color:var(--rss-text); }
+  body.rss-story-page .syn { color:var(--rss-muted); opacity:1; }
+  body.rss-story-page .dot { background:var(--rss-line); }
+  body.rss-story-page .dot .p { background:var(--rss-accent); }
+CSS;
 }
 
 /** Top fade on camera tile captions (cam wall grid). */

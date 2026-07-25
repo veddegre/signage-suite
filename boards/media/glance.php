@@ -156,7 +156,7 @@ $compact = $boardH < 1080;
   .tev .s { font-size:<?= $compact ? 24 : 26 ?>px; line-height:1.25; }
   .free { font-size:<?= $compact ? 24 : 26 ?>px; color:var(--mist); padding:12px 0; }
   .setup { font-size:22px; color:var(--mist); line-height:1.55; }
-  .setup code { background:var(--lake-night); padding:2px 8px; border-radius:6px; color:var(--snow); }
+  .setup code { background:var(--tile-bg); padding:2px 8px; border-radius:6px; color:var(--snow); }
   .tomorrow { margin-top:auto; padding-top:18px; border-top:1px solid var(--hairline); }
   .tomorrow .k { font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); margin-bottom:10px; }
   .tomorrow .tev { padding:7px 0; border-bottom:none; }

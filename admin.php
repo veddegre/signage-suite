@@ -6820,6 +6820,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     </div>
                     <div class="bg-section">
                       <div class="bg-section-title">Theme colors</div>
+                      <p class="field-hint" style="margin:0 0 8px">Six wall palettes — Lake Night, Beacon Bar, Harbor Glow, Frost (light), Slate, and GVSU. Photo scenes below are separate.</p>
                       <div class="bg-pick" id="bgPickTheme">
                         <?php foreach (slide_theme_background_presets() as $id => $preset):
                           $bgUrl = slide_background_url($id); ?>

@@ -86,7 +86,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           background:rgba(228,89,89,.15); color:var(--bad); margin-right:6px; }
 
   .nodata, .err, .setupmsg { font-size:24px; color:var(--mist); line-height:1.6; }
-  .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
+  .setupmsg code { color:var(--snow); background:var(--code-bg); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
 </style>
 </head>

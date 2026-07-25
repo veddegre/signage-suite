@@ -47,7 +47,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .board { width:1920px; height:<?= $heightCss ?>; display:flex; flex-direction:column;
-           min-height:0; overflow:hidden; background:var(--lake-night); }
+           min-height:0; overflow:hidden; background:var(--tile-bg); }
   .topbar { flex-shrink:0; height:<?= $topBar ?>px; display:flex; align-items:center;
             justify-content:space-between; gap:24px; padding:0 <?= $boardH < 1080 ? 28 : 32 ?>px;
             background:var(--harbor); border-bottom:1px solid var(--hairline); z-index:700; }
@@ -59,35 +59,43 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .topbar .sub .infocon.crit { color:var(--crit); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18; }
+  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
+              --src-text:#edf2fb; --src-muted:#9eb0cc; --src-accent:#7ec8ff;
+              --src-panel:rgba(10,16,28,.92); --src-border:rgba(148,163,198,.35); }
   .mapwrap { position:absolute; inset:0; }
   #heatMap { width:100%; height:100%; }
   #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.85); color:var(--mist); }
+  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--src-muted); }
+  #heatMap .leaflet-control-attribution a { color:var(--src-muted); }
   .heat-canvas { pointer-events:none; z-index:450; }
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - 88px); z-index:600;
-          display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; }
-  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist);
-             background:rgba(12,20,34,.72); padding:8px 12px; border-radius:8px; border:1px solid var(--hairline); }
-  .row { background:rgba(12,20,34,.78); border:1px solid var(--hairline); border-radius:10px; padding:10px 12px; }
-  .row.hero { border-color:rgba(126,200,255,.45); }
-  .row .code { font-family:'IBM Plex Mono',monospace; color:var(--beacon); }
-  .row .val { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; margin-top:4px; }
-  .row .meta { font-size:13px; color:var(--mist); margin-top:2px; }
+          display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none;
+          color:var(--src-text); }
+  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--src-muted);
+             background:var(--src-panel); padding:8px 12px; border-radius:8px; border:1px solid var(--src-border); }
+  .row { background:var(--src-panel); border:1px solid var(--src-border); border-radius:10px; padding:10px 12px;
+         color:var(--src-text); }
+  .row.hero { border-color:rgba(126,200,255,.55); box-shadow:0 0 16px rgba(93,173,226,.12); }
+  .row .code { font-family:'IBM Plex Mono',monospace; color:var(--src-accent); font-weight:600; }
+  .row .val { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; margin-top:4px;
+              color:var(--src-text); line-height:1.05; }
+  .row .meta { font-size:13px; color:var(--src-muted); margin-top:2px; }
   .map-tag { position:absolute; left:<?= $boardH < 1080 ? 28 : 32 ?>px; bottom:16px; z-index:600; pointer-events:none;
-             font-size:16px; text-transform:uppercase; color:var(--mist); background:rgba(12,20,34,.78);
-             padding:10px 16px; border-radius:8px; border:1px solid var(--hairline); }
-  .map-tag b { color:var(--beacon); }
-  .legend-bar { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:13px; text-transform:none; }
+             font-size:16px; text-transform:uppercase; color:var(--src-muted); background:var(--src-panel);
+             padding:10px 16px; border-radius:8px; border:1px solid var(--src-border); }
+  .map-tag b { color:var(--src-accent); }
+  .legend-bar { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:13px; text-transform:none;
+                color:var(--src-muted); }
   .legend-bar .grad { width:120px; height:10px; border-radius:5px;
-                      background:linear-gradient(90deg, rgba(93,173,226,.15), rgba(126,200,255,.55), rgba(93,173,226,.95)); }
+                      background:linear-gradient(90deg, rgba(93,173,226,.2), rgba(126,200,255,.65), rgba(93,173,226,.95)); }
   .setup, .empty { position:absolute; inset:0; z-index:700; display:flex; align-items:center; justify-content:center;
-                    flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--lake-night); }
+                    flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--tile-bg); }
   .setup h2, .empty h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p, .empty p { font-size:22px; color:var(--mist); max-width:920px; }
   <?= signage_stamp_css() ?>
-  .stamp { position:absolute; right:28px; bottom:10px; left:auto; z-index:600; pointer-events:none; }
+  .stamp { position:absolute; right:28px; bottom:10px; left:auto; z-index:600; pointer-events:none;
+           color:var(--src-muted); opacity:.95; }
 </style>
 </head>
 <body>
@@ -155,7 +163,12 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     _resize() { const sz=this._map.getSize(); L.DomUtil.setPosition(this._canvas, this._map.containerPointToLayerPoint([0,0]));
       const dpr=window.devicePixelRatio||1; this._canvas.width=Math.round(sz.x*dpr); this._canvas.height=Math.round(sz.y*dpr);
       this._canvas.style.width=sz.x+'px'; this._canvas.style.height=sz.y+'px'; this._dpr=dpr; },
-    _rgb(t,a) { return 'rgba('+Math.round(20+t*70)+','+Math.round(45+t*155)+','+Math.round(95+t*160)+','+a+')'; },
+    _heatRgb(t, alpha) {
+      const r = Math.round(25 + t * 65);
+      const g = Math.round(55 + t * 145);
+      const b = Math.round(100 + t * 155);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    },
     _tick(now) { this._draw(now||performance.now()); this._raf=requestAnimationFrame(this._tick); },
     _draw(now) {
       const ctx=this._canvas.getContext('2d'), dpr=this._dpr||1;
@@ -163,10 +176,21 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       const pulse=0.92+0.08*Math.sin(now/900);
       for (const c of COUNTRIES) {
         const pt=this._map.latLngToContainerPoint([c.lat,c.lng]), t=c.intensity;
-        const r=(14+t*58)*(c.rank===1?pulse:1);
+        const r=(10+t*46)*(c.rank===1?pulse:1);
         const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,r);
-        g.addColorStop(0,this._rgb(t,0.55+t*0.35)); g.addColorStop(0.42,this._rgb(t,0.2+t*0.2)); g.addColorStop(1,this._rgb(t,0));
+        g.addColorStop(0,this._heatRgb(t,0.34+t*0.26));
+        g.addColorStop(0.42,this._heatRgb(t,0.12+t*0.14));
+        g.addColorStop(1,this._heatRgb(t,0));
         ctx.fillStyle=g; ctx.beginPath(); ctx.arc(pt.x,pt.y,r,0,Math.PI*2); ctx.fill();
+        if (c.rank <= 8 || t > 0.45) {
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5 + t * 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = this._heatRgb(t, 0.88);
+          ctx.fill();
+          ctx.font = '600 11px "IBM Plex Mono", monospace';
+          ctx.fillStyle = 'rgba(237,242,251,0.92)';
+          ctx.textAlign = 'center';
+          ctx.fillText(c.code, pt.x, pt.y - r - 6);
+        }
       }
     }
   });

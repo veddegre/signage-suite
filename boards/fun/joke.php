@@ -146,7 +146,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .joke-break { height:<?= $boardH < 1080 ? 28 : 36 ?>px; max-width:480px;
                 border-bottom:2px solid rgba(255,179,71,.35); margin-bottom:<?= $boardH < 1080 ? 28 : 36 ?>px; }
   .badge { display:inline-block; margin-top:28px; padding:10px 18px; border-radius:999px;
-           background:var(--lake-night); border:1px solid var(--hairline);
+           background:var(--tile-bg); border:1px solid var(--hairline);
            font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); }
 
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; text-align:center; }

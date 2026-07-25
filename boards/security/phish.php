@@ -72,7 +72,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .k { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist); }
 
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
-  .row { padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+  .row { padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row.warn { border-color:rgba(255,107,107,.45); }
   .row.ok { border-color:rgba(57,196,109,.35); }
@@ -88,11 +88,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
   .tag { font-size:<?= $boardH < 1080 ? 14 : 15 ?>px; padding:4px 10px; border-radius:999px;
-         background:var(--lake-night); border:1px solid var(--hairline); color:var(--mist); }
+         background:var(--tile-bg); border:1px solid var(--hairline); color:var(--mist); }
 
   .empty { font-size:<?= $boardH < 1080 ? 17 : 18 ?>px; color:var(--mist); line-height:1.5; }
   .setup { font-size:<?= $boardH < 1080 ? 17 : 18 ?>px; color:var(--mist); line-height:1.55; }
-  .setup code { background:var(--lake-night); padding:2px 8px; border-radius:6px; color:var(--snow); }
+  .setup code { background:var(--tile-bg); padding:2px 8px; border-radius:6px; color:var(--snow); }
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; grid-area:main; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }

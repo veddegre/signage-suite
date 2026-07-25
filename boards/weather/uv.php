@@ -69,11 +69,11 @@ function uv_band(?float $uv): array
 {
     if ($uv === null) return ['—', 'var(--mist)', 'UV data unavailable'];
     $uv = max(0.0, $uv);
-    if ($uv < 3)  return ['Low', '#39c46d', 'No protection needed for most people'];
-    if ($uv < 6)  return ['Moderate', 'var(--beacon)', 'Wear SPF 30+ if outside more than 30 minutes'];
+    if ($uv < 3)  return ['Low', '#5ee878', 'No protection needed for most people'];
+    if ($uv < 6)  return ['Moderate', '#ffd089', 'Wear SPF 30+ if outside more than 30 minutes'];
     if ($uv < 8)  return ['High', '#ff9d4d', 'Seek shade 10am–4pm — hat, sunglasses, sunscreen'];
-    if ($uv < 11) return ['Very high', '#ff5d5d', 'Minimize midday sun — reapply sunscreen every 2 hours'];
-    return ['Extreme', '#c850ff', 'Avoid midday sun — skin burns in minutes'];
+    if ($uv < 11) return ['Very high', '#ff7a7a', 'Minimize midday sun — reapply sunscreen every 2 hours'];
+    return ['Extreme', '#d4a8ff', 'Avoid midday sun — skin burns in minutes'];
 }
 
 function uv_day_key(string $iso): string
@@ -130,7 +130,7 @@ function uv_verdict(?float $uvNow, bool $isDay, ?float $maxToday, ?float $maxTom
 {
     if (!$isDay && ($uvNow === null || $uvNow < 0.5)) {
         if ($maxTomorrow !== null && $maxTomorrow >= 6) {
-            return ['Night now', 'High UV expected tomorrow — plan shade and sunscreen', 'var(--beacon)'];
+            return ['Night now', 'High UV expected tomorrow — plan shade and sunscreen', '#ffd089'];
         }
         return ['Night now', 'Low UV after dark — tomorrow\'s peak shown in outlook', 'var(--mist)'];
     }
@@ -255,16 +255,21 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
                   line-height:1; font-variant-numeric:tabular-nums; color:<?= h($uvColor) ?>; }
   .current .band { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 38 : 46 ?>px;
                    letter-spacing:2px; text-transform:uppercase; color:<?= h($uvColor) ?>; margin-top:8px; }
-  .current .hint { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:10px; line-height:1.4; max-width:720px; }
-  .current .night { font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; color:var(--mist); margin-top:8px; }
+  .current .num.uv-tone, .current .band.uv-tone { text-shadow:0 2px 6px rgba(0,0,0,.38); }
+  .current .hint { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px;
+                    color:color-mix(in srgb,var(--snow) 75%, var(--mist)); margin-top:10px; line-height:1.4; max-width:720px; }
+  .current .night { font-size:<?= $boardH < 1080 ? 20 : 22 ?>px;
+                     color:color-mix(in srgb,var(--snow) 75%, var(--mist)); margin-top:8px; }
 
   .sun { grid-area:sun; display:grid; grid-template-columns:1fr 1fr; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; align-content:start; }
-  .stat { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-          padding:<?= $boardH < 1080 ? '16px 18px' : '20px 22px' ?>; min-height:0; }
-  .stat .lab { font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:8px; }
+  .stat.weather-stat { padding:<?= $boardH < 1080 ? '16px 18px' : '20px 22px' ?>; min-height:0; }
+  .stat .lab { font-size:16px; letter-spacing:2px; text-transform:uppercase;
+               color:color-mix(in srgb,var(--snow) 62%, var(--mist)); margin-bottom:8px; }
   .stat .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
                line-height:1.1; color:var(--snow); font-variant-numeric:tabular-nums; }
-  .stat .sub { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; color:var(--mist); margin-top:6px; }
+  .stat .val.uv-tone { text-shadow:0 1px 3px rgba(0,0,0,.42); }
+  .stat .sub { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px;
+               color:color-mix(in srgb,var(--snow) 78%, var(--mist)); margin-top:6px; }
 
   .hourly { grid-area:hourly; display:flex; flex-direction:column; min-height:0; }
   .chart { flex:1; min-height:0; display:flex; align-items:flex-end; gap:<?= $chartHours !== [] && count($chartHours) > 14 ? 6 : 10 ?>px;
@@ -272,29 +277,32 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   .bar-wrap { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:8px; height:100%; }
   .bar { width:100%; max-width:56px; min-height:4px; border-radius:8px 8px 4px 4px; transition:height .2s; }
   .bar-wrap .hr { font-size:<?= $boardH < 1080 ? 14 : 15 ?>px; color:var(--mist); font-family:'IBM Plex Mono',monospace; }
-  .bar-wrap .uv { font-size:<?= $boardH < 1080 ? 13 : 14 ?>px; color:var(--snow); font-weight:600; font-variant-numeric:tabular-nums; }
+  .bar-wrap .uv { font-size:<?= $boardH < 1080 ? 13 : 14 ?>px; color:var(--snow); font-weight:600;
+                  font-variant-numeric:tabular-nums; text-shadow:0 1px 2px rgba(0,0,0,.35); }
   .bar-wrap.now .hr { color:var(--beacon); font-weight:600; }
   .chart-empty { font-size:20px; color:var(--mist); padding:24px 0; }
 
   .forecast { grid-area:forecast; display:flex; flex-direction:column; min-height:0; }
   .forecast .days { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; }
-  .fday { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
-          padding:<?= $boardH < 1080 ? '12px 14px' : '14px 16px' ?>; display:grid;
+  .fday.weather-stat { padding:<?= $boardH < 1080 ? '12px 14px' : '14px 16px' ?>; display:grid;
           grid-template-columns:minmax(<?= $boardH < 1080 ? 96 : 108 ?>px, max-content) minmax(0, 1fr) auto;
-          gap:<?= $boardH < 1080 ? 10 : 12 ?>px 14px; align-items:center; }
+          gap:<?= $boardH < 1080 ? 10 : 12 ?>px 14px; align-items:center; min-height:0; }
   .fday .d { font-size:<?= $boardH < 1080 ? 14 : 15 ?>px; letter-spacing:<?= $boardH < 1080 ? 1.5 : 2 ?>px;
-             text-transform:uppercase; color:var(--mist); white-space:nowrap; }
+             text-transform:uppercase; color:color-mix(in srgb,var(--snow) 62%, var(--mist)); white-space:nowrap; }
   .fday .max { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 34 : 40 ?>px; line-height:1; }
-  .fday .line { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; color:var(--mist); margin-top:4px; white-space:nowrap; }
+  .fday .max.uv-tone { text-shadow:0 1px 3px rgba(0,0,0,.42); }
+  .fday .line { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px;
+                color:color-mix(in srgb,var(--snow) 78%, var(--mist)); margin-top:4px; white-space:nowrap; }
   .fday .band { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; font-weight:600; text-transform:uppercase; letter-spacing:1px;
                 text-align:right; white-space:nowrap; padding-left:8px; }
+  .fday .band.uv-tone { text-shadow:0 1px 3px rgba(0,0,0,.42); }
 
   .verdict { grid-area:verdict; border-radius:14px; border:1px solid var(--hairline);
              padding:<?= $boardH < 1080 ? '18px 24px' : '22px 32px' ?>; display:flex;
              align-items:baseline; justify-content:space-between; gap:24px;
-             background:linear-gradient(90deg, rgba(20,31,51,.95), rgba(12,20,34,.95)); }
+             background:color-mix(in srgb,var(--harbor) 94%, var(--lake-night)); }
   .verdict .t { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 40 : 48 ?>px;
-                color:<?= h($verdictColor) ?>; letter-spacing:1px; }
+                color:<?= h($verdictColor) ?>; letter-spacing:1px; text-shadow:0 1px 3px rgba(0,0,0,.35); }
   .verdict .s { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; color:var(--mist); text-align:right; }
 
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; }
@@ -313,8 +321,8 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   <section class="panel current">
     <div class="k">Right now<?= $isDay ? '' : ' · night' ?></div>
     <div>
-      <div class="num"><?= $uvNow !== null ? h((string)$uvNow) : '—' ?></div>
-      <div class="band"><?= h($uvLabel) ?></div>
+      <div class="num uv-tone"><?= $uvNow !== null ? h((string)$uvNow) : '—' ?></div>
+      <div class="band uv-tone"><?= h($uvLabel) ?></div>
       <div class="hint"><?= h($uvHint) ?></div>
       <?php if (!$isDay && $peakToday['uv'] !== null): ?>
       <div class="night">Today's peak was <?= h((string)round($peakToday['uv'], 1)) ?> around <?= h($peakToday['label']) ?></div>
@@ -323,21 +331,21 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
   </section>
 
   <section class="panel sun">
-    <div class="stat">
+    <div class="stat weather-stat">
       <div class="lab">Peak today</div>
-      <div class="val" style="color:<?= h(uv_band($maxToday)[1]) ?>"><?= $maxToday ?? '—' ?></div>
+      <div class="val uv-tone" style="color:<?= h(uv_band($maxToday)[1]) ?>"><?= $maxToday ?? '—' ?></div>
       <div class="sub"><?= $peakToday['uv'] !== null ? 'Around ' . h($peakToday['label']) : '—' ?></div>
     </div>
-    <div class="stat">
+    <div class="stat weather-stat">
       <div class="lab">Clear-sky max</div>
       <div class="val"><?= $clearToday ?? '—' ?></div>
       <div class="sub">Without cloud cover</div>
     </div>
-    <div class="stat">
+    <div class="stat weather-stat">
       <div class="lab">Sunrise</div>
       <div class="val" style="font-size:<?= $boardH < 1080 ? 36 : 42 ?>px"><?= h(uv_format_clock(is_string($sunrise) ? $sunrise : null)) ?></div>
     </div>
-    <div class="stat">
+    <div class="stat weather-stat">
       <div class="lab">Sunset</div>
       <div class="val" style="font-size:<?= $boardH < 1080 ? 36 : 42 ?>px"><?= h(uv_format_clock(is_string($sunset) ? $sunset : null)) ?></div>
     </div>
@@ -347,13 +355,13 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
     <div class="k">Daily peak · 5 days</div>
     <div class="days">
     <?php foreach ($forecast as $fd): ?>
-    <div class="fday">
+    <div class="fday weather-stat">
       <div class="d"><?= h($fd['label']) ?></div>
       <div>
-        <div class="max" style="color:<?= h($fd['color']) ?>"><?= $fd['max'] ?? '—' ?></div>
+        <div class="max uv-tone" style="color:<?= h($fd['color']) ?>"><?= $fd['max'] ?? '—' ?></div>
         <div class="line"><?= h($fd['sunrise']) ?> – <?= h($fd['sunset']) ?></div>
       </div>
-      <div class="band" style="color:<?= h($fd['color']) ?>"><?= h($fd['band']) ?></div>
+      <div class="band uv-tone" style="color:<?= h($fd['color']) ?>"><?= h($fd['band']) ?></div>
     </div>
     <?php endforeach; ?>
     </div>

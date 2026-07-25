@@ -35,11 +35,12 @@ if ($key === null || !isset(DASHBOARDS[$key])) {
 <meta charset="UTF-8">
 <title>Grafana — Not available</title>
 <style>
+  <?= signage_theme_css() ?>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422;
-              color:#8aa0c0; font-family:system-ui,sans-serif; cursor:none;
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
+              color:var(--mist); font-family:system-ui,sans-serif; cursor:none;
               display:flex; align-items:center; justify-content:center; text-align:center; }
-  h1 { font-size:58px; color:#edf2fb; margin-bottom:16px; }
+  h1 { font-size:58px; color:var(--snow); margin-bottom:16px; }
   p { font-size:28px; max-width:900px; line-height:1.5; }
 </style>
 </head>
@@ -74,12 +75,13 @@ $useJwt = grafana_jwt_configured() && ($embed['auth'] ?? '') === 'jwt';
 <title><?= h($dash['title'] ?? $key) ?></title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
+  <?= signage_theme_css() ?>
   <?= signage_kiosk_cursor_css() ?>
-  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422; }
-  iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; background:#0c1422; }
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night); }
+  iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; background:var(--lake-night); }
   .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
-           align-items:center; justify-content:center; color:#8aa0c0; padding:0 80px; text-align:center; }
-  .empty h2 { font-size:54px; color:#edf2fb; font-weight:700; }
+           align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
+  .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
   .empty p { font-size:27px; max-width:1100px; line-height:1.65; }
 </style>
 </head>

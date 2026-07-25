@@ -119,6 +119,14 @@ function signage_theme_derive_panel_dim(string $lakeNight, string $harbor): stri
     return signage_theme_mix_rgb($a, $b, 0.42);
 }
 
+/** Curated wall themes (admin picker + new displays). */
+function signage_curated_theme_keys(): array
+{
+    require_once __DIR__ . '/slides_lib.php';
+
+    return slide_curated_theme_keys();
+}
+
 /** @return array<string,array<string,string>>|null */
 function signage_theme_preset(string $key): ?array
 {
@@ -126,17 +134,17 @@ function signage_theme_preset(string $key): ?array
     if ($key === '') {
         return null;
     }
-    $all = signage_theme_presets();
+    $all = signage_theme_presets_all();
 
     return $all[$key] ?? null;
 }
 
 /**
- * Named schemes for admin + runtime (keys align with slide creator themes).
+ * All signage token sets (includes retired themes for saved slides/displays).
  *
  * @return array<string,array<string,string>>
  */
-function signage_theme_presets(): array
+function signage_theme_presets_all(): array
 {
     static $cache = null;
     if (is_array($cache)) {
@@ -146,7 +154,7 @@ function signage_theme_presets(): array
     require_once __DIR__ . '/slides_lib.php';
     $status = signage_theme_status_tokens();
     $out = [];
-    foreach (slide_theme_background_presets() as $key => $preset) {
+    foreach (slide_theme_background_presets_all() as $key => $preset) {
         if (!is_array($preset)) {
             continue;
         }
@@ -162,6 +170,33 @@ function signage_theme_presets(): array
         ], $status);
     }
     ksort($out);
+    $cache = $out;
+
+    return $cache;
+}
+
+/**
+ * Curated schemes for admin pickers (see signage_theme_presets_all for legacy keys).
+ *
+ * @return array<string,array<string,string>>
+ */
+function signage_theme_presets(): array
+{
+    static $cache = null;
+    if (is_array($cache)) {
+        return $cache;
+    }
+
+    $all = signage_theme_presets_all();
+    $out = [];
+    foreach (signage_curated_theme_keys() as $key) {
+        if (isset($all[$key])) {
+            $out[$key] = $all[$key];
+        }
+    }
+    if (!isset($out['lake_night'])) {
+        $out['lake_night'] = $all['lake_night'];
+    }
     $cache = $out;
 
     return $cache;
@@ -228,13 +263,33 @@ function signage_theme_tokens_from_slide_preset(string $key, array $preset, arra
 /** Sun arc guide lines — contrast with page/harbor on every palette. */
 function signage_theme_sun_track_color(array $preset): string
 {
-    $snow = signage_theme_hex_rgb((string)($preset['snow'] ?? '#edf2fb'));
+    $light = ($preset['light'] ?? '0') === '1';
     $hairline = signage_theme_hex_rgb((string)($preset['hairline'] ?? '#26344d'));
+    if ($light) {
+        $body = signage_theme_hex_rgb((string)($preset['mist'] ?? '#526580'));
+        if ($body === null || $hairline === null) {
+            return '#526580';
+        }
+
+        return signage_theme_mix_rgb($body, $hairline, 0.35);
+    }
+
+    $snow = signage_theme_hex_rgb((string)($preset['snow'] ?? '#edf2fb'));
     if ($snow === null || $hairline === null) {
         return '#8aa0c0';
     }
 
     return signage_theme_mix_rgb($snow, $hairline, 0.4);
+}
+
+/** Weather sun arc — avoid flex/grid clipping and keep stroke inside padded viewBox. */
+function signage_theme_sun_widget_css(): string
+{
+    return <<<'CSS'
+  .sun{overflow:visible;flex-shrink:0;}
+  .sun svg{display:block;width:100%;height:118px;overflow:visible;}
+  .sun #sunDot{stroke:var(--sun-dot-ring);stroke-width:2;paint-order:stroke fill;}
+CSS;
 }
 
 /** Saved theme for a rotation display (defaults to lake_night). */
@@ -271,7 +326,14 @@ function signage_theme_css_block(string $key): string
         return '';
     }
 
+    $light = ($preset['light'] ?? '0') === '1';
+    $dataAccent = (string)$preset['beacon'];
+    if ($key === 'gvsu_lakers') {
+        $dataAccent = '#DEC197';
+    }
+    $mapAccent = $key === 'gvsu_lakers' ? '#DEC197' : '#ffb347';
     $pairs = [
+        '--signage-light' => $light ? '1' : '0',
         '--lake-night' => $preset['lake-night'],
         '--night' => $preset['lake-night'],
         '--harbor' => $preset['harbor'],
@@ -280,6 +342,7 @@ function signage_theme_css_block(string $key): string
         '--snow' => $preset['snow'],
         '--mist' => $preset['mist'],
         '--beacon' => $preset['beacon'],
+        '--data-accent' => $dataAccent,
         '--ok' => $preset['ok'],
         '--bad' => $preset['bad'],
         '--warn' => $preset['warn'],
@@ -288,10 +351,27 @@ function signage_theme_css_block(string $key): string
         '--gold' => $preset['gold'],
         '--panel-dim' => $preset['panel-dim'] ?? $preset['harbor'],
         '--inset-surface' => $preset['panel-dim'] ?? $preset['harbor'],
+        '--tile-bg' => 'color-mix(in srgb, var(--panel-dim) 78%, var(--lake-night))',
+        '--tile-border' => 'color-mix(in srgb, var(--hairline) 92%, transparent)',
+        '--code-bg' => 'color-mix(in srgb, var(--panel-dim) 65%, var(--lake-night))',
+        '--inset-label' => 'color-mix(in srgb, var(--snow) 62%, var(--mist))',
+        '--inset-muted' => 'color-mix(in srgb, var(--snow) 78%, var(--mist))',
+        '--map-text' => '#edf2fb',
+        '--map-muted' => '#9eb0cc',
+        '--map-accent' => $mapAccent,
+        '--map-panel' => 'rgba(10,16,28,.92)',
+        '--map-border' => 'rgba(148,163,198,.35)',
         '--sun-track' => signage_theme_sun_track_color($preset),
         '--sun-trail' => $preset['beacon'],
         '--sun-dot-ring' => $preset['snow'],
     ];
+    if ($light) {
+        $mistRgb = signage_theme_hex_rgb((string)($preset['mist'] ?? '#526580'));
+        $harborRgb = signage_theme_hex_rgb((string)($preset['harbor'] ?? '#c8d4e8'));
+        if ($mistRgb !== null && $harborRgb !== null) {
+            $pairs['--logo-plate'] = signage_theme_mix_rgb($mistRgb, $harborRgb, 0.38);
+        }
+    }
     $parts = [];
     foreach ($pairs as $name => $value) {
         $parts[] = $name . ':' . $value;
@@ -307,10 +387,28 @@ function signage_theme_css_block(string $key): string
 function signage_theme_inset_surface_css(): string
 {
     return <<<'CSS'
-  .weather-stat{background:color-mix(in srgb,var(--panel-dim) 78%, var(--lake-night));
-    border:1px solid color-mix(in srgb,var(--hairline) 92%, transparent);}
+  .weather-stat,.board .stat,.board .fday,.board .row,.board .hero.us,.board .root,.board .issue,.board .wan-speed,.board .side-block{
+    background:var(--tile-bg); border-color:var(--tile-border);}
+  .weather-stat{background:var(--tile-bg);
+    border:1px solid var(--tile-border);}
   .board .inset-surface{background:color-mix(in srgb,var(--inset-surface,var(--panel-dim)) 88%, var(--harbor));
     border:1px solid color-mix(in srgb,var(--hairline) 90%, transparent);}
+  .board code,.board .setup code,.board .setupmsg code,.board .notcfg code,.board .pollen-note code{
+    background:var(--code-bg); color:var(--snow);}
+  .board .host{background:var(--tile-bg); border-color:var(--tile-border);}
+  .board .track,.board .bar .track,.board .lrow .track,.board .prow .track,.board .meter .track,.board .cloudbar .track{
+    background:var(--tile-bg); border-color:var(--tile-border);}
+CSS;
+}
+
+/** Flex/grid shells — reduce bottom clipping in rotation iframes. */
+function signage_theme_board_shell_css(): string
+{
+    return <<<'CSS'
+  .board{min-height:0;}
+  .board .list,.board .list-rows,.board .days,.board .recent,.board .side{
+    min-height:0;}
+  .board .list.scrollable,.board .list.clip{flex:1;min-height:0;overflow:hidden;}
 CSS;
 }
 
@@ -438,6 +536,10 @@ function admin_rotation_theme_picker(string $screenKey, string $savedTheme): voi
     $savedTheme = signage_normalize_theme_key($savedTheme);
     if ($savedTheme === '' || signage_theme_preset($savedTheme) === null) {
         $savedTheme = 'lake_night';
+    }
+    if (!isset($presets[$savedTheme]) && ($legacy = signage_theme_preset($savedTheme)) !== null) {
+        $legacy['label'] = ($legacy['label'] ?? $savedTheme) . ' (saved)';
+        $presets = [$savedTheme => $legacy] + $presets;
     }
     $nws = signage_ticker_nws_tokens();
     $name = 'SCREEN_OPTS[' . $screenKey . '][theme]';

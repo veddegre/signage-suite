@@ -55,20 +55,23 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .topbar .sub .infocon.warn { color:var(--warn); }
   .topbar .sub .infocon.crit { color:var(--crit); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:52px; color:var(--mist); font-variant-numeric:tabular-nums; }
-  .main { flex:1; min-height:0; display:grid; grid-template-columns:1fr <?= $boardH < 1080 ? 360 : 400 ?>px; gap:0; }
+  .main { flex:1; min-height:0; display:grid; grid-template-columns:1fr <?= $boardH < 1080 ? 360 : 400 ?>px; gap:0;
+          --ports-text:#edf2fb; --ports-muted:#9eb0cc; --ports-accent:#ffb347;
+          --ports-panel:rgba(10,16,28,.92); --ports-border:rgba(148,163,198,.35); }
   .viz { position:relative; background:#0a101a; padding:<?= $boardH < 1080 ? 20 : 28 ?>px; min-height:0; }
   #treemap { width:100%; height:100%; display:block; border-radius:12px; }
-  .side { background:rgba(12,20,34,.55); border-left:1px solid var(--hairline); padding:20px 20px 16px;
-          display:flex; flex-direction:column; gap:10px; overflow:hidden; }
-  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist); }
-  .row { background:rgba(12,20,34,.78); border:1px solid var(--hairline); border-radius:10px; padding:10px 12px; }
-  .row.hero { border-color:rgba(255,179,71,.45); }
-  .row .port { font-family:'IBM Plex Mono',monospace; font-size:22px; color:var(--beacon); }
-  .row .lbl { font-size:15px; color:var(--mist); margin-top:2px; }
-  .row .val { font-family:'Big Shoulders Display'; font-size:30px; margin-top:4px; }
-  .row .meta { font-size:13px; color:var(--mist); margin-top:2px; }
+  .side { background:var(--ports-panel); border-left:1px solid var(--ports-border); padding:20px 20px 16px;
+          display:flex; flex-direction:column; gap:10px; overflow:hidden; color:var(--ports-text); }
+  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ports-muted); }
+  .row { background:rgba(8,14,24,.55); border:1px solid var(--ports-border); border-radius:10px; padding:10px 12px;
+         color:var(--ports-text); }
+  .row.hero { border-color:rgba(255,179,71,.5); }
+  .row .port { font-family:'IBM Plex Mono',monospace; font-size:22px; color:var(--ports-accent); font-weight:600; }
+  .row .port .lbl { font-size:15px; font-weight:500; color:var(--ports-muted); margin-left:6px; }
+  .row .val { font-family:'Big Shoulders Display'; font-size:30px; margin-top:4px; color:var(--ports-text); line-height:1.05; }
+  .row .meta { font-size:13px; color:var(--ports-muted); margin-top:2px; }
   .setup, .empty { grid-column:1/-1; display:flex; align-items:center; justify-content:center; flex-direction:column;
-                   gap:18px; padding:40px; background:var(--lake-night); }
+                   gap:18px; padding:40px; background:var(--tile-bg); }
   .setup h2, .empty h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p, .empty p { font-size:22px; color:var(--mist); }
   <?= signage_stamp_css() ?>
@@ -176,20 +179,38 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetY = 1;
+
       if (r.w > 90 && r.h > 50) {
         ctx.fillStyle = '#edf2fb';
         ctx.font = '700 ' + Math.min(42, r.h * 0.38) + 'px "Big Shoulders Display",sans-serif';
-        ctx.fillText(String(p.port), r.x + 14, r.y + r.h * 0.42);
-        if (p.label && r.h > 70) {
-          ctx.font = '500 18px "IBM Plex Sans",sans-serif';
-          ctx.fillStyle = '#8aa0c0';
-          ctx.fillText(p.label, r.x + 14, r.y + r.h * 0.58);
+        ctx.fillText(String(p.port), r.x + 14, r.y + r.h * 0.38);
+        if (p.label && r.h > 64) {
+          ctx.font = '600 17px "IBM Plex Sans",sans-serif';
+          ctx.fillStyle = 'rgba(237,242,251,0.92)';
+          ctx.fillText(p.label, r.x + 14, r.y + r.h * 0.56);
         }
         ctx.font = '600 ' + Math.min(28, r.h * 0.22) + 'px "IBM Plex Mono",monospace';
         ctx.fillStyle = '#ffb347';
-        const txt = formatN(p.records);
-        ctx.fillText(txt, r.x + 14, r.y + r.h - 14);
+        ctx.fillText(formatN(p.records), r.x + 14, r.y + r.h - 16);
+      } else if (r.w > 48 && r.h > 32) {
+        ctx.fillStyle = '#edf2fb';
+        ctx.font = '700 ' + Math.min(26, Math.max(14, r.h * 0.42)) + 'px "Big Shoulders Display",sans-serif';
+        ctx.fillText(String(p.port), r.x + 8, r.y + r.h * 0.42);
+        if (p.label && r.w > 72 && r.h > 44) {
+          ctx.font = '600 13px "IBM Plex Sans",sans-serif';
+          ctx.fillStyle = 'rgba(237,242,251,0.9)';
+          ctx.fillText(p.label, r.x + 8, r.y + r.h * 0.68);
+        }
       }
+
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
     }
   }
 

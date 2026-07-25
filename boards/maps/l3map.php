@@ -48,7 +48,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .board { width:1920px; height:<?= $heightCss ?>; display:flex; flex-direction:column;
-           min-height:0; overflow:hidden; background:var(--lake-night); }
+           min-height:0; overflow:hidden; background:var(--tile-bg); }
   .topbar { flex-shrink:0; height:<?= $topBar ?>px; display:flex; align-items:center;
             justify-content:space-between; gap:24px; padding:0 <?= $boardH < 1080 ? 28 : 32 ?>px;
             background:var(--harbor); border-bottom:1px solid var(--hairline); z-index:700; }
@@ -59,46 +59,51 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                  margin-top:6px; white-space:nowrap; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18; }
+  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
+              --l3-text:#edf2fb; --l3-muted:#9eb0cc; --l3-accent:#ffb347;
+              --l3-origin:#b388ff; --l3-target:#4dd0e9;
+              --l3-panel:rgba(10,16,28,.92); --l3-border:rgba(148,163,198,.35); }
   .mapwrap { position:absolute; inset:0; }
   #attackMap { width:100%; height:100%; }
   #attackMap.leaflet-container,
   #attackMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #attackMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.85); color:var(--mist); }
-  #attackMap .leaflet-control-attribution a { color:var(--mist); }
+  #attackMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--l3-muted); }
+  #attackMap .leaflet-control-attribution a { color:var(--l3-muted); }
   .attack-canvas { pointer-events:none; z-index:450; }
 
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $boardH < 1080 ? 88 : 96 ?>px);
-          z-index:600; display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; }
-  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist);
-             background:rgba(12,20,34,.72); padding:8px 12px; border-radius:8px; border:1px solid var(--hairline); }
-  .flow { background:rgba(12,20,34,.78); border:1px solid var(--hairline); border-radius:10px;
-          padding:10px 12px; backdrop-filter:blur(4px); }
-  .flow .route { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; line-height:1.35; }
-  .flow .route .code { font-family:'IBM Plex Mono',monospace; color:var(--beacon); }
+          z-index:600; display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none;
+          color:var(--l3-text); }
+  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--l3-muted);
+             background:var(--l3-panel); padding:8px 12px; border-radius:8px; border:1px solid var(--l3-border); }
+  .flow { background:var(--l3-panel); border:1px solid var(--l3-border); border-radius:10px;
+          padding:10px 12px; color:var(--l3-text); }
+  .flow .route { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; line-height:1.35; color:var(--l3-text); }
+  .flow .route .code { font-family:'IBM Plex Mono',monospace; color:var(--l3-accent); font-weight:600; }
   .flow .pct { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px;
-               color:var(--snow); margin-top:4px; }
+               color:var(--l3-text); margin-top:4px; line-height:1.05; }
 
   .map-tag { position:absolute; left:<?= $boardH < 1080 ? 28 : 32 ?>px; bottom:<?= $boardH < 1080 ? 16 : 20 ?>px; z-index:600;
              pointer-events:none; font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; letter-spacing:1.5px;
-             text-transform:uppercase; color:var(--mist); background:rgba(12,20,34,.78); padding:10px 16px;
-             border-radius:8px; border:1px solid var(--hairline); }
-  .map-tag b { color:var(--beacon); }
-  .legend-dots { display:flex; gap:16px; margin-top:6px; font-size:14px; text-transform:none; letter-spacing:0; }
+             text-transform:uppercase; color:var(--l3-muted); background:var(--l3-panel); padding:10px 16px;
+             border-radius:8px; border:1px solid var(--l3-border); }
+  .map-tag b { color:var(--l3-accent); }
+  .legend-dots { display:flex; gap:16px; margin-top:6px; font-size:14px; text-transform:none; letter-spacing:0;
+                 color:var(--l3-muted); }
   .legend-dots span { display:inline-flex; align-items:center; gap:6px; }
   .legend-dots i { width:10px; height:10px; border-radius:50%; display:inline-block; }
-  .legend-dots .o { background:var(--origin); box-shadow:0 0 8px var(--origin); }
-  .legend-dots .t { background:var(--target); box-shadow:0 0 8px var(--target); }
+  .legend-dots .o { background:var(--l3-origin); box-shadow:0 0 8px var(--l3-origin); }
+  .legend-dots .t { background:var(--l3-target); box-shadow:0 0 8px var(--l3-target); }
 
   .setup { position:absolute; inset:0; z-index:700; display:flex; align-items:center; justify-content:center;
-           flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--lake-night); }
+           flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--tile-bg); }
   .setup h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p, .setup ol { font-size:22px; color:var(--mist); line-height:1.55; max-width:920px; text-align:left; }
   .setup ol { margin-top:8px; padding-left:24px; }
   <?= signage_stamp_css() ?>
   .stamp { position:absolute; right:<?= $boardH < 1080 ? 20 : 28 ?>px; bottom:<?= $boardH < 1080 ? 10 : 12 ?>px;
-           left:auto; z-index:600; pointer-events:none; }
+           left:auto; z-index:600; pointer-events:none; color:var(--l3-muted); opacity:.95; }
 </style>
 </head>
 <body>
@@ -266,7 +271,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
         ctx.beginPath();
         arc.pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
-        ctx.strokeStyle = 'rgba(179,136,255,0.14)';
+        ctx.strokeStyle = 'rgba(179,136,255,0.1)';
         ctx.lineWidth = weight;
         ctx.stroke();
 
@@ -284,32 +289,42 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           arc.pts[tailIdx][0], arc.pts[tailIdx][1],
           arc.pts[headIdx][0], arc.pts[headIdx][1]
         );
-        grad.addColorStop(0, 'rgba(179,136,255,0.05)');
-        grad.addColorStop(0.5, 'rgba(201,160,255,0.85)');
-        grad.addColorStop(1, 'rgba(255,255,255,0.95)');
+        grad.addColorStop(0, 'rgba(179,136,255,0.08)');
+        grad.addColorStop(0.5, 'rgba(201,160,255,0.72)');
+        grad.addColorStop(1, 'rgba(255,213,128,0.92)');
         ctx.strokeStyle = grad;
-        ctx.lineWidth = weight + 1.2;
-        ctx.shadowColor = 'rgba(201,160,255,0.9)';
-        ctx.shadowBlur = 10;
+        ctx.lineWidth = weight + 0.8;
+        ctx.shadowColor = 'rgba(179,136,255,0.45)';
+        ctx.shadowBlur = 6;
         ctx.stroke();
         ctx.shadowBlur = 0;
 
         const hp = arc.pts[headIdx];
         ctx.beginPath();
-        ctx.arc(hp[0], hp[1], 4 + weight * 0.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.arc(hp[0], hp[1], 3.5 + weight * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,213,128,0.95)';
         ctx.fill();
 
         const pulse = 0.55 + 0.45 * Math.sin(now / 280 + flow.phase * 6);
-        for (const [pt, color] of [[arc.p0, '179,136,255'], [arc.p1, '77,208,225']]) {
+        const endpoints = [
+          [arc.p0, flow.origin.code, '179,136,255'],
+          [arc.p1, flow.target.code, '77,208,225'],
+        ];
+        for (const [pt, code, color] of endpoints) {
           ctx.beginPath();
           ctx.arc(pt.x, pt.y, 5 + pulse * 2, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(' + color + ',' + (0.35 + pulse * 0.25) + ')';
+          ctx.fillStyle = 'rgba(' + color + ',' + (0.32 + pulse * 0.22) + ')';
           ctx.fill();
           ctx.beginPath();
           ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
           ctx.fillStyle = 'rgb(' + color + ')';
           ctx.fill();
+          if (code) {
+            ctx.font = '600 10px "IBM Plex Mono", monospace';
+            ctx.fillStyle = 'rgba(237,242,251,0.9)';
+            ctx.textAlign = 'center';
+            ctx.fillText(code, pt.x, pt.y - 10 - pulse);
+          }
         }
       }
     },

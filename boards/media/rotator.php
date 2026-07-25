@@ -157,9 +157,11 @@ function rotator_page_shell_open(string $title): void
 <style>
   <?= signage_theme_css() ?>
 
+  <?= signage_photo_overlay_css() ?>
+
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
-              font-family:'IBM Plex Sans',sans-serif; cursor:none; overscroll-behavior:none; }
+              font-family:'IBM Plex Sans',sans-serif; cursor:none; overscroll-behavior:none; position:relative; }
   html.rotator-frame, html.rotator-frame body {
     width:100%; max-width:1920px; position:fixed; inset:0; height:100%; max-height:100%;
   }
@@ -171,22 +173,20 @@ function rotator_page_shell_open(string $title): void
   @media (prefers-reduced-motion: reduce) { .layer { transition:none; } }
   .brand { position:absolute; left:44px; bottom:36px; z-index:10;
            font-family:'Big Shoulders Display'; font-weight:600; font-size:34px;
-           letter-spacing:7px; color:var(--snow); opacity:.85;
-           text-shadow:0 1px 14px rgba(0,0,0,.8); }
-  .brand b { color:var(--beacon); font-weight:600; }
+           letter-spacing:7px; }
+  .brand b { font-weight:600; }
   .caption { position:absolute; left:46px; bottom:84px; z-index:10; font-size:21px;
-             letter-spacing:1px; color:var(--mist); text-shadow:0 1px 10px rgba(0,0,0,.8); }
+             letter-spacing:1px; }
   #clock { position:absolute; right:44px; bottom:36px; z-index:10;
            font-family:'Big Shoulders Display'; font-weight:600; font-size:40px;
-           color:var(--snow); opacity:.8; text-shadow:0 1px 14px rgba(0,0,0,.8);
            font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-           flex-direction:column; gap:16px; color:var(--mist); background:var(--lake-night); text-align:center; padding:40px; }
+           flex-direction:column; gap:16px; color:var(--mist); background:var(--tile-bg); text-align:center; padding:40px; }
   .empty h1 { font-family:'Big Shoulders Display'; font-size:64px; color:var(--beacon); }
   .empty p { font-size:28px; line-height:1.5; max-width:900px; } .empty code { color:var(--snow); }
 </style>
 </head>
-<body>
+<body class="photo-overlay-page">
     <?php
 }
 

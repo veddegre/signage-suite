@@ -194,18 +194,18 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
 
   .hero { grid-area:hero; display:grid; grid-template-columns: <?= $hero && $hero['thumb'] ? '340px 1fr' : '1fr' ?>;
           gap:<?= $boardH < 1080 ? 18 : 24 ?>px; align-items:stretch; min-height:0; }
-  .hero-img { border-radius:12px; overflow:hidden; background:var(--lake-night); border:1px solid var(--hairline);
+  .hero-img { border-radius:12px; overflow:hidden; background:var(--tile-bg); border:1px solid var(--hairline);
               min-height:<?= $boardH < 1080 ? 220 : 280 ?>px; }
   .hero-img img { width:100%; height:100%; object-fit:cover; display:block; }
   .hero-body { display:flex; flex-direction:column; justify-content:center; min-height:0; }
   .hero-year { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 72 : 88 ?>px;
-               line-height:1; color:var(--lilac); margin-bottom:14px; }
+               line-height:1; color:var(--data-accent); margin-bottom:14px; }
   .hero-text { font-family:'IBM Plex Serif',serif; font-size:<?= $boardH < 1080 ? 30 : 36 ?>px; line-height:1.42; }
 
   .side { grid-area:side; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 12 : 14 ?>px; min-height:0; }
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 72px 1fr; gap:12px; align-items:start;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; }
   .row .yr { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px;
              color:var(--beacon); line-height:1.1; font-variant-numeric:tabular-nums; }

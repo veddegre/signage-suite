@@ -49,7 +49,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   html,body { width:1920px; height:<?= $heightCss ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; }
   .board { width:1920px; height:<?= $heightCss ?>; display:flex; flex-direction:column;
-           min-height:0; overflow:hidden; background:var(--lake-night); }
+           min-height:0; overflow:hidden; background:var(--tile-bg); }
   .topbar { flex-shrink:0; height:<?= $topBar ?>px; display:flex; align-items:center;
             justify-content:space-between; gap:24px; padding:0 <?= $boardH < 1080 ? 28 : 32 ?>px;
             background:var(--harbor); border-bottom:1px solid var(--hairline); z-index:700; }
@@ -60,7 +60,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                  margin-top:6px; white-space:nowrap; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18; }
+  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
+              --l7-text:var(--map-text); --l7-muted:var(--map-muted); --l7-accent:var(--map-accent);
+              --l7-origin:#b388ff; --l7-target:#4dd0e9;
+              --l7-panel:var(--map-panel); --l7-border:var(--map-border); }
   .mapwrap { position:absolute; inset:0; }
   #attackMap { width:100%; height:100%; }
   #attackMap.leaflet-container,
@@ -71,21 +74,22 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;
           width:<?= $boardH < 1080 ? 360 : 400 ?>px; max-height:calc(100% - <?= $boardH < 1080 ? 88 : 96 ?>px);
-          z-index:600; display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; }
-  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist);
-             background:rgba(12,20,34,.72); padding:8px 12px; border-radius:8px; border:1px solid var(--hairline); }
-  .flow { background:rgba(12,20,34,.78); border:1px solid var(--hairline); border-radius:10px;
-          padding:10px 12px; backdrop-filter:blur(4px); }
-  .flow .route { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; line-height:1.35; }
-  .flow .route .code { font-family:'IBM Plex Mono',monospace; color:var(--beacon); }
+          z-index:600; display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none;
+          color:var(--l7-text); min-height:0; }
+  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--l7-muted);
+             background:var(--l7-panel); padding:8px 12px; border-radius:8px; border:1px solid var(--l7-border); }
+  .flow { background:var(--l7-panel); border:1px solid var(--l7-border); border-radius:10px;
+          padding:10px 12px; backdrop-filter:blur(4px); color:var(--l7-text); }
+  .flow .route { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; line-height:1.35; color:var(--l7-text); }
+  .flow .route .code { font-family:'IBM Plex Mono',monospace; color:var(--l7-accent); font-weight:600; }
   .flow .pct { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 28 : 32 ?>px;
-               color:var(--snow); margin-top:4px; }
+               color:var(--l7-text); margin-top:4px; line-height:1.05; }
 
   .map-tag { position:absolute; left:<?= $boardH < 1080 ? 28 : 32 ?>px; bottom:<?= $boardH < 1080 ? 16 : 20 ?>px; z-index:600;
              pointer-events:none; font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; letter-spacing:1.5px;
-             text-transform:uppercase; color:var(--mist); background:rgba(12,20,34,.78); padding:10px 16px;
-             border-radius:8px; border:1px solid var(--hairline); }
-  .map-tag b { color:var(--beacon); }
+             text-transform:uppercase; color:var(--l7-muted); background:var(--l7-panel); padding:10px 16px;
+             border-radius:8px; border:1px solid var(--l7-border); }
+  .map-tag b { color:var(--l7-accent); }
   .legend-dots { display:flex; gap:16px; margin-top:6px; font-size:14px; text-transform:none; letter-spacing:0; }
   .legend-dots span { display:inline-flex; align-items:center; gap:6px; }
   .legend-dots i { width:10px; height:10px; border-radius:50%; display:inline-block; }
@@ -93,13 +97,13 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .legend-dots .t { background:var(--target); box-shadow:0 0 8px var(--target); }
 
   .setup { position:absolute; inset:0; z-index:700; display:flex; align-items:center; justify-content:center;
-           flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--lake-night); }
+           flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--tile-bg); }
   .setup h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p, .setup ol { font-size:22px; color:var(--mist); line-height:1.55; max-width:920px; text-align:left; }
   .setup ol { margin-top:8px; padding-left:24px; }
   <?= signage_stamp_css() ?>
   .stamp { position:absolute; right:<?= $boardH < 1080 ? 20 : 28 ?>px; bottom:<?= $boardH < 1080 ? 10 : 12 ?>px;
-           left:auto; z-index:600; pointer-events:none; }
+           left:auto; z-index:600; pointer-events:none; color:var(--l7-muted); opacity:.95; }
 </style>
 </head>
 <body>

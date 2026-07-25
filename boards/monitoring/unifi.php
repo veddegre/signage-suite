@@ -78,7 +78,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .devices { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; align-content:start; }
   .device { display:grid; grid-template-columns:14px 1fr auto; gap:12px; align-items:center;
-            padding:12px 14px; border-radius:10px; background:var(--lake-night);
+            padding:12px 14px; border-radius:10px; background:var(--tile-bg);
             border:1px solid rgba(38,52,77,.55); min-width:0; }
   .device .dot { width:14px; height:14px; border-radius:50%; background:var(--ok); }
   .device.offline .dot { background:var(--bad); }
@@ -88,7 +88,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .device .side .kind { font-size:15px; letter-spacing:1px; text-transform:uppercase; }
 
   .issues { display:flex; flex-direction:column; gap:12px; }
-  .issue { padding:14px 16px; border-radius:10px; background:var(--lake-night); border:1px solid rgba(38,52,77,.55); }
+  .issue { padding:14px 16px; border-radius:10px; background:var(--tile-bg); border:1px solid rgba(38,52,77,.55); }
   .issue .title { font-size:24px; }
   .issue .sub { font-size:18px; color:var(--mist); margin-top:4px; }
   .issue.warn { border-color:rgba(255,200,89,.35); }
@@ -96,7 +96,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .bandwidth { display:flex; flex-direction:column; gap:18px; margin-bottom:18px; }
   .wan-speeds { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .wan-speed { background:var(--lake-night); border:1px solid rgba(38,52,77,.55); border-radius:10px;
+  .wan-speed { background:var(--tile-bg); border:1px solid rgba(38,52,77,.55); border-radius:10px;
                 padding:16px 18px; }
   .wan-speed .lab { font-size:16px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); }
   .wan-speed .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:52px; color:var(--beacon);
@@ -106,14 +106,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .talkers { display:flex; flex-direction:column; gap:8px; }
   .talker { display:grid; grid-template-columns:1fr auto; gap:16px; align-items:center;
-            padding:10px 14px; border-radius:10px; background:var(--lake-night);
+            padding:10px 14px; border-radius:10px; background:var(--tile-bg);
             border:1px solid rgba(38,52,77,.55); min-width:0; }
   .talker .name { font-size:21px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .talker .rate { font-family:'IBM Plex Mono',monospace; font-size:18px; color:var(--mist);
                   white-space:nowrap; font-variant-numeric:tabular-nums; }
 
   .nodata, .err, .setupmsg { font-size:24px; color:var(--mist); line-height:1.6; }
-  .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
+  .setupmsg code { color:var(--snow); background:var(--code-bg); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
 </style>
 </head>

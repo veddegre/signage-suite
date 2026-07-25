@@ -85,9 +85,9 @@ function ransomware_row_class(array $row): string
 
   .hero { display:grid; grid-template-columns: <?= $hero && !empty($hero['screenshot']) ? '220px 1fr' : 'auto 1fr' ?>;
           gap:<?= $boardH < 1080 ? 16 : 20 ?>px; align-items:start; min-width:0; }
-  .hero.us { border:1px solid rgba(255,179,71,.45); border-radius:12px; padding:<?= $boardH < 1080 ? '12px 14px' : '14px 16px' ?>; background:var(--lake-night); }
+  .hero.us { border:1px solid rgba(255,179,71,.45); border-radius:12px; padding:<?= $boardH < 1080 ? '12px 14px' : '14px 16px' ?>; background:var(--tile-bg); }
   .hero-shot { width:<?= $boardH < 1080 ? 200 : 220 ?>px; height:<?= $boardH < 1080 ? 120 : 132 ?>px; border-radius:10px;
-               object-fit:cover; border:1px solid var(--hairline); background:var(--lake-night); }
+               object-fit:cover; border:1px solid var(--hairline); background:var(--tile-bg); }
   .hero-tag { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 20 : 22 ?>px; color:var(--beacon);
               writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:2px; }
   .hero-title { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 40 : 46 ?>px; line-height:1.05; }
@@ -101,7 +101,7 @@ function ransomware_row_class(array $row): string
 
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row.us { border-color:rgba(255,179,71,.45); }
   .row .title { font-size:<?= $boardH < 1080 ? 18 : 19 ?>px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

@@ -129,7 +129,7 @@ $loopAttr = $embedded ? '' : 'loop';
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px;
            color:var(--mist); font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; flex-direction:column; gap:16px;
-           align-items:center; justify-content:center; background:var(--lake-night);
+           align-items:center; justify-content:center; background:var(--tile-bg);
            color:var(--mist); }
   .empty h2 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--snow); }
   .empty p { font-size:27px; max-width:1100px; text-align:center; line-height:1.6; }

@@ -98,7 +98,7 @@ $markers = [
            gap:18px; text-align:center; padding:40px; }
   .setup h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p { font-size:26px; color:var(--mist); line-height:1.55; max-width:900px; }
-  .setup code { background:var(--lake-night); padding:3px 10px; border-radius:6px; color:var(--snow); }
+  .setup code { background:var(--tile-bg); padding:3px 10px; border-radius:6px; color:var(--snow); }
   .setup a { color:var(--beacon); }
 </style>
 </head>

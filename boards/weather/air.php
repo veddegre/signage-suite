@@ -656,6 +656,71 @@ function air_google_pollen_index(?array $indexInfo): array
     return [$upi, $category, $hasIndex];
 }
 
+/** Match Google dailyInfo[] to a local calendar day (Y-m-d). */
+function air_google_day_index(?array $data, string $dayKey): int
+{
+    if (!is_array($data)) {
+        return -1;
+    }
+    foreach ($data['dailyInfo'] ?? [] as $i => $day) {
+        if (!is_array($day)) {
+            continue;
+        }
+        $date = $day['date'] ?? null;
+        if (!is_array($date)) {
+            continue;
+        }
+        $y = (int)($date['year'] ?? 0);
+        $m = (int)($date['month'] ?? 0);
+        $d = (int)($date['day'] ?? 0);
+        if ($y > 0 && $m > 0 && $d > 0 && sprintf('%04d-%02d-%02d', $y, $m, $d) === $dayKey) {
+            return (int)$i;
+        }
+    }
+
+    return -1;
+}
+
+function air_google_pollen_response_valid(?array $data): bool
+{
+    return is_array($data)
+        && isset($data['dailyInfo'])
+        && is_array($data['dailyInfo'])
+        && $data['dailyInfo'] !== [];
+}
+
+/** Best in-season UPI for a pollen type from plantInfo (GRASS / TREE / WEED). */
+function air_google_plant_type_index(?array $day, string $pollenTypeCode): array
+{
+    $bestUpi = null;
+    $bestCategory = '';
+    foreach ($day['plantInfo'] ?? [] as $plant) {
+        if (!is_array($plant)) {
+            continue;
+        }
+        $desc = $plant['plantDescription'] ?? null;
+        if (!is_array($desc)) {
+            continue;
+        }
+        if (strtoupper((string)($desc['type'] ?? '')) !== $pollenTypeCode) {
+            continue;
+        }
+        if (empty($plant['inSeason'])) {
+            continue;
+        }
+        [$upi, $category, $hasIndex] = air_google_pollen_index($plant['indexInfo'] ?? null);
+        if (!$hasIndex || $upi === null) {
+            continue;
+        }
+        if ($bestUpi === null || $upi > $bestUpi) {
+            $bestUpi = $upi;
+            $bestCategory = $category;
+        }
+    }
+
+    return [$bestUpi, $bestCategory, $bestUpi !== null];
+}
+
 function air_google_pollen_row_label(?int $upi, string $category): array
 {
     [$label, $color] = air_upi_band($upi);
@@ -746,21 +811,52 @@ function air_pollen_rows_openmeteo(array $hourly, string $dayKey): array
 }
 
 /** @return list<array{name:string,val:?float,unit:string,label:string,color:string}> */
-function air_pollen_rows_google(?array $data, int $dayIndex): array
+function air_pollen_rows_google(?array $data, int $dayIndex, string $dayKey = ''): array
 {
-    if (!$data) return [];
+    if (!$data || !air_google_pollen_response_valid($data)) {
+        return [];
+    }
+    if ($dayKey !== '') {
+        $matched = air_google_day_index($data, $dayKey);
+        if ($matched >= 0) {
+            $dayIndex = $matched;
+        }
+    }
     $day = $data['dailyInfo'][$dayIndex] ?? null;
-    if (!$day) return [];
+    if (!$day || !is_array($day)) {
+        return [];
+    }
     $labels = ['GRASS' => 'Grass', 'WEED' => 'Weed', 'TREE' => 'Tree'];
-    $rows = [];
+    $byCode = [];
     foreach ($day['pollenTypeInfo'] ?? [] as $pt) {
-        $code = (string)($pt['code'] ?? '');
-        if (!isset($labels[$code])) continue;
-        $inSeason = (bool)($pt['inSeason'] ?? false);
-        [$upi, $category, $hasIndex] = air_google_pollen_index($pt['indexInfo'] ?? null);
-        if (!$inSeason && !$hasIndex) {
+        if (!is_array($pt)) {
+            continue;
+        }
+        $code = strtoupper((string)($pt['code'] ?? ''));
+        if ($code !== '') {
+            $byCode[$code] = $pt;
+        }
+    }
+    $rows = [];
+    foreach ($labels as $code => $displayName) {
+        $pt = $byCode[$code] ?? null;
+        $upi = null;
+        $category = '';
+        $hasIndex = false;
+        if (is_array($pt)) {
+            [$upi, $category, $hasIndex] = air_google_pollen_index($pt['indexInfo'] ?? null);
+        }
+        if (!$hasIndex) {
+            [$plantUpi, $plantCat, $plantHas] = air_google_plant_type_index($day, $code);
+            if ($plantHas) {
+                $upi = $plantUpi;
+                $category = $plantCat;
+                $hasIndex = true;
+            }
+        }
+        if (!$hasIndex) {
             $rows[] = [
-                'name' => $labels[$code],
+                'name' => $displayName,
                 'val' => null,
                 'unit' => 'upi',
                 'label' => 'Off season',
@@ -770,13 +866,14 @@ function air_pollen_rows_google(?array $data, int $dayIndex): array
         }
         [$label, $color] = air_google_pollen_row_label($upi, $category);
         $rows[] = [
-            'name' => $labels[$code],
+            'name' => $displayName,
             'val' => $upi !== null ? (float)$upi : null,
             'unit' => 'upi',
             'label' => $label,
             'color' => $color,
         ];
     }
+
     return air_pollen_rows_sort($rows);
 }
 
@@ -797,7 +894,7 @@ function air_fetch_google_pollen(): ?array
 function air_pollen_rows_for_day(string $source, array $hourly, ?array $google, int $dayIndex, string $dayKey): array
 {
     if ($source === 'google') {
-        return air_pollen_rows_google($google, $dayIndex);
+        return air_pollen_rows_google($google, $dayIndex, $dayKey);
     }
     if ($source === 'openmeteo') {
         return air_pollen_rows_openmeteo($hourly, $dayKey);
@@ -996,7 +1093,7 @@ if ($aqSource === 'airnow' && $nwsAlerts !== [] && ($aqiInfo['note'] ?? '') === 
 $todayKey = date('Y-m-d');
 $googlePollen = air_fetch_google_pollen();
 $pollenSource = 'none';
-if ($googlePollen) {
+if ($googlePollen !== null && air_google_pollen_response_valid($googlePollen)) {
     $pollenSource = 'google';
 } elseif (air_openmeteo_has_pollen($hourly)) {
     $pollenSource = 'openmeteo';
@@ -1097,7 +1194,7 @@ $gap = $compact ? 12 : 16;
   .parts { grid-area:parts; display:flex; flex-direction:column; min-height:0; gap:<?= $compact ? 8 : 10 ?>px; }
   .parts .stats-grid { flex:1; min-height:0; display:grid; grid-template-columns:repeat(<?= $statGridCols ?>, 1fr);
           gap:<?= $compact ? 8 : 10 ?>px; align-content:start; }
-  .stat { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
+  .stat { background:var(--tile-bg); border:1px solid var(--hairline); border-radius:12px;
           padding:<?= $compact ? '10px 12px' : '14px 16px' ?>; min-height:0; display:flex; flex-direction:column; justify-content:center; }
   .stat .lab { font-size:<?= $compact ? 12 : 13 ?>px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
   .stat .val { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 34 : 44 ?>px;
@@ -1111,7 +1208,7 @@ $gap = $compact ? 12 : 16;
           padding:<?= $compact ? '7px 0' : '9px 0' ?>; border-bottom:1px solid var(--hairline); }
   .prow:last-child { border-bottom:none; }
   .prow .n { font-size:<?= $compact ? 20 : 24 ?>px; }
-  .prow .track { height:16px; background:var(--lake-night); border-radius:9px; overflow:hidden; }
+  .prow .track { height:16px; background:var(--tile-bg); border-radius:9px; overflow:hidden; }
   .prow .fill { height:100%; border-radius:9px; background:var(--beacon); }
   .prow .fill.hot { background:var(--down); }
   .prow .c { font-family:'IBM Plex Mono',monospace; font-size:<?= $compact ? 16 : 19 ?>px; color:var(--mist); text-align:right; }
@@ -1120,7 +1217,7 @@ $gap = $compact ? 12 : 16;
   .forecast { grid-area:forecast; display:flex; flex-direction:column; min-height:0; }
   .forecast .days { flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr);
                    gap:<?= $compact ? 8 : 10 ?>px; align-items:stretch; }
-  .fday { background:var(--lake-night); border:1px solid var(--hairline); border-radius:12px;
+  .fday { background:var(--tile-bg); border:1px solid var(--hairline); border-radius:12px;
           padding:<?= $compact ? '10px 12px' : '14px 16px' ?>; min-height:0;
           display:flex; flex-direction:column; justify-content:flex-start; }
   .fday .d { font-size:14px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:6px; }
@@ -1131,7 +1228,7 @@ $gap = $compact ? 12 : 16;
   .fday .line.sub { margin-top:2px; opacity:.9; }
 
   .pollen-note { font-size:<?= $compact ? 15 : 17 ?>px; color:var(--mist); margin-top:8px; line-height:1.4; }
-  .pollen-note code { background:var(--lake-night); padding:2px 6px; border-radius:6px; }
+  .pollen-note code { background:var(--tile-bg); padding:2px 6px; border-radius:6px; }
 
   .verdict { grid-area:verdict; border-radius:14px; border:1px solid var(--hairline);
              padding:<?= $compact ? '14px 20px' : '18px 24px' ?>; display:flex;
@@ -1143,7 +1240,7 @@ $gap = $compact ? 12 : 16;
                 display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
   .notcfg { font-size:24px; color:var(--mist); line-height:1.55; padding:20px 0; }
-  .notcfg code { background:var(--lake-night); padding:2px 8px; border-radius:6px; }
+  .notcfg code { background:var(--tile-bg); padding:2px 8px; border-radius:6px; }
   <?= signage_stamp_css() ?>
   .stamp { grid-area:meta; }
 </style>

@@ -64,7 +64,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .inactive { font-size:32px; color:var(--mist); line-height:1.5; }
   .setupmsg { font-size:26px; color:var(--mist); line-height:1.6; }
-  .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
+  .setupmsg code { color:var(--snow); background:var(--code-bg); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
 </style>
 </head>

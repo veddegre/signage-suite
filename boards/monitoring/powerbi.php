@@ -94,7 +94,7 @@ $boardH = signage_frame_height();
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
               font-family:system-ui,sans-serif; }
   iframe, #embed-container { width:1920px; height:<?= (int)$boardH ?>px; border:0; display:block;
-                              background:var(--lake-night); pointer-events:none; }
+                              background:var(--tile-bg); pointer-events:none; }
   .empty { width:1920px; height:<?= (int)$boardH ?>px; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; text-align:center; }

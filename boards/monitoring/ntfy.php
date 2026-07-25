@@ -12,6 +12,7 @@ define('MAX_SHOWN', max(4, min(20, (int)cfg('ntfy.MAX_SHOWN', 10))));
 
 date_default_timezone_set(TIMEZONE);
 $showClock = signage_show_clock();
+$boardH = signage_frame_height();
 ntfy_poll_refresh_if_due();
 $messages = ntfy_recent_messages(MAX_SHOWN);
 
@@ -28,14 +29,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; overflow:hidden; background:var(--lake-night); color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none; <?= signage_viewport_css() ?> }
-  .board { padding:36px 40px; display:flex; flex-direction:column; gap:20px; min-height:1080px; }
-  h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--beacon); }
-  .list { display:flex; flex-direction:column; gap:12px; }
-  .msg { padding:16px 18px; border-radius:12px; background:var(--harbor); border:1px solid var(--hairline); }
+  .board { padding:<?= $boardH < 1080 ? 28 : 36 ?>px 40px; display:flex; flex-direction:column; gap:20px; min-height:0; height:100%; box-sizing:border-box; }
+  h1 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--data-accent); }
+  .list { display:flex; flex-direction:column; gap:12px; flex:1; min-height:0; overflow:hidden; }
+  .msg { padding:16px 18px; border-radius:12px; background:var(--harbor); border:1px solid var(--hairline); flex-shrink:0; }
   .msg.high { border-color:rgba(228,89,89,.45); }
   .msg .title { font-size:28px; }
-  .msg .body { font-size:20px; color:var(--mist); margin-top:6px; }
-  .empty { font-size:26px; color:var(--mist); }
+  .msg .body { font-size:20px; color:var(--inset-muted); margin-top:6px; }
+  .empty { font-size:26px; color:var(--inset-muted); }
   <?= signage_stamp_css() ?>
 </style>
 </head>

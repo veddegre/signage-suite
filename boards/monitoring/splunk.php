@@ -92,14 +92,14 @@ $cacheTtl = splunk_cache_ttl();
   .lrow { display:grid; grid-template-columns:minmax(110px,auto) 1fr 90px; align-items:center;
           gap:14px; padding:8px 0; }
   .lrow .n { font-size:24px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .lrow .track { height:14px; background:var(--lake-night); border-radius:7px; overflow:hidden; }
+  .lrow .track { height:14px; background:var(--tile-bg); border-radius:7px; overflow:hidden; }
   .lrow .fill { height:100%; background:var(--beacon); border-radius:7px; }
   .lrow .c { font-size:26px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums; }
   .trend { flex:1; min-height:0; }
   .trend svg { width:100%; height:100%; }
   .nodata, .err { font-size:24px; color:var(--mist); }
   .setupmsg { font-size:28px; color:var(--mist); line-height:1.7; }
-  .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
+  .setupmsg code { color:var(--snow); background:var(--code-bg); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
 </style>
 </head>

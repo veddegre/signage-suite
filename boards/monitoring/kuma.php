@@ -75,7 +75,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
   .mon-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; align-content:start; }
   .mon { display:grid; grid-template-columns:14px 1fr auto; gap:12px; align-items:center;
-         padding:12px 14px; border-radius:10px; background:var(--lake-night);
+         padding:12px 14px; border-radius:10px; background:var(--tile-bg);
          border:1px solid rgba(38,52,77,.55); min-width:0; }
   .mon .dot { width:14px; height:14px; border-radius:50%; background:var(--ok); }
   .mon.down .dot { background:var(--bad); }
@@ -87,13 +87,13 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .mon .side .uptime { font-size:15px; margin-top:4px; }
 
   .issues { display:flex; flex-direction:column; gap:12px; }
-  .issue { padding:14px 16px; border-radius:10px; background:var(--lake-night); border:1px solid rgba(38,52,77,.55); }
+  .issue { padding:14px 16px; border-radius:10px; background:var(--tile-bg); border:1px solid rgba(38,52,77,.55); }
   .issue .title { font-size:24px; }
   .issue .sub { font-size:18px; color:var(--mist); margin-top:4px; }
   .issue.bad { border-color:rgba(228,89,89,.35); }
 
   .nodata, .err, .setupmsg { font-size:24px; color:var(--mist); line-height:1.6; }
-  .setupmsg code { color:var(--snow); background:var(--lake-night); padding:2px 10px; border-radius:6px; }
+  .setupmsg code { color:var(--snow); background:var(--code-bg); padding:2px 10px; border-radius:6px; }
   <?= signage_stamp_css() ?>
 </style>
 </head>

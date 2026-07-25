@@ -93,7 +93,7 @@ function certexp_row_class(array $row): string
   .panel h2 { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 34 : 38 ?>px; font-weight:600; }
   .k { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist); }
   .hero { border:1px solid var(--hairline); border-radius:12px; padding:<?= $boardH < 1080 ? '14px 16px' : '16px 18px' ?>;
-          background:var(--lake-night); min-width:0; }
+          background:var(--tile-bg); min-width:0; }
   .hero.warn { border-color:rgba(255,179,71,.45); }
   .hero.expired, .hero.error { border-color:rgba(255,107,107,.55); }
   .hero-title { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 40 : 46 ?>px; line-height:1.05; }
@@ -104,7 +104,7 @@ function certexp_row_class(array $row): string
   .chip strong { color:var(--snow); }
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row.warn { border-color:rgba(255,179,71,.45); }
   .row.expired, .row.error { border-color:rgba(255,107,107,.55); }

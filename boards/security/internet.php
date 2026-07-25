@@ -97,7 +97,7 @@ function internet_level_class(string $level): string
   .k { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist); }
 
   .hero { display:grid; grid-template-columns:auto 1fr; gap:<?= $boardH < 1080 ? 16 : 20 ?>px; align-items:start;
-          padding:<?= $boardH < 1080 ? '14px 16px' : '16px 18px' ?>; background:var(--lake-night);
+          padding:<?= $boardH < 1080 ? '14px 16px' : '16px 18px' ?>; background:var(--tile-bg);
           border:1px solid var(--hairline); border-radius:12px; min-width:0; }
   .hero .tag { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 22 : 24 ?>px; color:var(--beacon);
                writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:2px; }
@@ -112,7 +112,7 @@ function internet_level_class(string $level): string
 
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row .title { font-size:<?= $boardH < 1080 ? 18 : 19 ?>px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .sub { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; color:var(--mist); margin-top:3px;
@@ -123,7 +123,7 @@ function internet_level_class(string $level): string
 
   .root-grid { flex:1; min-height:0; display:grid; gap:<?= $boardH < 1080 ? 8 : 10 ?>px;
                grid-template-columns: repeat(4, minmax(0, 1fr)); align-content:start; }
-  .root { padding:<?= $boardH < 1080 ? '10px 8px' : '12px 10px' ?>; background:var(--lake-night);
+  .root { padding:<?= $boardH < 1080 ? '10px 8px' : '12px 10px' ?>; background:var(--tile-bg);
           border:1px solid var(--hairline); border-radius:10px; text-align:center; min-width:0; }
   .root.down { border-color:var(--crit); background:rgba(255,93,93,.08); }
   .root .letter { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 34 : 38 ?>px; line-height:1; }

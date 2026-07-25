@@ -69,7 +69,7 @@ $camJson['streamIframe'] = (string)$cam['url'];
   .board { position:relative; width:1920px; height:<?= h($heightCss) ?>; }
   .frame { position:absolute; inset:0; overflow:hidden; background:var(--lake-night); }
   .frame iframe, .frame img, .frame video { width:100%; height:100%; border:0; display:block;
-                               object-fit:cover; object-position:center; background:var(--lake-night); }
+                               object-fit:cover; object-position:center; background:var(--tile-bg); }
   .overlay { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 24 : 32 ?>px;
              z-index:2; pointer-events:none;
              padding:12px 18px; border-radius:12px; <?= signage_glass_panel_css() ?> }

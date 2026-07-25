@@ -236,7 +236,7 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
                 line-height:1.1; margin-bottom:12px; }
   .hero-meta { display:flex; flex-wrap:wrap; gap:10px 16px; margin-bottom:14px; }
   .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
-          border:1px solid var(--hairline); background:var(--lake-night); font-size:<?= $boardH < 1080 ? 17 : 19 ?>px;
+          border:1px solid var(--hairline); background:var(--tile-bg); font-size:<?= $boardH < 1080 ? 17 : 19 ?>px;
           color:var(--mist); }
   .pill strong { color:var(--snow); font-weight:600; }
   .pill.crit strong { color:var(--crit); }
@@ -249,7 +249,7 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
   .side { grid-area:side; display:flex; flex-direction:column; min-height:0; }
   .list { flex:1; min-height:0; display:flex; flex-direction:column; gap:<?= $boardH < 1080 ? 8 : 10 ?>px; overflow:hidden; }
   .row { display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center;
-         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--lake-night);
+         padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row .id { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 17 : 18 ?>px; color:var(--beacon); }
   .row .sub { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; color:var(--mist); margin-top:4px;

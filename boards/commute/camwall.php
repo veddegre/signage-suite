@@ -85,7 +85,7 @@ $heightPx = $boardH . 'px';
           border-radius:<?= $compact ? 8 : 10 ?>px; overflow:hidden; }
   .tile.empty { opacity:.35; }
   .tile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center;
-              background:var(--lake-night); display:block; }
+              background:var(--tile-bg); display:block; }
   .tile img.err { opacity:.15; }
   .cap { position:absolute; left:0; right:0; top:0; z-index:2; display:flex; align-items:center; gap:8px;
          padding:<?= $compact ? '6px 10px' : '8px 12px' ?>;

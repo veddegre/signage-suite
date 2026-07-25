@@ -64,37 +64,43 @@ function iodamap_format_score(float $score): string
   .topbar h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:54px; line-height:1; }
   .topbar .sub { display:block; font-size:22px; color:var(--beacon); margin-top:6px; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:52px; color:var(--mist); font-variant-numeric:tabular-nums; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18; }
+  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
+              /* Map UI sits on a dark basemap — do not inherit light-theme text tokens. */
+              --ioda-text:#edf2fb; --ioda-muted:#9eb0cc; --ioda-accent:#d9a7ff;
+              --ioda-warn:#ffb347; --ioda-panel:rgba(10,16,28,.92); --ioda-panel-border:rgba(148,163,198,.35); }
   .mapwrap { position:absolute; inset:0; }
   #heatMap { width:100%; height:100%; }
   #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.85); color:var(--mist); }
+  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--ioda-muted); }
+  #heatMap .leaflet-control-attribution a { color:var(--ioda-muted); }
   .heat-canvas { pointer-events:none; z-index:450; }
   .side { position:absolute; top:20px; right:28px; width:400px; max-height:calc(100% - 88px); z-index:600;
-          display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; }
-  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--mist);
-             background:rgba(12,20,34,.72); padding:8px 12px; border-radius:8px; border:1px solid var(--hairline); }
-  .row { background:rgba(12,20,34,.78); border:1px solid var(--hairline); border-radius:10px; padding:10px 12px; }
-  .row.hero { border-color:rgba(217,167,255,.45); }
-  .row.ongoing { box-shadow:0 0 16px rgba(217,167,255,.15); }
-  .row .code { font-family:'IBM Plex Mono',monospace; color:var(--beacon); }
-  .row .val { font-family:'Big Shoulders Display'; font-size:32px; margin-top:4px; }
-  .row .meta { font-size:13px; color:var(--mist); margin-top:2px; }
+          display:flex; flex-direction:column; gap:10px; overflow:hidden; pointer-events:none; color:var(--ioda-text); }
+  .side .k { font-size:14px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ioda-muted);
+             background:var(--ioda-panel); padding:8px 12px; border-radius:8px; border:1px solid var(--ioda-panel-border); }
+  .row { background:var(--ioda-panel); border:1px solid var(--ioda-panel-border); border-radius:10px; padding:10px 12px;
+         color:var(--ioda-text); }
+  .row.hero { border-color:rgba(217,167,255,.55); }
+  .row.ongoing { box-shadow:0 0 16px rgba(255,179,71,.18); border-color:rgba(255,179,71,.4); }
+  .row .code { font-family:'IBM Plex Mono',monospace; color:var(--ioda-accent); font-weight:600; }
+  .row .val { font-family:'Big Shoulders Display'; font-size:32px; margin-top:4px; color:var(--ioda-text); line-height:1.05; }
+  .row .meta { font-size:13px; color:var(--ioda-muted); margin-top:2px; }
   .pill-live { display:inline-block; font-size:11px; letter-spacing:1px; text-transform:uppercase;
-               color:#ffb347; border:1px solid rgba(255,179,71,.45); border-radius:999px; padding:2px 8px; margin-left:8px; }
+               color:var(--ioda-warn); border:1px solid rgba(255,179,71,.5); border-radius:999px; padding:2px 8px; margin-left:8px; }
   .map-tag { position:absolute; left:32px; bottom:16px; z-index:600; pointer-events:none; font-size:16px;
-             text-transform:uppercase; color:var(--mist); background:rgba(12,20,34,.78); padding:10px 16px;
-             border-radius:8px; border:1px solid var(--hairline); }
-  .map-tag b { color:var(--beacon); }
-  .legend-bar { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:13px; text-transform:none; }
+             text-transform:uppercase; color:var(--ioda-muted); background:var(--ioda-panel); padding:10px 16px;
+             border-radius:8px; border:1px solid var(--ioda-panel-border); }
+  .map-tag b { color:var(--ioda-accent); }
+  .legend-bar { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:13px; text-transform:none; color:var(--ioda-muted); }
   .legend-bar .grad { width:120px; height:10px; border-radius:5px;
-                      background:linear-gradient(90deg, rgba(150,90,220,.15), rgba(217,167,255,.55), rgba(255,179,71,.9)); }
+                      background:linear-gradient(90deg, rgba(80,120,180,.25), rgba(217,167,255,.65), rgba(255,140,60,.95)); }
   .setup, .empty { position:absolute; inset:0; z-index:700; display:flex; align-items:center; justify-content:center;
-                    flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--lake-night); }
+                    flex-direction:column; gap:18px; text-align:center; padding:40px; background:var(--tile-bg); }
   .setup h2, .empty h2 { font-family:'Big Shoulders Display'; font-size:52px; color:var(--beacon); }
   .setup p, .empty p { font-size:22px; color:var(--mist); max-width:920px; }
   <?= signage_stamp_css() ?>
-  .stamp { position:absolute; right:28px; bottom:10px; left:auto; z-index:600; pointer-events:none; }
+  .stamp { position:absolute; right:28px; bottom:10px; left:auto; z-index:600; pointer-events:none;
+           color:var(--ioda-muted); opacity:.95; }
 </style>
 </head>
 <body>
@@ -171,11 +177,11 @@ function iodamap_format_score(float $score): string
     _resize() { const sz=this._map.getSize(); L.DomUtil.setPosition(this._canvas, this._map.containerPointToLayerPoint([0,0]));
       const dpr=window.devicePixelRatio||1; this._canvas.width=Math.round(sz.x*dpr); this._canvas.height=Math.round(sz.y*dpr);
       this._canvas.style.width=sz.x+'px'; this._canvas.style.height=sz.y+'px'; this._dpr=dpr; },
-    _rgb(t, a, ongoing) {
-      const r = Math.round(90 + t * 130 + (ongoing ? 35 : 0));
-      const g = Math.round(35 + t * 60);
-      const b = Math.round(120 + t * 100);
-      return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+    _heatRgb(t, alpha, ongoing) {
+      const r = Math.round(45 + t * 200 + (ongoing ? 25 : 0));
+      const g = Math.round(55 + t * 70);
+      const b = Math.round(100 + (1 - t) * 35);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
     },
     _tick(now) { this._draw(now||performance.now()); this._raf=requestAnimationFrame(this._tick); },
     _draw(now) {
@@ -183,16 +189,25 @@ function iodamap_format_score(float $score): string
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,this._canvas.width/dpr,this._canvas.height/dpr);
       for (const c of COUNTRIES) {
         const pt=this._map.latLngToContainerPoint([c.lat,c.lng]), t=c.intensity;
-        const pulse = c.ongoing ? (0.85 + 0.15 * Math.sin(now / 420)) : 1;
-        const radius = (12 + t * 54) * (c.rank === 1 ? pulse : (c.ongoing ? pulse : 1));
+        const pulse = c.ongoing ? (0.92 + 0.08 * Math.sin(now / 520)) : 1;
+        const radius = (10 + t * 44) * (c.rank === 1 ? pulse : (c.ongoing ? pulse : 1));
         const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,radius);
-        g.addColorStop(0, this._rgb(t, 0.5 + t * 0.35, c.ongoing));
-        g.addColorStop(0.45, this._rgb(t, 0.2 + t * 0.18, c.ongoing));
-        g.addColorStop(1, this._rgb(t, 0, c.ongoing));
+        g.addColorStop(0, this._heatRgb(t, 0.32 + t * 0.28, c.ongoing));
+        g.addColorStop(0.45, this._heatRgb(t, 0.12 + t * 0.14, c.ongoing));
+        g.addColorStop(1, this._heatRgb(t, 0, c.ongoing));
         ctx.fillStyle=g; ctx.beginPath(); ctx.arc(pt.x,pt.y,radius,0,Math.PI*2); ctx.fill();
+        if (c.rank <= 5 || c.ongoing) {
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5 + t * 2, 0, Math.PI * 2);
+          ctx.fillStyle = this._heatRgb(t, 0.85, c.ongoing);
+          ctx.fill();
+          ctx.font = '600 11px IBM Plex Mono, monospace';
+          ctx.fillStyle = 'rgba(237,242,251,0.92)';
+          ctx.textAlign = 'center';
+          ctx.fillText(c.code, pt.x, pt.y - radius - 6);
+        }
         if (c.ongoing) {
-          ctx.beginPath(); ctx.arc(pt.x, pt.y, 4 + t * 2, 0, Math.PI * 2);
-          ctx.strokeStyle = 'rgba(255,179,71,0.85)'; ctx.lineWidth = 2; ctx.stroke();
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 + t * 2, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255,179,71,0.9)'; ctx.lineWidth = 2; ctx.stroke();
         }
       }
     }
