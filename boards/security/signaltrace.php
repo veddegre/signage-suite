@@ -28,10 +28,16 @@ $showClock = signage_show_clock();
 $frameH = signage_frame_height();
 $GLOBALS['diag'] = [];
 
+/** One JSON file per export key; time window is applied on fetch, not in the cache name. */
+function st_cache_path(string $key): string
+{
+    return CACHE_DIR . '/' . preg_replace('/[^a-z0-9_]/i', '_', $key) . '.json';
+}
+
 function st_get(string $path, string $key): ?array
 {
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
-    $f = CACHE_DIR . "/{$key}_" . md5($path) . '.json';
+    $f = st_cache_path($key);
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
         $d = json_decode((string)file_get_contents($f), true);
         if (is_array($d)) return $d;
