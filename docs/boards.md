@@ -101,7 +101,7 @@ webcam.php?cam=grandhaven
 
 Custom cameras: `webcam.php?cam=yourkey`. Set **Off** on a row to hide it from quick-add and disable a built-in feed.
 
-Still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 60s). Iframe streams use an hourly reload backstop (`RELOAD_SEC`).
+Still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 15s). **Safari** EarthCam (`grandhaven`) uses proxied frames every `EARTHCAM_STILL_REFRESH_SEC` (default **5s**). Iframe streams use an hourly reload backstop (`RELOAD_SEC`).
 
 If a camera URL fails probe checks for **24 hours**, that rotation entry is auto-skipped until the stream responds again.
 

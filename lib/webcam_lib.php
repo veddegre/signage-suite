@@ -147,6 +147,10 @@ function webcam_earthcam_api_json(string $shareUrl): ?array
     static $mem = [];
     $cacheKey = md5($token);
     $ttl = 45;
+    $refresh = webcam_earthcam_still_refresh_sec();
+    if ($refresh < $ttl) {
+        $ttl = max(10, $refresh * 3);
+    }
     if (isset($mem[$cacheKey]) && (time() - $mem[$cacheKey]['t']) < $ttl) {
         return $mem[$cacheKey]['j'];
     }
@@ -231,6 +235,20 @@ function webcam_cam_for_browser(array $cam): array
     $cam['kind'] = 'image';
 
     return $cam;
+}
+
+function webcam_uses_earthcam_still(array $cam): bool
+{
+    return webcam_uses_image_tag($cam)
+        && webcam_is_earthcam_share_url((string)($cam['url'] ?? ''));
+}
+
+/** Safari EarthCam proxy — faster than generic still-image boards (default 5s). */
+function webcam_earthcam_still_refresh_sec(): int
+{
+    $n = (int)cfg('webcam.EARTHCAM_STILL_REFRESH_SEC', 5);
+
+    return max(3, min(30, $n));
 }
 
 function webcam_detect_kind(string $url): string
