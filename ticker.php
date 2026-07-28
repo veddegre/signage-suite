@@ -163,6 +163,33 @@ function signage_ticker_text_contains(array $parts, string $needle): bool
 }
 }
 
+if (!function_exists('signage_weather_ticker_alerts_from_geojson')) {
+/** @param array<string,mixed>|null $j Decoded NWS alerts GeoJSON */
+function signage_weather_ticker_alerts_from_geojson(?array $j): array
+{
+    $rank = ['Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
+    $min  = $rank[TICKER_MIN_SEVERITY] ?? 1;
+    $out = [];
+    foreach (($j['features'] ?? []) as $feat) {
+        $p = $feat['properties'] ?? [];
+        $sev = $p['severity'] ?? 'Minor';
+        if (($rank[$sev] ?? 1) < $min) {
+            continue;
+        }
+        $out[] = [
+            'event'    => (string)($p['event'] ?? 'Weather Alert'),
+            'severity' => $sev,
+            'kind'     => signage_ticker_event_kind((string)($p['event'] ?? '')),
+            'headline' => (string)($p['headline'] ?? $p['event'] ?? ''),
+            'text'     => signage_ticker_alert_detail($p),
+        ];
+    }
+    usort($out, fn($a, $b) => ($rank[$b['severity']] ?? 0) <=> ($rank[$a['severity']] ?? 0));
+
+    return $out;
+}
+}
+
 if (!function_exists('signage_weather_ticker_alerts')) {
 function signage_weather_ticker_alerts(?string $screen = null): array
 {
@@ -197,9 +224,11 @@ function signage_weather_ticker_alerts(?string $screen = null): array
     $dir = SIGNAGE_ROOT . '/cache';
     if (!is_dir($dir)) @mkdir($dir, 0775, true);
     $f = $dir . '/ticker_alerts_' . sprintf('%.4F_%.4F', $lat, $lon) . '.dat';
+    $emptyConfirmFile = $f . '.empty_confirm';
     $maxAge = min(max((int)TICKER_TTL, 30), 90);   // cap so new alerts show within ~90s
+    $pendingEmptyConfirm = is_file($emptyConfirmFile) ? max(0, (int)file_get_contents($emptyConfirmFile)) : 0;
     $raw = null;
-    if (is_file($f) && (time() - filemtime($f)) < $maxAge) {
+    if ($pendingEmptyConfirm === 0 && is_file($f) && (time() - filemtime($f)) < $maxAge) {
         $raw = (string)file_get_contents($f);
     } else {
         $ch = curl_init(sprintf('https://api.weather.gov/alerts/active?point=%.4F,%.4F', $lat, $lon));
@@ -207,32 +236,45 @@ function signage_weather_ticker_alerts(?string $screen = null): array
             CURLOPT_TIMEOUT=>8, CURLOPT_USERAGENT=>TICKER_UA,
             CURLOPT_HTTPHEADER=>['Accept: application/geo+json']]);
         $body = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
-        if ($body !== false && $code === 200) { @file_put_contents($f, $body, LOCK_EX); $raw = $body; }
-        elseif (is_file($f)) { $raw = (string)file_get_contents($f); } // stale fallback, retry later
+        if ($body !== false && $code === 200) {
+            $newJ = json_decode($body, true);
+            $newOut = signage_weather_ticker_alerts_from_geojson(is_array($newJ) ? $newJ : null);
+            if ($newOut === [] && is_file($f)) {
+                $oldJ = json_decode((string)file_get_contents($f), true);
+                $oldOut = signage_weather_ticker_alerts_from_geojson(is_array($oldJ) ? $oldJ : null);
+                if ($oldOut !== []) {
+                    $pendingEmptyConfirm++;
+                    if ($pendingEmptyConfirm < 2) {
+                        @file_put_contents($emptyConfirmFile, (string)$pendingEmptyConfirm, LOCK_EX);
+                        $raw = (string)file_get_contents($f);
+                    } else {
+                        @unlink($emptyConfirmFile);
+                        @file_put_contents($f, $body, LOCK_EX);
+                        $raw = $body;
+                    }
+                } else {
+                    @unlink($emptyConfirmFile);
+                    @file_put_contents($f, $body, LOCK_EX);
+                    $raw = $body;
+                }
+            } else {
+                @unlink($emptyConfirmFile);
+                @file_put_contents($f, $body, LOCK_EX);
+                $raw = $body;
+            }
+        } elseif (is_file($f)) {
+            $raw = (string)file_get_contents($f); // stale fallback, retry later
+        }
     }
-    if ($raw === null) return [];
+    if ($raw === null) {
+        return [];
+    }
 
     $j = json_decode($raw, true);
-    $rank = ['Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
-    $min  = $rank[TICKER_MIN_SEVERITY] ?? 1;
-    $out = [];
-    foreach (($j['features'] ?? []) as $feat) {
-        $p = $feat['properties'] ?? [];
-        $sev = $p['severity'] ?? 'Minor';
-        if (($rank[$sev] ?? 1) < $min) continue;
-        $out[] = [
-            'event'    => (string)($p['event'] ?? 'Weather Alert'),
-            'severity' => $sev,
-            'kind'     => signage_ticker_event_kind((string)($p['event'] ?? '')),
-            'headline' => (string)($p['headline'] ?? $p['event'] ?? ''),
-            'text'     => signage_ticker_alert_detail($p),
-        ];
-    }
-    // Most severe first
-    usort($out, fn($a, $b) => ($rank[$b['severity']] ?? 0) <=> ($rank[$a['severity']] ?? 0));
-    return $out;
+
+    return signage_weather_ticker_alerts_from_geojson(is_array($j) ? $j : null);
 }
 }
 
@@ -325,6 +367,9 @@ $tickerThemeKey = signage_active_theme_key();
   var scrollRAF = null;
   var staticTimer = null;
   var lastKey = '';
+  var alertEmptyStreak = 0;
+  var contentEmptyStreak = 0;
+  var refreshDebounce = null;
 
   function esc(s) {
     var d = document.createElement('div');
@@ -417,8 +462,24 @@ $tickerThemeKey = signage_active_theme_key();
     }
 
     var hasAlerts = !!(data.alerts && data.alerts.length);
-    var hasNews = !hasAlerts && !!(data.news && data.news.length);
-    var key = JSON.stringify(data.alerts || []) + '|' + JSON.stringify(data.news || [])
+    if (hasAlerts) {
+      alertEmptyStreak = 0;
+    } else {
+      alertEmptyStreak++;
+    }
+    var hasNewsRaw = !!(data.news && data.news.length);
+    // News fallback only after alerts are absent on two consecutive polls (avoids alert/news bar swap flicker).
+    var hasNews = !hasAlerts && alertEmptyStreak >= 2 && hasNewsRaw;
+    var hasContent = hasAlerts || hasNews;
+    if (!hasContent) {
+      contentEmptyStreak++;
+    } else {
+      contentEmptyStreak = 0;
+    }
+    if (!hasContent && contentEmptyStreak < 2 && lastKey !== '') {
+      return;
+    }
+    var key = JSON.stringify(data.alerts || []) + '|' + JSON.stringify(hasNews ? (data.news || []) : [])
       + '|' + (data.news_label || '') + '|' + (data.mode || 'scroll');
     if (key === lastKey) return;
     lastKey = key;
@@ -426,7 +487,7 @@ $tickerThemeKey = signage_active_theme_key();
     var root = document.getElementById('signage-ticker-root');
     stopAnim();
 
-    if (!hasAlerts && !hasNews) {
+    if (!hasContent) {
       root.innerHTML = '';
       document.documentElement.style.setProperty('--signage-ticker-inset', '0px');
       return;
@@ -489,18 +550,25 @@ $tickerThemeKey = signage_active_theme_key();
       .catch(function () {});
   }
 
+  function scheduleRefresh() {
+    if (refreshDebounce) clearTimeout(refreshDebounce);
+    refreshDebounce = setTimeout(function () {
+      refreshDebounce = null;
+      refresh();
+    }, 350);
+  }
+
   refresh();
   setInterval(refresh, POLL);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') refresh();
   });
-  document.addEventListener('signage-blank', function (ev) {
-    if (ev.detail && ev.detail.on) refresh();
-    else refresh();
+  document.addEventListener('signage-blank', function () {
+    scheduleRefresh();
   });
   if (typeof MutationObserver !== 'undefined') {
     new MutationObserver(function () {
-      refresh();
+      scheduleRefresh();
     }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
 })();

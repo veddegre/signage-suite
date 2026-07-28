@@ -208,8 +208,10 @@ function signage_board_preview_url(string $file): string
 {
     require_once __DIR__ . '/lib/screen_scope_lib.php';
     require_once __DIR__ . '/lib/signage_theme_lib.php';
+    $screen = signage_preview_screen_key();
+    $theme = signage_theme_for_screen($screen);
     $sep = str_contains($file, '?') ? '&' : '?';
-    $qs = signage_board_rotation_query(signage_request_screen(), signage_active_theme_key(), signage_ticker_enabled());
+    $qs = signage_board_rotation_query($screen, $theme, signage_ticker_enabled());
 
     return $file . $sep . $qs;
 }

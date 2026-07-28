@@ -569,6 +569,20 @@ function admin_rotation_theme_picker(string $screenKey, string $savedTheme): voi
     <?php
 }
 
+/** True for relative .php board URLs (not external http(s) embeds). */
+function signage_board_url_is_local(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+    if (preg_match('#^https?://#i', $url)) {
+        return false;
+    }
+
+    return (bool)preg_match('#\.php(?:[?#]|$)#i', $url);
+}
+
 /** Merge theme (and other kiosk params) onto a board URL for rotation iframes. */
 function signage_board_rotation_query(string $screen, string $themeKey, bool $includeTickerSafeBottom = true): string
 {
@@ -582,7 +596,7 @@ function signage_board_rotation_query(string $screen, string $themeKey, bool $in
         $qs .= '&screen=' . rawurlencode($screen);
     }
     $themeKey = signage_normalize_theme_key($themeKey);
-    if ($themeKey !== '' && $themeKey !== 'lake_night') {
+    if ($themeKey !== '' && signage_theme_preset($themeKey) !== null) {
         $qs .= '&theme=' . rawurlencode($themeKey);
     }
 

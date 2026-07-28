@@ -490,6 +490,36 @@ function signage_prime_ticker_location(string $screen): void
     signage_ticker_bootstrap($screen);
 }
 
+/** Display key for admin board previews and themed query helpers (?screen= on the request wins). */
+function signage_preview_screen_key(): string
+{
+    $fromRequest = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
+    if ($fromRequest !== '') {
+        return $fromRequest;
+    }
+    if (function_exists('admin_preview_session_ready')
+        && admin_preview_session_ready()
+        && function_exists('admin_is_super')
+        && !admin_is_super()
+        && function_exists('admin_allowed_screen_keys')) {
+        $keys = admin_allowed_screen_keys();
+        if (count($keys) === 1) {
+            return $keys[0];
+        }
+        if (function_exists('admin_operator_screen_key')) {
+            $locked = admin_operator_screen_key();
+            if ($locked !== null && $locked !== '') {
+                return $locked;
+            }
+        }
+        if ($keys !== []) {
+            return $keys[0];
+        }
+    }
+
+    return 'main';
+}
+
 /** ticker.php poll URL for a rotation display (includes ?screen= for per-display location). */
 function signage_ticker_api_url(?string $screen = null): string
 {
@@ -498,6 +528,15 @@ function signage_ticker_api_url(?string $screen = null): string
     } else {
         $screen = rotation_normalize_screen_key($screen);
     }
+    if ($screen === '') {
+        $screen = 'main';
+    }
+    require_once __DIR__ . '/signage_theme_lib.php';
+    $theme = signage_theme_for_screen($screen);
+    $qs = 'api=1&screen=' . rawurlencode($screen);
+    if ($theme !== '' && signage_theme_preset($theme) !== null) {
+        $qs .= '&theme=' . rawurlencode($theme);
+    }
 
-    return 'ticker.php?api=1&screen=' . rawurlencode($screen);
+    return 'ticker.php?' . $qs;
 }

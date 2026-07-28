@@ -7060,7 +7060,14 @@ window.SHARING_USER_OPTIONS = <?= json_encode(admin_sharing_user_options(), JSON
 window.SHARING_ROLE_OPTIONS = <?= json_encode(admin_sharing_role_options(), JSON_UNESCAPED_UNICODE) ?>;
 window.SCREEN_OPERATOR_MAP = <?= json_encode(admin_screen_operator_map(), JSON_UNESCAPED_UNICODE) ?>;
 <?php endif; ?>
-const RSS_PREVIEW_SUFFIX = <?= json_encode('noticker=1' . (signage_ticker_enabled() ? '&safebottom=' . SIGNAGE_TICKER_H : '')) ?>;
+<?php
+require_once __DIR__ . '/lib/signage_theme_lib.php';
+$adminPreviewScreen = signage_preview_screen_key();
+$adminPreviewTheme = signage_theme_for_screen($adminPreviewScreen);
+?>
+const RSS_PREVIEW_SUFFIX = <?= json_encode(
+    signage_board_rotation_query($adminPreviewScreen, $adminPreviewTheme, signage_ticker_enabled())
+) ?>;
 
 function rssPreviewUrl(key) {
   key = (key || '').replace(/[^a-z0-9_\-]/gi, '');

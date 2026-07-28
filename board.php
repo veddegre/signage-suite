@@ -601,8 +601,10 @@ if (($_GET['api'] ?? '') === 'presence') {
     } catch (e) {}
   }
 
-  function boardNeedsScope(url) {
-    return /(?:^|[?&/])(calendar|family|glance|rss|video|grafana|splunkdash|powerbi|splunk|zabbix|web|slides|rotator|index|air|uv|photo|traffic|sports)\.php(?:[?&#]|$)/i.test(String(url));
+  function boardIsLocalSignage(url) {
+    const u = String(url || '');
+    if (/^https?:\/\//i.test(u)) return false;
+    return /\.php(?:[?#]|$)/i.test(u);
   }
 
   function rotateToIndex(targetIdx) {
@@ -621,8 +623,10 @@ if (($_GET['api'] ?? '') === 'presence') {
     const sep = p.url.includes('?') ? '&' : '?';
     let qs = 'noticker=1&settle=' + SETTLE;
     if (SHOW_TICKER) qs += '&safebottom=' + TICKER_H;
-    if (SCREEN && SCREEN !== 'main' && boardNeedsScope(p.url)) qs += '&screen=' + encodeURIComponent(SCREEN);
-    if (THEME && THEME !== 'lake_night') qs += '&theme=' + encodeURIComponent(THEME);
+    if (boardIsLocalSignage(p.url)) {
+      if (SCREEN && SCREEN !== 'main') qs += '&screen=' + encodeURIComponent(SCREEN);
+      if (THEME) qs += '&theme=' + encodeURIComponent(THEME);
+    }
     if (!SHOW_CLOCK) qs += '&clock=0';
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();
     updateRotateDebug('loading…', p, idx, fullSrc);
