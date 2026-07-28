@@ -202,6 +202,31 @@ function webcam_earthcam_monitor_image_url(string $shareUrl): ?string
     return null;
 }
 
+/** Safari / WebKit (not Chromium) — EarthCam first paint often shows bmp404 until a reload. */
+function webcam_request_is_safari_webkit(): bool
+{
+    $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if ($ua === '') {
+        return false;
+    }
+    if (preg_match('/Chrome|Chromium|CriOS|Edg|OPR|SamsungBrowser/i', $ua)) {
+        return false;
+    }
+
+    return preg_match('/Safari|AppleWebKit/i', $ua) === 1;
+}
+
+/** @param array<string,mixed> $cam */
+function webcam_earthcam_iframe_warmup(array $cam): bool
+{
+    if (webcam_uses_image_tag($cam) || webcam_uses_stream_tag($cam)) {
+        return false;
+    }
+
+    return webcam_is_earthcam_share_url((string)($cam['url'] ?? ''))
+        && webcam_request_is_safari_webkit();
+}
+
 function webcam_detect_kind(string $url): string
 {
     if (webcam_is_ant_media_play_url($url)) {

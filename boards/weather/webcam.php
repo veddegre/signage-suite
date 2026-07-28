@@ -48,6 +48,8 @@ $camJson['imageSrc'] = $imageSrc;
 $camJson['streamPlaylist'] = $streamPlaylist;
 $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . '&api=1';
 $camJson['streamIframe'] = (string)$cam['url'];
+$earthcamIframeWarmup = webcam_earthcam_iframe_warmup($cam);
+$camJson['earthcamWarmup'] = $earthcamIframeWarmup;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -101,8 +103,8 @@ $camJson['streamIframe'] = (string)$cam['url'];
     <?php elseif ($usesImage): ?>
     <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
-    <iframe id="cam-frame" allow="autoplay; fullscreen" loading="eager"
-            src="<?= h((string)$cam['url']) ?>"></iframe>
+    <iframe id="cam-frame" allow="autoplay; fullscreen" loading="eager"<?php
+      if (!$earthcamIframeWarmup): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
     <?php endif; ?>
   </div>
   <?php if (SHOW_OVERLAY): ?>
@@ -229,10 +231,54 @@ $camJson['streamIframe'] = (string)$cam['url'];
   }
 
   const frame = document.getElementById('cam-frame');
-  if (!frame || reloadMs <= 0) return;
-  setInterval(function () {
-    frame.src = cam.url.split('#')[0];
-  }, reloadMs);
+  if (!frame) return;
+
+  function iframeBaseUrl() {
+    return (cam.url || '').split('#')[0];
+  }
+
+  function iframeBustUrl() {
+    const base = iframeBaseUrl();
+    if (!base) return base;
+    const sep = base.indexOf('?') >= 0 ? '&' : '?';
+    return base + sep + 'ec=' + Date.now();
+  }
+
+  function startIframeHourlyReload() {
+    if (reloadMs <= 0) return;
+    setInterval(function () {
+      frame.src = iframeBaseUrl();
+    }, reloadMs);
+  }
+
+  if (cam.earthcamWarmup) {
+    frame.style.opacity = '0';
+    frame.style.transition = 'opacity 0.4s ease';
+    let loadPass = 0;
+    let shown = false;
+    function revealIframe() {
+      if (shown) return;
+      shown = true;
+      frame.style.opacity = '1';
+      startIframeHourlyReload();
+    }
+    frame.onload = function () {
+      loadPass++;
+      if (loadPass === 1) {
+        setTimeout(function () {
+          frame.src = iframeBustUrl();
+        }, 700);
+        return;
+      }
+      frame.onload = null;
+      revealIframe();
+    };
+    frame.src = iframeBustUrl();
+    setTimeout(revealIframe, 14000);
+    return;
+  }
+
+  startIframeHourlyReload();
 })();
 <?php if ($showClock && SHOW_OVERLAY): ?>
 (function(){
