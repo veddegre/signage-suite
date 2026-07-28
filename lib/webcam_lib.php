@@ -117,6 +117,122 @@ function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
     ];
 }
 
+function webcam_is_earthcam_share_url(string $url): bool
+{
+    return preg_match('~^https://share\.earthcam\.net/[^/?#]+~i', trim($url)) === 1;
+}
+
+/** Client token from a share.earthcam.net viewer URL (includes trailing punctuation such as !). */
+function webcam_earthcam_share_token(string $url): ?string
+{
+    $url = trim($url);
+    if (!webcam_is_earthcam_share_url($url)) {
+        return null;
+    }
+    if (!preg_match('~^https://share\.earthcam\.net/([^/?#]+)~i', $url, $m)) {
+        return null;
+    }
+    $token = trim(rawurldecode($m[1]));
+
+    return $token !== '' ? $token : null;
+}
+
+/** @return array<string,mixed>|null */
+function webcam_earthcam_api_json(string $shareUrl): ?array
+{
+    $token = webcam_earthcam_share_token($shareUrl);
+    if ($token === null) {
+        return null;
+    }
+    static $mem = [];
+    $cacheKey = md5($token);
+    $ttl = 45;
+    if (isset($mem[$cacheKey]) && (time() - $mem[$cacheKey]['t']) < $ttl) {
+        return $mem[$cacheKey]['j'];
+    }
+    $apiUrl = 'https://share.earthcam.net/api/' . $token;
+    if (!preg_match('#^https://share\.earthcam\.net/api/[a-zA-Z0-9!._-]+$#', $apiUrl)) {
+        return null;
+    }
+    $body = webcam_http_get($apiUrl, 12, true, 'https://share.earthcam.net/', 'application/json');
+    if ($body === null) {
+        return null;
+    }
+    $j = json_decode($body, true);
+    if (!is_array($j)) {
+        return null;
+    }
+    $mem[$cacheKey] = ['t' => time(), 'j' => $j];
+
+    return $j;
+}
+
+function webcam_earthcam_monitor_image_url(string $shareUrl): ?string
+{
+    $j = webcam_earthcam_api_json($shareUrl);
+    if ($j === null) {
+        return null;
+    }
+    $candidates = [];
+    $clientMon = $j['client']['monitor']['image'] ?? $j['client']['image'] ?? null;
+    if (is_string($clientMon) && $clientMon !== '') {
+        $candidates[] = $clientMon;
+    }
+    foreach (($j['projects'] ?? []) as $project) {
+        if (!is_array($project)) {
+            continue;
+        }
+        foreach (($project['servers'] ?? []) as $server) {
+            if (!is_array($server)) {
+                continue;
+            }
+            $img = $server['monitor']['image'] ?? $server['image'] ?? null;
+            if (is_string($img) && $img !== '') {
+                $candidates[] = $img;
+            }
+        }
+    }
+    foreach ($candidates as $img) {
+        $valid = webcam_validate_url($img);
+        if ($valid !== null) {
+            return $valid;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * EarthCam's share player mis-detects Safari as legacy IE and flashes bmp404.
+ * Chromium-based browsers keep the normal iframe embed.
+ */
+function webcam_request_prefers_earthcam_still(): bool
+{
+    $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if ($ua === '') {
+        return false;
+    }
+    if (preg_match('/Chrome|Chromium|CriOS|Edg|OPR|SamsungBrowser/i', $ua)) {
+        return false;
+    }
+
+    return preg_match('/Safari|AppleWebKit/i', $ua) === 1;
+}
+
+/** @param array<string,mixed> $cam */
+function webcam_cam_for_browser(array $cam): array
+{
+    if (!webcam_is_earthcam_share_url((string)($cam['url'] ?? ''))) {
+        return $cam;
+    }
+    if (!webcam_request_prefers_earthcam_still()) {
+        return $cam;
+    }
+    $cam['kind'] = 'image';
+
+    return $cam;
+}
+
 function webcam_detect_kind(string $url): string
 {
     if (webcam_is_ant_media_play_url($url)) {
@@ -251,16 +367,23 @@ function webcam_board_image_src(array $cam): string
     return $url;
 }
 
-function webcam_http_get(string $url, int $timeout = 12, bool $noCache = false): ?string
+function webcam_http_get(string $url, int $timeout = 12, bool $noCache = false, ?string $referer = null, string $accept = '*/*'): ?string
 {
     $url = webcam_validate_url($url);
     if ($url === null || !function_exists('curl_init')) {
         return null;
     }
-    $headers = ['Accept: */*'];
+    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+    if ($referer === null && str_contains($host, 'earthcam.net')) {
+        $referer = 'https://share.earthcam.net/';
+    }
+    $headers = ['Accept: ' . $accept];
     if ($noCache) {
         $headers[] = 'Cache-Control: no-cache, no-store';
         $headers[] = 'Pragma: no-cache';
+    }
+    if ($referer !== null && $referer !== '') {
+        $headers[] = 'Referer: ' . $referer;
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -496,6 +619,9 @@ function webcam_resolve_remote_image_url(array $cam): ?string
     if ($kind === 'widget' || webcam_is_widget_frame_url($url)) {
         return webcam_widget_image_url($url);
     }
+    if (webcam_is_earthcam_share_url($url)) {
+        return webcam_earthcam_monitor_image_url($url);
+    }
     if ($kind === 'image') {
         return $url;
     }
@@ -507,7 +633,9 @@ function webcam_resolve_remote_image_url(array $cam): ?string
 function webcam_stream_image(string $camKey): void
 {
     $cam = webcam_resolve_camera($camKey);
-    if ($cam['off'] || trim((string)$cam['url']) === '' || !webcam_uses_image_tag($cam)) {
+    $earthcamStill = webcam_is_earthcam_share_url((string)($cam['url'] ?? ''));
+    if ($cam['off'] || trim((string)$cam['url']) === ''
+        || (!webcam_uses_image_tag($cam) && !$earthcamStill)) {
         http_response_code(404);
         exit;
     }

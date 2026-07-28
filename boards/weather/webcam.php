@@ -7,7 +7,7 @@
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/webcam_lib.php';
 
-$cam = webcam_resolve_camera((string)($_GET['cam'] ?? ''));
+$cam = webcam_cam_for_browser(webcam_resolve_camera((string)($_GET['cam'] ?? '')));
 if (isset($_GET['api']) && (string)$_GET['api'] === '1') {
     webcam_stream_api_response($cam);
 }
@@ -209,14 +209,20 @@ $camJson['streamIframe'] = (string)$cam['url'];
     const img = document.getElementById('cam-img');
     if (!img) return;
     const preload = new Image();
+    function frameOk(el) {
+      return el && el.complete && el.naturalWidth > 0 && el.naturalHeight > 0;
+    }
     function showLoaded(el) {
+      if (!frameOk(el)) return;
       img.src = el.src;
     }
     function refresh() {
       preload.onload = function () { showLoaded(preload); };
+      preload.onerror = function () {};
       preload.src = refreshImageSrc(cam.imageSrc);
-      if (preload.complete) showLoaded(preload);
+      if (frameOk(preload)) showLoaded(preload);
     }
+    img.onerror = function () {};
     refresh();
     setInterval(refresh, imageRefreshMs);
     return;
