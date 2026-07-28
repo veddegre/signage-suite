@@ -158,8 +158,6 @@ function admin_schema(): array
             ['key' => 'SHOW_OVERLAY', 'label' => 'Show title + clock overlay', 'type' => 'bool', 'default' => true],
             ['key' => 'IMAGE_REFRESH_SEC', 'label' => 'Still-image refresh (seconds)', 'type' => 'number',
              'help' => 'Widget/direct still cameras — default 15'],
-            ['key' => 'EARTHCAM_STILL_REFRESH_SEC', 'label' => 'EarthCam still refresh (Safari, seconds)', 'type' => 'number',
-             'help' => 'When Safari uses proxied EarthCam frames instead of the iframe — default 5 (min 3, max 30)'],
             ['key' => 'STREAM_REFRESH_SEC', 'label' => 'Live stream token refresh (seconds)', 'type' => 'number',
              'help' => 'HLS stream cameras — re-fetch signed playlist URL before expiry — default 1500 (25 min)'],
             ['key' => 'RELOAD_SEC', 'label' => 'Iframe reload (seconds)', 'type' => 'number',

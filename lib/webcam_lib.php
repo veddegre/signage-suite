@@ -147,10 +147,6 @@ function webcam_earthcam_api_json(string $shareUrl): ?array
     static $mem = [];
     $cacheKey = md5($token);
     $ttl = 45;
-    $refresh = webcam_earthcam_still_refresh_sec();
-    if ($refresh < $ttl) {
-        $ttl = max(10, $refresh * 3);
-    }
     if (isset($mem[$cacheKey]) && (time() - $mem[$cacheKey]['t']) < $ttl) {
         return $mem[$cacheKey]['j'];
     }
@@ -204,51 +200,6 @@ function webcam_earthcam_monitor_image_url(string $shareUrl): ?string
     }
 
     return null;
-}
-
-/**
- * EarthCam's share player mis-detects Safari as legacy IE and flashes bmp404.
- * Chromium-based browsers keep the normal iframe embed.
- */
-function webcam_request_prefers_earthcam_still(): bool
-{
-    $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-    if ($ua === '') {
-        return false;
-    }
-    if (preg_match('/Chrome|Chromium|CriOS|Edg|OPR|SamsungBrowser/i', $ua)) {
-        return false;
-    }
-
-    return preg_match('/Safari|AppleWebKit/i', $ua) === 1;
-}
-
-/** @param array<string,mixed> $cam */
-function webcam_cam_for_browser(array $cam): array
-{
-    if (!webcam_is_earthcam_share_url((string)($cam['url'] ?? ''))) {
-        return $cam;
-    }
-    if (!webcam_request_prefers_earthcam_still()) {
-        return $cam;
-    }
-    $cam['kind'] = 'image';
-
-    return $cam;
-}
-
-function webcam_uses_earthcam_still(array $cam): bool
-{
-    return webcam_uses_image_tag($cam)
-        && webcam_is_earthcam_share_url((string)($cam['url'] ?? ''));
-}
-
-/** Safari EarthCam proxy — faster than generic still-image boards (default 5s). */
-function webcam_earthcam_still_refresh_sec(): int
-{
-    $n = (int)cfg('webcam.EARTHCAM_STILL_REFRESH_SEC', 5);
-
-    return max(3, min(30, $n));
 }
 
 function webcam_detect_kind(string $url): string
@@ -651,9 +602,7 @@ function webcam_resolve_remote_image_url(array $cam): ?string
 function webcam_stream_image(string $camKey): void
 {
     $cam = webcam_resolve_camera($camKey);
-    $earthcamStill = webcam_is_earthcam_share_url((string)($cam['url'] ?? ''));
-    if ($cam['off'] || trim((string)$cam['url']) === ''
-        || (!webcam_uses_image_tag($cam) && !$earthcamStill)) {
+    if ($cam['off'] || trim((string)$cam['url']) === '' || !webcam_uses_image_tag($cam)) {
         http_response_code(404);
         exit;
     }
@@ -685,6 +634,20 @@ function webcam_stream_image(string $camKey): void
     header('Content-Length: ' . (string)strlen($body));
     echo $body;
     exit;
+}
+
+/** EarthCam share links use the live iframe embed (not proxied stills). */
+function webcam_apply_earthcam_iframe_defaults(array $entry, string $key): array
+{
+    $url = (string)($entry['url'] ?? '');
+    if (!webcam_is_earthcam_share_url($url)) {
+        return $entry;
+    }
+    if ((string)($entry['kind'] ?? '') === 'image') {
+        $entry['kind'] = 'iframe';
+    }
+
+    return $entry;
 }
 
 /** Upgrade legacy GRPM saves to the WMTA live stream iframe URL. */
@@ -744,7 +707,8 @@ function webcam_registry(): array
             }
             $entry = webcam_normalize_entry($row, is_array($out[$key] ?? null) ? $out[$key] : null);
             if ($entry !== null) {
-                $out[$key] = webcam_apply_grpm_defaults($entry, $key);
+                $entry = webcam_apply_grpm_defaults($entry, $key);
+                $out[$key] = webcam_apply_earthcam_iframe_defaults($entry, $key);
             }
         }
     }
@@ -754,6 +718,12 @@ function webcam_registry(): array
             || !is_array($entry)
             || trim((string)($entry['url'] ?? '')) === '') {
             unset($out[$key]);
+        }
+    }
+
+    foreach ($out as $key => $entry) {
+        if (is_array($entry)) {
+            $out[$key] = webcam_apply_earthcam_iframe_defaults($entry, (string)$key);
         }
     }
 

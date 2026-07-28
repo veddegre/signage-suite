@@ -7,7 +7,7 @@
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/webcam_lib.php';
 
-$cam = webcam_cam_for_browser(webcam_resolve_camera((string)($_GET['cam'] ?? '')));
+$cam = webcam_resolve_camera((string)($_GET['cam'] ?? ''));
 if (isset($_GET['api']) && (string)$_GET['api'] === '1') {
     webcam_stream_api_response($cam);
 }
@@ -28,13 +28,9 @@ $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
 $heightCss = signage_viewport_height();
 $reloadSec = max(0, (int)RELOAD_SEC);
-if (webcam_uses_earthcam_still($cam)) {
-    $imageRefreshSec = webcam_earthcam_still_refresh_sec();
-} elseif (($cam['kind'] ?? '') === 'widget') {
-    $imageRefreshSec = max(10, min(IMAGE_REFRESH_SEC, 20));
-} else {
-    $imageRefreshSec = IMAGE_REFRESH_SEC;
-}
+$imageRefreshSec = ($cam['kind'] ?? '') === 'widget'
+    ? max(10, min(IMAGE_REFRESH_SEC, 20))
+    : IMAGE_REFRESH_SEC;
 $streamRefreshSec = STREAM_REFRESH_SEC;
 $boardAttribution = trim((string)cfg('webcam.ATTRIBUTION', ''));
 $usesImage = webcam_uses_image_tag($cam);

@@ -88,7 +88,7 @@ Full-screen live feeds — **one camera per rotation slot**, same pattern as `za
 | Key | Source |
 |-----|--------|
 | `grpm` | [Grand Rapids Public Museum](https://www.wmta.org/live-west-michigan-camera-gallery/grand-rapids-public-museum-west-michigan-live-camera/) live stream (WMTA / WetMet iframe) |
-| `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe; Safari uses proxied stills) |
+| `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
 
 **Setup:** admin → **Webcam** → **Cameras** — override built-in feeds or add rows with a unique **Key**. Each camera appears in **Rotation → Quick add** as its own entry (e.g. **Webcam — GR Public Museum**).
 
@@ -101,7 +101,7 @@ webcam.php?cam=grandhaven
 
 Custom cameras: `webcam.php?cam=yourkey`. Set **Off** on a row to hide it from quick-add and disable a built-in feed.
 
-Still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 15s). **Safari** EarthCam (`grandhaven`) uses proxied frames every `EARTHCAM_STILL_REFRESH_SEC` (default **5s**). Iframe streams use an hourly reload backstop (`RELOAD_SEC`).
+Still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 15s). Iframe streams use an hourly reload backstop (`RELOAD_SEC`).
 
 If a camera URL fails probe checks for **24 hours**, that rotation entry is auto-skipped until the stream responds again.
 
