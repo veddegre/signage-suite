@@ -21,7 +21,7 @@ const ADMIN_OPERATOR_BOARDS = [
 const ADMIN_INFRA_BOARDS = ['homelab', 'unifi', 'signaltrace', 'kuma', 'tailscale', 'ntfy'];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
-const ADMIN_OPERATOR_SETTINGS_BOARDS = ['slides', 'rotator'];
+const ADMIN_OPERATOR_SETTINGS_BOARDS = ['rotation', 'slides', 'rotator'];
 
 function users_load_raw(): array
 {
@@ -555,11 +555,32 @@ function admin_sync_session_user(): void
     }
     $id = (string)($current['id'] ?? '');
     if ($id === '') {
+        $username = users_normalize_username((string)($current['username'] ?? ''));
+        if ($username !== '') {
+            $fresh = users_find_by_username($username);
+            if (is_array($fresh) && empty($fresh['disabled'])) {
+                $public = users_public_row($fresh);
+                if ($public !== null) {
+                    $_SESSION['admin_user'] = $public;
+
+                    return;
+                }
+            }
+        }
         admin_logout_user();
 
         return;
     }
     $fresh = users_find_by_id($id);
+    if ($fresh === null || !empty($fresh['disabled'])) {
+        $username = users_normalize_username((string)($current['username'] ?? ''));
+        if ($username !== '') {
+            $byName = users_find_by_username($username);
+            if (is_array($byName) && empty($byName['disabled'])) {
+                $fresh = $byName;
+            }
+        }
+    }
     if ($fresh === null || !empty($fresh['disabled'])) {
         admin_logout_user();
 

@@ -874,6 +874,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 && ($_POST['SCREENS'] ?? []) !== [];
             $rotationKioskTabSave = (string)($_POST['rotation_setup_tab'] ?? '') === 'kiosk';
             $rotationFocusSk = admin_rotation_focus_screen_key(admin_filter_screens(rotation_screens()));
+            $operatorKioskFocusOnly = !admin_is_super() && $rotationKioskTabSave;
             foreach ($screenOpts as $sk => $opts) {
                 if (!is_array($opts)) {
                     continue;
@@ -883,6 +884,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     continue;
                 }
                 if ($superScreensTablePosted && $sk !== $rotationFocusSk) {
+                    continue;
+                }
+                if ($operatorKioskFocusOnly && $sk !== $rotationFocusSk) {
                     continue;
                 }
                 $entry = is_array($screens[$sk] ?? null) ? $screens[$sk] : ['name' => rotation_screen_display_name($sk, rotation_screens())];
@@ -912,7 +916,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
 
         $rotationPagesFromJson = false;
         $jsonRaw = trim((string)($_POST['ROTATION_PAGES_JSON'] ?? ''));
-        if (!$rotationSaveLocked && $jsonRaw !== '') {
+        $rotationKioskTabSaveJson = (string)($_POST['rotation_setup_tab'] ?? '') === 'kiosk';
+        if (!$rotationSaveLocked && $jsonRaw !== '' && !( !admin_is_super() && $rotationKioskTabSaveJson)) {
             $parsedByScreen = rotation_pages_from_json_string($jsonRaw);
             if ($parsedByScreen === null) {
                 $errors[] = 'Rotation playlist data invalid — not saved.';
@@ -958,6 +963,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
         if (!$rotationPagesFromJson && !$rotationSaveLocked) {
+            $operatorKioskTabSave = !admin_is_super() && (string)($_POST['rotation_setup_tab'] ?? '') === 'kiosk';
+            if (!$operatorKioskTabSave) {
             if (admin_post_input_vars_saturated()) {
                 $errors[] = 'Rotation save may have been truncated (PHP max_input_vars=' . (int)ini_get('max_input_vars')
                     . '). Reload the page and save again.';
@@ -989,6 +996,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     $errors[] = 'Could not save playlist for display "' . $screenKey . '".';
                 }
                 unset($conf['rotation.PAGES_' . $screenKey]);
+            }
             }
         }
         if (admin_is_super()) {
@@ -1127,6 +1135,16 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
     }
     }
+}
+
+if ($authed && ($_POST['action'] ?? '') === 'save' && !csrf_ok()) {
+    if ($_POST === [] && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        $flash = 'Request body too large for PHP post_max_size (' . ini_get('post_max_size')
+            . '). Try saving again after a refresh, or ask an admin to raise post_max_size / max_input_vars on the server.';
+    } else {
+        $flash = 'Could not save — refresh the page and try again (session or security token expired).';
+    }
+    $flashOk = false;
 }
 
 if ($authed && admin_can_manage_users() && ($_POST['action'] ?? '') === 'save_users' && csrf_ok()) {
@@ -9619,13 +9637,12 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       if (document.getElementById('slideDeck')) serializeSlideDeckForSave();
       if (document.getElementById('photoDeck')) serializePhotoDeckForSave();
-      if (document.querySelector('.rotation-playlist[data-field]')) serializeRotationPlaylistsForSave();
-      if (document.getElementById('rotationCalendarOverridePanels')) serializeRotationCalendarOverridesForSave();
       syncRotationFocusScreenField();
       const rotationSetupTabs = document.getElementById('rotationSetupTabs');
+      let rotationSetupTabName = '';
       if (rotationSetupTabs) {
         const activeSetupTab = rotationSetupTabs.querySelector('.rotation-setup-tab.is-active');
-        const tabName = activeSetupTab ? (activeSetupTab.getAttribute('data-rotation-tab') || '') : '';
+        rotationSetupTabName = activeSetupTab ? (activeSetupTab.getAttribute('data-rotation-tab') || '') : '';
         let setupTabInp = boardForm.querySelector('input[name="rotation_setup_tab"]');
         if (!setupTabInp) {
           setupTabInp = document.createElement('input');
@@ -9633,7 +9650,32 @@ document.addEventListener('DOMContentLoaded', function () {
           setupTabInp.name = 'rotation_setup_tab';
           boardForm.appendChild(setupTabInp);
         }
-        setupTabInp.value = tabName;
+        setupTabInp.value = rotationSetupTabName;
+      }
+      const kioskOnlySave = rotationSetupTabName === 'kiosk';
+      const calendarOnlySave = rotationSetupTabName === 'calendar';
+      if (!kioskOnlySave && !calendarOnlySave && document.querySelector('.rotation-playlist[data-field]')) {
+        serializeRotationPlaylistsForSave();
+      }
+      if ((calendarOnlySave || !kioskOnlySave) && document.getElementById('rotationCalendarOverridePanels')) {
+        serializeRotationCalendarOverridesForSave();
+      }
+      document.querySelectorAll('.rotation-display-options-wrap[hidden]').forEach(function (wrap) {
+        wrap.querySelectorAll('input, select, textarea').forEach(function (el) {
+          el.disabled = true;
+        });
+      });
+      document.querySelectorAll('.rotation-calendar-panel[data-calendar-screen][hidden]').forEach(function (panel) {
+        panel.querySelectorAll('input, select, textarea').forEach(function (el) {
+          el.disabled = true;
+        });
+      });
+      if (kioskOnlySave || calendarOnlySave) {
+        document.querySelectorAll('.rotation-playlist[data-field]').forEach(function (deck) {
+          deck.querySelectorAll('input, select, textarea').forEach(function (el) {
+            el.disabled = true;
+          });
+        });
       }
     });
   }
