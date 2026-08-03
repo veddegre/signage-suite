@@ -2515,6 +2515,21 @@ function admin_operator_board_preamble(string $board): void
                 'Use <strong>+ Add page</strong> for your own panel walls; quick-add under <strong>Dashboards</strong> in rotation.',
             ];
             break;
+        case 'grafana':
+            require_once __DIR__ . '/grafana_lib.php';
+            if (grafana_static_auth_configured()) {
+                $authLine = 'Embed auth is configured by your super admin — paste normal Grafana <code>/d/…</code> dashboard URLs only (no <code>auth_token</code> per page).';
+            } elseif (grafana_jwt_configured()) {
+                $authLine = 'JWT embed auth is configured — paste normal <code>/d/…</code> URLs; tokens are signed automatically on this server.';
+            } else {
+                $authLine = 'Embed auth is not configured yet — ask a super admin to set a global embed token or JWT under <strong>Board settings</strong>.';
+            }
+            $lines = [
+                $authLine,
+                'Use <strong>+ Add page</strong> for each dashboard wall, then quick-add under <strong>Dashboards</strong> in rotation.',
+                'Pages you create are owned by you. Super-admin dashboards require <strong>Access</strong> sharing before you can use them.',
+            ];
+            break;
         case 'announce':
             $lines = [
                 'Create announcements and countdowns here. Mark <strong>Strip only</strong> for the hero status bar (Rotation → Display options).',

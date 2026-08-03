@@ -336,6 +336,7 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
     }
     $pagesKey = match ($shareBoard) {
         'zabbix', 'kuma', 'splunk', 'tdx' => $shareBoard . '.PAGES',
+        'grafana' => 'grafana.DASHBOARDS',
         default => '',
     };
     if ($pagesKey === '') {
@@ -418,6 +419,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     $applyBoardSave = function (array $conf) use ($board, $schema, $rotationSuperFieldKeys, &$errors, &$saveWarnFlash, &$saveWarnFlashOk, &$rotationPageWrites) {
     foreach ($schema[$board]['fields'] as $f) {
         if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
+            continue;
+        }
+        if ($board === 'grafana' && $f['key'] === 'DASHBOARDS') {
             continue;
         }
         if ($board === 'rotation' && $f['key'] === 'SCREENS') {
@@ -743,6 +747,44 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 unset($conf['zabbix.PAGES']);
             } else {
                 $conf['zabbix.PAGES'] = $mergedPages;
+            }
+        }
+    }
+    if ($board === 'grafana') {
+        if (!admin_is_super() && !empty($_POST['grafana_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['grafana_use_json'])) {
+            require_once __DIR__ . '/lib/grafana_lib.php';
+            $parsed = grafana_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Pages JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['grafana.DASHBOARDS']);
+            } else {
+                $conf['grafana.DASHBOARDS'] = $parsed;
+            }
+        } else {
+            require_once __DIR__ . '/lib/grafana_lib.php';
+            $existingPages = is_array($conf['grafana.DASHBOARDS'] ?? null) ? $conf['grafana.DASHBOARDS'] : [];
+            $outV = grafana_pages_from_post($_POST['PAGES'] ?? []);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = grafana_normalize_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
+            if ($mergedPages === []) {
+                unset($conf['grafana.DASHBOARDS']);
+            } else {
+                $conf['grafana.DASHBOARDS'] = $mergedPages;
             }
         }
     }
@@ -2039,6 +2081,7 @@ $splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_T
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
+$grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = ($authed && $board === 'rotation') ? rotation_quick_add_items() : [];
@@ -2167,6 +2210,16 @@ if ($board === 'kuma') {
     $kumaActivePage = kuma_normalize_page_key((string)($_GET['page'] ?? ''));
     if (!isset($kumaPages[$kumaActivePage])) {
         $kumaActivePage = (string)(array_key_first($kumaPages) ?: 'main');
+    }
+}
+$grafanaPages = [];
+$grafanaActivePage = 'main';
+if ($board === 'grafana') {
+    require_once __DIR__ . '/lib/grafana_lib.php';
+    $grafanaPages = admin_filter_owned_map(grafana_admin_pages($rawConf));
+    $grafanaActivePage = grafana_normalize_key((string)($_GET['page'] ?? ''));
+    if (!isset($grafanaPages[$grafanaActivePage])) {
+        $grafanaActivePage = (string)(array_key_first($grafanaPages) ?: 'main');
     }
 }
 $tdxPages = [];
@@ -4134,9 +4187,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
         <?php elseif ($board === 'kuma'): ?>
           Each page is <code>kuma.php?d=<em>key</em></code> in rotation — one status page slug per tab below.
         <?php elseif ($board === 'grafana'): ?>
-          Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — preview per row below.
-          Paste a shared <strong>Global embed auth token</strong> once (super admin), or enable <strong>JWT auth for embed</strong>
-          to sign tokens on this server — see <code>docs/grafana.md</code>.
+          Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — use <strong>+ Add page</strong> below.
+          Super admins configure embed auth once under <strong>Board settings</strong> — see <code>docs/grafana.md</code>.
         <?php elseif ($board === 'splunkdash'): ?>
           Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'powerbi'): ?>
@@ -4154,44 +4206,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
         <?php elseif (!empty($b['file'])): ?>
           <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
         <?php endif; ?></div>
-
-      <?php if ($board === 'grafana'):
-        require_once __DIR__ . '/lib/grafana_lib.php';
-        $grafStaticOn = grafana_static_auth_configured();
-        $grafJwtOn = grafana_jwt_enabled();
-        $grafJwtReady = grafana_jwt_configured();
-      ?>
-      <?php if ($grafStaticOn): ?>
-      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
-        <div class="section-title" style="margin-top:0">Embed auth token</div>
-        <div class="video-meta">
-          <div>Global token: <strong>configured</strong> — appended to every dashboard URL automatically.</div>
-          <div class="help" style="margin-top:10px">Operators add normal <code>/d/…</code> URLs only (no <code>auth_token</code> per row).
-            JWT signing below is ignored while a global token is set. Update here only if IT rotates the token.</div>
-        </div>
-      </div>
-      <?php endif; ?>
-      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
-        <div class="section-title" style="margin-top:0">JWT embed auth</div>
-        <div class="video-meta">
-          <div>JWT embed: <strong><?= $grafStaticOn ? 'skipped (global token set)' : ($grafJwtReady ? 'active' : ($grafJwtOn ? 'incomplete' : 'disabled')) ?></strong>
-            <?php if (!$grafStaticOn && $grafJwtOn && !$grafJwtReady): ?> — enable JWT, set secret + login email, Save<?php endif; ?></div>
-          <div class="help" style="margin-top:10px"><strong>Self-hosted:</strong> HS256 + <code>[auth.jwt]</code> — see <code>docs/grafana.md</code>.
-            <strong>Grafana Cloud:</strong> RS256 + <code>grafana-jwks.php</code> — see <code>docs/grafana-cloud.md</code>
-            (authenticated embed requires Grafana Labs support; public dashboards need JWT off).</div>
-          <?php if ($grafJwtReady && grafana_jwt_algorithm() === 'rs256'): ?>
-          <div class="video-meta" style="margin-top:10px">JWKS URL for Cloud support:
-            <code><?= h(grafana_jwks_public_url()) ?></code></div>
-          <?php endif; ?>
-        </div>
-        <form method="post" action="?board=grafana" style="margin-top:14px">
-          <input type="hidden" name="action" value="grafana_test">
-          <input type="hidden" name="board" value="grafana">
-          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-          <button class="secondary" type="submit">Test JWT signing</button>
-        </form>
-      </div>
-      <?php endif; ?>
 
       <?php if ($board === 'powerbi'):
         require_once __DIR__ . '/lib/powerbi_lib.php';
@@ -5976,6 +5990,158 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
               </div>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'grafana'):
+          $grafStaticOn = grafana_static_auth_configured();
+          $grafJwtOn = grafana_jwt_enabled();
+          $grafJwtReady = grafana_jwt_configured();
+        ?>
+          <script>window.GRAFANA_STATIC_AUTH = <?= json_encode($grafStaticOn) ?>;</script>
+          <?php admin_operator_board_preamble('grafana'); ?>
+          <?php admin_super_registry_share_hint('Grafana'); ?>
+          <div class="section-title">Grafana dashboard pages</div>
+          <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
+            <code>grafana.php?d=<em>key</em></code>. Paste the Grafana dashboard URL (e.g. <code>/d/uid/slug</code> or a public-dashboard link).</div>
+          <?php if ($grafanaPages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No pages yet — click <strong>+ Add page</strong> below to create your first Grafana wall.
+          </div>
+          <?php endif; ?>
+
+          <div class="splunk-pages-bar" id="grafanaPagesBar">
+            <?php foreach ($grafanaPages as $pk => $pg): ?>
+            <button type="button" class="splunk-page-tab<?= $pk === $grafanaActivePage ? ' active' : '' ?>"
+                    data-grafana-page-tab="<?= h($pk) ?>">
+              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="addrow" onclick="addGrafanaPage()">+ Add page</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=grafana" formmethod="post"
+                    onclick="this.form.share_board.value='grafana'; return confirm('Share every Grafana page with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
+          </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="operator">
+          <?php endif; ?>
+
+          <?php foreach ($grafanaPages as $pk => $pg):
+            $jwtAuth = strtolower(trim((string)($pg['jwt_auth'] ?? 'auto')));
+            if (!in_array($jwtAuth, ['auto', 'on', 'off'], true)) {
+                $jwtAuth = 'auto';
+            }
+          ?>
+          <div class="splunk-page-editor" data-grafana-page-editor="<?= h($pk) ?>"
+               style="<?= $pk === $grafanaActivePage ? '' : 'display:none' ?>">
+            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-grafana-page-key>
+            <div class="splunk-page-head">
+              <div>
+                <label class="mini">Page title</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="NOC overview" data-grafana-page-title>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
+                   href="<?= h(grafana_preview_url($pk)) ?>" target="_blank" rel="noopener" data-grafana-page-preview>Preview ↗</a>
+                <?php if (count($grafanaPages) > 1): ?>
+                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
+                        onclick="removeGrafanaPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(grafana_page_url($pk)) ?></code></div>
+
+            <div class="field-grid" style="margin-bottom:12px">
+              <div class="field span-2">
+                <label class="mini">Dashboard URL</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][url]" value="<?= h((string)($pg['url'] ?? '')) ?>"
+                       placeholder="https://grafana.example.com/d/uid/slug">
+                <div class="help">Self-hosted <code>/d/…</code>, Grafana Cloud <code>*.grafana.net/d/…</code>, or a public-dashboard URL. Do not paste <code>auth_token</code> — signage adds embed auth when configured.</div>
+              </div>
+              <?php if (!$grafStaticOn): ?>
+              <div class="field">
+                <label class="mini">JWT</label>
+                <select name="PAGES[<?= h($pk) ?>][jwt_auth]">
+                  <?php foreach (['auto' => 'Auto', 'on' => 'On', 'off' => 'Off'] as $optVal => $optLabel): ?>
+                  <option value="<?= h($optVal) ?>" <?= $jwtAuth === $optVal ? 'selected' : '' ?>><?= h($optLabel) ?></option>
+                  <?php endforeach; ?>
+                </select>
+                <div class="help">Auto skips JWT for public-dashboard URLs.</div>
+              </div>
+              <div class="field">
+                <label class="mini">JWT email override</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][jwt_email]" value="<?= h((string)($pg['jwt_email'] ?? '')) ?>"
+                       placeholder="Optional Grafana user email">
+              </div>
+              <?php else: ?>
+              <div class="field span-2">
+                <div class="help" style="margin:0">Global embed auth token is set — per-page JWT settings are ignored.</div>
+              </div>
+              <?php endif; ?>
+              <div class="field">
+                <label class="mini">Refresh</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][refresh]" value="<?= h((string)($pg['refresh'] ?? '')) ?>"
+                       placeholder="30s">
+              </div>
+              <div class="field span-2">
+                <label class="mini">Extra params</label>
+                <input type="text" name="PAGES[<?= h($pk) ?>][params]" value="<?= h((string)($pg['params'] ?? '')) ?>"
+                       placeholder="var-host=web01&orgId=1">
+                <div class="help">Query string without <code>?</code> — omit kiosk, theme, refresh, and auth_token (signage adds those).</div>
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
+                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
+                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+              </div>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="grafana_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Keyed object: <code>{"noc":{"title":"…","url":"https://…/d/…"}}</code>.</div>
+              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($grafanaPages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Board settings — embed auth &amp; theme</summary>
+            <div class="panel-body">
+              <?php if ($grafStaticOn): ?>
+              <div class="help" style="margin:0 0 14px;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
+                Global embed token: <strong>configured</strong> — appended to every dashboard URL. Operators paste normal <code>/d/…</code> URLs only.
+              </div>
+              <?php endif; ?>
+              <div class="help" style="margin:0 0 14px">
+                JWT embed: <strong><?= $grafStaticOn ? 'skipped (global token set)' : ($grafJwtReady ? 'active' : ($grafJwtOn ? 'incomplete' : 'disabled')) ?></strong>
+                <?php if (!$grafStaticOn && $grafJwtOn && !$grafJwtReady): ?> — enable JWT, set secret + login email, Save<?php endif; ?>
+                · <strong>Self-hosted:</strong> HS256 — <strong>Cloud:</strong> RS256 + <code>grafana-jwks.php</code> (see docs).
+                <?php if ($grafJwtReady && grafana_jwt_algorithm() === 'rs256'): ?>
+                · JWKS: <code><?= h(grafana_jwks_public_url()) ?></code>
+                <?php endif; ?>
+              </div>
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $grafanaBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+              <form method="post" action="?board=grafana" style="margin-top:14px">
+                <input type="hidden" name="action" value="grafana_test">
+                <input type="hidden" name="board" value="grafana">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button class="secondary" type="submit">Test JWT signing</button>
+              </form>
             </div>
           </details>
 
@@ -9757,6 +9923,7 @@ document.addEventListener('DOMContentLoaded', function () {
   initSplunkPanels();
   initZabbixPages();
   initKumaPages();
+  initGrafanaPages();
   initHeroStripSlots();
   initEmergencyPanel();
   initPresencePanel();
@@ -11293,6 +11460,144 @@ function removeKumaPage(pageKey) {
   if (tab) tab.remove();
   const remaining = document.querySelector('[data-kuma-page-tab]');
   if (remaining) showKumaPage(remaining.getAttribute('data-kuma-page-tab'));
+}
+
+function grafanaNormalizePageKey(raw) {
+  raw = (raw || '').replace(/[^a-z0-9_\-]/gi, '');
+  return raw || 'main';
+}
+
+function grafanaPreviewHref(pageKey) {
+  return 'grafana.php?d=' + encodeURIComponent(pageKey) + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function showGrafanaPage(pageKey) {
+  document.querySelectorAll('[data-grafana-page-editor]').forEach(function (el) {
+    el.style.display = el.getAttribute('data-grafana-page-editor') === pageKey ? '' : 'none';
+  });
+  document.querySelectorAll('[data-grafana-page-tab]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-grafana-page-tab') === pageKey);
+  });
+}
+
+function syncGrafanaPageTabLabel(titleInp) {
+  const editor = titleInp.closest('[data-grafana-page-editor]');
+  if (!editor) return;
+  const pageKey = editor.getAttribute('data-grafana-page-editor');
+  const tab = document.querySelector('[data-grafana-page-tab="' + pageKey + '"]');
+  if (!tab) return;
+  const title = titleInp.value.trim() || pageKey;
+  const code = tab.querySelector('code');
+  tab.textContent = '';
+  tab.appendChild(document.createTextNode(title + ' '));
+  const codeEl = code || document.createElement('code');
+  codeEl.textContent = pageKey;
+  tab.appendChild(codeEl);
+}
+
+function bindGrafanaPageTab(btn) {
+  if (btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', function () {
+    showGrafanaPage(btn.getAttribute('data-grafana-page-tab'));
+  });
+}
+
+function bindGrafanaPageTabs() {
+  document.querySelectorAll('[data-grafana-page-tab]').forEach(bindGrafanaPageTab);
+}
+
+function initGrafanaPages() {
+  bindGrafanaPageTabs();
+  document.querySelectorAll('[data-grafana-page-title]').forEach(function (inp) {
+    inp.addEventListener('input', function () { syncGrafanaPageTabLabel(inp); });
+  });
+}
+
+function grafanaJwtFieldsHtml(pageKey) {
+  if (window.GRAFANA_STATIC_AUTH) {
+    return '<div class="field span-2"><div class="help" style="margin:0">Global embed auth token is set — per-page JWT settings are ignored.</div></div>';
+  }
+  return '<div class="field"><label class="mini">JWT</label>' +
+      '<select name="PAGES[' + pageKey + '][jwt_auth]">' +
+        '<option value="auto" selected>Auto</option><option value="on">On</option><option value="off">Off</option>' +
+      '</select><div class="help">Auto skips JWT for public-dashboard URLs.</div></div>' +
+    '<div class="field"><label class="mini">JWT email override</label>' +
+      '<input type="text" name="PAGES[' + pageKey + '][jwt_email]" placeholder="Optional Grafana user email"></div>';
+}
+
+function addGrafanaPage() {
+  const key = prompt('Page key (letters, numbers, underscore — used in grafana.php?d=KEY):', 'page2');
+  if (key === null) return;
+  const pageKey = grafanaNormalizePageKey(key);
+  if (document.querySelector('[data-grafana-page-editor="' + pageKey + '"]')) {
+    alert('A page with key "' + pageKey + '" already exists.');
+    showGrafanaPage(pageKey);
+    return;
+  }
+  const bar = document.getElementById('grafanaPagesBar');
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'splunk-page-tab';
+  tab.setAttribute('data-grafana-page-tab', pageKey);
+  tab.appendChild(document.createTextNode('New page '));
+  const tabCode = document.createElement('code');
+  tabCode.textContent = pageKey;
+  tab.appendChild(tabCode);
+  if (bar) {
+    const addBtn = bar.querySelector('.addrow');
+    if (addBtn) bar.insertBefore(tab, addBtn);
+    else bar.appendChild(tab);
+  }
+  bindGrafanaPageTab(tab);
+
+  const editor = document.createElement('div');
+  editor.className = 'splunk-page-editor';
+  editor.setAttribute('data-grafana-page-editor', pageKey);
+  editor.style.display = 'none';
+  editor.innerHTML =
+    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-grafana-page-key>' +
+    '<div class="splunk-page-head">' +
+      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="NOC overview" data-grafana-page-title></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
+        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + grafanaPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-grafana-page-preview>Preview ↗</a>' +
+        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeGrafanaPage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>grafana.php?d=' + pageKey + '</code></div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
+    '<div class="field-grid" style="margin-bottom:12px">' +
+      '<div class="field span-2"><label class="mini">Dashboard URL</label>' +
+        '<input type="text" name="PAGES[' + pageKey + '][url]" placeholder="https://grafana.example.com/d/uid/slug">' +
+        '<div class="help">Paste <code>/d/…</code> or a public-dashboard URL — omit auth_token.</div></div>' +
+      grafanaJwtFieldsHtml(pageKey) +
+      '<div class="field"><label class="mini">Refresh</label><input type="text" name="PAGES[' + pageKey + '][refresh]" placeholder="30s"></div>' +
+      '<div class="field span-2"><label class="mini">Extra params</label>' +
+        '<input type="text" name="PAGES[' + pageKey + '][params]" placeholder="var-host=web01&orgId=1"></div>' +
+      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
+      '</div>' +
+    '</div>';
+
+  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
+  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
+  if (jsonDetails && jsonDetails.closest('details')) {
+    jsonDetails.closest('details').before(editor);
+  } else if (form) {
+    form.appendChild(editor);
+  }
+  editor.querySelector('[data-grafana-page-title]').addEventListener('input', function () { syncGrafanaPageTabLabel(this); });
+  showGrafanaPage(pageKey);
+}
+
+function removeGrafanaPage(pageKey) {
+  if (!confirm('Remove page "' + pageKey + '"?')) return;
+  const editor = document.querySelector('[data-grafana-page-editor="' + pageKey + '"]');
+  const tab = document.querySelector('[data-grafana-page-tab="' + pageKey + '"]');
+  if (editor) editor.remove();
+  if (tab) tab.remove();
+  const remaining = document.querySelector('[data-grafana-page-tab]');
+  if (remaining) showGrafanaPage(remaining.getAttribute('data-grafana-page-tab'));
 }
 
 function heroStripKeySelectHtml(name, source, selectedKey) {

@@ -7,8 +7,11 @@
 function grafana_dashboard_registry(): array
 {
     $dash = cfg('grafana.DASHBOARDS', []);
+    if (!is_array($dash)) {
+        return [];
+    }
 
-    return is_array($dash) ? $dash : [];
+    return grafana_normalize_pages_registry($dash);
 }
 
 /** @return array<string,array<string,mixed>> */
@@ -17,6 +20,135 @@ function grafana_dashboards_for_display(): array
     require_once __DIR__ . '/users_lib.php';
 
     return admin_filter_registry_for_display(grafana_dashboard_registry());
+}
+
+/** @param array<string,mixed> $raw @return array<string,array<string,mixed>> */
+function grafana_normalize_pages_registry(array $raw): array
+{
+    $out = [];
+    foreach ($raw as $k => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        $key = grafana_normalize_key((string)$k);
+        $norm = grafana_normalize_page($page, $key);
+        if ($norm !== null) {
+            $out[$key] = $norm;
+        }
+    }
+
+    return $out;
+}
+
+/** @return array<string,mixed>|null */
+function grafana_normalize_page(array $page, string $key): ?array
+{
+    $title = trim((string)($page['title'] ?? ''));
+    $url = trim((string)($page['url'] ?? ''));
+    if ($url !== '') {
+        $url = grafana_normalize_dashboard_url($url);
+    }
+    $jwtAuth = strtolower(trim((string)($page['jwt_auth'] ?? 'auto')));
+    if (!in_array($jwtAuth, ['auto', 'on', 'off'], true)) {
+        $jwtAuth = 'auto';
+    }
+    $jwtEmail = trim((string)($page['jwt_email'] ?? ''));
+    $refresh = trim((string)($page['refresh'] ?? ''));
+    $params = grafana_clean_extra_params(trim((string)($page['params'] ?? '')));
+
+    $out = [];
+    if ($url !== '') {
+        $out['url'] = $url;
+    }
+    if ($jwtAuth !== 'auto') {
+        $out['jwt_auth'] = $jwtAuth;
+    }
+    if ($jwtEmail !== '') {
+        $out['jwt_email'] = $jwtEmail;
+    }
+    if ($refresh !== '') {
+        $out['refresh'] = $refresh;
+    }
+    if ($params !== '') {
+        $out['params'] = $params;
+    }
+    if (!empty($page['off'])) {
+        $out['off'] = true;
+    }
+    if ($title !== '') {
+        $out['title'] = $title;
+    } elseif ($key === 'main') {
+        $out['title'] = 'Grafana';
+    } else {
+        $out['title'] = ucfirst(str_replace(['_', '-'], ' ', $key));
+    }
+
+    require_once __DIR__ . '/users_lib.php';
+
+    return admin_merge_entry_access_meta($out, $page);
+}
+
+/** @param array<string,mixed>|null $rawConf @return array<string,array<string,mixed>> */
+function grafana_admin_pages(?array $rawConf = null): array
+{
+    require_once __DIR__ . '/users_lib.php';
+    if ($rawConf === null) {
+        $pages = grafana_dashboard_registry();
+    } else {
+        $raw = is_array($rawConf['grafana.DASHBOARDS'] ?? null) ? $rawConf['grafana.DASHBOARDS'] : [];
+        $pages = grafana_normalize_pages_registry($raw);
+    }
+
+    return admin_registry_editor_pages(
+        $pages,
+        static function (): array {
+            return [
+                'main' => grafana_normalize_page(['title' => 'Grafana', 'url' => ''], 'main') ?? [],
+            ];
+        }
+    );
+}
+
+/**
+ * @param array<string|int,mixed> $pagesPost
+ * @return array<string,array<string,mixed>>
+ */
+function grafana_pages_from_post(array $pagesPost): array
+{
+    $out = [];
+    foreach ($pagesPost as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $key = grafana_normalize_key((string)($row['_key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $norm = grafana_normalize_page($row, $key);
+        if ($norm !== null) {
+            $out[$key] = $norm;
+        }
+    }
+
+    return $out;
+}
+
+/** @return array<string,array<string,mixed>>|null */
+function grafana_pages_from_json_string(string $raw): ?array
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+    $dec = json_decode($raw, true);
+    if (!is_array($dec)) {
+        return null;
+    }
+    if ($dec === []) {
+        return [];
+    }
+
+    return grafana_normalize_pages_registry($dec);
 }
 
 function grafana_normalize_key(string $key): string

@@ -698,7 +698,7 @@ See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
 
 ### grafana.php — Grafana (iframe + JWT)
 
-`grafana.php?d=<key>`. Kiosk mode, theme, and refresh params are appended automatically. Per-dashboard **Access** (owner, users, roles) like other operator boards.
+`grafana.php?d=<key>`. Kiosk mode, theme, and refresh params are appended automatically. Per-dashboard **Access** (owner, users, roles) like other operator boards. Admin uses tabbed **+ Add page** editors (same pattern as Zabbix/Splunk) — not the wide row table.
 
 | Auth path | When |
 |-----------|------|
