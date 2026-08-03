@@ -108,6 +108,92 @@ function grafana_jwt_configured(): bool
     return grafana_jwt_enabled() && grafana_jwt_login_email() !== '';
 }
 
+/** IT-provided auth_token appended to every dashboard embed (not signed on this server). */
+function grafana_static_auth_token(): string
+{
+    $raw = trim((string)cfg('grafana.AUTH_TOKEN', ''));
+    if ($raw === '') {
+        return '';
+    }
+    if (str_starts_with(strtolower($raw), 'auth_token=')) {
+        $raw = substr($raw, 11);
+    }
+
+    return trim($raw);
+}
+
+function grafana_static_auth_configured(): bool
+{
+    return grafana_static_auth_token() !== '';
+}
+
+function grafana_strip_auth_token_from_url(string $url): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts) || empty($parts['query'])) {
+        return $url;
+    }
+
+    parse_str((string)$parts['query'], $params);
+    if (!isset($params['auth_token'])) {
+        return $url;
+    }
+    unset($params['auth_token']);
+
+    $rebuilt = '';
+    if (isset($parts['scheme'])) {
+        $rebuilt .= $parts['scheme'] . '://';
+    }
+    if (isset($parts['user'])) {
+        $rebuilt .= $parts['user'];
+        if (isset($parts['pass'])) {
+            $rebuilt .= ':' . $parts['pass'];
+        }
+        $rebuilt .= '@';
+    }
+    if (isset($parts['host'])) {
+        $rebuilt .= $parts['host'];
+    }
+    if (isset($parts['port'])) {
+        $rebuilt .= ':' . $parts['port'];
+    }
+    $rebuilt .= (string)($parts['path'] ?? '');
+    $query = http_build_query($params);
+    if ($query !== '') {
+        $rebuilt .= '?' . $query;
+    }
+    if (isset($parts['fragment'])) {
+        $rebuilt .= '#' . $parts['fragment'];
+    }
+
+    return $rebuilt;
+}
+
+/**
+ * Resolve embed auth: global static token wins over per-request JWT signing.
+ *
+ * @param array<string,mixed> $dash
+ * @return array{token:string,mode:'static'|'jwt'}|null
+ */
+function grafana_dashboard_auth(array $dash): ?array
+{
+    $static = grafana_static_auth_token();
+    if ($static !== '') {
+        return ['token' => $static, 'mode' => 'static'];
+    }
+
+    if (!grafana_dashboard_uses_jwt($dash)) {
+        return null;
+    }
+
+    $token = grafana_jwt_create($dash);
+    if ($token === null) {
+        return null;
+    }
+
+    return ['token' => $token, 'mode' => 'jwt'];
+}
+
 function grafana_url_is_cloud(string $url): bool
 {
     $host = strtolower((string)(parse_url($url, PHP_URL_HOST) ?? ''));
@@ -287,7 +373,7 @@ function grafana_jwt_create(array $dash = []): ?string
  */
 function grafana_dashboard_iframe_src(string $registryKey, array $dash): array
 {
-    $url = trim((string)($dash['url'] ?? ''));
+    $url = grafana_strip_auth_token_from_url(trim((string)($dash['url'] ?? '')));
     if ($url === '' || str_contains($url, 'REPLACE')) {
         return ['ok' => false, 'error' => 'Dashboard URL not configured'];
     }
@@ -302,13 +388,13 @@ function grafana_dashboard_iframe_src(string $registryKey, array $dash): array
     }
 
     $authMode = 'none';
-    if (grafana_dashboard_uses_jwt($dash)) {
-        $token = grafana_jwt_create($dash);
-        if ($token === null) {
-            return ['ok' => false, 'error' => 'JWT enabled but signing key or login email missing'];
-        }
-        $qs .= '&auth_token=' . rawurlencode($token);
-        $authMode = 'jwt';
+    $auth = grafana_dashboard_auth($dash);
+    if ($auth === null && grafana_dashboard_uses_jwt($dash)) {
+        return ['ok' => false, 'error' => 'JWT enabled but signing key or login email missing'];
+    }
+    if ($auth !== null) {
+        $qs .= '&auth_token=' . rawurlencode($auth['token']);
+        $authMode = $auth['mode'];
     }
 
     $src = $url . (str_contains($url, '?') ? '&' : '?') . $qs;
@@ -404,8 +490,15 @@ function grafana_test_dashboard_embed(string $registryKey, array $dash): array
         return ['ok' => false, 'error' => (string)($built['error'] ?? 'Bad dashboard row')];
     }
 
+    if (($built['auth'] ?? '') === 'static') {
+        return [
+            'ok' => true,
+            'detail' => 'Dashboard URL built with global embed auth token (not signed on this server).',
+        ];
+    }
+
     if (($built['auth'] ?? '') !== 'jwt') {
-        $note = 'Dashboard URL built without JWT';
+        $note = 'Dashboard URL built without embed auth';
         if (!empty($built['public'])) {
             $note .= ' (public dashboard URL — expected)';
         }

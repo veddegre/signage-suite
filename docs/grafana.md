@@ -12,14 +12,39 @@ Signage signs a short-lived **HS256 JWT** (self-hosted) and appends it to the if
 
 | Path | When to use |
 |------|-------------|
-| **JWT embed (HS256)** | Self-hosted Grafana behind SSO (this guide) |
+| **Global embed auth token** | IT gave you a shared `auth_token` — paste once in admin; appended to every dashboard URL |
+| **JWT embed (HS256)** | Self-hosted Grafana — signage signs fresh tokens (this guide, [JWT setup](#grafana-server-setup)) |
 | **JWT embed (RS256)** | Grafana Cloud — [grafana-cloud.md](grafana-cloud.md) |
 | **Public dashboard URL** | Non-sensitive data; no JWT |
 | **Anonymous Viewer** | Homelab / LAN-only Grafana without SSO |
 
 ---
 
-## Quick start
+## Quick start — IT-provided auth token
+
+When your Grafana team gives you a working **`auth_token`** (not the signing secret):
+
+1. Super admin → **Dashboards → Grafana**
+2. **Global embed auth token** — paste the token value only (the long `eyJ…` string, not `auth_token=`)
+3. Leave **JWT auth for embed** off
+4. **Save**
+5. Add dashboard rows with normal **`/d/…`** URLs from your browser (no token in each row)
+6. **Preview ↗**, then add `grafana.php?d=<key>` to rotation
+
+Example row:
+
+| Field | Value |
+|-------|-------|
+| **Dashboard URL** | `https://monitor.example.edu/d/uid/dashboard-name?orgId=1` |
+| **Extra params** | `from=now-15m&to=now&timezone=browser` |
+
+Signage appends `kiosk`, theme, refresh, and `auth_token=` automatically.
+
+**Note:** Signage does **not** refresh this token (no automatic re-signing). Many orgs issue **non-expiring** embed tokens — set once and leave it. If IT ever rotates the token, update **Global embed auth token** here. For short-lived JWTs that signage mints itself, use [JWT signing](#grafana-server-setup) instead.
+
+---
+
+## Quick start — JWT signing on this server
 
 1. Complete [Grafana server setup](#grafana-server-setup) below.
 2. Admin → **Dashboards → Grafana**:
@@ -140,7 +165,8 @@ Admin → **Dashboards → Grafana**:
 
 | Field | Description |
 |-------|-------------|
-| **JWT auth for embed** | Master switch |
+| **Global embed auth token** | Paste IT’s shared `auth_token` once — appended to every dashboard URL. Often non-expiring; signage does not refresh it. Takes precedence over JWT signing. |
+| **JWT auth for embed** | Sign fresh tokens on this server (ignored when a global token is set) |
 | **JWT signing secret** | Raw shared secret (same as used to build JWK `k`) |
 | **JWT key ID (kid)** | Default `signage` — must match JWK |
 | **JWT login email** | Default Grafana user for all rows |

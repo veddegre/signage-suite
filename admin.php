@@ -4115,8 +4115,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each page is <code>kuma.php?d=<em>key</em></code> in rotation — one status page slug per tab below.
         <?php elseif ($board === 'grafana'): ?>
           Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — preview per row below.
-          For <strong>SSO-protected self-hosted Grafana</strong>, enable <strong>JWT auth for embed</strong> below and
-          configure matching <code>[auth.jwt]</code> in Grafana — see <code>docs/grafana.md</code>.
+          Paste a shared <strong>Global embed auth token</strong> once (super admin), or enable <strong>JWT auth for embed</strong>
+          to sign tokens on this server — see <code>docs/grafana.md</code>.
         <?php elseif ($board === 'splunkdash'): ?>
           Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif ($board === 'powerbi'): ?>
@@ -4137,14 +4137,25 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
       <?php if ($board === 'grafana'):
         require_once __DIR__ . '/lib/grafana_lib.php';
+        $grafStaticOn = grafana_static_auth_configured();
         $grafJwtOn = grafana_jwt_enabled();
         $grafJwtReady = grafana_jwt_configured();
       ?>
+      <?php if ($grafStaticOn): ?>
+      <div class="panel" style="padding:18px 20px;margin-bottom:18px">
+        <div class="section-title" style="margin-top:0">Embed auth token</div>
+        <div class="video-meta">
+          <div>Global token: <strong>configured</strong> — appended to every dashboard URL automatically.</div>
+          <div class="help" style="margin-top:10px">Operators add normal <code>/d/…</code> URLs only (no <code>auth_token</code> per row).
+            JWT signing below is ignored while a global token is set. Update here only if IT rotates the token.</div>
+        </div>
+      </div>
+      <?php endif; ?>
       <div class="panel" style="padding:18px 20px;margin-bottom:18px">
         <div class="section-title" style="margin-top:0">JWT embed auth</div>
         <div class="video-meta">
-          <div>JWT embed: <strong><?= $grafJwtReady ? 'active' : ($grafJwtOn ? 'incomplete' : 'disabled') ?></strong>
-            <?php if ($grafJwtOn && !$grafJwtReady): ?> — enable JWT, set secret + login email, Save<?php endif; ?></div>
+          <div>JWT embed: <strong><?= $grafStaticOn ? 'skipped (global token set)' : ($grafJwtReady ? 'active' : ($grafJwtOn ? 'incomplete' : 'disabled')) ?></strong>
+            <?php if (!$grafStaticOn && $grafJwtOn && !$grafJwtReady): ?> — enable JWT, set secret + login email, Save<?php endif; ?></div>
           <div class="help" style="margin-top:10px"><strong>Self-hosted:</strong> HS256 + <code>[auth.jwt]</code> — see <code>docs/grafana.md</code>.
             <strong>Grafana Cloud:</strong> RS256 + <code>grafana-jwks.php</code> — see <code>docs/grafana-cloud.md</code>
             (authenticated embed requires Grafana Labs support; public dashboards need JWT off).</div>

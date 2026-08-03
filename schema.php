@@ -828,8 +828,10 @@ function admin_schema(): array
             $tz,
         ]],
         'grafana' => ['title' => 'Grafana', 'file' => 'grafana.php', 'fields' => [
+            ['key' => 'AUTH_TOKEN', 'label' => 'Global embed auth token', 'type' => 'password',
+             'help' => 'Paste the auth_token value only (not auth_token=). Appended to every dashboard URL — operators put normal /d/… URLs in each row. Use when IT provides a shared embed token (often non-expiring). Takes precedence over JWT auth below.'],
             ['key' => 'JWT_ENABLED', 'label' => 'JWT auth for embed', 'type' => 'bool', 'default' => false,
-             'help' => 'Sign auth_token URLs — self-hosted (HS256) or Grafana Cloud (RS256 + JWKS)'],
+             'help' => 'Sign fresh auth_token URLs on this server — self-hosted (HS256) or Grafana Cloud (RS256 + JWKS). Ignored when a global embed auth token is set above.'],
             ['key' => 'JWT_ALG', 'label' => 'JWT algorithm', 'type' => 'select', 'options' => ['hs256', 'rs256'],
              'default' => 'hs256', 'help' => 'HS256 = self-hosted jwk_set_file · RS256 = Grafana Cloud jwk_set_url'],
             ['key' => 'JWT_SECRET', 'label' => 'JWT signing secret', 'type' => 'password',

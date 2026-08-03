@@ -701,7 +701,8 @@ See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
 
 | Auth path | When |
 |-----------|------|
-| **JWT embed (HS256)** | Self-hosted — `auth.jwt` + local JWK file |
+| **Global embed auth token** | IT provided a shared `auth_token` — paste once in admin |
+| **JWT embed (HS256)** | Self-hosted — signage signs tokens via `auth.jwt` + local JWK file |
 | **JWT embed (RS256)** | Grafana Cloud — `grafana-jwks.php` + support enablement |
 | **Public dashboard URL** | `…/public-dashboards/…` — JWT off; data is public |
 | **Anonymous Viewer** | Homelab LAN (`auth.anonymous` in grafana.ini) |

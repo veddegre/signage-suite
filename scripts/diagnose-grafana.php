@@ -33,7 +33,12 @@ echo 'SIGNAGE_ROOT: ' . SIGNAGE_ROOT . "\n";
 echo 'Config: ' . cfg_path() . "\n";
 echo 'JWT enabled: ' . (grafana_jwt_enabled() ? 'yes' : 'no') . "\n";
 echo 'JWT configured: ' . (grafana_jwt_configured() ? 'yes' : 'no') . "\n";
-if (grafana_jwt_configured()) {
+echo 'Global embed auth token: ' . (grafana_static_auth_configured() ? 'yes' : 'no') . "\n";
+if (grafana_static_auth_configured()) {
+    $preview = grafana_static_auth_token();
+    echo '  token preview: ' . substr($preview, 0, 24) . "…\n";
+    echo "  (JWT signing skipped while global token is set)\n\n";
+} elseif (grafana_jwt_configured()) {
     echo 'Login email: ' . grafana_jwt_login_email() . "\n";
     echo 'Key ID (kid): ' . grafana_jwt_kid() . "\n";
     echo 'TTL: ' . grafana_jwt_ttl() . "s\n\n";

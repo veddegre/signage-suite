@@ -66,7 +66,7 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
 }
 
 $embed = grafana_dashboard_iframe_src((string)$key, $dash);
-$useJwt = grafana_jwt_configured() && ($embed['auth'] ?? '') === 'jwt';
+$useJwt = ($embed['auth'] ?? '') === 'jwt';
 ?>
 <!DOCTYPE html>
 <html lang="en">
