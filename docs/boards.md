@@ -249,6 +249,7 @@ Expect **200** and `Content-Type: image/png`. Errors logged to `cache/traffic_ti
 - **Signage wall feeds:** super admin only — which feed keys may appear on **main** / plain `board.php` (no assigned operator). **Default is none** until you check feeds and save
 - **Signage wall countdowns:** super admin only — same for the bottom countdown strip on `calendar.php` (default none)
 - **Per display:** operators with an assigned screen use **Rotation → Kiosk settings → Calendar & glance feeds** for that display only (their own feed rows and countdown labels)
+- **Timezone:** `America/Detroit` (or your locale) — all event times display in this zone. Outlook/Exchange feeds often use `TZID="Eastern Standard Time"` or UTC (`…Z`); both are converted correctly. Set this to match how you read Outlook.
 - **Trash/recycle:** `TRASH_WEEKDAY`, `RECYCLE_ANCHOR` (any past recycle date). Leave trash day as default to hide the chip
 - **Countdowns:** label → `YYYY-MM-DD`
 

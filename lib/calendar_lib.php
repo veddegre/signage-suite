@@ -110,7 +110,7 @@ function ics_wkst_to_iso(string $wkst): int
 /** Local-midnight timestamp for the WKST-aligned week that contains $dayMidnight. */
 function ics_week_period_start(int $dayMidnight, int $wkstIso): int
 {
-    $dow = (int)date('N', $dayMidnight);
+    $dow = ics_local_iso_weekday($dayMidnight);
     $back = ($dow - $wkstIso + 7) % 7;
     return strtotime("-{$back} days", $dayMidnight);
 }
@@ -122,7 +122,7 @@ function ics_calendar_days_between(int $fromMidnight, int $toMidnight): int
         return 0;
     }
     try {
-        $tz = new DateTimeZone(date_default_timezone_get() ?: 'UTC');
+        $tz = calendar_display_timezone();
     } catch (Throwable $e) {
         $tz = new DateTimeZone('UTC');
     }
@@ -165,6 +165,208 @@ function ics_rrule_interval(array $ev): int
     }
 
     return 1;
+}
+
+/** Display timezone for calendar wall + ICS expansion (admin → Calendar → Timezone). */
+function calendar_display_timezone_name(): string
+{
+    if (defined('TIMEZONE')) {
+        $name = trim((string)TIMEZONE);
+        if ($name !== '') {
+            return $name;
+        }
+    }
+    $name = trim((string)cfg('calendar.TIMEZONE', 'America/Detroit'));
+
+    return $name !== '' ? $name : 'America/Detroit';
+}
+
+function calendar_display_timezone(): DateTimeZone
+{
+    static $tz = null;
+    if ($tz instanceof DateTimeZone) {
+        return $tz;
+    }
+    try {
+        $tz = new DateTimeZone(calendar_display_timezone_name());
+    } catch (Throwable $e) {
+        $tz = new DateTimeZone('America/Detroit');
+    }
+
+    return $tz;
+}
+
+function calendar_ensure_display_timezone(): void
+{
+    @date_default_timezone_set(calendar_display_timezone_name());
+}
+
+/** @return array<string, string> Outlook / Windows TZID → IANA */
+function ics_windows_tzid_map(): array
+{
+    return [
+        'Eastern Standard Time' => 'America/New_York',
+        'US Eastern Standard Time' => 'America/New_York',
+        'Central Standard Time' => 'America/Chicago',
+        'US Central Standard Time' => 'America/Chicago',
+        'Mountain Standard Time' => 'America/Denver',
+        'US Mountain Standard Time' => 'America/Phoenix',
+        'Pacific Standard Time' => 'America/Los_Angeles',
+        'US Pacific Standard Time' => 'America/Los_Angeles',
+        'Alaskan Standard Time' => 'America/Anchorage',
+        'Hawaiian Standard Time' => 'Pacific/Honolulu',
+        'Atlantic Standard Time' => 'America/Halifax',
+        'Newfoundland Standard Time' => 'America/St_Johns',
+        'Central Europe Standard Time' => 'Europe/Budapest',
+        'W. Europe Standard Time' => 'Europe/Berlin',
+        'GMT Standard Time' => 'Europe/London',
+        'Greenwich Standard Time' => 'Atlantic/Reykjavik',
+        'UTC' => 'UTC',
+        'GMT' => 'UTC',
+    ];
+}
+
+function ics_unfold(string $ics): array
+{
+    $lines = preg_split('/\R/', $ics);
+    $out = [];
+    foreach ($lines as $line) {
+        if ($line !== '' && ($line[0] === ' ' || $line[0] === "\t") && $out) {
+            $out[count($out) - 1] .= substr($line, 1);
+        } else {
+            $out[] = $line;
+        }
+    }
+
+    return $out;
+}
+
+function ics_parse_tzid(string $params): ?string
+{
+    if (!preg_match('/(?:^|;)TZID=([^:;]+)/i', $params, $m)) {
+        return null;
+    }
+    $tzid = trim(str_replace('\\,', ',', $m[1]));
+    if ($tzid !== '' && $tzid[0] === '"' && str_ends_with($tzid, '"')) {
+        $tzid = substr($tzid, 1, -1);
+    }
+
+    return $tzid !== '' ? $tzid : null;
+}
+
+/** Map Outlook/Windows TZID names (and IANA ids) to a PHP zone. */
+function ics_timezone(string $tzid, ?DateTimeZone $fallback = null): DateTimeZone
+{
+    $fallback ??= calendar_display_timezone();
+    $tzid = trim(str_replace('\\,', ',', $tzid));
+    $windows = ics_windows_tzid_map();
+    if (isset($windows[$tzid])) {
+        try {
+            return new DateTimeZone($windows[$tzid]);
+        } catch (Throwable $e) {
+        }
+    }
+    try {
+        return new DateTimeZone($tzid);
+    } catch (Throwable $e) {
+        return $fallback;
+    }
+}
+
+/** Local midnight for a unix timestamp in the display timezone. */
+function ics_local_midnight(int $ts): int
+{
+    $dt = (new DateTime('@' . $ts))->setTimezone(calendar_display_timezone());
+    $dt->setTime(0, 0, 0);
+
+    return $dt->getTimestamp();
+}
+
+function ics_local_date_key(int $ts): string
+{
+    return (new DateTime('@' . $ts))->setTimezone(calendar_display_timezone())->format('Y-m-d');
+}
+
+/** ISO weekday 1=Mon … 7=Sun for a local-midnight timestamp. */
+function ics_local_iso_weekday(int $dayMidnight): int
+{
+    return (int)(new DateTime('@' . $dayMidnight))
+        ->setTimezone(calendar_display_timezone())
+        ->format('N');
+}
+
+/** Apply the wall-clock time from $referenceTs onto a local calendar day. DST-safe. */
+function ics_wall_time_on_day(int $dayMidnight, int $referenceTs): int
+{
+    $tz = calendar_display_timezone();
+    $ref = (new DateTime('@' . $referenceTs))->setTimezone($tz);
+    $day = (new DateTime('@' . $dayMidnight))->setTimezone($tz);
+    $day->setTime((int)$ref->format('G'), (int)$ref->format('i'), (int)$ref->format('s'));
+
+    return $day->getTimestamp();
+}
+
+function ics_format_local_time(int $ts, string $format = 'g:i A'): string
+{
+    return (new DateTime('@' . $ts))->setTimezone(calendar_display_timezone())->format($format);
+}
+
+/** Parse a DTSTART/DTEND/RECURRENCE-ID/EXDATE value (+params) into [unix_ts, all_day]. */
+function ics_time(string $params, string $value, ?DateTimeZone $fallbackTz = null): ?array
+{
+    $fallbackTz ??= calendar_display_timezone();
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+
+    if (stripos($params, 'VALUE=DATE') !== false || preg_match('/^\d{8}$/', $value)) {
+        $t = DateTime::createFromFormat('Ymd', substr($value, 0, 8), $fallbackTz);
+
+        return $t ? [$t->setTime(0, 0)->getTimestamp(), true] : null;
+    }
+
+    $tz = $fallbackTz;
+    $tzid = ics_parse_tzid($params);
+    if ($tzid !== null) {
+        $tz = ics_timezone($tzid, $fallbackTz);
+    }
+
+    if (str_ends_with($value, 'Z')) {
+        $t = DateTime::createFromFormat('Ymd\THis\Z', $value, new DateTimeZone('UTC'));
+        if ($t) {
+            return [$t->getTimestamp(), false];
+        }
+    }
+
+    $t = DateTime::createFromFormat('Ymd\THis', $value, $tz);
+    if (!$t) {
+        $t = DateTime::createFromFormat('Ymd\THi', $value, $tz);
+    }
+
+    return $t ? [$t->getTimestamp(), false] : null;
+}
+
+function ics_add_local_days(int $dayMidnight, int $days): int
+{
+    $dt = (new DateTime('@' . $dayMidnight))->setTimezone(calendar_display_timezone());
+    $dt->modify(($days >= 0 ? '+' : '') . $days . ' days');
+    $dt->setTime(0, 0, 0);
+
+    return $dt->getTimestamp();
+}
+
+/** @return array{0:int,1:int,2:int,3:int} year, month, day-of-month, days-in-month */
+function ics_local_ymd(int $dayMidnight): array
+{
+    $dt = (new DateTime('@' . $dayMidnight))->setTimezone(calendar_display_timezone());
+
+    return [
+        (int)$dt->format('Y'),
+        (int)$dt->format('n'),
+        (int)$dt->format('j'),
+        (int)$dt->format('t'),
+    ];
 }
 
 /**

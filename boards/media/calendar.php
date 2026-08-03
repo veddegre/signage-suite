@@ -27,11 +27,13 @@ define('ICS_FEEDS', calendar_feeds_for_signage(signage_request_screen()));
 define('TRASH_WEEKDAY', cfg('calendar.TRASH_WEEKDAY', ''));
 define('RECYCLE_ANCHOR', cfg('calendar.RECYCLE_ANCHOR', ''));
 define('COUNTDOWNS', calendar_countdowns_for_signage(signage_request_screen()));
-define('TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit'));
+if (!defined('TIMEZONE')) {
+    define('TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detroit'));
+}
 const CACHE_DIR = SIGNAGE_ROOT . '/cache';
 define('CACHE_TTL', cfg('calendar.CACHE_TTL', 600));
 
-date_default_timezone_set(TIMEZONE);
+date_default_timezone_set(calendar_display_timezone_name());
 $frameH = signage_frame_height();
 $showClock = signage_show_clock();
 $GLOBALS['diag'] = [];
@@ -277,62 +279,7 @@ function fetch_calendar_feed(array $feed, int $i, int $winStart, int $winEnd): ?
 }
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-// ── Minimal ICS parsing ──────────────────────────────────────────────────────
-function ics_unfold(string $ics): array
-{
-    $lines = preg_split('/\R/', $ics);
-    $out = [];
-    foreach ($lines as $line) {
-        if ($line !== '' && ($line[0] === ' ' || $line[0] === "\t") && $out) {
-            $out[count($out) - 1] .= substr($line, 1);
-        } else {
-            $out[] = $line;
-        }
-    }
-    return $out;
-}
-
-/** Map Outlook/Windows TZID names to IANA zones PHP understands. */
-function ics_timezone(string $tzid): DateTimeZone
-{
-    static $windows = [
-        'Eastern Standard Time' => 'America/Detroit',
-        'Central Standard Time' => 'America/Chicago',
-        'Mountain Standard Time' => 'America/Denver',
-        'Pacific Standard Time' => 'America/Los_Angeles',
-        'US Eastern Standard Time' => 'America/Detroit',
-        'UTC' => 'UTC',
-        'GMT Standard Time' => 'Europe/London',
-    ];
-    $tzid = trim($tzid);
-    if (isset($windows[$tzid])) {
-        return new DateTimeZone($windows[$tzid]);
-    }
-    try {
-        return new DateTimeZone($tzid);
-    } catch (Throwable $e) {
-        return new DateTimeZone(TIMEZONE);
-    }
-}
-
-/** Parse a DTSTART/DTEND value (+params) into [unix_ts, all_day]. */
-function ics_time(string $params, string $value): ?array
-{
-    if (stripos($params, 'VALUE=DATE') !== false || preg_match('/^\d{8}$/', $value)) {
-        $t = DateTime::createFromFormat('Ymd', substr($value, 0, 8), new DateTimeZone(TIMEZONE));
-        return $t ? [$t->setTime(0, 0)->getTimestamp(), true] : null;
-    }
-    $tz = new DateTimeZone(TIMEZONE);
-    if (preg_match('/TZID=([^;:]+)/', $params, $m)) {
-        $tz = ics_timezone($m[1]);
-    }
-    if (str_ends_with($value, 'Z')) {
-        $t = DateTime::createFromFormat('Ymd\THis\Z', $value, new DateTimeZone('UTC'));
-    } else {
-        $t = DateTime::createFromFormat('Ymd\THis', $value, $tz);
-    }
-    return $t ? [$t->getTimestamp(), false] : null;
-}
+// ICS parsing helpers live in lib/calendar_lib.php (ics_time, ics_timezone, …).
 
 function parse_rrule(string $r): array
 {
@@ -372,29 +319,29 @@ function ics_parse_byday_rules(string $byday): array
 /** Does $day fall on the requested weekday position (e.g. 2nd Friday)? */
 function ics_day_matches_byday(int $day, array $rule): bool
 {
-    if ((int)date('N', $day) !== $rule['dow']) {
+    if (ics_local_iso_weekday($day) !== $rule['dow']) {
         return false;
     }
     $ord = $rule['ord'];
     if ($ord === null) {
         return true;
     }
-    $year = (int)date('Y', $day);
-    $month = (int)date('n', $day);
-    $dom = (int)date('j', $day);
+    [$year, $month, $dom, $daysInMonth] = ics_local_ymd($day);
+    $tz = calendar_display_timezone();
     if ($ord > 0) {
         $count = 0;
         for ($d = 1; $d <= $dom; $d++) {
-            if ((int)date('N', mktime(12, 0, 0, $month, $d, $year)) === $rule['dow']) {
+            $probe = (new DateTime())->setTimezone($tz)->setDate($year, $month, $d)->setTime(12, 0, 0);
+            if ((int)$probe->format('N') === $rule['dow']) {
                 $count++;
             }
         }
         return $count === $ord;
     }
-    $daysInMonth = (int)date('t', $day);
     $count = 0;
     for ($d = $daysInMonth; $d >= $dom; $d--) {
-        if ((int)date('N', mktime(12, 0, 0, $month, $d, $year)) === $rule['dow']) {
+        $probe = (new DateTime())->setTimezone($tz)->setDate($year, $month, $d)->setTime(12, 0, 0);
+        if ((int)$probe->format('N') === $rule['dow']) {
             $count++;
         }
     }
@@ -403,29 +350,31 @@ function ics_day_matches_byday(int $day, array $rule): bool
 
 function ics_months_between(int $day, int $start): int
 {
-    return ((int)date('Y', $day) * 12 + (int)date('n', $day))
-         - ((int)date('Y', $start) * 12 + (int)date('n', $start));
+    [$y1, $m1] = ics_local_ymd($day);
+    [$y2, $m2] = ics_local_ymd($start);
+
+    return ($y1 * 12 + $m1) - ($y2 * 12 + $m2);
 }
 
 function ics_is_excluded(int $ts, array $ev): bool
 {
-    $dayKey = date('Ymd', $ts);
+    $dayKey = ics_local_date_key($ts);
     foreach ($ev['exdate_ts'] ?? [] as $ex) {
         if ($ex === $ts) {
             return true;
         }
         // Outlook EXDATE often differs by TZ/UTC from expanded instances — match local day.
-        if (date('Ymd', $ex) === $dayKey) {
+        if (ics_local_date_key($ex) === $dayKey) {
             return true;
         }
     }
-    return in_array($dayKey, $ev['exdates'] ?? [], true);
+    return in_array(str_replace('-', '', $dayKey), $ev['exdates'] ?? [], true);
 }
 
 /** Each local-midnight timestamp for an all-day span (end is iCal-exclusive). */
 function ics_all_day_instances(array $ev, int $winStart, int $winEnd): array
 {
-    $tz = new DateTimeZone(TIMEZONE);
+    $tz = calendar_display_timezone();
     $start = (new DateTime('@' . $ev['start']))->setTimezone($tz)->setTime(0, 0, 0);
     $endEx = (int)($ev['end'] ?? ($ev['start'] + 86400));
     $end = (new DateTime('@' . $endEx))->setTimezone($tz)->setTime(0, 0, 0);
@@ -449,14 +398,14 @@ function ics_finalize_vevent(array $cur): array
         return $cur;
     }
     if (!empty($cur['ms_all_day']) && !$cur['all_day'] && ($cur['end'] ?? null) !== null) {
-        $startDay = strtotime('today', $cur['start']);
-        $endDay = strtotime('today', $cur['end']);
+        $startDay = ics_local_midnight($cur['start']);
+        $endDay = ics_local_midnight($cur['end']);
         if ($endDay > $startDay || ($cur['end'] - $cur['start']) >= 82800) {
             $cur['all_day'] = true;
             $cur['start'] = $startDay;
-            $cur['end'] = $cur['end'] > $endDay ? $endDay + 86400 : $endDay;
+            $cur['end'] = $cur['end'] > $endDay ? ics_add_local_days($endDay, 1) : $endDay;
             if ($cur['end'] <= $cur['start']) {
-                $cur['end'] = $cur['start'] + 86400;
+                $cur['end'] = ics_add_local_days($cur['start'], 1);
             }
         }
     }
@@ -464,15 +413,15 @@ function ics_finalize_vevent(array $cur): array
     if (!$cur['all_day'] && ($cur['busy'] ?? '') === 'OOF' && ($cur['end'] ?? null) !== null) {
         $dur = $cur['end'] - $cur['start'];
         if ($dur >= 4 * 3600) {
-            $first = strtotime('today', $cur['start']);
-            $last = strtotime('today', $cur['end']);
+            $first = ics_local_midnight($cur['start']);
+            $last = ics_local_midnight($cur['end']);
             $cur['all_day'] = true;
             $cur['start'] = $first;
-            $cur['end'] = strtotime('+1 day', $last);
+            $cur['end'] = ics_add_local_days($last, 1);
         }
     }
     if ($cur['all_day'] && ($cur['end'] ?? null) === null) {
-        $cur['end'] = $cur['start'] + 86400;
+        $cur['end'] = ics_add_local_days(ics_local_midnight($cur['start']), 1);
     }
     return $cur;
 }
@@ -487,7 +436,7 @@ function ics_rrule_last_instance_day(array $ev): ?int
     if (isset($r['UNTIL'])) {
         $until = ics_time('', $r['UNTIL']);
         if ($until) {
-            return strtotime('today', $until[0]);
+            return ics_local_midnight($until[0]);
         }
     }
     if (!isset($r['COUNT'])) {
@@ -496,23 +445,27 @@ function ics_rrule_last_instance_day(array $ev): ?int
 
     $count = max(1, (int)$r['COUNT']);
     $interval = ics_rrule_interval($ev);
-    $startDay = strtotime('today', $ev['start']);
+    $startDay = ics_local_midnight($ev['start']);
     $freq = $r['FREQ'] ?? '';
 
     switch ($freq) {
         case 'DAILY':
-            return $startDay + ($count - 1) * $interval * 86400;
+            return ics_add_local_days($startDay, ($count - 1) * $interval);
         case 'WEEKLY':
             $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
             if ($bydayRules === []) {
-                return $startDay + ($count - 1) * 7 * $interval * 86400;
+                return ics_add_local_days($startDay, ($count - 1) * 7 * $interval);
             }
             $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));
             $found = 0;
-            $cap = $startDay + max($count * 7 * $interval * 4, 366) * 86400;
-            for ($day = $startDay; $day <= $cap; $day += 86400) {
+            $cap = ics_add_local_days($startDay, max($count * 7 * $interval * 4, 366));
+            $cur = (new DateTime('@' . $startDay))->setTimezone(calendar_display_timezone());
+            $capDt = (new DateTime('@' . $cap))->setTimezone(calendar_display_timezone());
+            while ($cur <= $capDt) {
+                $day = $cur->getTimestamp();
                 $weeks = ics_weeks_since_start($day, $startDay, $wkstIso);
                 if ($weeks < 0 || $weeks % $interval !== 0) {
+                    $cur->modify('+1 day');
                     continue;
                 }
                 $hit = false;
@@ -522,27 +475,31 @@ function ics_rrule_last_instance_day(array $ev): ?int
                             $hit = true;
                             break;
                         }
-                    } elseif ((int)date('N', $day) === $rule['dow']) {
+                    } elseif (ics_local_iso_weekday($day) === $rule['dow']) {
                         $hit = true;
                         break;
                     }
                 }
-                if (!$hit) {
-                    continue;
+                if ($hit) {
+                    $found++;
+                    if ($found >= $count) {
+                        return $day;
+                    }
                 }
-                $found++;
-                if ($found >= $count) {
-                    return $day;
-                }
+                $cur->modify('+1 day');
             }
             return null;
         case 'MONTHLY':
             $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
             $found = 0;
-            $cap = $startDay + max($count * 32 * $interval, 366) * 86400;
-            for ($day = $startDay; $day <= $cap; $day += 86400) {
+            $cap = ics_add_local_days($startDay, max($count * 32 * $interval, 366));
+            $cur = (new DateTime('@' . $startDay))->setTimezone(calendar_display_timezone());
+            $capDt = (new DateTime('@' . $cap))->setTimezone(calendar_display_timezone());
+            while ($cur <= $capDt) {
+                $day = $cur->getTimestamp();
                 $months = ics_months_between($day, $startDay);
                 if ($months < 0 || $months % $interval !== 0) {
+                    $cur->modify('+1 day');
                     continue;
                 }
                 $hit = false;
@@ -554,20 +511,25 @@ function ics_rrule_last_instance_day(array $ev): ?int
                         }
                     }
                 } else {
-                    $dom = (int)($r['BYMONTHDAY'] ?? date('j', $startDay));
-                    $hit = (int)date('j', $day) === $dom;
+                    [, , $domStart] = ics_local_ymd($startDay);
+                    $dom = (int)($r['BYMONTHDAY'] ?? $domStart);
+                    [, , $domDay] = ics_local_ymd($day);
+                    $hit = $domDay === $dom;
                 }
-                if (!$hit) {
-                    continue;
+                if ($hit) {
+                    $found++;
+                    if ($found >= $count) {
+                        return $day;
+                    }
                 }
-                $found++;
-                if ($found >= $count) {
-                    return $day;
-                }
+                $cur->modify('+1 day');
             }
             return null;
         case 'YEARLY':
-            return strtotime('+' . ($count - 1) * $interval . ' years', $startDay);
+            return (new DateTime('@' . $startDay))->setTimezone(calendar_display_timezone())
+                ->modify('+' . ($count - 1) * $interval . ' years')
+                ->setTime(0, 0, 0)
+                ->getTimestamp();
         default:
             return null;
     }
@@ -580,7 +542,7 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
     if (!is_array($r)) {
         return null;
     }
-    $startDay = strtotime('today', $ev['start']);
+    $startDay = ics_local_midnight($ev['start']);
     if ($dayMidnight < $startDay) {
         return null;
     }
@@ -603,16 +565,20 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
                 return null;
             }
             if ($bydayRules === []) {
-                if ((int)date('N', $dayMidnight) !== (int)date('N', $startDay)) {
+                if (ics_local_iso_weekday($dayMidnight) !== ics_local_iso_weekday($startDay)) {
                     return null;
                 }
 
                 return (int)($weeks / $interval) + 1;
             }
             $found = 0;
-            for ($day = $startDay; $day <= $dayMidnight; $day += 86400) {
+            $cur = (new DateTime('@' . $startDay))->setTimezone(calendar_display_timezone());
+            $endDt = (new DateTime('@' . $dayMidnight))->setTimezone(calendar_display_timezone());
+            while ($cur <= $endDt) {
+                $day = $cur->getTimestamp();
                 $w = ics_weeks_since_start($day, $startDay, $wkstIso);
                 if ($w < 0 || $w % $interval !== 0) {
+                    $cur->modify('+1 day');
                     continue;
                 }
                 $hit = false;
@@ -622,7 +588,7 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
                             $hit = true;
                             break;
                         }
-                    } elseif ((int)date('N', $day) === $rule['dow']) {
+                    } elseif (ics_local_iso_weekday($day) === $rule['dow']) {
                         $hit = true;
                         break;
                     }
@@ -633,6 +599,7 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
                         return $found;
                     }
                 }
+                $cur->modify('+1 day');
             }
             return null;
         case 'MONTHLY':
@@ -649,8 +616,10 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
                     }
                 }
             } else {
-                $dom = (int)($r['BYMONTHDAY'] ?? date('j', $startDay));
-                $hit = (int)date('j', $dayMidnight) === $dom;
+                [, , $domStart] = ics_local_ymd($startDay);
+                $dom = (int)($r['BYMONTHDAY'] ?? $domStart);
+                [, , $domDay] = ics_local_ymd($dayMidnight);
+                $hit = $domDay === $dom;
             }
             if (!$hit) {
                 return null;
@@ -658,11 +627,14 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
 
             return (int)($months / $interval) + 1;
         case 'YEARLY':
-            $years = (int)date('Y', $dayMidnight) - (int)date('Y', $startDay);
+            [$y1] = ics_local_ymd($dayMidnight);
+            [$y2] = ics_local_ymd($startDay);
+            $years = $y1 - $y2;
             if ($years < 0 || $years % $interval !== 0) {
                 return null;
             }
-            if (isset($r['BYMONTH']) && (int)date('n', $dayMidnight) !== (int)$r['BYMONTH']) {
+            [, $m1] = ics_local_ymd($dayMidnight);
+            if (isset($r['BYMONTH']) && $m1 !== (int)$r['BYMONTH']) {
                 return null;
             }
             if ($bydayRules !== []) {
@@ -676,8 +648,12 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
                 if (!$hit) {
                     return null;
                 }
-            } elseif (date('md', $dayMidnight) !== date('md', $startDay)) {
-                return null;
+            } else {
+                [, $mStart, $dStart] = ics_local_ymd($startDay);
+                [, $mDay, $dDay] = ics_local_ymd($dayMidnight);
+                if ($mDay !== $mStart || $dDay !== $dStart) {
+                    return null;
+                }
             }
 
             return (int)($years / $interval) + 1;
@@ -690,7 +666,7 @@ function ics_rrule_occurrence_index(array $ev, int $dayMidnight): ?int
 function ics_instance_end_ts(array $ev, int $startTs): int
 {
     if (!empty($ev['all_day'])) {
-        return strtotime('tomorrow', $startTs);
+        return ics_add_local_days(ics_local_midnight($startTs), 1);
     }
     $masterStart = (int)($ev['start'] ?? $startTs);
     $masterEnd = (int)($ev['end'] ?? 0);
@@ -750,25 +726,32 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
     $bydayRules = ics_parse_byday_rules($r['BYDAY'] ?? '');
     $rruleCount = isset($r['COUNT']) ? max(1, (int)$r['COUNT']) : null;
     $lastInstanceDay = ics_rrule_last_instance_day($ev);
+    $startDay = ics_local_midnight($start);
+    $winDayStart = ics_local_midnight($winStart);
+    $winDayEnd = ics_local_midnight($winEnd);
 
-    $tod = $allDay ? 0 : ($start - strtotime('today', $start));
-    for ($day = strtotime('today', $winStart); $day <= $winEnd; $day += 86400) {
+    $cur = (new DateTime('@' . $winDayStart))->setTimezone(calendar_display_timezone());
+    $endDt = (new DateTime('@' . $winDayEnd))->setTimezone(calendar_display_timezone());
+    while ($cur <= $endDt) {
+        $day = $cur->getTimestamp();
         if ($lastInstanceDay !== null && $day > $lastInstanceDay) {
+            $cur->modify('+1 day');
             continue;
         }
-        $ts = $day + $tod;
+        $ts = $allDay ? $day : ics_wall_time_on_day($day, $start);
         if ($ts < $start || $ts > $until || $ts < $winStart || $ts > $winEnd) {
+            $cur->modify('+1 day');
             continue;
         }
         $match = false;
         switch ($freq) {
             case 'DAILY':
-                $daysSince = ics_calendar_days_between(strtotime('today', $start), $day);
+                $daysSince = ics_calendar_days_between($startDay, $day);
                 $match = $daysSince >= 0 && $daysSince % $interval === 0;
                 break;
             case 'WEEKLY':
                 $wkstIso = ics_wkst_to_iso($r['WKST'] ?? ($interval > 1 ? 'SU' : 'MO'));
-                $weeks = ics_weeks_since_start($day, strtotime('today', $start), $wkstIso);
+                $weeks = ics_weeks_since_start($day, $startDay, $wkstIso);
                 if ($weeks >= 0 && $weeks % $interval === 0) {
                     if ($bydayRules !== []) {
                         foreach ($bydayRules as $rule) {
@@ -777,50 +760,55 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
                                     $match = true;
                                     break;
                                 }
-                            } elseif ((int)date('N', $day) === $rule['dow']) {
+                            } elseif (ics_local_iso_weekday($day) === $rule['dow']) {
                                 $match = true;
                                 break;
                             }
                         }
                     } else {
-                        $match = (int)date('N', $day) === (int)date('N', $start);
+                        $match = ics_local_iso_weekday($day) === ics_local_iso_weekday($startDay);
                     }
                 }
                 break;
             case 'MONTHLY':
                 $months = ics_months_between($day, $start);
-                if ($months % $interval !== 0) {
-                    break;
-                }
-                if ($bydayRules !== []) {
-                    foreach ($bydayRules as $rule) {
-                        if (ics_day_matches_byday($day, $rule)) {
-                            $match = true;
-                            break;
+                if ($months % $interval === 0) {
+                    if ($bydayRules !== []) {
+                        foreach ($bydayRules as $rule) {
+                            if (ics_day_matches_byday($day, $rule)) {
+                                $match = true;
+                                break;
+                            }
                         }
+                    } else {
+                        [, , $domStart] = ics_local_ymd($startDay);
+                        $dom = (int)($r['BYMONTHDAY'] ?? $domStart);
+                        [, , $domDay] = ics_local_ymd($day);
+                        $match = $domDay === $dom;
                     }
-                } else {
-                    $dom = (int)($r['BYMONTHDAY'] ?? date('j', $start));
-                    $match = (int)date('j', $day) === $dom;
                 }
                 break;
             case 'YEARLY':
-                $years = (int)date('Y', $day) - (int)date('Y', $start);
-                if ($years % $interval !== 0) {
-                    break;
-                }
-                if (isset($r['BYMONTH']) && (int)date('n', $day) !== (int)$r['BYMONTH']) {
-                    break;
-                }
-                if ($bydayRules !== []) {
-                    foreach ($bydayRules as $rule) {
-                        if (ics_day_matches_byday($day, $rule)) {
-                            $match = true;
-                            break;
-                        }
+                [$yDay] = ics_local_ymd($day);
+                [$yStart] = ics_local_ymd($startDay);
+                $years = $yDay - $yStart;
+                if ($years % $interval === 0) {
+                    [, $mDay] = ics_local_ymd($day);
+                    if (isset($r['BYMONTH']) && $mDay !== (int)$r['BYMONTH']) {
+                        break;
                     }
-                } else {
-                    $match = date('md', $day) === date('md', $start);
+                    if ($bydayRules !== []) {
+                        foreach ($bydayRules as $rule) {
+                            if (ics_day_matches_byday($day, $rule)) {
+                                $match = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        [, $mStart, $dStart] = ics_local_ymd($startDay);
+                        [, $mCur, $dCur] = ics_local_ymd($day);
+                        $match = $mCur === $mStart && $dCur === $dStart;
+                    }
                 }
                 break;
         }
@@ -831,6 +819,7 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
         if ($match) {
             $push($ts);
         }
+        $cur->modify('+1 day');
     }
     return $out;
 }
@@ -887,7 +876,7 @@ function calendar_collect_events(int $winStart, int $winEnd, ?array $feeds = nul
                 $interval = ics_rrule_interval($master);
                 if ($interval > 1) {
                     $ridTs = (int)$ev['recurrence_id'];
-                    $dayStart = strtotime('today', $ridTs);
+                    $dayStart = ics_local_midnight($ridTs);
                     $dayEnd = $dayStart + 86399;
                     if (expand_event($master, $dayStart, $dayEnd, []) === []) {
                         continue;
@@ -1012,19 +1001,21 @@ if (defined('SIGNAGE_CALENDAR_LIB_ONLY') && SIGNAGE_CALENDAR_LIB_ONLY) {
 }
 
 // ── Gather events for today + 6 days ────────────────────────────────────────
-$winStart = strtotime('today');
-$winEnd   = strtotime('today +7 days') - 1;
+$winStart = ics_local_midnight(time());
+$winEnd   = ics_add_local_days($winStart, 7) - 1;
 $events   = calendar_collect_events($winStart, $winEnd);
 
 // Bucket by day
 $days = [];
 for ($d = 0; $d < 7; $d++) {
-    $key = date('Y-m-d', strtotime("+$d day", $winStart));
+    $key = ics_local_date_key(ics_add_local_days($winStart, $d));
     $days[$key] = [];
 }
 foreach ($events as $e) {
-    $key = date('Y-m-d', $e['ts']);
-    if (isset($days[$key])) $days[$key][] = $e;
+    $key = ics_local_date_key($e['ts']);
+    if (isset($days[$key])) {
+        $days[$key][] = $e;
+    }
 }
 
 // ── Trash & recycling (optional — leave TRASH_WEEKDAY unset to hide) ─────────
@@ -1149,14 +1140,14 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
     <?php endif; ?>
     <div class="k">Today</div>
     <div class="today-events">
-    <?php $todayKey = date('Y-m-d');
+    <?php $todayKey = ics_local_date_key(time());
     if (ICS_FEEDS === []) : ?>
       <div class="setup">Add calendar feeds in admin — iCal subscription URLs or WebDAV/CalDAV
         (Nextcloud, Radicale, …) with user/password when required.</div>
     <?php elseif ($days[$todayKey]): foreach (array_slice($days[$todayKey], 0, 7) as $e): ?>
       <div class="tev">
         <span class="who" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
+        <span class="t" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
     <?php endforeach; else: ?>
@@ -1177,7 +1168,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
           <div class="ev" style="border-color:<?= h($hex) ?>">
             <span class="ewho" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
             <?= h($e['summary']) ?>
-            <span class="et"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
+            <span class="et"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
           </div>
         <?php endforeach; ?>
         <?php if (count($list) > 4): ?><div class="more">+<?= count($list) - 4 ?> more</div><?php endif; ?>

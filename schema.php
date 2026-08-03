@@ -41,7 +41,8 @@ function rotation_page_fields(): array
 
 function admin_schema(): array
 {
-    $tz  = ['key' => 'TIMEZONE', 'label' => 'Timezone', 'type' => 'text', 'help' => 'PHP timezone, e.g. America/Detroit'];
+    $tz  = ['key' => 'TIMEZONE', 'label' => 'Timezone', 'type' => 'text',
+             'help' => 'PHP timezone for wall display and ICS parsing (e.g. America/Detroit). Match Outlook/your locale — event times convert from feed TZIDs to this zone.'];
     $ttl = fn($h = '') => ['key' => 'CACHE_TTL', 'label' => 'Cache TTL (seconds)', 'type' => 'number', 'help' => $h ?: 'How long API responses are cached'];
 
     return [

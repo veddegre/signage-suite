@@ -26,7 +26,7 @@ define('TIMEZONE', cfg('glance.TIMEZONE', cfg('calendar.TIMEZONE', 'America/Detr
 define('SIGNAGE_CALENDAR_LIB_ONLY', true);
 require_once __DIR__ . '/calendar.php';
 
-date_default_timezone_set(TIMEZONE);
+calendar_ensure_display_timezone();
 $frameH = signage_frame_height();
 $showClock = signage_show_clock();
 $GLOBALS['diag'] = [];
@@ -36,16 +36,16 @@ $LOC = rotation_screen_location($SCREEN);
 $lat = (float)$LOC['lat'];
 $lon = (float)$LOC['lon'];
 
-$winStart = strtotime('today');
-$winEnd = strtotime('today +2 days') - 1;
+$winStart = ics_local_midnight(time());
+$winEnd = ics_add_local_days($winStart, 2) - 1;
 $events = calendar_collect_events($winStart, $winEnd);
 
-$todayKey = date('Y-m-d');
-$tomorrowKey = date('Y-m-d', strtotime('+1 day'));
+$todayKey = ics_local_date_key(time());
+$tomorrowKey = ics_local_date_key(ics_add_local_days($winStart, 1));
 $todayEvents = [];
 $tomorrowEvents = [];
 foreach ($events as $e) {
-    $key = date('Y-m-d', $e['ts']);
+    $key = ics_local_date_key($e['ts']);
     if ($key === $todayKey) {
         $todayEvents[] = $e;
     } elseif ($key === $tomorrowKey) {
@@ -227,7 +227,7 @@ $compact = $boardH < 1080;
       ?>
       <div class="tev">
         <span class="who" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
+        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
       <?php endforeach; ?>
@@ -246,7 +246,7 @@ $compact = $boardH < 1080;
       ?>
       <div class="tev">
         <span class="who" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : date('g:i A', $e['ts']) ?></span>
+        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
       <?php endforeach; ?>

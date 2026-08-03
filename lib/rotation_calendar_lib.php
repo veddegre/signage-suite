@@ -107,6 +107,7 @@ function rotation_calendar_match_override(string $screen = 'main', ?DateTimeInte
     $winEnd = $winStart + (2 * 86400) - 1;
 
     require_once __DIR__ . '/calendar_lib.php';
+    calendar_ensure_display_timezone();
     if (!defined('SIGNAGE_CALENDAR_LIB_ONLY')) {
         define('SIGNAGE_CALENDAR_LIB_ONLY', true);
     }

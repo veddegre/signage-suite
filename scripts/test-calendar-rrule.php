@@ -14,7 +14,7 @@ function test_expand(array $ev, int $winStart, int $winEnd): array
 {
     $out = [];
     foreach (expand_event($ev, $winStart, $winEnd) as $inst) {
-        $out[] = date('Y-m-d D H:i', $inst['ts']);
+        $out[] = ics_local_date_key($inst['ts']) . ' ' . ics_format_local_time($inst['ts'], 'D H:i');
     }
     return $out;
 }
@@ -186,9 +186,53 @@ if (preg_grep('/2019-08-03/', $gotSpan)) {
     $fail++;
 }
 
+// Outlook-style TZID (quoted Windows name) → local wall time
+$t = ics_time('TZID="Eastern Standard Time"', '20250722T140000');
+if (!$t || ics_format_local_time($t[0], 'G:i') !== '14:00') {
+    echo 'FAIL Outlook TZID: expected 2:00 PM local, got '
+        . ($t ? ics_format_local_time($t[0], 'g:i A') : 'null') . PHP_EOL;
+    $fail++;
+}
+
+// UTC Z suffix converts to local display
+$tUtc = ics_time('', '20250722T180000Z');
+if (!$tUtc || ics_format_local_time($tUtc[0], 'G:i') !== '14:00') {
+    echo 'FAIL UTC Z: expected 2:00 PM America/Detroit, got '
+        . ($tUtc ? ics_format_local_time($tUtc[0], 'g:i A') : 'null') . PHP_EOL;
+    $fail++;
+}
+
+// Recurring 2pm Eastern stays 2pm across DST spring-forward week
+$start = ics_time('TZID=Eastern Standard Time', '20260302T140000')[0] ?? 0;
+$evDst = [
+    'start' => $start,
+    'end' => $start + 3600,
+    'all_day' => false,
+    'summary' => 'Weekly 2pm',
+    'rrule' => parse_rrule('FREQ=WEEKLY;BYDAY=MO'),
+    'exdates' => [], 'exdate_ts' => [], 'uid' => 'dst1',
+    'cal' => '', 'color' => '', 'hex' => '',
+];
+foreach (['2026-03-02', '2026-03-09'] as $ymd) {
+    $dayDt = DateTime::createFromFormat('Y-m-d', $ymd, calendar_display_timezone());
+    $dayStart = $dayDt ? ics_local_midnight($dayDt->getTimestamp()) : 0;
+    $got = test_expand($evDst, $dayStart, $dayStart + 86399);
+    $ok = false;
+    foreach ($got as $line) {
+        if (str_contains($line, '14:00') || str_contains($line, '2:00 PM')) {
+            $ok = true;
+            break;
+        }
+    }
+    if (!$ok) {
+        echo "FAIL DST weekly: $ymd expected 2:00 PM in " . implode(', ', $got) . PHP_EOL;
+        $fail++;
+    }
+}
+
 if ($fail === 0) {
-    echo "OK — all RRULE checks passed\n";
+    echo "OK — timezone checks passed\n";
     exit(0);
 }
-echo "$fail check(s) failed\n";
+echo "$fail total check(s) failed\n";
 exit(1);
