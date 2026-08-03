@@ -127,7 +127,16 @@ function st_country_rows(?array $stats, ?array $byCountry, int $limit = 4): arra
 
 function labelColor(string $l): string
 {
-    return ['bot'=>'#ff5d5d','suspicious'=>'#ffb347','uncertain'=>'#8aa0c0','human'=>'#39c46d'][strtolower($l)] ?? '#8aa0c0';
+    require_once dirname(__DIR__, 2) . '/lib/signage_theme_lib.php';
+    $preset = signage_theme_preset(signage_active_theme_key()) ?? signage_theme_preset('lake_night') ?? [];
+
+    return match (strtolower($l)) {
+        'bot' => (string)($preset['bad'] ?? '#ff5d5d'),
+        'suspicious' => (string)($preset['warn'] ?? '#ffb347'),
+        'uncertain' => (string)($preset['mist'] ?? '#8aa0c0'),
+        'human' => (string)($preset['ok'] ?? '#39c46d'),
+        default => (string)($preset['mist'] ?? '#8aa0c0'),
+    };
 }
 
 $configured = ST_EXPORT_TOKEN !== 'PUT-YOUR-EXPORT-API-TOKEN-HERE'
@@ -145,10 +154,10 @@ $total      = (int)($stats['total_events'] ?? $stats['total'] ?? 0);
 $uniqueIps  = (int)($stats['unique_ips'] ?? 0);
 $uniqueToks = (int)($stats['unique_tokens'] ?? 0);
 $labels = [
-    'bot'        => ['Bot',        (int)($stats['bot_events'] ?? 0),        '#ff5d5d'],
-    'suspicious' => ['Suspicious', (int)($stats['suspicious_events'] ?? 0), '#ffb347'],
-    'uncertain'  => ['Uncertain',  (int)($stats['uncertain_events'] ?? 0),  '#8aa0c0'],
-    'human'      => ['Human',      (int)($stats['human_events'] ?? 0),      '#39c46d'],
+    'bot'        => ['Bot',        (int)($stats['bot_events'] ?? 0),        labelColor('bot')],
+    'suspicious' => ['Suspicious', (int)($stats['suspicious_events'] ?? 0), labelColor('suspicious')],
+    'uncertain'  => ['Uncertain',  (int)($stats['uncertain_events'] ?? 0),  labelColor('uncertain')],
+    'human'      => ['Human',      (int)($stats['human_events'] ?? 0),      labelColor('human')],
 ];
 $labelMax = max(1, max(array_values(array_map(fn($l) => $l[1], $labels))));
 $topCountries = st_country_rows($stats, $byCountry, 4);

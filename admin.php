@@ -5110,7 +5110,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                       <span><?= h(slide_schedule_summary($slideMeta)) ?></span>
                     <?php endif; ?>
                     <div class="rotation-card-actions">
-                      <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                      <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(signage_rotation_page_preview_url($purl, $screenKey)) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
                     </div>
                   </div>
                 </div>
@@ -5198,7 +5198,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                       <span class="pill">Group: <?= h((string)$photoMeta['group']) ?></span>
                     <?php endif; ?>
                     <div class="rotation-card-actions">
-                      <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                      <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(signage_rotation_page_preview_url($purl, $screenKey)) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
                     </div>
                   </div>
                 </div>
@@ -5228,7 +5228,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     <span class="pill play-proof" title="Proof of play"><?= h($pageProof) ?></span>
                   <?php endif; ?>
                   <?php if ($purl !== ''): ?>
-                  <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
+                  <a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h(signage_rotation_page_preview_url($purl, $screenKey)) ?>" target="_blank" rel="noopener" data-rotation-preview>Preview</a>
                   <?php endif; ?>
                   <button type="button" class="rowdel" onclick="removeRotationCard(this, '<?= h($deckId) ?>')" title="Remove">×</button>
                 </div>
@@ -7319,6 +7319,30 @@ $adminPreviewTheme = signage_theme_for_screen($adminPreviewScreen);
 const RSS_PREVIEW_SUFFIX = <?= json_encode(
     signage_board_rotation_query($adminPreviewScreen, $adminPreviewTheme, signage_ticker_enabled())
 ) ?>;
+
+function rotationPreviewUrl(url) {
+  url = (url || '').trim();
+  if (!url || /^https?:\/\//i.test(url) || !/\.php(?:[?#]|$)/i.test(url)) return url;
+  let frag = '';
+  const hash = url.indexOf('#');
+  if (hash >= 0) {
+    frag = url.slice(hash);
+    url = url.slice(0, hash);
+  }
+  let base = url;
+  const q = url.indexOf('?');
+  if (q >= 0) {
+    base = url.slice(0, q);
+    const params = new URLSearchParams(url.slice(q + 1));
+    ['noticker', 'theme', 'screen', 'safebottom', 'clock', 'settle', 'r'].forEach(function (k) {
+      params.delete(k);
+    });
+    const rest = params.toString();
+    url = base + (rest ? '?' + rest : '');
+  }
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + RSS_PREVIEW_SUFFIX + frag;
+}
 
 function rssPreviewUrl(key) {
   key = (key || '').replace(/[^a-z0-9_\-]/gi, '');
@@ -10638,7 +10662,7 @@ function bindRotationCard(card, deck) {
     if (labelEl) labelEl.textContent = rotationLabelFromUrl(u);
     if (codeEl) codeEl.textContent = u || 'board URL';
     if (preview) {
-      if (u) { preview.href = u; preview.style.display = ''; }
+      if (u) { preview.href = rotationPreviewUrl(u); preview.style.display = ''; }
       else { preview.style.display = 'none'; }
     } else if (u) {
       let actions = card.querySelector('.rotation-card-actions');
@@ -10649,7 +10673,7 @@ function bindRotationCard(card, deck) {
         if (meta) meta.appendChild(actions);
       }
       actions.innerHTML = '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="' +
-        u.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" data-rotation-preview>Preview</a>';
+        rotationPreviewUrl(u).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" data-rotation-preview>Preview</a>';
     }
   }
   if (urlInp && !urlInp.dataset.bound) {

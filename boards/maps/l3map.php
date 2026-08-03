@@ -59,15 +59,13 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                  margin-top:6px; white-space:nowrap; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
-              --l3-text:#edf2fb; --l3-muted:#9eb0cc; --l3-accent:#ffb347;
-              --l3-origin:#b388ff; --l3-target:#4dd0e9;
-              --l3-panel:rgba(10,16,28,.92); --l3-border:rgba(148,163,198,.35); }
+  .map-area { flex:1; min-height:0; position:relative;
+              --l3-origin:#b388ff; --l3-target:#4dd0e9; }
   .mapwrap { position:absolute; inset:0; }
   #attackMap { width:100%; height:100%; }
   #attackMap.leaflet-container,
-  #attackMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #attackMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--l3-muted); }
+  #attackMap .leaflet-container { width:100% !important; height:100% !important; }
+  #attackMap .leaflet-control-attribution { font-size:11px; }
   #attackMap .leaflet-control-attribution a { color:var(--l3-muted); }
   .attack-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
 

@@ -76,17 +76,15 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .topbar .sub .infocon.crit { color:var(--crit); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px; color:var(--mist); font-variant-numeric:tabular-nums; }
   .main { min-height:0; display:grid; grid-template-columns:minmax(0,1fr) <?= (int)$sideW ?>px; grid-template-rows:minmax(0,1fr);
-          gap:0; overflow:hidden;
-          --ports-text:#edf2fb; --ports-muted:#9eb0cc; --ports-accent:#ffb347;
-          --ports-panel:rgba(10,16,28,.92); --ports-border:rgba(148,163,198,.35); }
-  .viz { position:relative; background:#0a101a; padding:<?= (int)$vizPad ?>px; min-height:0; min-width:0; overflow:hidden; height:100%; }
+          gap:0; overflow:hidden; }
+  .viz { position:relative; background:var(--map-bg); padding:<?= (int)$vizPad ?>px; min-height:0; min-width:0; overflow:hidden; height:100%; }
   #treemap { width:100%; height:100%; display:block; border-radius:12px; }
   .side { background:var(--ports-panel); border-left:1px solid var(--ports-border); padding:<?= $dense ? '12px 14px 10px' : '16px 18px 14px' ?>;
           display:flex; flex-direction:column; gap:<?= (int)$sideGap ?>px; overflow:hidden; min-height:0; min-width:0;
           color:var(--ports-text); }
   .side .k { font-size:<?= $dense ? 13 : 14 ?>px; letter-spacing:1.6px; text-transform:uppercase; color:var(--ports-muted); flex-shrink:0; }
   .side-rows { flex:1; min-height:0; display:grid; gap:<?= (int)$sideGap ?>px; overflow:hidden; align-content:stretch; }
-  .row { background:rgba(8,14,24,.55); border:1px solid var(--ports-border); border-radius:10px; padding:<?= h($rowPad) ?>;
+  .row { background:color-mix(in srgb, var(--map-panel) 72%, transparent); border:1px solid var(--ports-border); border-radius:10px; padding:<?= h($rowPad) ?>;
          color:var(--ports-text); min-height:0; overflow:hidden; display:flex; flex-direction:column; justify-content:center; }
   .row.hero { border-color:rgba(255,179,71,.5); }
   .row .port { font-family:'IBM Plex Mono',monospace; font-size:<?= (int)$rowPortSz ?>px; color:var(--ports-accent); font-weight:600;
@@ -147,6 +145,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   const RELOAD = <?= max(0, (int)RELOAD_SEC) ?> * 1000;
   const canvas = document.getElementById('treemap');
   const ctx = canvas.getContext('2d');
+  const themeRoot = getComputedStyle(document.documentElement);
+  const mapText = themeRoot.getPropertyValue('--map-text').trim() || '#edf2fb';
+  const mapAccent = themeRoot.getPropertyValue('--map-accent').trim() || '#ffb347';
+  const mapTextSoft = themeRoot.getPropertyValue('--map-muted').trim() || 'rgba(237,242,251,0.92)';
 
   function resize() {
     const r = canvas.parentElement.getBoundingClientRect();
@@ -212,19 +214,19 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       ctx.shadowOffsetY = 1;
 
       if (r.w > 90 && r.h > 50) {
-        ctx.fillStyle = '#edf2fb';
+        ctx.fillStyle = mapText;
         ctx.font = '700 ' + Math.min(42, r.h * 0.38) + 'px "Big Shoulders Display",sans-serif';
         ctx.fillText(String(p.port), r.x + 14, r.y + r.h * 0.38);
         if (p.label && r.h > 64) {
           ctx.font = '600 17px "IBM Plex Sans",sans-serif';
-          ctx.fillStyle = 'rgba(237,242,251,0.92)';
+          ctx.fillStyle = mapTextSoft;
           ctx.fillText(p.label, r.x + 14, r.y + r.h * 0.56);
         }
         ctx.font = '600 ' + Math.min(28, r.h * 0.22) + 'px "IBM Plex Mono",monospace';
-        ctx.fillStyle = '#ffb347';
+        ctx.fillStyle = mapAccent;
         ctx.fillText(formatN(p.records), r.x + 14, r.y + r.h - Math.max(10, Math.min(16, r.h * 0.12)));
       } else if (r.w > 48 && r.h > 32) {
-        ctx.fillStyle = '#edf2fb';
+        ctx.fillStyle = mapText;
         ctx.font = '700 ' + Math.min(26, Math.max(14, r.h * 0.42)) + 'px "Big Shoulders Display",sans-serif';
         ctx.fillText(String(p.port), r.x + 8, r.y + r.h * 0.42);
         if (p.label && r.w > 72 && r.h > 44) {

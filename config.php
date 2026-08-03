@@ -200,20 +200,24 @@ function signage_theme_css(): string
     return signage_theme_css_block($key)
         . signage_theme_inset_surface_css()
         . signage_theme_board_shell_css()
+        . signage_theme_map_board_css()
         . signage_theme_sun_widget_css();
 }
 
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */
 function signage_board_preview_url(string $file): string
 {
-    require_once __DIR__ . '/lib/screen_scope_lib.php';
     require_once __DIR__ . '/lib/signage_theme_lib.php';
-    $screen = signage_preview_screen_key();
-    $theme = signage_theme_for_screen($screen);
-    $sep = str_contains($file, '?') ? '&' : '?';
-    $qs = signage_board_rotation_query($screen, $theme, signage_ticker_enabled());
 
-    return $file . $sep . $qs;
+    return signage_board_url_with_rotation_query($file);
+}
+
+/** Themed preview URL for a rotation playlist entry on a given display. */
+function signage_rotation_page_preview_url(string $url, string $screen = 'main'): string
+{
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
+
+    return signage_board_url_with_rotation_query($url, $screen);
 }
 
 /** In-flow attribution line — place inside .board, not as an absolute body overlay. */

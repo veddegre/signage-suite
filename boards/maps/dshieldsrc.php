@@ -59,13 +59,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .topbar .sub .infocon.crit { color:var(--crit); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
-              --src-text:#edf2fb; --src-muted:#9eb0cc; --src-accent:#7ec8ff;
-              --src-panel:rgba(10,16,28,.92); --src-border:rgba(148,163,198,.35); }
+  .map-area { flex:1; min-height:0; position:relative; }
   .mapwrap { position:absolute; inset:0; }
   #heatMap { width:100%; height:100%; }
-  #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--src-muted); }
+  #heatMap .leaflet-container { width:100% !important; height:100% !important; }
+  #heatMap .leaflet-control-attribution { font-size:11px; }
   #heatMap .leaflet-control-attribution a { color:var(--src-muted); }
   .heat-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
   .side { position:absolute; top:<?= $boardH < 1080 ? 16 : 20 ?>px; right:<?= $boardH < 1080 ? 20 : 28 ?>px;

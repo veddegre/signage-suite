@@ -624,7 +624,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     let qs = 'noticker=1&settle=' + SETTLE;
     if (SHOW_TICKER) qs += '&safebottom=' + TICKER_H;
     if (boardIsLocalSignage(p.url)) {
-      if (SCREEN && SCREEN !== 'main') qs += '&screen=' + encodeURIComponent(SCREEN);
+      if (SCREEN) qs += '&screen=' + encodeURIComponent(SCREEN);
       if (THEME) qs += '&theme=' + encodeURIComponent(THEME);
     }
     if (!SHOW_CLOCK) qs += '&clock=0';

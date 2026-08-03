@@ -60,15 +60,15 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
                  margin-top:6px; white-space:nowrap; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
+  .map-area { flex:1; min-height:0; position:relative;
               --l7-text:var(--map-text); --l7-muted:var(--map-muted); --l7-accent:var(--map-accent);
               --l7-origin:#b388ff; --l7-target:#4dd0e9;
               --l7-panel:var(--map-panel); --l7-border:var(--map-border); }
   .mapwrap { position:absolute; inset:0; }
   #attackMap { width:100%; height:100%; }
   #attackMap.leaflet-container,
-  #attackMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #attackMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.85); color:var(--mist); }
+  #attackMap .leaflet-container { width:100% !important; height:100% !important; }
+  #attackMap .leaflet-control-attribution { font-size:11px; }
   #attackMap .leaflet-control-attribution a { color:var(--mist); }
   .attack-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
 

@@ -65,14 +65,12 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .topbar .sub .infocon.crit { color:var(--crit); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $boardH < 1080 ? 44 : 52 ?>px;
            color:var(--mist); font-variant-numeric:tabular-nums; flex-shrink:0; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
-              --dshield-text:#edf2fb; --dshield-muted:#9eb0cc; --dshield-accent:#ffb347;
-              --dshield-panel:rgba(10,16,28,.92); --dshield-border:rgba(148,163,198,.35); }
+  .map-area { flex:1; min-height:0; position:relative; }
   .mapwrap { position:absolute; inset:0; }
   #heatMap { width:100%; height:100%; }
   #heatMap.leaflet-container,
-  #heatMap .leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--dshield-muted); }
+  #heatMap .leaflet-container { width:100% !important; height:100% !important; }
+  #heatMap .leaflet-control-attribution { font-size:11px; }
   #heatMap .leaflet-control-attribution a { color:var(--dshield-muted); }
   .heat-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
 

@@ -47,11 +47,12 @@ if ($feedKey === null || !isset(FEEDS[$feedKey])) {
 <meta charset="UTF-8">
 <title>RSS — Not available</title>
 <style>
+  <?= signage_theme_css() ?>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#0c1422;
-              color:#8aa0c0; font-family:system-ui,sans-serif; cursor:none;
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
+              color:var(--mist); font-family:system-ui,sans-serif; cursor:none;
               display:flex; align-items:center; justify-content:center; text-align:center; }
-  h1 { font-size:58px; color:#edf2fb; margin-bottom:16px; }
+  h1 { font-size:58px; color:var(--snow); margin-bottom:16px; }
   p { font-size:28px; max-width:900px; line-height:1.5; }
 </style>
 </head>

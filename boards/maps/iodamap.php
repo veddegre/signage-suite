@@ -64,14 +64,11 @@ function iodamap_format_score(float $score): string
   .topbar h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:54px; line-height:1; }
   .topbar .sub { display:block; font-size:22px; color:var(--beacon); margin-top:6px; }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:52px; color:var(--mist); font-variant-numeric:tabular-nums; }
-  .map-area { flex:1; min-height:0; position:relative; background:#080e18;
-              /* Map UI sits on a dark basemap — do not inherit light-theme text tokens. */
-              --ioda-text:#edf2fb; --ioda-muted:#9eb0cc; --ioda-accent:#d9a7ff;
-              --ioda-warn:#ffb347; --ioda-panel:rgba(10,16,28,.92); --ioda-panel-border:rgba(148,163,198,.35); }
+  .map-area { flex:1; min-height:0; position:relative; }
   .mapwrap { position:absolute; inset:0; }
   #heatMap { width:100%; height:100%; }
-  #heatMap.leaflet-container { width:100% !important; height:100% !important; background:#080e18; }
-  #heatMap .leaflet-control-attribution { font-size:11px; background:rgba(8,14,24,.92); color:var(--ioda-muted); }
+  #heatMap.leaflet-container { width:100% !important; height:100% !important; }
+  #heatMap .leaflet-control-attribution { font-size:11px; }
   #heatMap .leaflet-control-attribution a { color:var(--ioda-muted); }
   .heat-canvas { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
   .side { position:absolute; top:20px; right:28px; width:400px; max-height:calc(100% - 88px); z-index:600;

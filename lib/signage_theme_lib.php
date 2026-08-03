@@ -355,11 +355,17 @@ function signage_theme_css_block(string $key): string
         '--code-bg' => 'color-mix(in srgb, var(--panel-dim) 65%, var(--lake-night))',
         '--inset-label' => 'color-mix(in srgb, var(--snow) 62%, var(--mist))',
         '--inset-muted' => 'color-mix(in srgb, var(--snow) 78%, var(--mist))',
-        '--map-text' => '#edf2fb',
-        '--map-muted' => '#9eb0cc',
+        '--map-text' => $preset['snow'],
+        '--map-muted' => $preset['mist'],
         '--map-accent' => $mapAccent,
-        '--map-panel' => 'rgba(10,16,28,.92)',
-        '--map-border' => 'rgba(148,163,198,.35)',
+        '--map-panel' => 'color-mix(in srgb, var(--harbor) 94%, var(--lake-night))',
+        '--map-border' => 'color-mix(in srgb, var(--hairline) 88%, transparent)',
+        '--map-bg' => 'color-mix(in srgb, var(--lake-night) 90%, #000)',
+        '--crit' => $preset['bad'],
+        '--alert' => $preset['bad'],
+        '--high' => $preset['warn'],
+        '--med' => $preset['gold'],
+        '--low' => $preset['ok'],
         '--sun-track' => signage_theme_sun_track_color($preset),
         '--sun-trail' => $preset['beacon'],
         '--sun-dot-ring' => $preset['snow'],
@@ -397,6 +403,30 @@ function signage_theme_inset_surface_css(): string
   .board .host{background:var(--tile-bg); border-color:var(--tile-border);}
   .board .track,.board .bar .track,.board .lrow .track,.board .prow .track,.board .meter .track,.board .cloudbar .track{
     background:var(--tile-bg); border-color:var(--tile-border);}
+CSS;
+}
+
+/** Map / treemap boards — alias legacy per-board vars to active theme tokens. */
+function signage_theme_map_board_css(): string
+{
+    return <<<'CSS'
+  .map-area,.main{
+    --dshield-text:var(--map-text); --dshield-muted:var(--map-muted); --dshield-accent:var(--map-accent);
+    --dshield-panel:var(--map-panel); --dshield-border:var(--map-border);
+    --src-text:var(--map-text); --src-muted:var(--map-muted); --src-accent:var(--map-accent);
+    --src-panel:var(--map-panel); --src-border:var(--map-border);
+    --ports-text:var(--map-text); --ports-muted:var(--map-muted); --ports-accent:var(--map-accent);
+    --ports-panel:var(--map-panel); --ports-border:var(--map-border);
+    --l3-text:var(--map-text); --l3-muted:var(--map-muted); --l3-accent:var(--map-accent);
+    --l3-panel:var(--map-panel); --l3-border:var(--map-border);
+    --ioda-text:var(--map-text); --ioda-muted:var(--map-muted); --ioda-accent:var(--map-accent);
+    --ioda-warn:var(--warn); --ioda-panel:var(--map-panel); --ioda-panel-border:var(--map-border);}
+  .map-area,.ports-main,.main{background:var(--map-bg);}
+  #heatMap.leaflet-container,#attackMap.leaflet-container,#attackMap .leaflet-container{
+    background:var(--map-bg)!important;}
+  .leaflet-control-attribution{background:color-mix(in srgb,var(--map-panel) 96%, transparent)!important;
+    color:var(--map-muted)!important;}
+  .leaflet-control-attribution a{color:var(--map-muted)!important;}
 CSS;
 }
 
@@ -585,6 +615,67 @@ function admin_rotation_theme_picker(string $screenKey, string $savedTheme): voi
     <?php
 }
 
+/** Strip rotation/kiosk query params before re-appending a fresh set. */
+function signage_board_url_strip_rotation_query(string $url): string
+{
+    $url = trim($url);
+    if ($url === '' || !signage_board_url_is_local($url)) {
+        return $url;
+    }
+    $qPos = strpos($url, '?');
+    if ($qPos === false) {
+        return $url;
+    }
+    $base = substr($url, 0, $qPos);
+    $tail = substr($url, $qPos + 1);
+    $frag = '';
+    $hashPos = strpos($tail, '#');
+    if ($hashPos !== false) {
+        $frag = substr($tail, $hashPos);
+        $tail = substr($tail, 0, $hashPos);
+    }
+    parse_str($tail, $params);
+    if (!is_array($params)) {
+        $params = [];
+    }
+    foreach (['noticker', 'theme', 'screen', 'safebottom', 'clock', 'settle', 'r'] as $key) {
+        unset($params[$key]);
+    }
+    $query = http_build_query($params);
+
+    return $base . ($query !== '' ? '?' . $query : '') . $frag;
+}
+
+/** Append display theme + kiosk params to a local board URL (admin preview, rotation links). */
+function signage_board_url_with_rotation_query(
+    string $url,
+    ?string $screen = null,
+    ?string $themeKey = null,
+    ?bool $includeTickerSafeBottom = null
+): string {
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+    if (!signage_board_url_is_local($url)) {
+        return $url;
+    }
+    require_once __DIR__ . '/screen_scope_lib.php';
+    if ($screen === null) {
+        $screen = signage_preview_screen_key();
+    }
+    if ($themeKey === null) {
+        $themeKey = signage_theme_for_screen($screen);
+    }
+    if ($includeTickerSafeBottom === null) {
+        $includeTickerSafeBottom = signage_ticker_enabled();
+    }
+    $url = signage_board_url_strip_rotation_query($url);
+    $sep = str_contains($url, '?') ? '&' : '?';
+
+    return $url . $sep . signage_board_rotation_query($screen, $themeKey, $includeTickerSafeBottom);
+}
+
 /** True for relative .php board URLs (not external http(s) embeds). */
 function signage_board_url_is_local(string $url): bool
 {
@@ -596,7 +687,7 @@ function signage_board_url_is_local(string $url): bool
         return false;
     }
 
-    return (bool)preg_match('#\.php(?:[?#]|$)#i', $url);
+    return (bool)preg_match('~\.php(?:[?#]|$)~i', $url);
 }
 
 /** Merge theme (and other kiosk params) onto a board URL for rotation iframes. */
@@ -608,7 +699,7 @@ function signage_board_rotation_query(string $screen, string $themeKey, bool $in
         $qs .= '&safebottom=' . (int)SIGNAGE_TICKER_H;
     }
     $screen = rotation_normalize_screen_key($screen);
-    if ($screen !== '' && $screen !== 'main') {
+    if ($screen !== '') {
         $qs .= '&screen=' . rawurlencode($screen);
     }
     $themeKey = signage_normalize_theme_key($themeKey);
