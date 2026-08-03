@@ -15,12 +15,16 @@ if (count($presets) !== 5) {
     fwrite(STDERR, 'FAIL: expected 5 curated signage themes, got ' . count($presets) . "\n");
     $fail++;
 }
-if (isset($presets['frost'])) {
-    fwrite(STDERR, "FAIL: frost must not be a curated theme\n");
+if (!isset($presets['ember'], $presets['forest'], $presets['frost'])) {
+    fwrite(STDERR, "FAIL: curated presets must include ember, forest, frost\n");
+    $fail++;
+}
+if (isset($presets['beacon_bar']) || isset($presets['harbor_glow']) || isset($presets['slate'])) {
+    fwrite(STDERR, "FAIL: retired themes must not appear in curated picker\n");
     $fail++;
 }
 $requiredTokens = ['--tile-bg', '--data-accent', '--inset-muted', '--map-accent'];
-foreach (['lake_night', 'gvsu_lakers', 'slate'] as $key) {
+foreach (['lake_night', 'gvsu_lakers', 'ember', 'forest', 'frost'] as $key) {
     $css = signage_theme_css_block($key);
     foreach ($requiredTokens as $tok) {
         if (!str_contains($css, $tok . ':')) {

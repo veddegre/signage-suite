@@ -654,26 +654,32 @@ function slide_theme_background_presets_all(): array
             'thumb' => 'celebration.png',
         ],
         'frost' => [
-            'label' => 'Frost (light)',
+            'label' => 'Frost',
             'light' => true,
             'title' => '#0c1422',
-            'subtitle' => '#b45309',
-            'body' => '#26344d',
-            'footer' => '#526580',
+            'subtitle' => '#2563eb',
+            'highlight' => '#2563eb',
+            'signage_beacon' => '#2563eb',
+            'body' => '#526580',
+            'footer' => '#6a7890',
             'bg' => ['type' => 'linear', 'angle' => 180, 'stops' => [
-                [0, '#edf2fb'], [1, '#c8d4e8'],
+                [0, '#edf2fb'], [1, '#d8e4f4'],
             ]],
             'thumb' => 'frost.png',
         ],
         'forest' => [
             'label' => 'Forest',
-            'title' => '#edf2fb',
-            'subtitle' => '#7dd3a8',
-            'body' => '#8aa0c0',
-            'footer' => '#8aa0c0',
+            'title' => '#e8f5ec',
+            'subtitle' => '#6ee7a8',
+            'highlight' => '#6ee7a8',
+            'signage_page' => '#0f1a14',
+            'signage_beacon' => '#6ee7a8',
+            'body' => '#8aab96',
+            'footer' => '#6a8a76',
             'bg' => ['type' => 'linear', 'angle' => 160, 'stops' => [
-                [0, '#0f1f18'], [0.5, '#0c1422'], [1, '#141f33'],
+                [0, '#0f1f18'], [0.5, '#142820'], [1, '#0f1a14'],
             ]],
+            'accent' => ['type' => 'glow', 'color' => '#6ee7a8', 'opacity' => 0.14],
             'thumb' => 'forest.png',
         ],
         'sky_glow' => [
@@ -778,14 +784,17 @@ function slide_theme_background_presets_all(): array
         ],
         'ember' => [
             'label' => 'Ember',
-            'title' => '#edf2fb',
+            'title' => '#f5ebe4',
             'subtitle' => '#ff7a45',
-            'body' => '#c8a090',
-            'footer' => '#8aa0c0',
+            'highlight' => '#ff7a45',
+            'signage_page' => '#1a1210',
+            'signage_beacon' => '#ff7a45',
+            'body' => '#b8a090',
+            'footer' => '#8a7870',
             'bg' => ['type' => 'radial', 'cx' => 0.5, 'cy' => 1.05, 'r' => 1.15, 'stops' => [
-                [0, '#4a1808'], [0.35, '#1f1520'], [1, '#0c1422'],
+                [0, '#4a1808'], [0.35, '#2a1814'], [1, '#1a1210'],
             ]],
-            'accent' => ['type' => 'glow', 'color' => '#ff7a45', 'opacity' => 0.22],
+            'accent' => ['type' => 'bar', 'color' => '#ff7a45', 'width' => 12],
             'thumb' => 'ember.png',
         ],
     ];
@@ -795,11 +804,11 @@ function slide_theme_background_presets_all(): array
 function slide_curated_theme_keys(): array
 {
     return [
-        'beacon_bar',
+        'ember',
+        'forest',
+        'frost',
         'gvsu_lakers',
-        'harbor_glow',
         'lake_night',
-        'slate',
     ];
 }
 
@@ -1460,12 +1469,50 @@ function slide_background_ensure_assets(): void
         if (is_file($path)) {
             continue;
         }
-        $im = slide_background_gd_image($preset);
-        if (!$im) {
+        slide_background_write_png($preset, $path);
+    }
+}
+
+/** Regenerate slide_backgrounds/*.png for the given theme keys (or all curated). */
+function slide_background_regenerate_themes(?array $keys = null): int
+{
+    if (!function_exists('imagepng')) {
+        return 0;
+    }
+    $dir = slide_backgrounds_dir();
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+        return 0;
+    }
+    $all = slide_theme_background_presets_all();
+    if ($keys === null) {
+        $keys = slide_curated_theme_keys();
+    }
+    $written = 0;
+    foreach ($keys as $id) {
+        $id = strtolower(preg_replace('/[^a-z0-9_]/', '', (string)$id) ?? '');
+        if ($id === '' || !isset($all[$id]) || !is_array($all[$id])) {
             continue;
         }
-        imagepng($im, $path, 6);
+        $preset = $all[$id];
+        $name = $preset['thumb'] ?? ($id . '.png');
+        if (slide_background_write_png($preset, $dir . '/' . $name)) {
+            $written++;
+        }
     }
+
+    return $written;
+}
+
+function slide_background_write_png(array $preset, string $path): bool
+{
+    $im = slide_background_gd_image($preset);
+    if (!$im) {
+        return false;
+    }
+    $ok = imagepng($im, $path, 6);
+    imagedestroy($im);
+
+    return $ok;
 }
 
 function slides_timezone(): string
