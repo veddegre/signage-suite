@@ -45,7 +45,7 @@ if ($allPages !== []) {
         }
         $groups = zabbix_host_groups_string($row['host_groups'] ?? '');
         echo '  ' . $key . ': ' . (string)($row['title'] ?? '') . ' — groups: '
-            . ($groups !== '' ? $groups : '(empty)') . "\n";
+            . ($groups !== '' ? $groups : '(all hosts)') . "\n";
     }
     echo "\n";
 }
@@ -56,7 +56,7 @@ $parsed = zabbix_parse_host_groups($rawGroups);
 
 echo "Page key: {$pageKey}\n";
 echo 'Title: ' . (string)($page['title'] ?? '') . "\n";
-echo 'Host groups (stored): ' . ($rawGroups !== '' ? $rawGroups : '(empty)') . "\n";
+echo 'Host groups (stored): ' . ($rawGroups !== '' ? $rawGroups : '(all hosts)') . "\n";
 echo 'Parsed: ' . ($parsed !== [] ? implode(' | ', $parsed) : '(none)') . "\n\n";
 
 if (!zabbix_configured()) {
@@ -78,31 +78,33 @@ if ($timing) {
     echo "Latency: {$ms} ms\n\n";
 }
 
-if ($parsed === []) {
-    echo "No host groups on this page — pick a page key from the list above.\n";
-    exit(1);
-}
-
 $error = null;
-$ids = zabbix_resolve_group_ids($parsed, $error);
-if ($ids === []) {
-    echo 'Resolve failed: ' . ($error ?: 'unknown error') . "\n";
-    exit(1);
-}
+$groupIds = [];
+if ($parsed === []) {
+    echo "Scope: all hosts visible to the API token\n\n";
+} else {
+    $groupIds = zabbix_resolve_group_ids($parsed, $error);
+    if ($groupIds === []) {
+        echo 'Resolve failed: ' . ($error ?: 'unknown error') . "\n";
+        exit(1);
+    }
 
-echo 'Resolved group IDs: ' . implode(', ', $ids) . "\n";
+    echo 'Resolved group IDs: ' . implode(', ', $groupIds) . "\n\n";
+}
 
 $minSeverity = max(0, min(5, (int)($page['min_severity'] ?? 2)));
 $hideAck = !empty($page['hide_acknowledged']);
 $problemParams = [
     'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'r_eventid', 'objectid', 'source'],
-    'groupids' => $ids,
     'severities' => zabbix_severities_from_min($minSeverity),
     'recent' => false,
     'symptom' => false,
     'limit' => 50,
     'suppressed' => false,
 ];
+if ($groupIds !== []) {
+    $problemParams['groupids'] = $groupIds;
+}
 if ($hideAck) {
     $problemParams['acknowledged'] = false;
 }

@@ -5595,7 +5595,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <input type="text" name="PAGES[<?= h($pk) ?>][host_groups]"
                        value="<?= h(zabbix_host_groups_string($pg['host_groups'] ?? '')) ?>"
                        placeholder="Linux servers, Network gear">
-                <div class="help">Exact Zabbix host group names, comma-separated. Use quotes when a name contains a comma, e.g. <code>"Linux servers", Network gear</code>.</div>
+                <div class="help">Exact Zabbix host group names, comma-separated — leave blank for <strong>all hosts</strong> the API token can read. Use quotes when a name contains a comma, e.g. <code>"Linux servers", Network gear</code>.</div>
               </div>
               <div class="field">
                 <label class="mini">Minimum severity</label>
@@ -11010,7 +11010,7 @@ function addZabbixPage() {
     entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
     '<div class="field-grid" style="margin-bottom:12px">' +
       '<div class="field span-2"><label class="mini">Host groups</label>' +
-        '<input type="text" name="PAGES[' + pageKey + '][host_groups]" placeholder="Linux servers, Network gear">' +
+        '<input type="text" name="PAGES[' + pageKey + '][host_groups]" placeholder="Leave blank for all hosts">' +
         '<div class="help">Exact Zabbix host group names, comma-separated.</div></div>' +
       '<div class="field"><label class="mini">Minimum severity</label>' +
         '<select name="PAGES[' + pageKey + '][min_severity]">' + zabbixSeverityOptionsHtml(2) + '</select></div>' +

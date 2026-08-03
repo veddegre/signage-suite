@@ -577,7 +577,7 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 
 | Setting | Purpose |
 |---------|---------|
-| Host groups | Comma-separated **exact** Zabbix host group names |
+| Host groups | Comma-separated **exact** Zabbix host group names — **leave blank for all hosts** the API token can read |
 | Minimum severity | Not classified through Disaster |
 | Max problems / Max hosts | List limits (defaults 12 / 24) |
 | Hide acknowledged | Omit acknowledged problems from the wall |

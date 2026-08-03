@@ -940,11 +940,7 @@ function zabbix_fetch_wall_data(array $page): array
     }
 
     $groupNames = zabbix_parse_host_groups((string)($page['host_groups'] ?? ''));
-    if ($groupNames === []) {
-        $empty['error'] = 'No host groups configured for this page';
-
-        return $empty;
-    }
+    $allHosts = $groupNames === [];
 
     $minSeverity = max(0, min(5, (int)($page['min_severity'] ?? 2)));
     $maxProblems = max(1, min(50, (int)($page['max_problems'] ?? 12)));
@@ -956,7 +952,7 @@ function zabbix_fetch_wall_data(array $page): array
         @mkdir($cacheDir, 0775, true);
     }
     $cacheKey = 'zabbix_visible_' . md5(json_encode([
-        $groupNames,
+        $allHosts ? '__all__' : $groupNames,
         $minSeverity,
         $maxProblems,
         $maxHosts,
@@ -972,23 +968,28 @@ function zabbix_fetch_wall_data(array $page): array
     }
 
     $error = null;
-    $groupIds = zabbix_cached_group_ids($groupNames, $error);
-    if ($groupIds === []) {
-        $empty['error'] = $error ?: 'Host group(s) not found: ' . implode(', ', $groupNames);
-        $empty['group_names'] = $groupNames;
+    $groupIds = [];
+    if (!$allHosts) {
+        $groupIds = zabbix_cached_group_ids($groupNames, $error);
+        if ($groupIds === []) {
+            $empty['error'] = $error ?: 'Host group(s) not found: ' . implode(', ', $groupNames);
+            $empty['group_names'] = $groupNames;
 
-        return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
+            return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
+        }
     }
 
     $problemParams = [
         'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata', 'r_eventid', 'objectid', 'source'],
-        'groupids' => $groupIds,
         'severities' => zabbix_severities_from_min($minSeverity),
         'recent' => false,
         'symptom' => false,
         'limit' => $maxProblems,
         'suppressed' => false,
     ];
+    if ($groupIds !== []) {
+        $problemParams['groupids'] = $groupIds;
+    }
     if ($hideAck) {
         $problemParams['acknowledged'] = false;
     }
@@ -1006,12 +1007,16 @@ function zabbix_fetch_wall_data(array $page): array
     $problems = zabbix_attach_problem_hosts($problems, $error);
     $problems = zabbix_sort_problems($problems);
 
-    $hosts = zabbix_api_call('host.get', [
+    $hostParams = [
         'output' => ['hostid', 'name', 'status'],
-        'groupids' => $groupIds,
         'sortfield' => 'name',
         'limit' => $maxHosts,
-    ], $error);
+    ];
+    if ($groupIds !== []) {
+        $hostParams['groupids'] = $groupIds;
+    }
+
+    $hosts = zabbix_api_call('host.get', $hostParams, $error);
     if (!is_array($hosts)) {
         $empty['error'] = $error ?: 'host.get failed';
         $empty['group_names'] = $groupNames;
@@ -1063,6 +1068,7 @@ function zabbix_fetch_wall_data(array $page): array
     $out = [
         'ok' => true,
         'error' => null,
+        'all_hosts' => $allHosts,
         'group_names' => $groupNames,
         'group_ids' => $groupIds,
         'problems' => $problems,

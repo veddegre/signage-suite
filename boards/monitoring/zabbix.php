@@ -27,7 +27,9 @@ $data = $pageOff
     ? ['ok' => false, 'error' => 'This page is marked Off wall in admin.', 'group_names' => [], 'problems' => [], 'hosts' => [], 'counts' => []]
     : zabbix_fetch_wall_data($page);
 $cacheTtl = zabbix_cache_ttl();
-$groupLabel = implode(', ', $data['group_names'] ?? []);
+$allHostsScope = !empty($data['all_hosts']);
+$groupLabel = $allHostsScope ? 'All hosts' : implode(', ', $data['group_names'] ?? []);
+$scopePhrase = $allHostsScope ? 'in scope' : 'in selected groups';
 $problemCount = count($data['problems'] ?? []);
 $hostCount = count($data['hosts'] ?? []);
 $hostsWithProblems = count(array_filter($data['hosts'] ?? [], static fn($h) => is_array($h) && !empty($h['problem'])));
@@ -135,7 +137,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     </div>
   <?php else: ?>
     <div class="summary">
-      <div class="pill">Groups <strong><?= h($groupLabel !== '' ? $groupLabel : '—') ?></strong></div>
+      <div class="pill">Scope <strong><?= h($groupLabel !== '' ? $groupLabel : '—') ?></strong></div>
       <div class="pill">Problems <strong><?= (int)$problemCount ?></strong></div>
       <div class="pill">Hosts <strong><?= (int)$hostsWithProblems ?> / <?= (int)$hostCount ?></strong> with issues</div>
       <?php foreach (array_reverse(zabbix_severity_options(), true) as $sev):
@@ -151,7 +153,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         <div class="k">Active problems</div>
         <div class="body">
           <?php if ($problemCount === 0): ?>
-            <div class="nodata">No active problems at <?= h($minSevLabel) ?>+ in selected groups.</div>
+            <div class="nodata">No active problems at <?= h($minSevLabel) ?>+ <?= h($scopePhrase) ?>.</div>
           <?php else: ?>
             <div class="problems">
               <?php foreach ($data['problems'] as $problem):
@@ -185,7 +187,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         <div class="k">Hosts in scope</div>
         <div class="body">
           <?php if ($hostCount === 0): ?>
-            <div class="nodata">No hosts in selected group(s).</div>
+            <div class="nodata">No hosts <?= h($allHostsScope ? 'visible to the API token' : 'in selected group(s)') ?>.</div>
           <?php else: ?>
             <div class="hosts">
               <?php foreach ($data['hosts'] as $host):
