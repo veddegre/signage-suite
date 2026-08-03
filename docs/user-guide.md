@@ -104,7 +104,7 @@ Same as operator, plus admin access to **Homelab**, **UniFi**, **SignalTrace**, 
 5. **Rotation** — create display keys (`main`, `lobby`, …); build playlists.
 6. **Users** — create operator/infrastructure accounts; assign displays.
 7. **Integrations** — configure API credentials per board (Zabbix, TDX, Grafana, …).
-8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)).
+8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)). If kiosks connect through a reverse proxy, set **Security → Trusted reverse proxies** ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)).
 9. **SSO** (optional) — [admin-and-security.md → SSO](admin-and-security.md#sso-setup-entra-id--authentik).
 
 ### Day-to-day tasks

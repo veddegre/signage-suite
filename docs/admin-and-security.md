@@ -43,7 +43,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 | **Account** | Change local password (hidden for SSO-linked accounts) |
 | **Users** | Create users, assign roles (super / infrastructure / operator), assign display(s) |
 | **Status** | Kiosk heartbeats, play log, slide/photo deploy sync |
-| **Security** | Idle timeout, outbound URL policy, SSO, multi-display policy, audit settings |
+| **Security** | Idle timeout, outbound URL policy, SSO, multi-display policy, audit settings, **trusted reverse proxies** |
 | **Audit** | Sign-ins, saves, user changes (not cleared with API cache) |
 
 **Login:** local username/password and/or SSO, CSRF-protected sessions, configurable idle logout, lockout after repeated failures.
@@ -257,3 +257,48 @@ On first successful SSO sign-in the account **links** (“Linked” status). Unt
 - YouTube downloads only accept `youtube.com` / `youtu.be`; yt-dlp updates verify SHA-256 from official GitHub releases
 - Put **HTTPS** in front if admin is internet-facing (reverse proxy, Cloudflare Tunnel). VPN or Cloudflare Access recommended on semi-public hosts
 - `php video.php fetch` works from CLI; admin can refresh YouTube entries from the Video Board
+
+### Trusted reverse proxies
+
+When kiosks or admins reach signage through **nginx**, **Caddy**, **Traefik**, **HAProxy**, or **Cloudflare**, PHP sees the **proxy’s** IP as `REMOTE_ADDR`, not the browser or kiosk. Without configuration, **Status** shows every display coming from the same proxy IP, and admin **login lockout** counts failures against that proxy instead of the real client.
+
+**Security → Trusted reverse proxies** (`TRUSTED_PROXIES`) lists comma-separated proxy IPs or CIDRs (e.g. `127.0.0.1, 10.0.0.0/8, 192.168.1.50/32`). When the direct connection’s IP matches an entry, the server resolves the client from forwarded headers (in order):
+
+1. `CF-Connecting-IP` (Cloudflare)
+2. `True-Client-IP`
+3. `X-Real-IP`
+4. First valid hop in `X-Forwarded-For`
+
+Leave blank to use **`REMOTE_ADDR` only** — correct for direct LAN access with no proxy.
+
+| What uses client IP | Why it matters behind a proxy |
+|---------------------|--------------------------------|
+| **Status** kiosk heartbeats | Shows each display’s real network address; offline detection stays per kiosk |
+| **Admin login lockout** | Failed attempts rate-limit the actual client, not the proxy |
+| **Audit log** | Sign-in and save events record the operator’s IP |
+
+**Typical values:**
+
+| Setup | Example `TRUSTED_PROXIES` |
+|-------|---------------------------|
+| Proxy on same host as Apache | `127.0.0.1` |
+| Dedicated LAN reverse proxy | `192.168.1.10` or `192.168.0.0/16` |
+| Cloudflare (orange cloud) | Cloudflare egress ranges, or your tunnel/origin proxy IP — ensure the proxy sends `CF-Connecting-IP` |
+
+**Proxy must forward headers.** Example nginx upstream block:
+
+```nginx
+location /boards/ {
+    proxy_pass http://signage-backend/boards/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Caddy and Traefik set these by default. For HTTPS termination at the proxy, `X-Forwarded-Proto: https` also lets admin session cookies use the **Secure** flag correctly.
+
+**Security note:** Only list proxies you control. Anyone who can connect **directly** to Apache/nginx on port 80/443 and spoof `X-Forwarded-For` is not affected — headers are ignored unless `REMOTE_ADDR` matches your trusted list.
+
+Full TLS and proxy topology: [rotation-and-deployment.md → HTTPS and TLS](rotation-and-deployment.md#https-and-tls).

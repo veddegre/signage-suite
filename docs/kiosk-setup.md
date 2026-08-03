@@ -95,7 +95,7 @@ sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict
 | *(none)* | Self-signed cert on server, or HTTPS via LAN IP/hostname |
 | **`--strict-ssl`** | Trusted public certificate (e.g. Let's Encrypt at reverse proxy) |
 
-**Reverse proxy:** Point the proxy at **`http://signage-host/boards/`** on port 80. Give kiosks the proxy’s **`https://`** URL. The server installer does **not** redirect port 80 to 443 by default. Full diagram: [HTTPS and TLS → Reverse proxy](rotation-and-deployment.md#reverse-proxy-recommended-production).
+**Reverse proxy:** Point the proxy at **`http://signage-host/boards/`** on port 80. Give kiosks the proxy’s **`https://`** URL. The server installer does **not** redirect port 80 to 443 by default. Set **Security → Trusted reverse proxies** in admin so **Status** shows each kiosk’s real IP ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)). Full diagram: [HTTPS and TLS → Reverse proxy](rotation-and-deployment.md#reverse-proxy-recommended-production).
 
 After changing URL or SSL flags, re-run setup and restart:
 

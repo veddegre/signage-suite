@@ -229,6 +229,7 @@ Browser / kiosk  ──HTTPS──►  reverse proxy  ──HTTP──►  Apach
 - On the signage server: **`--no-https`** *or* leave HTTPS enabled but point the proxy at **`http://signage-host/boards/`** (port 80 is not redirected by default).
 - For kiosks and browsers: use the proxy’s public **`https://`** URL.
 - Set **`--url-base https://your.public.host/boards`** when re-running setup if you want the install summary to show the proxy URL.
+- In admin → **Security**, set **Trusted reverse proxies** so kiosk **Status** heartbeats and login lockouts see the real client IP — see [admin-and-security.md → Trusted reverse proxies](admin-and-security.md#trusted-reverse-proxies).
 
 ### Kiosk displays (`setup-kiosk.sh`)
 
