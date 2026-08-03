@@ -560,16 +560,26 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                             $obj[$col['key']] = ($col['cast'] ?? '') === 'int' ? (int)$v : $v;
                         }
                         if ($any) {
+                            if ($board === 'calendar' && $name === 'ICS_FEEDS') {
+                                $postedId = trim((string)($row['id'] ?? ''));
+                                if ($postedId !== '') {
+                                    $obj['id'] = $postedId;
+                                }
+                            }
                             $prev = admin_find_owned_list_entry($existingRows, $obj);
                             $outV[] = admin_finalize_entry($obj, $prev, $row);
                         }
                     }
                 }
+                if ($board === 'calendar' && $name === 'ICS_FEEDS') {
+                    require_once __DIR__ . '/lib/calendar_lib.php';
+                    $outV = calendar_finalize_feed_list($outV);
+                }
                 if ($keyed && $scalar) {
                     $outV = admin_merge_owned_scalar_map($existingRows, $outV);
                 } elseif ($keyed) {
                     $outV = admin_merge_owned_map($existingRows, $outV);
-                } elseif ($outV !== []) {
+                } elseif (!admin_is_super() || $outV !== []) {
                     $outV = admin_merge_owned_list($existingRows, $outV);
                 }
                 if ($outV === []) unset($conf[$cfgKey]); else $conf[$cfgKey] = $outV;
@@ -2057,7 +2067,7 @@ if ($authed && $board === 'rotation') {
         $rotationMainPages = $rotationStarterPages;
     }
     $rotationTemplates = rotation_playlist_templates_all();
-    $rotationCalendarFeedKeys = rotation_calendar_feed_keys();
+    $rotationCalendarFeedKeys = rotation_calendar_feed_catalog();
     $rotationCalendarOverrides = is_array($rawConf['rotation.CALENDAR_OVERRIDES'] ?? null)
         ? $rawConf['rotation.CALENDAR_OVERRIDES'] : [];
 }
@@ -2620,7 +2630,7 @@ function admin_rotation_kiosk_settings_panel(
     $sportsTeamKeys = rotation_screen_sports_team_keys($screenKey);
     $screenCalendarFeedKeys = rotation_screen_calendar_feed_keys($screenKey);
     $screenCalendarCountdownKeys = rotation_screen_calendar_countdown_keys($screenKey);
-    $catalogCalendarFeedKeys = calendar_admin_selectable_feed_keys();
+    $catalogCalendarFeedKeys = calendar_admin_selectable_feed_catalog();
     $catalogCalendarCountdownKeys = calendar_admin_selectable_countdown_keys();
     $canEditDisplayCalendarFeeds = calendar_admin_may_edit_display_feeds($screenKey);
     $sportsSlots = $sportsTeamKeys;
@@ -2908,12 +2918,15 @@ function admin_rotation_kiosk_settings_panel(
             foreach ($screenCalendarFeedKeys as $ck) {
                 $screenCalChecked[strtolower($ck)] = true;
             }
-            foreach ($catalogCalendarFeedKeys as $fk):
+            foreach ($catalogCalendarFeedKeys as $feedOpt):
+              $feedId = (string)($feedOpt['id'] ?? '');
+              if ($feedId === '') continue;
+              $feedLabel = calendar_feed_option_label($feedOpt, $catalogCalendarFeedKeys);
             ?>
             <label class="check" style="margin:0">
-              <input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][calendar_feeds][]" value="<?= h($fk) ?>"
-                <?= isset($screenCalChecked[strtolower($fk)]) ? 'checked' : '' ?>>
-              <?= h($fk) ?>
+              <input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][calendar_feeds][]" value="<?= h($feedId) ?>"
+                <?= isset($screenCalChecked[strtolower($feedId)]) ? 'checked' : '' ?>>
+              <?= h($feedLabel) ?>
             </label>
             <?php endforeach; ?>
           </div>
@@ -3030,7 +3043,7 @@ function admin_field(array $f, $val, string $board): void
     elseif ($f['type'] === 'calendar_public_feeds'):
               require_once __DIR__ . '/lib/calendar_lib.php';
               require_once __DIR__ . '/lib/rotation_calendar_lib.php';
-              $feedKeys = rotation_calendar_feed_keys();
+              $feedCatalog = rotation_calendar_feed_catalog();
               $savedPublic = calendar_public_feed_keys();
               $checkedIds = [];
               foreach ($savedPublic as $ck) {
@@ -3038,15 +3051,19 @@ function admin_field(array $f, $val, string $board): void
               }
               ?>
               <label class="l"><?= h($f['label']) ?></label>
-              <?php if ($feedKeys === []): ?>
+              <?php if ($feedCatalog === []): ?>
               <div class="help">Add calendar feeds above first, then choose which may appear on unauthenticated kiosks.</div>
               <?php else: ?>
               <div class="cal-public-feed-picks" style="display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:8px">
-                <?php foreach ($feedKeys as $fk): ?>
+                <?php foreach ($feedCatalog as $feedOpt):
+                  $feedId = (string)($feedOpt['id'] ?? '');
+                  if ($feedId === '') continue;
+                  $feedLabel = calendar_feed_option_label($feedOpt, $feedCatalog);
+                ?>
                 <label class="check" style="margin:0">
-                  <input type="checkbox" name="PUBLIC_FEED_KEYS[]" value="<?= h($fk) ?>"
-                    <?= isset($checkedIds[strtolower($fk)]) ? 'checked' : '' ?>>
-                  <?= h($fk) ?>
+                  <input type="checkbox" name="PUBLIC_FEED_KEYS[]" value="<?= h($feedId) ?>"
+                    <?= isset($checkedIds[strtolower($feedId)]) ? 'checked' : '' ?>>
+                  <?= h($feedLabel) ?>
                 </label>
                 <?php endforeach; ?>
               </div>
@@ -4091,8 +4108,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
     <?php else: $b = $schema[$board]; ?>
       <h2><?= h($b['title']) ?></h2>
-      <?php if (in_array($board, ['announce', 'tailscale', 'ntfy'], true)): ?>
+      <?php if (in_array($board, ['announce', 'calendar', 'tailscale', 'ntfy'], true)): ?>
         <?php admin_operator_board_preamble($board); ?>
+      <?php endif; ?>
+      <?php if ($board === 'calendar' && admin_is_super()): ?>
+        <?php admin_super_registry_share_hint('Calendar'); ?>
       <?php endif; ?>
       <div class="sub">Changes save to <code>config/settings.json</code>.
         <?php if ($board === 'rotation'):
@@ -4738,8 +4758,13 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                         <div class="field">
                           <label class="mini">Calendar feed</label>
                           <select data-cal-feed>
-                            <?php foreach ($rotationCalendarFeedKeys as $feedKey): ?>
-                            <option value="<?= h($feedKey) ?>" <?= ($crow['feed'] ?? '') === $feedKey ? 'selected' : '' ?>><?= h($feedKey) ?></option>
+                            <?php foreach ($rotationCalendarFeedKeys as $feedOpt):
+                              $feedId = (string)($feedOpt['id'] ?? '');
+                              if ($feedId === '') continue;
+                              $feedLabel = calendar_feed_option_label($feedOpt, $rotationCalendarFeedKeys);
+                              $selectedFeed = calendar_resolve_feed_ref((string)($crow['feed'] ?? '')) ?? (string)($crow['feed'] ?? '');
+                            ?>
+                            <option value="<?= h($feedId) ?>" <?= $selectedFeed === $feedId ? 'selected' : '' ?>><?= h($feedLabel) ?></option>
                             <?php endforeach; ?>
                           </select>
                         </div>
@@ -6661,6 +6686,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     $camReadonly = $board === 'webcam' && $f['key'] === 'CAMS' && !empty($row['_readonly']);
                   ?>
                     <tr<?= $camReadonly ? ' class="webcam-row-readonly"' : '' ?>>
+                      <?php if ($board === 'calendar' && $f['key'] === 'ICS_FEEDS'): ?>
+                      <input type="hidden" name="<?= h($f['key']) ?>[<?= $ri ?>][id]" value="<?= h((string)($row['id'] ?? '')) ?>">
+                      <?php endif; ?>
                       <?php foreach ($cols as $c): ?>
                         <td class="<?= !empty($c['wide']) ? 'wide' : '' ?>"<?= ($c['type'] ?? '') === 'check' ? ' style="text-align:center;vertical-align:middle"' : '' ?>>
                           <?php if (($c['type'] ?? '') === 'check'): ?>
@@ -7228,6 +7256,7 @@ function addRow(btn) {
       (c.options || []).forEach(function (o) {
         const opt = document.createElement('option');
         opt.value = o; opt.textContent = o;
+        if (field === 'ICS_FEEDS' && c.key === 'source' && o === 'ical') opt.selected = true;
         inp.appendChild(opt);
       });
     } else if (c.password) {
@@ -7311,14 +7340,14 @@ function updateCalLegendPreview() {
   };
   const seen = {};
   const parts = [];
-  table.querySelectorAll('tbody tr').forEach(function (tr) {
+  table.querySelectorAll('tbody tr').forEach(function (tr, rowIndex) {
     const keyInp = tr.querySelector('input[name*="[key]"]');
     const colorSel = tr.querySelector('select[name*="[color]"]');
     const key = keyInp && keyInp.value.trim();
     if (!key) return;
-    const id = key.toLowerCase();
-    if (seen[id]) return;
-    seen[id] = true;
+    const rowId = 'row-' + rowIndex;
+    if (seen[rowId]) return;
+    seen[rowId] = true;
     const hex = colorSel ? hexFor(colorSel.value) : '#ffb347';
     parts.push('<span class="leg"><span class="dot" style="background:' + hex + '"></span>'
       + key.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>');
@@ -7741,9 +7770,19 @@ function serializeRotationCalendarOverridesForSave() {
 }
 
 function calendarOverrideFeedOptions(selected) {
-  const keys = window.ROTATION_CALENDAR_FEED_KEYS || [];
-  return keys.map(function (k) {
-    return '<option value="' + String(k).replace(/"/g, '&quot;') + '"' + (k === selected ? ' selected' : '') + '>' + k + '</option>';
+  const catalog = window.ROTATION_CALENDAR_FEED_KEYS || [];
+  const legendCounts = {};
+  catalog.forEach(function (row) {
+    const leg = String(row.legend || row.id || '').toLowerCase();
+    if (leg) legendCounts[leg] = (legendCounts[leg] || 0) + 1;
+  });
+  return catalog.map(function (row) {
+    const id = String(row.id || '');
+    if (!id) return '';
+    let label = String(row.legend || id);
+    const legKey = label.toLowerCase();
+    if (legendCounts[legKey] > 1) label += ' (' + id + ')';
+    return '<option value="' + id.replace(/"/g, '&quot;') + '"' + (id === selected ? ' selected' : '') + '>' + label.replace(/</g, '&lt;') + '</option>';
   }).join('');
 }
 

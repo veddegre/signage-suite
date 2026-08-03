@@ -1205,6 +1205,9 @@ function admin_stamp_owner(array $entry, ?array $prev = null): array
         $entry['owner'] = $uid;
     } elseif ($prevOwner === $uid) {
         $entry['owner'] = $uid;
+    } elseif ($prevOwner === null) {
+        // Legacy row with no owner (super-admin-only) — poster owns their copy.
+        $entry['owner'] = $uid;
     } elseif ($prevOwner !== null) {
         if (!array_key_exists('owner', $entry)) {
             $entry['owner'] = $prevOwner;
@@ -1515,7 +1518,7 @@ function admin_merge_owned_list(array $existing, array $posted): array
             continue;
         }
         $prev = admin_find_owned_list_entry($existing, $row);
-        if ($prev !== null && !admin_entry_visible($prev)) {
+        if ($prev !== null && !admin_entry_visible($prev) && !admin_entry_owned_by_current_user($row)) {
             continue;
         }
         $ownedOut[] = admin_finalize_entry($row, $prev, $row);
@@ -1609,17 +1612,18 @@ function admin_find_owned_list_entry(array $existing, array $row): ?array
             }
         }
     }
-    $feedKey = trim((string)($row['key'] ?? ''));
-    if ($feedKey !== '') {
+    $feedId = trim((string)($row['id'] ?? ''));
+    if ($feedId !== '') {
         foreach ($existing as $entry) {
             if (!is_array($entry)) {
                 continue;
             }
-            if (trim((string)($entry['key'] ?? '')) === $feedKey) {
+            if (trim((string)($entry['id'] ?? '')) === $feedId) {
                 return $entry;
             }
         }
     }
+
     return null;
 }
 
@@ -2515,6 +2519,14 @@ function admin_operator_board_preamble(string $board): void
             $lines = [
                 'Create announcements and countdowns here. Mark <strong>Strip only</strong> for the hero status bar (Rotation → Display options).',
                 'Quick-add non-strip items under <strong>Daily</strong> in rotation.',
+            ];
+            break;
+        case 'calendar':
+            $lines = [
+                'Add calendar feeds with <strong>+ Add row</strong> — each needs a wall <strong>Legend</strong> and feed <strong>URL</strong>. Legend names can repeat (e.g. several “Greg” calendars); each row gets a unique id automatically.',
+                'iCloud / Outlook public links: set <strong>Source</strong> to <strong>ical</strong> (no login). CalDAV (Fastmail, Nextcloud): <strong>webdav</strong> + app password.',
+                'You only see feeds you own or that are shared with you.',
+                'Pick which feeds appear on a kiosk under <strong>Rotation</strong> → display → <strong>Calendar</strong> (or quick-add <strong>Calendar</strong> / <strong>Glance</strong>).',
             ];
             break;
         case 'tailscale':

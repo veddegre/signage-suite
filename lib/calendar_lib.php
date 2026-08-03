@@ -35,6 +35,195 @@ function calendar_color_hex(string $stored): string
     return '#ffb347';
 }
 
+function calendar_generate_feed_id(): string
+{
+    return 'cal_' . bin2hex(random_bytes(4));
+}
+
+/** @param array<string,mixed> $feed */
+function calendar_feed_id(array $feed): string
+{
+    return trim((string)($feed['id'] ?? ''));
+}
+
+/** Stable id for legacy rows until the next admin save assigns a persisted id. */
+function calendar_feed_stable_id(array $feed, int $index): string
+{
+    $url = calendar_normalize_feed_url((string)($feed['url'] ?? ''));
+    $owner = trim((string)($feed['owner'] ?? ''));
+
+    return 'cal_' . substr(hash('sha256', $index . '|' . $url . '|' . $owner), 0, 8);
+}
+
+/** @param array<string,mixed> $feed */
+function calendar_feed_effective_id(array $feed, int $index = 0): string
+{
+    $id = calendar_feed_id($feed);
+
+    return $id !== '' ? $id : calendar_feed_stable_id($feed, $index);
+}
+
+/** @param array<string,mixed> $feed */
+function calendar_feed_legend(array $feed, int $index = 0): string
+{
+    return calendar_feed_meta($feed, $index)['key'];
+}
+
+/**
+ * Assign a unique persisted id to every feed row (new rows included).
+ *
+ * @param list<array<string,mixed>> $feeds
+ * @return list<array<string,mixed>>
+ */
+function calendar_finalize_feed_list(array $feeds): array
+{
+    $used = [];
+    $out = [];
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        $id = calendar_feed_id($feed);
+        if ($id === '' || isset($used[$id])) {
+            do {
+                $id = calendar_generate_feed_id();
+            } while (isset($used[$id]));
+            $feed['id'] = $id;
+        }
+        $used[$id] = true;
+        $out[] = $feed;
+    }
+
+    return $out;
+}
+
+/**
+ * Catalog entry for admin pickers and calendar overrides.
+ *
+ * @param list<array<string,mixed>>|null $feeds
+ * @return list<array{id:string,legend:string}>
+ */
+function calendar_feed_options(?array $feeds = null): array
+{
+    if ($feeds === null) {
+        $feeds = cfg('calendar.ICS_FEEDS', []);
+    }
+    if (!is_array($feeds)) {
+        return [];
+    }
+    $out = [];
+    $i = 0;
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        $id = calendar_feed_effective_id($feed, $i);
+        if ($id === '') {
+            $i++;
+            continue;
+        }
+        $out[] = [
+            'id' => $id,
+            'legend' => calendar_feed_legend($feed, $i),
+        ];
+        $i++;
+    }
+
+    return $out;
+}
+
+/** Label for pickers — disambiguate duplicate legend names. @param list<array{id:string,legend:string}> $options */
+function calendar_feed_option_label(array $option, array $options): string
+{
+    $legend = (string)($option['legend'] ?? '');
+    if ($legend === '') {
+        return (string)($option['id'] ?? '');
+    }
+    $dupes = 0;
+    foreach ($options as $row) {
+        if (strcasecmp((string)($row['legend'] ?? ''), $legend) === 0) {
+            $dupes++;
+        }
+    }
+    if ($dupes > 1) {
+        return $legend . ' (' . ($option['id'] ?? '') . ')';
+    }
+
+    return $legend;
+}
+
+/**
+ * Resolve a stored feed reference (id or legacy legend label) to a feed id.
+ *
+ * @param list<array<string,mixed>>|null $feeds
+ */
+function calendar_resolve_feed_ref(string $ref, ?array $feeds = null): ?string
+{
+    $ref = trim($ref);
+    if ($ref === '') {
+        return null;
+    }
+    if ($feeds === null) {
+        $feeds = cfg('calendar.ICS_FEEDS', []);
+    }
+    if (!is_array($feeds)) {
+        return null;
+    }
+    $i = 0;
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        if (calendar_feed_effective_id($feed, $i) === $ref || calendar_feed_id($feed) === $ref) {
+            return calendar_feed_effective_id($feed, $i);
+        }
+        $i++;
+    }
+    $matches = [];
+    $i = 0;
+    foreach ($feeds as $feed) {
+        if (!is_array($feed)) {
+            continue;
+        }
+        if (strcasecmp(calendar_feed_legend($feed, $i), $ref) === 0) {
+            $matches[] = calendar_feed_effective_id($feed, $i);
+        }
+        $i++;
+    }
+    if (count($matches) === 1) {
+        return $matches[0];
+    }
+
+    return null;
+}
+
+/**
+ * Normalize posted/stored feed references to feed ids.
+ *
+ * @param list<mixed> $refs
+ * @param list<array<string,mixed>>|null $feeds
+ * @return list<string>
+ */
+function calendar_normalize_feed_id_list(array $refs, ?array $feeds = null): array
+{
+    $out = [];
+    $seen = [];
+    foreach ($refs as $ref) {
+        $resolved = calendar_resolve_feed_ref((string)$ref, $feeds);
+        if ($resolved === null || $resolved === '') {
+            continue;
+        }
+        $id = strtolower($resolved);
+        if (isset($seen[$id])) {
+            continue;
+        }
+        $seen[$id] = true;
+        $out[] = $resolved;
+    }
+
+    return $out;
+}
+
 /** @param array<string,mixed> $feed */
 function calendar_feed_meta(array $feed, int $index = 0): array
 {
@@ -48,6 +237,7 @@ function calendar_feed_meta(array $feed, int $index = 0): array
         $colorKey = $palette[$index % count($palette)]['key'];
     }
     return [
+        'id' => calendar_feed_effective_id($feed, $index),
         'key' => $key,
         'color' => $colorKey,
         'hex' => calendar_color_hex($colorKey),
@@ -386,7 +576,7 @@ function calendar_public_feed_keys(): array
         return [];
     }
 
-    return calendar_normalize_feed_key_list($raw);
+    return calendar_normalize_feed_id_list($raw);
 }
 
 /**
@@ -396,28 +586,28 @@ function calendar_public_feed_keys(): array
  */
 function calendar_admin_selectable_feed_keys(): array
 {
+    return array_column(calendar_admin_selectable_feed_catalog(), 'id');
+}
+
+/**
+ * Feeds an operator may pick for display kiosk settings.
+ *
+ * @return list<array{id:string,legend:string}>
+ */
+function calendar_admin_selectable_feed_catalog(): array
+{
     require_once __DIR__ . '/users_lib.php';
-    require_once __DIR__ . '/rotation_calendar_lib.php';
 
     $raw = cfg('calendar.ICS_FEEDS', []);
     if (!is_array($raw)) {
         return [];
     }
     if (admin_is_super()) {
-        return rotation_calendar_feed_keys();
+        return calendar_feed_options($raw);
     }
     $feeds = admin_filter_list_for_display($raw);
-    $keys = [];
-    $i = 0;
-    foreach ($feeds as $feed) {
-        if (!is_array($feed)) {
-            continue;
-        }
-        $meta = calendar_feed_meta($feed, $i++);
-        $keys[] = $meta['key'];
-    }
 
-    return calendar_normalize_feed_key_list($keys);
+    return calendar_feed_options($feeds);
 }
 
 /** Whether kiosk settings may change calendar_feeds (operators never on main). */
@@ -465,37 +655,19 @@ function calendar_normalize_feed_key_list(array $keys): array
  */
 function calendar_normalize_public_feed_keys_from_post(array $posted, array $feeds): array
 {
-    $catalog = [];
-    $i = 0;
-    foreach ($feeds as $feed) {
-        if (!is_array($feed)) {
-            continue;
-        }
-        $meta = calendar_feed_meta($feed, $i++);
-        $catalog[strtolower($meta['key'])] = $meta['key'];
-    }
-    $out = [];
-    foreach ($posted as $key) {
-        $id = strtolower(trim((string)$key));
-        if ($id === '' || !isset($catalog[$id])) {
-            continue;
-        }
-        $out[] = $catalog[$id];
-    }
-
-    return calendar_normalize_feed_key_list($out);
+    return calendar_normalize_feed_id_list($posted, $feeds);
 }
 
-/** @param list<array<string,mixed>> $feeds @param list<string> $allowedKeys @return list<array<string,mixed>> */
-function calendar_filter_feeds_by_keys(array $feeds, array $allowedKeys): array
+/** @param list<array<string,mixed>> $feeds @param list<string> $allowedRefs @return list<array<string,mixed>> */
+function calendar_filter_feeds_by_keys(array $feeds, array $allowedRefs): array
 {
-    $allowedKeys = calendar_normalize_feed_key_list($allowedKeys);
-    if ($allowedKeys === []) {
+    $allowedRefs = calendar_normalize_feed_id_list($allowedRefs, $feeds);
+    if ($allowedRefs === []) {
         return [];
     }
     $want = [];
-    foreach ($allowedKeys as $key) {
-        $want[strtolower($key)] = true;
+    foreach ($allowedRefs as $id) {
+        $want[strtolower($id)] = true;
     }
     $out = [];
     $i = 0;
@@ -503,8 +675,8 @@ function calendar_filter_feeds_by_keys(array $feeds, array $allowedKeys): array
         if (!is_array($feed)) {
             continue;
         }
-        $meta = calendar_feed_meta($feed, $i);
-        if (isset($want[strtolower($meta['key'])])) {
+        $id = calendar_feed_effective_id($feed, $i);
+        if (isset($want[strtolower($id)])) {
             $out[] = $feed;
         }
         $i++;
@@ -710,13 +882,14 @@ function calendar_legend(array $feeds): array
             continue;
         }
         $meta = calendar_feed_meta($feed, $i++);
-        $id = strtolower($meta['key']);
-        if (isset($seen[$id])) {
+        $id = strtolower((string)($meta['id'] ?? ''));
+        if ($id === '' || isset($seen[$id])) {
             continue;
         }
         $seen[$id] = true;
         $out[] = ['key' => $meta['key'], 'hex' => $meta['hex']];
     }
+
     return $out;
 }
 

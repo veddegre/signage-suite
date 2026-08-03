@@ -686,6 +686,7 @@ function calendar_event_instance(array $ev, int $ts, bool $allDay): array
         'all_day' => $allDay,
         'summary' => $ev['summary'],
         'cal' => $ev['cal'],
+        'feed_id' => (string)($ev['feed_id'] ?? ''),
         'color' => $ev['color'],
         'hex' => $ev['hex'],
     ];
@@ -915,6 +916,7 @@ function parse_ics_vevents(string $raw, array $feedMeta): array
                 'exdates' => [], 'exdate_ts' => [], 'uid' => '', 'recurrence_id' => null,
                 'status' => '', 'busy' => '', 'ms_all_day' => false,
                 'cal' => (string)($feedMeta['key'] ?? ''),
+                'feed_id' => (string)($feedMeta['id'] ?? ''),
                 'color' => (string)($feedMeta['color'] ?? 'beacon'),
                 'hex' => (string)($feedMeta['hex'] ?? '#ffb347'),
             ];

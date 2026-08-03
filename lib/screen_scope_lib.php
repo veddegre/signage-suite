@@ -141,11 +141,15 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
                 if ($key === '') {
                     continue;
                 }
-                $id = strtolower($key);
+                $resolved = calendar_resolve_feed_ref($key);
+                if ($resolved === null) {
+                    continue;
+                }
+                $id = strtolower($resolved);
                 if (!isset($allowedPick[$id])) {
                     continue;
                 }
-                $calKeys[$id] = $key;
+                $calKeys[$id] = $resolved;
             }
         }
         $calKeys = array_values($calKeys);
@@ -262,25 +266,9 @@ function rotation_screen_calendar_feed_keys(string $screen): array
     if (!is_array($scr) || !isset($scr['calendar_feeds']) || !is_array($scr['calendar_feeds'])) {
         return [];
     }
-    require_once __DIR__ . '/rotation_calendar_lib.php';
-    $catalog = [];
-    foreach (rotation_calendar_feed_keys() as $k) {
-        $catalog[strtolower($k)] = $k;
-    }
-    $out = [];
-    foreach ($scr['calendar_feeds'] as $key) {
-        $key = trim((string)$key);
-        if ($key === '') {
-            continue;
-        }
-        $id = strtolower($key);
-        if (!isset($catalog[$id])) {
-            continue;
-        }
-        $out[$id] = $key;
-    }
+    require_once __DIR__ . '/calendar_lib.php';
 
-    return array_values($out);
+    return calendar_normalize_feed_id_list($scr['calendar_feeds']);
 }
 
 /** @return list<string> Selected countdown labels, or empty = no per-display override. */

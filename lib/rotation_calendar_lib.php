@@ -127,7 +127,20 @@ function rotation_calendar_match_override(string $screen = 'main', ?DateTimeInte
             if (!is_array($ev)) {
                 continue;
             }
-            if ((string)($ev['cal'] ?? '') !== $feed) {
+            $evFeedId = trim((string)($ev['feed_id'] ?? ''));
+            $evCal = (string)($ev['cal'] ?? '');
+            $feedMatch = false;
+            if ($evFeedId !== '' && $evFeedId === $feed) {
+                $feedMatch = true;
+            } elseif ($evFeedId === '' && strcasecmp($evCal, $feed) === 0) {
+                $feedMatch = true;
+            } else {
+                $resolved = calendar_resolve_feed_ref($feed);
+                if ($resolved !== null && $evFeedId === $resolved) {
+                    $feedMatch = true;
+                }
+            }
+            if (!$feedMatch) {
                 continue;
             }
             $summary = (string)($ev['summary'] ?? '');
@@ -168,26 +181,20 @@ function rotation_calendar_slide_filter(string $screen = 'main', ?DateTimeInterf
     return is_array($files) && $files !== [] ? array_values($files) : null;
 }
 
-/** @return list<string> ICS feed keys from calendar board config. */
+/** @return list<string> ICS feed ids from calendar board config. */
 function rotation_calendar_feed_keys(): array
 {
-    $feeds = cfg('calendar.ICS_FEEDS', []);
-    if (!is_array($feeds)) {
-        return [];
-    }
-    $keys = [];
-    foreach ($feeds as $i => $feed) {
-        if (!is_array($feed)) {
-            continue;
-        }
-        $meta = calendar_feed_meta($feed, (int)$i);
-        $key = trim((string)($meta['key'] ?? ''));
-        if ($key !== '') {
-            $keys[] = $key;
-        }
-    }
+    require_once __DIR__ . '/calendar_lib.php';
 
-    return array_values(array_unique($keys));
+    return array_column(calendar_feed_options(), 'id');
+}
+
+/** @return list<array{id:string,legend:string}> */
+function rotation_calendar_feed_catalog(): array
+{
+    require_once __DIR__ . '/calendar_lib.php';
+
+    return calendar_feed_options();
 }
 
 /**

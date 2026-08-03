@@ -698,7 +698,7 @@ function admin_schema(): array
         'calendar' => ['title' => 'Calendar', 'file' => 'calendar.php', 'fields' => [
             ['key' => 'ICS_FEEDS', 'label' => 'Calendar feeds', 'type' => 'rows',
              'columns' => [
-                 ['key' => 'key', 'label' => 'Key', 'placeholder' => 'Dad'],
+                 ['key' => 'key', 'label' => 'Legend', 'placeholder' => 'Greg'],
                  ['key' => 'color', 'label' => 'Color', 'type' => 'palette'],
                  ['key' => 'source', 'label' => 'Source', 'type' => 'select',
                   'options' => ['ical', 'webdav']],
@@ -706,13 +706,14 @@ function admin_schema(): array
                  ['key' => 'user', 'label' => 'User', 'placeholder' => 'email for CalDAV'],
                  ['key' => 'password', 'label' => 'Password', 'type' => 'password'],
              ],
-             'help' => 'Key is the legend label on the wall (e.g. Dad, Mom). Pick a theme color per feed. '
+             'help' => 'Legend is the name on the wall (e.g. Greg, Dad) — duplicates are fine. Each feed gets a unique id automatically. '
+                     . 'Pick a theme color per feed. '
                      . 'ical: secret iCal URL — iCloud “Public Calendar” / webcal:// links work with no login '
                      . '(webcal:// is converted to https:// automatically). '
                      . 'webdav: CalDAV (Fastmail, Nextcloud, …) with app password — not for iCloud public links. '
                      . 'LAN/private hosts need Security → Allow private URL fetches.'],
             ['key' => 'PUBLIC_FEED_KEYS', 'label' => 'Signage wall feeds (main kiosk)', 'type' => 'calendar_public_feeds',
-             'help' => 'Super admin only. calendar.php / glance.php on plain board.php (no assigned operator) show only checked keys. Default: none. Operators manage feeds on their own displays under Rotation → Kiosk settings.'],
+             'help' => 'Super admin only. calendar.php / glance.php on plain board.php (no assigned operator) show only checked feeds. Default: none. Operators manage feeds on their own displays under Rotation → Kiosk settings.'],
             ['key' => 'PUBLIC_COUNTDOWN_KEYS', 'label' => 'Signage wall countdowns (main kiosk)', 'type' => 'calendar_public_countdowns',
              'help' => 'Super admin only. Bottom countdown strip on calendar.php for main / unauthenticated kiosks — only checked labels. Default: none.'],
             ['key' => 'TRASH_WEEKDAY', 'label' => 'Trash day', 'type' => 'select',
