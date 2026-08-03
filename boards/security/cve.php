@@ -30,6 +30,149 @@ function cve_plain(string $text): string
     return trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
 }
 
+function cve_cpe_component_label(string $raw): string
+{
+    $raw = trim(str_replace('_', ' ', $raw));
+    if ($raw === '' || $raw === '*' || $raw === '-') {
+        return '';
+    }
+
+    return $raw;
+}
+
+/** @return array{vendor:string,product:string,part:string}|null */
+function cve_parse_cpe_criteria(string $criteria): ?array
+{
+    $criteria = trim($criteria);
+    if ($criteria === '' || !str_starts_with(strtolower($criteria), 'cpe:2.3:')) {
+        return null;
+    }
+    $parts = explode(':', $criteria);
+    if (count($parts) < 5) {
+        return null;
+    }
+    $vendor = cve_cpe_component_label((string)$parts[3]);
+    $product = cve_cpe_component_label((string)$parts[4]);
+    if ($vendor === '' && $product === '') {
+        return null;
+    }
+
+    return [
+        'vendor' => $vendor,
+        'product' => $product,
+        'part' => cve_cpe_component_label((string)($parts[2] ?? '')),
+    ];
+}
+
+function cve_trim_label(string $text, int $max = 80): string
+{
+    $text = cve_plain($text);
+    if ($text === '') {
+        return '';
+    }
+    if (strlen($text) <= $max) {
+        return $text;
+    }
+
+    return rtrim(substr($text, 0, max(1, $max - 1))) . '…';
+}
+
+function cve_product_label(string $vendor, string $product): string
+{
+    $vendor = cve_trim_label(trim($vendor), 40);
+    $product = cve_trim_label(trim($product), 72);
+    if ($vendor !== '' && $product !== '') {
+        return $vendor . ' · ' . $product;
+    }
+
+    return $vendor !== '' ? $vendor : $product;
+}
+
+/** @return list<string> */
+function cve_extract_products_from_affected(array $cve): array
+{
+    $out = [];
+    foreach ($cve['affected'] ?? [] as $block) {
+        if (!is_array($block)) {
+            continue;
+        }
+        foreach ($block['affectedData'] ?? [] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $label = cve_product_label((string)($row['vendor'] ?? ''), (string)($row['product'] ?? ''));
+            if ($label !== '') {
+                $out[strtolower($label)] = $label;
+            }
+        }
+    }
+
+    return array_values($out);
+}
+
+/** @param list<mixed> $nodes @return list<string> */
+function cve_collect_products_from_nodes(array $nodes): array
+{
+    $out = [];
+    foreach ($nodes as $node) {
+        if (!is_array($node)) {
+            continue;
+        }
+        foreach ($node['cpeMatch'] ?? [] as $match) {
+            if (!is_array($match) || empty($match['vulnerable'])) {
+                continue;
+            }
+            $parsed = cve_parse_cpe_criteria((string)($match['criteria'] ?? ''));
+            if ($parsed === null) {
+                continue;
+            }
+            $label = cve_product_label($parsed['vendor'], $parsed['product']);
+            if ($label !== '') {
+                $out[strtolower($label)] = $label;
+            }
+        }
+        foreach (cve_collect_products_from_nodes(is_array($node['nodes'] ?? null) ? $node['nodes'] : []) as $label) {
+            $out[strtolower($label)] = $label;
+        }
+    }
+
+    return array_values($out);
+}
+
+/** @return list<string> */
+function cve_extract_products(array $cve): array
+{
+    $fromAffected = cve_extract_products_from_affected($cve);
+    if ($fromAffected !== []) {
+        return $fromAffected;
+    }
+
+    $out = [];
+    foreach ($cve['configurations'] ?? [] as $config) {
+        if (!is_array($config)) {
+            continue;
+        }
+        foreach (cve_collect_products_from_nodes(is_array($config['nodes'] ?? null) ? $config['nodes'] : []) as $label) {
+            $out[strtolower($label)] = $label;
+        }
+    }
+
+    return array_values($out);
+}
+
+function cve_products_display(array $products, int $max = 2): string
+{
+    $products = array_values(array_filter(array_map('trim', $products), static fn($p) => $p !== ''));
+    if ($products === []) {
+        return '';
+    }
+    if (count($products) <= $max) {
+        return implode(', ', $products);
+    }
+
+    return implode(', ', array_slice($products, 0, $max)) . ' +' . (count($products) - $max) . ' more';
+}
+
 /** @return array{score:?float,severity:string,version:string} */
 function cve_extract_cvss(array $cve): array
 {
@@ -53,7 +196,7 @@ function cve_extract_cvss(array $cve): array
     return ['score' => null, 'severity' => '', 'version' => ''];
 }
 
-/** @return array{id:string,published:string,summary:string,score:?float,severity:string,cvss_version:string,url:string}|null */
+/** @return array{id:string,published:string,summary:string,product:string,products:list<string>,score:?float,severity:string,cvss_version:string,url:string}|null */
 function cve_normalize(?array $entry): ?array
 {
     if (!is_array($entry)) {
@@ -77,11 +220,14 @@ function cve_normalize(?array $entry): ?array
             break;
         }
     }
+    $products = cve_extract_products($cve);
     $cvss = cve_extract_cvss($cve);
     return [
         'id' => $id,
         'published' => trim((string)($cve['published'] ?? '')),
         'summary' => $summary,
+        'products' => $products,
+        'product' => cve_products_display($products),
         'score' => $cvss['score'],
         'severity' => $cvss['severity'],
         'cvss_version' => $cvss['version'],
@@ -252,8 +398,10 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
          padding:<?= $boardH < 1080 ? '10px 12px' : '12px 14px' ?>; background:var(--tile-bg);
          border:1px solid var(--hairline); border-radius:10px; min-width:0; }
   .row .id { font-family:'IBM Plex Mono',monospace; font-size:<?= $boardH < 1080 ? 17 : 18 ?>px; color:var(--beacon); }
-  .row .sub { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; color:var(--mist); margin-top:4px;
-              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .sub { font-size:<?= $boardH < 1080 ? 16 : 17 ?>px; color:var(--snow); margin-top:4px;
+              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:500; }
+  .row .desc { font-size:<?= $boardH < 1080 ? 15 : 16 ?>px; color:var(--mist); margin-top:3px;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .score { text-align:right; white-space:nowrap; }
   .row .score .num { font-family:'Big Shoulders Display'; font-size:<?= $boardH < 1080 ? 30 : 34 ?>px;
                      font-variant-numeric:tabular-nums; line-height:1; }
@@ -280,6 +428,9 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
     <div class="hero-id"><?= h($hero['id']) ?></div>
     <div class="hero-body">
       <div class="k">Latest published</div>
+      <?php if ($hero['product'] !== ''): ?>
+      <div class="hero-title"><?= h($hero['product']) ?></div>
+      <?php endif; ?>
       <div class="hero-meta">
         <?php if ($hero['score'] !== null): ?>
         <span class="pill <?= h($heroSev) ?>"><strong><?= h(number_format((float)$hero['score'], 1)) ?></strong> CVSS</span>
@@ -306,7 +457,14 @@ $heroSev = $hero ? cve_severity_class((string)$hero['severity']) : 'unk';
       <div class="row">
         <div>
           <div class="id"><?= h($c['id']) ?></div>
-          <div class="sub"><?= h($c['summary'] !== '' ? $c['summary'] : cve_format_date($c['published'])) ?></div>
+          <?php if ($c['product'] !== ''): ?>
+          <div class="sub"><?= h($c['product']) ?></div>
+          <?php endif; ?>
+          <?php if ($c['summary'] !== ''): ?>
+          <div class="desc"><?= h($c['summary']) ?></div>
+          <?php elseif ($c['product'] === '' && $c['published'] !== ''): ?>
+          <div class="desc"><?= h(cve_format_date($c['published'])) ?></div>
+          <?php endif; ?>
         </div>
         <div class="score <?= h($sev) ?>">
           <?php if ($c['score'] !== null): ?>

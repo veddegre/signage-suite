@@ -49,6 +49,7 @@ $camJson['streamPlaylist'] = $streamPlaylist;
 $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . '&api=1';
 $camJson['streamIframe'] = (string)$cam['url'];
 $earthcamIframeWarmup = webcam_earthcam_iframe_warmup($cam);
+$iframeEmbed = $available && !$usesImage && !$usesStream;
 $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
 ?>
 <!DOCTYPE html>
@@ -68,10 +69,16 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; height:<?= h($heightCss) ?>; overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; cursor:none; }
-  .board { position:relative; width:1920px; height:<?= h($heightCss) ?>; }
+  .board { position:relative; width:1920px; height:<?= h($heightCss) ?>; overflow:hidden; }
   .frame { position:absolute; inset:0; overflow:hidden; background:var(--lake-night); }
   .frame iframe, .frame img, .frame video { width:100%; height:100%; border:0; display:block;
-                               object-fit:cover; object-position:center; background:var(--tile-bg); }
+                               object-fit:cover; object-position:center; background:var(--tile-bg);
+                               overflow:hidden; }
+  /* Third-party iframe embeds (EarthCam, WMTA/wetmet, …) occasionally paint scrollbars */
+  .frame.iframe-embed iframe {
+    width:102%; height:102%; max-width:none; max-height:none;
+    transform:translate(-1%, -1%); transform-origin:center center;
+  }
   .overlay { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 24 : 32 ?>px;
              z-index:2; pointer-events:none;
              padding:12px 18px; border-radius:12px; <?= signage_glass_panel_css() ?> }
@@ -97,13 +104,13 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
 <body>
 <div class="board">
   <?php if ($available): ?>
-  <div class="frame" id="frame">
+  <div class="frame<?= $iframeEmbed ? ' iframe-embed' : '' ?>" id="frame">
     <?php if ($usesStream): ?>
     <video id="cam-video" autoplay muted playsinline></video>
     <?php elseif ($usesImage): ?>
     <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
-    <iframe id="cam-frame" allow="autoplay; fullscreen" loading="eager"<?php
+    <iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen" loading="eager"<?php
       if (!$earthcamIframeWarmup): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
     <?php endif; ?>
   </div>
@@ -147,7 +154,8 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
   function showStreamIframe(url) {
     const frame = document.getElementById('frame');
     if (!frame) return;
-    frame.innerHTML = '<iframe id="cam-frame" allow="autoplay; fullscreen; encrypted-media" loading="eager" src="' + url + '"></iframe>';
+    frame.classList.add('iframe-embed');
+    frame.innerHTML = '<iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager" src="' + url + '"></iframe>';
   }
 
   function loadStream(playlistUrl) {

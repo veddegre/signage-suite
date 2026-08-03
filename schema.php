@@ -179,6 +179,8 @@ function admin_schema(): array
              'help' => 'Source updates about every 60s — default 60'],
             ['key' => 'ROTATE_SEC', 'label' => 'Camera rotation (seconds)', 'type' => 'number',
              'help' => 'When showing all cameras — default 45'],
+            ['key' => 'CROP_BOTTOM_PCT', 'label' => 'Crop bottom overlay (%)', 'type' => 'number',
+             'help' => 'Hides the source site timestamp burned into the bottom of each still (default 10). Set 0 to show full frame.'],
             $tz,
         ]],
         'photo' => ['title' => 'Photo Conditions', 'file' => 'photo.php', 'fields' => [

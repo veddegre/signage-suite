@@ -15,6 +15,7 @@ define('ATTRIBUTION', cfg('bridgecam.ATTRIBUTION', 'Mackinac Bridge Authority'))
 define('SHOW_OVERLAY', cfg('bridgecam.SHOW_OVERLAY', true));
 define('REFRESH_SEC', cfg('bridgecam.REFRESH_SEC', 60));
 define('ROTATE_SEC', cfg('bridgecam.ROTATE_SEC', 45));
+define('CROP_BOTTOM_PCT', max(0, min(25, (int)cfg('bridgecam.CROP_BOTTOM_PCT', 10))));
 define('TIMEZONE', cfg('bridgecam.TIMEZONE', 'America/Detroit'));
 
 /** @return list<array{id:string,label:string,url:string}> */
@@ -82,6 +83,8 @@ $boardH = signage_frame_height();
 $heightCss = signage_viewport_height();
 $refreshSec = max(5, (int)REFRESH_SEC);
 $rotateSec = max(5, (int)ROTATE_SEC);
+$cropBottomPct = (int)CROP_BOTTOM_PCT;
+$imgHeightPct = $cropBottomPct > 0 ? round(100 / (1 - $cropBottomPct / 100), 2) : 100;
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -101,8 +104,8 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; cursor:none; }
   .board { position:relative; width:1920px; height:<?= $heightCss ?>; }
   .frame { position:absolute; inset:0; overflow:hidden; background:var(--lake-night); }
-  .frame img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center;
-                opacity:0; transition:opacity 1.2s ease; }
+  .frame img { position:absolute; left:0; top:0; width:100%; height:<?= h((string)$imgHeightPct) ?>%;
+                object-fit:cover; object-position:center top; opacity:0; transition:opacity 1.2s ease; }
   .frame img.on { opacity:1; }
   .overlay { position:absolute; top:<?= $boardH < 1080 ? 18 : 24 ?>px; left:<?= $boardH < 1080 ? 24 : 32 ?>px;
              z-index:2; pointer-events:none;
