@@ -400,6 +400,22 @@ function signage_theme_inset_surface_css(): string
 CSS;
 }
 
+/** Themed border wrapper for full-page iframe embeds (Grafana, Splunk publish, Power BI, web). */
+function signage_embed_frame_css(): string
+{
+    return <<<'CSS'
+  .signage-embed-frame{
+    width:100%; height:100%; box-sizing:border-box; overflow:hidden;
+    border:3px solid var(--beacon); border-radius:14px;
+    background:var(--harbor);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--hairline) 65%, transparent),
+               0 8px 28px color-mix(in srgb,var(--lake-night) 55%, transparent);}
+  .signage-embed-frame iframe{
+    width:100%; height:100%; border:0; display:block; pointer-events:none;
+    background:var(--lake-night);}
+CSS;
+}
+
 /** Flex/grid shells — reduce bottom clipping in rotation iframes. */
 function signage_theme_board_shell_css(): string
 {
