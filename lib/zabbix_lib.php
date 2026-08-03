@@ -103,7 +103,7 @@ function zabbix_normalize_page(array $page, string $key): ?array
         'max_problems' => $maxProblems,
         'max_hosts' => $maxHosts,
     ];
-    if (!empty($page['hide_acknowledged'])) {
+    if ($hostGroups === '' || !empty($page['hide_acknowledged'])) {
         $out['hide_acknowledged'] = true;
     }
     if (!empty($page['off'])) {
@@ -875,6 +875,133 @@ function zabbix_sort_problems(array $problems): array
 }
 
 /**
+ * Fetch problems severity-by-severity: all Disaster/High first, then fill display
+ * budget with Average, Warning, etc. (not a single flat API limit).
+ *
+ * @param list<string> $groupIds
+ * @return array{problems:list<array<string,mixed>>,counts:array<int,int>}
+ */
+function zabbix_fetch_wall_problems(
+    array $groupIds,
+    int $minSeverity,
+    int $maxDisplay,
+    bool $hideAck,
+    ?string &$error = null
+): array {
+    $minSeverity = max(0, min(5, $minSeverity));
+    $maxDisplay = max(1, min(500, $maxDisplay));
+    $display = [];
+    $seen = [];
+    $counts = [];
+    foreach (zabbix_severity_options() as $sev) {
+        $counts[$sev] = 0;
+    }
+
+    $criticalMin = 4;
+
+    for ($sev = 5; $sev >= $minSeverity; $sev--) {
+        $params = [
+            'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata', 'r_eventid', 'objectid', 'source'],
+            'severities' => [$sev],
+            'recent' => false,
+            'symptom' => false,
+            'suppressed' => false,
+        ];
+        if ($groupIds !== []) {
+            $params['groupids'] = $groupIds;
+        }
+        if ($hideAck) {
+            $params['acknowledged'] = false;
+        }
+
+        $countRaw = zabbix_api_call('problem.get', $params + ['countOutput' => true], $error);
+        $tierTotal = is_numeric($countRaw) ? (int)$countRaw : 0;
+        $counts[$sev] = $tierTotal;
+
+        if ($sev >= $criticalMin) {
+            $fetchLimit = min($tierTotal, 500);
+        } elseif (count($display) >= $maxDisplay) {
+            continue;
+        } else {
+            $fetchLimit = min($tierTotal, $maxDisplay - count($display));
+        }
+
+        if ($fetchLimit <= 0) {
+            continue;
+        }
+
+        $params['limit'] = $fetchLimit;
+        $batch = zabbix_api_call('problem.get', $params, $error);
+        if (!is_array($batch)) {
+            continue;
+        }
+        $batch = zabbix_filter_unresolved_problems($batch);
+        $batch = zabbix_filter_visible_problems($batch, $error);
+
+        foreach ($batch as $problem) {
+            if (!is_array($problem)) {
+                continue;
+            }
+            $eid = (string)($problem['eventid'] ?? '');
+            if ($eid === '' || isset($seen[$eid])) {
+                continue;
+            }
+            if ($sev < $criticalMin && count($display) >= $maxDisplay) {
+                break;
+            }
+            $seen[$eid] = true;
+            $display[] = $problem;
+        }
+    }
+
+    $display = zabbix_attach_problem_hosts($display, $error);
+    $display = zabbix_sort_problems($display);
+
+    $ackHidden = 0;
+    if ($hideAck) {
+        for ($sev = 5; $sev >= $minSeverity; $sev--) {
+            $ackParams = [
+                'severities' => [$sev],
+                'recent' => false,
+                'symptom' => false,
+                'suppressed' => false,
+                'acknowledged' => true,
+            ];
+            if ($groupIds !== []) {
+                $ackParams['groupids'] = $groupIds;
+            }
+            $ackRaw = zabbix_api_call('problem.get', $ackParams + ['countOutput' => true], $error);
+            $ackHidden += is_numeric($ackRaw) ? (int)$ackRaw : 0;
+        }
+    }
+
+    $displayedBySev = [];
+    foreach (zabbix_severity_options() as $sev) {
+        $displayedBySev[$sev] = 0;
+    }
+    foreach ($display as $problem) {
+        if (!is_array($problem)) {
+            continue;
+        }
+        $s = max(0, min(5, (int)($problem['severity'] ?? 0)));
+        $displayedBySev[$s] = ($displayedBySev[$s] ?? 0) + 1;
+    }
+
+    $problemsTotal = 0;
+    foreach ($counts as $c) {
+        $problemsTotal += (int)$c;
+    }
+
+    return [
+        'problems' => $display,
+        'counts' => $counts,
+        'problems_total' => $problemsTotal,
+        'acknowledged_hidden' => $ackHidden,
+        'displayed_by_severity' => $displayedBySev,
+    ];
+}
+
+/**
  * Fetch hosts for a wall page — all hosts when $maxHosts is null, else capped.
  *
  * @param array<string,mixed> $scopeParams groupids and other host.get filters (no output/limit)
@@ -1050,8 +1177,11 @@ function zabbix_fetch_wall_data(array $page): array
 
     $minSeverity = max(0, min(5, (int)($page['min_severity'] ?? 2)));
     $maxProblems = max(1, min(50, (int)($page['max_problems'] ?? 12)));
+    if ($allHosts) {
+        $maxProblems = max($maxProblems, 36);
+    }
     $maxHosts = max(1, min(100, (int)($page['max_hosts'] ?? 24)));
-    $hideAck = !empty($page['hide_acknowledged']);
+    $hideAck = $allHosts || !empty($page['hide_acknowledged']);
 
     $cacheDir = SIGNAGE_ROOT . '/cache';
     if (!is_dir($cacheDir)) {
@@ -1085,33 +1215,20 @@ function zabbix_fetch_wall_data(array $page): array
         }
     }
 
-    $problemParams = [
-        'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'opdata', 'r_eventid', 'objectid', 'source'],
-        'severities' => zabbix_severities_from_min($minSeverity),
-        'recent' => false,
-        'symptom' => false,
-        'limit' => $maxProblems,
-        'suppressed' => false,
-    ];
-    if ($groupIds !== []) {
-        $problemParams['groupids'] = $groupIds;
-    }
-    if ($hideAck) {
-        $problemParams['acknowledged'] = false;
-    }
+    $fetched = zabbix_fetch_wall_problems($groupIds, $minSeverity, $maxProblems, $hideAck, $error);
+    $problems = $fetched['problems'];
+    $counts = $fetched['counts'];
+    $problemsTotal = (int)($fetched['problems_total'] ?? 0);
+    $ackHidden = (int)($fetched['acknowledged_hidden'] ?? 0);
+    $displayedBySev = $fetched['displayed_by_severity'] ?? [];
 
-    $problems = zabbix_api_call('problem.get', $problemParams, $error);
-    if (!is_array($problems)) {
+    if ($problems === [] && ($error ?? '') !== '') {
         $empty['error'] = $error ?: 'problem.get failed';
         $empty['group_names'] = $groupNames;
         $empty['group_ids'] = $groupIds;
 
         return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
     }
-    $problems = zabbix_filter_unresolved_problems($problems);
-    $problems = zabbix_filter_visible_problems($problems, $error);
-    $problems = zabbix_attach_problem_hosts($problems, $error);
-    $problems = zabbix_sort_problems($problems);
 
     $hostScope = [];
     if ($groupIds !== []) {
@@ -1162,18 +1279,10 @@ function zabbix_fetch_wall_data(array $page): array
         ];
     }
     $hostRows = zabbix_sort_hosts_for_wall($hostRows);
-
-    $counts = [];
-    foreach (zabbix_severity_options() as $sev) {
-        $counts[$sev] = 0;
-    }
-    foreach ($problems as $problem) {
-        if (!is_array($problem)) {
-            continue;
-        }
-        $sev = max(0, min(5, (int)($problem['severity'] ?? 0)));
-        $counts[$sev] = ($counts[$sev] ?? 0) + 1;
-    }
+    $hostsWithProblemsCount = count(array_filter(
+        $hostRows,
+        static fn(array $row): bool => !empty($row['problem'])
+    ));
 
     $out = [
         'ok' => true,
@@ -1183,7 +1292,13 @@ function zabbix_fetch_wall_data(array $page): array
         'group_ids' => $groupIds,
         'problems' => $problems,
         'hosts' => $hostRows,
+        'hosts_total' => count($hostRows),
+        'hosts_with_problems' => $hostsWithProblemsCount,
         'counts' => $counts,
+        'problems_total' => $problemsTotal,
+        'acknowledged_hidden' => $ackHidden,
+        'displayed_by_severity' => $displayedBySev,
+        'hide_acknowledged' => $hideAck,
     ];
 
     @file_put_contents($cacheFile, json_encode($out), LOCK_EX);

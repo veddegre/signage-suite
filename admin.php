@@ -5618,7 +5618,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
                 <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][hide_acknowledged]"
-                  <?= !empty($pg['hide_acknowledged']) ? 'checked' : '' ?>> Hide acknowledged</label>
+                  <?= !empty($pg['hide_acknowledged']) || zabbix_host_groups_string($pg['host_groups'] ?? '') === '' ? 'checked' : '' ?>
+                  <?= zabbix_host_groups_string($pg['host_groups'] ?? '') === '' ? 'disabled' : '' ?>> Hide acknowledged</label>
+                <?php if (zabbix_host_groups_string($pg['host_groups'] ?? '') === ''): ?>
+                <span class="help" style="margin:0">Always on for all-hosts pages.</span>
+                <?php endif; ?>
                 <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
                   <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
               </div>

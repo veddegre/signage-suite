@@ -579,12 +579,12 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 |---------|---------|
 | Host groups | Comma-separated **exact** Zabbix host group names — **leave blank for all hosts** the API token can read |
 | Minimum severity | Not classified through Disaster |
-| Max problems / Max hosts | List limits (defaults 12 / 24) — **Max hosts** applies only when host groups are set; all-hosts pages fetch every host and sort problem hosts to the top |
-| Hide acknowledged | Omit acknowledged problems from the wall |
+| Max problems / Max hosts | Display cap for Average and below (defaults 12 / 24) — **Disaster and High always shown in full**; lower severities fill remaining slots. **Max hosts** applies only when host groups are set. |
+| Hide acknowledged | Omit acknowledged problems from the wall (always on for all-hosts pages) |
 | Off wall | Keep in admin but skip on kiosk |
 | Access | Owner; shared with users and/or roles (e.g. Operators) |
 
-**Wall layout:** severity summary pills, active problem list (host, age, acknowledged), host grid (green = OK, red = problem, grey = disabled). Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
+**Wall layout:** severity summary pills (open **problem** counts per tier) and active problem list (host, age). **All-hosts** pages (blank host groups) use a **full-width problem list** — summary shows monitored / open problems / hosts / OK, plus **acknowledged hidden** when ack’d problems are omitted; section headers show **shown of total** when the display cap trims a tier. Group-scoped pages keep a two-column layout with the host grid (up to **Max hosts**). Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
 
 ### tdx.php — TeamDynamix tickets (TDWebApi)
 
