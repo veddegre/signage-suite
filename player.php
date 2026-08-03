@@ -22,6 +22,8 @@ require_once __DIR__ . '/lib/rotation_lib.php';
 require_once __DIR__ . '/lib/screen_scope_lib.php';
 
 $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
+$screenRegistered = rotation_screen_is_registered($SCREEN);
+$similarScreens = $screenRegistered ? [] : rotation_similar_screen_keys($SCREEN);
 $blankActive = rotation_screen_blank_active($SCREEN);
 $showTicker = rotation_screen_ticker_enabled($SCREEN);
 // noticker=1 suppresses the ticker inside the iframe; player.php renders it here
@@ -60,10 +62,29 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
   #hint.show { opacity:1; }
   body.signage-blank #signage-ticker-root,
   body.signage-blank #signage-ticker { display:none !important; }
+  #screen-warn { position:fixed; inset:0; z-index:9000; display:flex; align-items:center;
+                 justify-content:center; padding:32px; background:rgba(0,0,0,.92); }
+  #screen-warn div { max-width:720px; text-align:center; color:#8aa0c0; font:18px/1.55 system-ui,sans-serif; }
+  #screen-warn h1 { color:#ffb347; font-size:32px; margin-bottom:16px; }
+  #screen-warn code { color:#e8eef8; background:#1a2438; padding:2px 8px; border-radius:6px; }
 </style>
 </head>
 <body<?= $blankActive ? ' class="signage-blank"' : '' ?>>
+<?php if (!$screenRegistered && $SCREEN !== 'main'): ?>
+<div id="screen-warn">
+  <div>
+    <h1>Unknown display &ldquo;<?= htmlspecialchars($SCREEN) ?>&rdquo;</h1>
+    <p>This URL is not a configured rotation screen, so it would previously have played the <strong>main</strong> playlist (RSS and everything else).</p>
+    <?php if ($similarScreens !== []): ?>
+    <p style="margin-top:14px">Did you mean <code><?= htmlspecialchars((string)$similarScreens[0]) ?></code>?
+       Try <code>player.php?screen=<?= htmlspecialchars((string)$similarScreens[0]) ?></code>.</p>
+    <?php endif; ?>
+    <p style="margin-top:14px">Fix the kiosk URL or bookmark to use the exact key from admin → Rotation.</p>
+  </div>
+</div>
+<?php else: ?>
 <div id="stage"><iframe src="<?= htmlspecialchars($src) ?>" allow="autoplay; fullscreen"></iframe></div>
+<?php endif; ?>
 <?php signage_kiosk_pointer_shield_html(); ?>
 <div id="hint">Tap to toggle fullscreen</div>
 

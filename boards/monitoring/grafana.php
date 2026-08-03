@@ -12,6 +12,7 @@
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/grafana_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/rotation_lib.php';
 
 define('TIMEZONE', cfg('grafana.TIMEZONE', 'America/Detroit'));
 
@@ -104,6 +105,10 @@ $showClock = signage_show_clock();
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
   .empty p { font-size:27px; max-width:1100px; line-height:1.65; }
+  .embed-warn { position:absolute; left:16px; right:16px; bottom:24px; z-index:20;
+                padding:16px 22px; border-radius:12px; background:rgba(12,20,34,.94);
+                border:1px solid var(--warn); color:var(--mist); font-size:20px; line-height:1.5; }
+  .embed-warn code { color:var(--beacon); }
 </style>
 </head>
 <body>
@@ -119,7 +124,13 @@ $showClock = signage_show_clock();
       <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
     </div>
     <div class="signage-embed-frame">
-      <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen" scrolling="no"></iframe>
+      <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen" scrolling="no"
+              referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+    <div id="embed-warn" class="embed-warn" hidden>
+      <p>If this frame stays blank, Grafana may be blocking embeds from this signage server.
+         Ask your Grafana admin to set <code>allow_embedding = true</code> in <code>grafana.ini</code>
+         and allow this site in <code>frame-ancestors</code>. The auth token must also work without a browser login session.</p>
     </div>
   </div>
   <script>
@@ -140,7 +151,8 @@ $showClock = signage_show_clock();
     })();
     <?php endif; ?>
     <?php if ($useJwt): ?>
-    const API = 'grafana.php?api=1&d=' + encodeURIComponent(<?= json_encode((string)$key) ?>);
+    const API = 'grafana.php?api=1&d=' + encodeURIComponent(<?= json_encode((string)$key) ?>)
+      + <?= json_encode(isset($_GET['screen']) && (string)$_GET['screen'] !== '' ? '&screen=' . rawurlencode(rotation_normalize_screen_key((string)$_GET['screen'])) : '') ?>;
     let refreshTimer = null;
 
     function scheduleRefresh(expiresIn) {
@@ -162,6 +174,13 @@ $showClock = signage_show_clock();
 
     scheduleRefresh(<?= (int)($embed['expiresIn'] ?? 3600) ?>);
     <?php endif; ?>
+    (function () {
+      const warn = document.getElementById('embed-warn');
+      if (!frame || !warn) return;
+      setTimeout(function () {
+        warn.hidden = false;
+      }, 12000);
+    })();
     setTimeout(() => location.reload(), 60 * 60 * 1000);
   })();
   </script>

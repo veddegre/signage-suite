@@ -1368,6 +1368,48 @@ function rotation_screens(): array
     return $out;
 }
 
+/** Whether this display key exists in rotation.SCREENS (main is always registered). */
+function rotation_screen_is_registered(string $screen): bool
+{
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === 'main') {
+        return true;
+    }
+    foreach (rotation_screens() as $k => $_) {
+        if (rotation_normalize_screen_key((string)$k) === $screen) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Registered display keys that look like typos of an unknown ?screen= value.
+ *
+ * @return list<string>
+ */
+function rotation_similar_screen_keys(string $screen, int $maxDistance = 2): array
+{
+    $screen = rotation_normalize_screen_key($screen);
+    if ($screen === '' || $screen === 'main') {
+        return [];
+    }
+    $out = [];
+    foreach (array_keys(rotation_screens()) as $k) {
+        $key = rotation_normalize_screen_key((string)$k);
+        if ($key === '' || $key === $screen) {
+            continue;
+        }
+        if (levenshtein($screen, $key) <= $maxDistance) {
+            $out[] = $key;
+        }
+    }
+    sort($out);
+
+    return $out;
+}
+
 /** @return list<array<string,mixed>> Saved pages for one screen only (no fallback). */
 function rotation_screen_own_pages(string $screen = 'main'): array
 {
@@ -1495,6 +1537,11 @@ function rotation_resolved_playlist_pages(string $screen = 'main'): array
     $own = rotation_screen_own_pages($screen);
     if ($own === []) {
         if ($screen !== 'main') {
+            // Unknown ?screen= keys must not silently inherit main (typo → wrong playlist).
+            if (!rotation_screen_is_registered($screen)) {
+                return [];
+            }
+
             return rotation_resolved_playlist_pages('main');
         }
 
@@ -1599,6 +1646,9 @@ function rotation_merge_pages_from_post(string $screen, array $rawRows): array
 function rotation_screen_playlist_source(string $screen = 'main'): string
 {
     $screen = rotation_normalize_screen_key($screen);
+    if ($screen !== 'main' && !rotation_screen_is_registered($screen)) {
+        return 'unknown';
+    }
     if (rotation_screen_own_pages($screen) !== []) {
         return 'own';
     }
@@ -1882,7 +1932,9 @@ function rotation_screen_runtime(string $screen = 'main'): array
 
     $runtime = [
         'screen' => $screen,
+        'screen_registered' => rotation_screen_is_registered($screen),
         'playlist_source' => rotation_screen_playlist_source($screen),
+        'similar_screens' => rotation_similar_screen_keys($screen),
         'timezone' => rotation_timezone(),
         'pages' => rotation_pages_labeled(rotation_screen_active_pages($screen)),
         'shuffle' => $settings['shuffle'] && !$settings['weighted'],

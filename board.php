@@ -33,6 +33,9 @@ $signageThemeKey = signage_theme_for_screen($SCREEN);
 $signageThemeCss = signage_theme_css_block($signageThemeKey);
 
 $runtime = rotation_screen_runtime($SCREEN);
+$screenRegistered = (bool)($runtime['screen_registered'] ?? rotation_screen_is_registered($SCREEN));
+$playlistSource = (string)($runtime['playlist_source'] ?? rotation_screen_playlist_source($SCREEN));
+$similarScreens = is_array($runtime['similar_screens'] ?? null) ? $runtime['similar_screens'] : rotation_similar_screen_keys($SCREEN);
 $heroStrip = hero_strip_render(is_array($runtime['hero_strip'] ?? null) ? $runtime['hero_strip'] : [], $SCREEN);
 $heroStripHeight = !empty($heroStrip['enabled']) ? (int)($heroStrip['height'] ?? 120) : 0;
 $blankActive = (bool)$runtime['blank'];
@@ -112,9 +115,16 @@ if (($_GET['api'] ?? '') === 'presence') {
   #hero-strip .hero-strip-item.warn { color:var(--warn); }
   #hero-strip .hero-strip-item.muted { color:var(--mist); }
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
-           flex-direction:column; gap:16px; color:var(--mist); font-family:system-ui,sans-serif; }
+           flex-direction:column; gap:16px; color:var(--mist); font-family:system-ui,sans-serif;
+           padding:48px; text-align:center; }
   #empty h1 { font-size:48px; color:var(--beacon); }
-  #empty p { font-size:24px; }
+  #empty p { font-size:24px; max-width:980px; line-height:1.5; }
+  #empty code { color:var(--snow); background:var(--harbor); padding:2px 10px; border-radius:6px; }
+  #screen-badge { position:fixed; top:14px; right:18px; z-index:9600; pointer-events:none;
+                  padding:6px 14px; border-radius:999px; font:600 18px/1.2 system-ui,sans-serif;
+                  letter-spacing:.04em; text-transform:uppercase; color:var(--beacon);
+                  background:rgba(12,20,34,.82); border:1px solid var(--hairline);
+                  box-shadow:0 2px 18px rgba(0,0,0,.45); }
   #blank { position:absolute; inset:0; z-index:10000; background:#000; display:none; }
   body.signage-blank:not(.signage-emergency-ticker) #signage-ticker-root,
   body.signage-blank:not(.signage-emergency-ticker) #signage-ticker { display:none !important; }
@@ -133,9 +143,27 @@ if (($_GET['api'] ?? '') === 'presence') {
 </style>
 </head>
 <body<?= $blankActive ? ' class="signage-blank' . ($emergencyTicker ? ' signage-emergency-ticker' : '') . '"' : ($emergencyTicker ? ' class="signage-emergency-ticker"' : '') ?> style="--signage-hero-inset: <?= (int)$heroStripHeight ?>px">
+<?php if ($SCREEN !== 'main'): ?>
+<div id="screen-badge" title="Rotation display key"><?= htmlspecialchars($SCREEN) ?></div>
+<?php endif; ?>
 <div id="empty">
+  <?php if (!$screenRegistered): ?>
+  <h1>Unknown display &ldquo;<?= htmlspecialchars($SCREEN) ?>&rdquo;</h1>
+  <p>This screen is not defined in admin → Rotation. It will <strong>not</strong> play a playlist until the name matches a configured display.
+    <?php if ($similarScreens !== []): ?>
+      Did you mean
+      <?php foreach ($similarScreens as $i => $sk): ?>
+        <?= $i > 0 ? ($i === count($similarScreens) - 1 ? ', or ' : ', ') : '' ?><code><?= htmlspecialchars($sk) ?></code>
+      <?php endforeach; ?>?
+      Use <code>player.php?screen=<?= htmlspecialchars((string)$similarScreens[0]) ?></code>.
+    <?php else: ?>
+      Use <code>player.php?screen=<em>key</em></code> with a key from admin → Rotation.
+    <?php endif; ?>
+  </p>
+  <?php else: ?>
   <h1>No pages in rotation</h1>
   <p>Add boards in admin.php → Rotation, or check hour windows and Skip flags.</p>
+  <?php endif; ?>
 </div>
 <div id="blank"<?= $blankActive ? ' style="display:block"' : '' ?>></div>
 <div id="rotate-debug" aria-live="polite"<?= $showDebug ? '' : ' style="display:none"' ?>></div>
