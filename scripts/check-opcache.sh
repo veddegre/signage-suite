@@ -76,7 +76,9 @@ fi
 
 url="${base%/}/$(basename "$probe")"
 echo "== Probing web SAPI: $url"
-body="$(curl -fsS "$url" 2>/dev/null || true)"
+curl_opts=()
+[[ "$url" == https://* ]] && curl_opts=(-k)
+body="$(curl "${curl_opts[@]}" -fsS "$url" 2>/dev/null || true)"
 if [[ -z "$body" ]]; then
   echo "FAIL — could not curl probe URL (is Apache/nginx running? adjust URL_BASE=)"
   exit 1

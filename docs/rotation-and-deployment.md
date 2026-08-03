@@ -171,10 +171,15 @@ sudo bash setup-server.sh
 sudo bash setup-server.sh --webroot /var/www/html/boards --with-video-cron
 sudo bash setup-server.sh --clone https://github.com/you/signage-suite.git
 sudo bash setup-server.sh --domain signage.lan
+sudo bash setup-server.sh --no-https                    # HTTP only (TLS at reverse proxy)
+sudo bash setup-server.sh --https-redirect              # force port 80 → HTTPS (no proxy)
+sudo bash setup-server.sh --domain signage.example.com --letsencrypt   # trusted public cert
 sudo bash setup-server.sh --nginx
 ```
 
-**Installs:** Apache or nginx, PHP 8.x + opcache, ffmpeg, dnsutils (`dig`), yt-dlp (pipx), writable dirs (including **`config/rotation/pages/`** for per-display playlists), deny rules for secrets, 1-hour timeouts for YouTube downloads, slide backgrounds.
+**Installs:** Apache or nginx, PHP 8.x + opcache, ffmpeg, dnsutils (`dig`), yt-dlp (pipx), writable dirs (including **`config/rotation/pages/`** for per-display playlists), deny rules for secrets, 1-hour timeouts for YouTube downloads, slide backgrounds, **HTTPS** (self-signed cert on :443 by default; **:80 stays HTTP** for reverse-proxy backends).
+
+**HTTPS:** Browsers need an `https://` URL for secure-context iframe embeds and `player.php`. Default install enables TLS on port 443 **without** redirecting port 80 — so a reverse proxy can upstream to `http://signage-host/boards/` while clients use the proxy's public HTTPS URL. Use `--https-redirect` only on a standalone box with no proxy. Use `--no-https` if the proxy is the only TLS terminator. Set `--url-base https://your.public.host/boards` when the printed URL should match the proxy.
 
 **Re-run after updates:**
 
@@ -201,7 +206,7 @@ Fullscreen Chromium on a Pi or mini PC is covered in a dedicated guide (install,
 Short version:
 
 ```bash
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage"   # add 2 for 4K
+sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"   # add 2 for 4K
 sudo reboot
 ```
 

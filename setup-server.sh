@@ -20,6 +20,7 @@
 #   * Optionally adds a weekly cron job for `php video.php fetch`
 #   * Raises PHP / web-server timeouts for admin YouTube downloads
 #   * Enables PHP OPcache (php-opcache) for faster admin and board requests
+#   * Enables HTTPS by default (self-signed LAN cert on :443; :80 stays plain HTTP)
 #
 # Pair with setup-kiosk.sh on display devices — point each Pi at board.php.
 
@@ -37,8 +38,15 @@ SKIP_APT=0
 WITH_YTDLP=1
 WITH_VIDEO_CRON=0
 URL_BASE=""
+WITH_HTTPS=1
+TLS_MODE="selfsigned"
+TLS_REGEN=0
+HTTPS_REDIRECT=0
 # Admin yt-dlp downloads can run a long time — applied to PHP, Apache, and nginx.
 PHP_VIDEO_TIMEOUT_SEC=3600
+TLS_DIR="/etc/ssl/signage"
+TLS_CERT="$TLS_DIR/signage.crt"
+TLS_KEY="$TLS_DIR/signage.key"
 
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf '!!> %s\n' "$*" >&2; }
@@ -54,6 +62,10 @@ Options:
       --clone URL          git clone into webroot parent, then install
   -d, --domain NAME        Apache ServerName (optional, e.g. signage.lan)
       --nginx              Write nginx snippet instead of Apache config
+      --no-https           Skip TLS setup (HTTP only — use when a reverse proxy terminates TLS)
+      --https-redirect     Redirect port 80 → HTTPS (standalone server; skip if behind a proxy)
+      --letsencrypt        Public Let's Encrypt cert (requires --domain on the internet)
+      --tls-regen          Regenerate self-signed certificate
       --skip-apt           Skip apt package installation (re-run / config only)
       --no-ytdlp           Skip yt-dlp install (video board YouTube fetch won't work)
       --with-ytdlp         Install yt-dlp via pipx (default; kept for compatibility)
@@ -75,6 +87,10 @@ while [[ $# -gt 0 ]]; do
     --clone)            CLONE_URL="${2:?}"; shift 2 ;;
     -d|--domain)        DOMAIN="${2:?}"; shift 2 ;;
     --nginx)            WEBSERVER="nginx"; shift ;;
+    --no-https)         WITH_HTTPS=0; shift ;;
+    --https-redirect)   HTTPS_REDIRECT=1; shift ;;
+    --letsencrypt)      WITH_HTTPS=1; TLS_MODE="letsencrypt"; shift ;;
+    --tls-regen)        TLS_REGEN=1; shift ;;
     --skip-apt)         SKIP_APT=1; shift ;;
     --no-ytdlp)         WITH_YTDLP=0; shift ;;
     --with-ytdlp)       WITH_YTDLP=1; shift ;;
@@ -92,6 +108,12 @@ if [[ -n "$CLONE_URL" && -n "$SOURCE" ]]; then
 fi
 if [[ $WITH_VIDEO_CRON -eq 1 && $WITH_YTDLP -eq 0 ]]; then
   warn "--with-video-cron requested without --with-ytdlp; cron will only work if yt-dlp is already installed"
+fi
+if [[ "$TLS_MODE" == "letsencrypt" && -z "$DOMAIN" ]]; then
+  die "--letsencrypt requires --domain (must resolve on the public internet)"
+fi
+if [[ "$TLS_MODE" == "letsencrypt" && "$WEBSERVER" != "apache" ]]; then
+  die "--letsencrypt is supported with Apache only (omit --nginx or use --no-https + your own cert)"
 fi
 
 SOURCE="${SOURCE:-$SCRIPT_DIR}"
@@ -308,12 +330,110 @@ seed_ytdlp_bin() {
   fi
 }
 
+apache_document_root() {
+  local html="/var/www/html"
+  html="$(realpath -m "$html")"
+  if [[ "$WEBROOT" == "$html" || "$WEBROOT" == "$html/"* ]]; then
+    echo "$html"
+    return
+  fi
+  echo "$WEBROOT"
+}
+
+signage_server_name() {
+  if [[ -n "$DOMAIN" ]]; then
+    echo "$DOMAIN"
+    return
+  fi
+  hostname -f 2>/dev/null || hostname
+}
+
+setup_tls_certificate() {
+  [[ $WITH_HTTPS -eq 1 ]] || return
+  [[ "$TLS_MODE" == "letsencrypt" ]] && return
+
+  command -v openssl >/dev/null 2>&1 || die "openssl required for HTTPS — install openssl or use --no-https"
+
+  if [[ -f "$TLS_CERT" && -f "$TLS_KEY" && $TLS_REGEN -eq 0 ]]; then
+    log "TLS certificate already present ($TLS_CERT)"
+    return
+  fi
+
+  local cn host short primary_ip openssl_cnf
+  cn="$(signage_server_name)"
+  host="$(hostname -f 2>/dev/null || hostname)"
+  short="$(hostname 2>/dev/null || echo localhost)"
+  primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+
+  mkdir -p "$TLS_DIR"
+  chmod 755 "$TLS_DIR"
+  openssl_cnf="$(mktemp)"
+  cat > "$openssl_cnf" <<EOF
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+CN = $cn
+
+[v3_req]
+subjectAltName = @alt_names
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = $short
+DNS.3 = $host
+DNS.4 = $cn
+IP.1 = 127.0.0.1
+EOF
+  if [[ -n "$primary_ip" ]]; then
+    printf 'IP.2 = %s\n' "$primary_ip" >> "$openssl_cnf"
+  fi
+  if [[ -n "$DOMAIN" && "$DOMAIN" != "$cn" ]]; then
+    printf 'DNS.5 = %s\n' "$DOMAIN" >> "$openssl_cnf"
+  fi
+
+  log "Generating self-signed TLS certificate (CN=$cn) → $TLS_DIR"
+  openssl req -x509 -nodes -days 825 -newkey rsa:2048 \
+    -keyout "$TLS_KEY" -out "$TLS_CERT" \
+    -config "$openssl_cnf" -extensions v3_req
+  rm -f "$openssl_cnf"
+  chmod 640 "$TLS_KEY"
+  chmod 644 "$TLS_CERT"
+}
+
+setup_letsencrypt() {
+  [[ $WITH_HTTPS -eq 1 && "$TLS_MODE" == "letsencrypt" ]] || return
+  [[ "$WEBSERVER" == "apache" ]] || return
+
+  log "Installing certbot for Let's Encrypt"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get install -y -q certbot python3-certbot-apache
+  log "Requesting certificate for $DOMAIN"
+  local certbot_args=(--apache -d "$DOMAIN" --non-interactive --agree-tos \
+    --register-unsafely-without-email --no-eff-email)
+  [[ $HTTPS_REDIRECT -eq 1 ]] && certbot_args+=(--redirect)
+  certbot "${certbot_args[@]}"
+}
+
+setup_apache_https_modules() {
+  [[ $WITH_HTTPS -eq 1 ]] || return
+  a2enmod ssl >/dev/null 2>&1 || true
+  a2enmod headers >/dev/null 2>&1 || true
+}
+
 setup_apache() {
   [[ "$WEBSERVER" == "apache" ]] || return
 
   local conf="/etc/apache2/conf-available/signage-boards.conf"
-  local escaped
+  local escaped docroot server_name
   escaped="$(printf '%s' "$WEBROOT" | sed 's/[\/&]/\\&/g')"
+  docroot="$(apache_document_root)"
+  server_name="$(signage_server_name)"
 
   log "Writing Apache hardening config → $conf"
   cat > "$conf" <<EOF
@@ -337,13 +457,71 @@ LimitRequestBody 23068672
 </DirectoryMatch>
 EOF
 
-  if [[ -n "$DOMAIN" ]]; then
+  if [[ $WITH_HTTPS -eq 1 && "$TLS_MODE" == "selfsigned" ]]; then
+    setup_tls_certificate
+    setup_apache_https_modules
+
+    local http_vhost="/etc/apache2/sites-available/signage.conf"
+    local ssl_vhost="/etc/apache2/sites-available/signage-ssl.conf"
+    if [[ $HTTPS_REDIRECT -eq 1 ]]; then
+      log "Writing Apache HTTP → HTTPS redirect → $http_vhost"
+      cat > "$http_vhost" <<EOF
+<VirtualHost *:80>
+    ServerName $server_name
+    Redirect permanent / https://${server_name}/
+</VirtualHost>
+EOF
+    else
+      log "Writing Apache HTTP vhost → $http_vhost (no redirect — proxy-friendly)"
+      cat > "$http_vhost" <<EOF
+<VirtualHost *:80>
+    ServerName $server_name
+    DocumentRoot $docroot
+
+    ErrorLog \${APACHE_LOG_DIR}/signage-error.log
+    CustomLog \${APACHE_LOG_DIR}/signage-access.log combined
+</VirtualHost>
+EOF
+    fi
+
+    log "Writing Apache HTTPS vhost → $ssl_vhost"
+    cat > "$ssl_vhost" <<EOF
+<VirtualHost *:443>
+    ServerName $server_name
+    DocumentRoot $docroot
+
+    SSLEngine on
+    SSLCertificateFile $TLS_CERT
+    SSLCertificateKeyFile $TLS_KEY
+
+    ErrorLog \${APACHE_LOG_DIR}/signage-ssl-error.log
+    CustomLog \${APACHE_LOG_DIR}/signage-ssl-access.log combined
+</VirtualHost>
+EOF
+    a2ensite signage.conf >/dev/null 2>&1 || true
+    a2ensite signage-ssl.conf >/dev/null 2>&1 || true
+    a2dissite 000-default.conf >/dev/null 2>&1 || true
+  elif [[ $WITH_HTTPS -eq 1 && "$TLS_MODE" == "letsencrypt" ]]; then
+    local http_vhost="/etc/apache2/sites-available/signage.conf"
+    log "Writing Apache HTTP vhost → $http_vhost (certbot will add HTTPS)"
+    cat > "$http_vhost" <<EOF
+<VirtualHost *:80>
+    ServerName $server_name
+    DocumentRoot $docroot
+
+    ErrorLog \${APACHE_LOG_DIR}/signage-error.log
+    CustomLog \${APACHE_LOG_DIR}/signage-access.log combined
+</VirtualHost>
+EOF
+    a2ensite signage.conf >/dev/null 2>&1 || true
+    a2dissite 000-default.conf >/dev/null 2>&1 || true
+  elif [[ -n "$DOMAIN" ]]; then
     local vhost="/etc/apache2/sites-available/signage.conf"
     log "Writing Apache vhost → $vhost (ServerName $DOMAIN)"
     cat > "$vhost" <<EOF
 <VirtualHost *:80>
     ServerName $DOMAIN
-    DocumentRoot $WEBROOT
+    DocumentRoot $docroot
 
     ErrorLog \${APACHE_LOG_DIR}/signage-error.log
     CustomLog \${APACHE_LOG_DIR}/signage-access.log combined
@@ -360,6 +538,8 @@ EOF
   apache2ctl configtest
   systemctl enable apache2 >/dev/null 2>&1 || true
   systemctl reload apache2
+
+  setup_letsencrypt
 }
 
 setup_nginx() {
@@ -395,8 +575,70 @@ location ~ ^${loc_path}/(.+\.php)$ {
 }
 EOF
 
-  warn "nginx: add 'include snippets/signage-boards.conf;' to your server block"
-  warn "nginx: adjust fastcgi_pass if your PHP-FPM socket path differs"
+  if [[ $WITH_HTTPS -eq 1 && "$TLS_MODE" == "selfsigned" ]]; then
+    setup_tls_certificate
+    local docroot server_name site="/etc/nginx/sites-available/signage.conf"
+    docroot="$(apache_document_root)"
+    server_name="$(signage_server_name)"
+    log "Writing nginx site → $site"
+    if [[ $HTTPS_REDIRECT -eq 1 ]]; then
+      cat > "$site" <<EOF
+# Home Signage Boards — generated by setup-server.sh
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $server_name;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name $server_name;
+    root $docroot;
+    index index.php board.php;
+
+    ssl_certificate $TLS_CERT;
+    ssl_certificate_key $TLS_KEY;
+
+    include snippets/signage-boards.conf;
+}
+EOF
+    else
+      cat > "$site" <<EOF
+# Home Signage Boards — generated by setup-server.sh
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $server_name;
+    root $docroot;
+    index index.php board.php;
+
+    include snippets/signage-boards.conf;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name $server_name;
+    root $docroot;
+    index index.php board.php;
+
+    ssl_certificate $TLS_CERT;
+    ssl_certificate_key $TLS_KEY;
+
+    include snippets/signage-boards.conf;
+}
+EOF
+    fi
+    ln -sf "$site" /etc/nginx/sites-enabled/signage.conf 2>/dev/null || true
+    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+    warn "nginx: review $site — adjust fastcgi_pass if PHP-FPM socket differs"
+  else
+    warn "nginx: add 'include snippets/signage-boards.conf;' to your server block"
+    warn "nginx: adjust fastcgi_pass if your PHP-FPM socket path differs"
+  fi
+
   nginx -t
   systemctl enable nginx >/dev/null 2>&1 || true
   systemctl reload nginx
@@ -422,13 +664,12 @@ guess_url_base() {
     echo "$URL_BASE"
     return
   fi
-  local host path
-  host="$(hostname -f 2>/dev/null || hostname)"
+  local host path scheme
+  host="$(signage_server_name)"
   path="$(url_path)"
-  if [[ -n "$DOMAIN" ]]; then
-    host="$DOMAIN"
-  fi
-  echo "http://${host}${path}"
+  scheme="http"
+  [[ $WITH_HTTPS -eq 1 && $HTTPS_REDIRECT -eq 1 ]] && scheme="https"
+  echo "${scheme}://${host}${path}"
 }
 
 post_install_php() {
@@ -649,12 +890,13 @@ EOF
 verify_protection() {
   [[ "$WEBSERVER" == "apache" ]] || return
 
-  local base path
+  local base path curl_opts=()
   base="$(guess_url_base)"
   path="${base%/}/config/settings.json"
+  [[ $WITH_HTTPS -eq 1 && "$TLS_MODE" == "selfsigned" ]] && curl_opts=(-k)
   log "Verifying config/ is blocked (expect HTTP 403)"
   local code
-  code="$(curl -s -o /dev/null -w '%{http_code}' "$path" 2>/dev/null || echo "000")"
+  code="$(curl "${curl_opts[@]}" -s -o /dev/null -w '%{http_code}' "$path" 2>/dev/null || echo "000")"
   case "$code" in
     403) log "OK — config/settings.json returned 403" ;;
     404) log "OK — config/settings.json returned 404 (directory empty)" ;;
@@ -712,6 +954,20 @@ print_summary() {
   board="${base%/}/board.php"
   admin="${base%/}/admin.php"
   player="${base%/}/player.php"
+  local https_note=""
+  if [[ $WITH_HTTPS -eq 1 ]]; then
+    local https_base="https://$(signage_server_name)$(url_path)"
+    if [[ "$TLS_MODE" == "letsencrypt" ]]; then
+      https_note="HTTPS:     Let's Encrypt (managed by certbot for $DOMAIN)"
+    else
+      https_note="HTTPS:     also on ${https_base} (self-signed cert at $TLS_CERT)
+             Port 80 stays plain HTTP — point reverse proxies at http:// (not :443).
+             Kiosks need an https:// URL for embeds; use the proxy's public URL, or
+             https:// directly if hitting this box. Cert trust warning until accepted."
+      [[ $HTTPS_REDIRECT -eq 1 ]] && https_note="HTTPS:     self-signed cert at $TLS_CERT (port 80 redirects to HTTPS)
+             Kiosk URL: use https:// in setup-kiosk.sh"
+    fi
+  fi
 
   local setup_step
   if [[ -f "$keyfile" ]]; then
@@ -733,6 +989,7 @@ Home Signage Boards — server setup complete
 Web root:     $WEBROOT
 Web server:   $WEBSERVER
 Base URL:     $base
+$https_note
 
 Next steps:
 ${setup_step}
@@ -751,7 +1008,10 @@ Security checklist:
   • First admin setup needs config/setup.key from the server (not web-accessible)
   • Confirm blocked paths return 403:
       curl -I ${base%/}/config/settings.json
-  • For HTTPS, put Caddy/nginx/Certbot or Cloudflare Tunnel in front
+  • HTTPS is required for secure-context embeds, PWA player, and many iframe sites
+  • Behind a reverse proxy: proxy → http://this-host/boards/ ; kiosks use the proxy https URL
+  • Standalone server forcing HTTPS: re-run with --https-redirect
+  • Public hostname: re-run with --domain example.com --letsencrypt for a trusted cert
 
 Writable directories (owned by $WEB_USER):
   config/  cache/  videos/  slides/  photos/  bin/
