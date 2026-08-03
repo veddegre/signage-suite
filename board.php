@@ -143,7 +143,7 @@ if (($_GET['api'] ?? '') === 'presence') {
 </style>
 </head>
 <body<?= $blankActive ? ' class="signage-blank' . ($emergencyTicker ? ' signage-emergency-ticker' : '') . '"' : ($emergencyTicker ? ' class="signage-emergency-ticker"' : '') ?> style="--signage-hero-inset: <?= (int)$heroStripHeight ?>px">
-<?php if ($SCREEN !== 'main'): ?>
+<?php if ($SCREEN !== 'main' && $showDebug): ?>
 <div id="screen-badge" title="Rotation display key"><?= htmlspecialchars($SCREEN) ?></div>
 <?php endif; ?>
 <div id="empty">
