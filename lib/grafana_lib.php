@@ -127,18 +127,27 @@ function grafana_static_auth_configured(): bool
     return grafana_static_auth_token() !== '';
 }
 
-function grafana_strip_auth_token_from_url(string $url): string
+function grafana_embed_query_keys_to_strip(): array
 {
-    $parts = parse_url($url);
-    if (!is_array($parts) || empty($parts['query'])) {
-        return $url;
+    return ['auth_token', 'kiosk', 'theme', 'refresh'];
+}
+
+/** @param array<string, scalar|null> $params */
+function grafana_strip_embed_query_params(array $params): array
+{
+    foreach (grafana_embed_query_keys_to_strip() as $key) {
+        unset($params[$key]);
     }
 
-    parse_str((string)$parts['query'], $params);
-    if (!isset($params['auth_token'])) {
+    return $params;
+}
+
+function grafana_rebuild_url_with_query(string $url, array $params): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
         return $url;
     }
-    unset($params['auth_token']);
 
     $rebuilt = '';
     if (isset($parts['scheme'])) {
@@ -158,15 +167,53 @@ function grafana_strip_auth_token_from_url(string $url): string
         $rebuilt .= ':' . $parts['port'];
     }
     $rebuilt .= (string)($parts['path'] ?? '');
-    $query = http_build_query($params);
-    if ($query !== '') {
-        $rebuilt .= '?' . $query;
+    if ($params !== []) {
+        $rebuilt .= '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     }
     if (isset($parts['fragment'])) {
         $rebuilt .= '#' . $parts['fragment'];
     }
 
     return $rebuilt;
+}
+
+/** Remove embed params signage re-appends (auth_token, kiosk, theme, refresh). */
+function grafana_normalize_dashboard_url(string $url): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts) || empty($parts['query'])) {
+        return $url;
+    }
+
+    parse_str((string)$parts['query'], $params);
+
+    return grafana_rebuild_url_with_query($url, grafana_strip_embed_query_params($params));
+}
+
+function grafana_clean_extra_params(string $params): string
+{
+    $params = trim($params);
+    if ($params === '') {
+        return '';
+    }
+
+    parse_str(ltrim($params, '&?'), $parsed);
+    if (!is_array($parsed) || $parsed === []) {
+        return '';
+    }
+
+    $clean = grafana_strip_embed_query_params($parsed);
+    if ($clean === []) {
+        return '';
+    }
+
+    return http_build_query($clean, '', '&', PHP_QUERY_RFC3986);
+}
+
+/** @deprecated Use grafana_normalize_dashboard_url() */
+function grafana_strip_auth_token_from_url(string $url): string
+{
+    return grafana_normalize_dashboard_url($url);
 }
 
 /**
@@ -373,18 +420,19 @@ function grafana_jwt_create(array $dash = []): ?string
  */
 function grafana_dashboard_iframe_src(string $registryKey, array $dash): array
 {
-    $url = grafana_strip_auth_token_from_url(trim((string)($dash['url'] ?? '')));
+    $url = grafana_normalize_dashboard_url(trim((string)($dash['url'] ?? '')));
     if ($url === '' || str_contains($url, 'REPLACE')) {
         return ['ok' => false, 'error' => 'Dashboard URL not configured'];
     }
 
     $theme = (string)cfg('grafana.GRAFANA_THEME', 'dark');
-    $qs = 'kiosk&theme=' . rawurlencode($theme);
+    $qs = 'kiosk=true&theme=' . rawurlencode($theme);
     if (!empty($dash['refresh'])) {
         $qs .= '&refresh=' . rawurlencode((string)$dash['refresh']);
     }
-    if (!empty($dash['params'])) {
-        $qs .= '&' . ltrim((string)$dash['params'], '&?');
+    $extra = grafana_clean_extra_params((string)($dash['params'] ?? ''));
+    if ($extra !== '') {
+        $qs .= '&' . $extra;
     }
 
     $authMode = 'none';

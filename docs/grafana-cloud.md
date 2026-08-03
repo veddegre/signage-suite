@@ -73,7 +73,7 @@ Reference: [Grafana blog — embedding authenticated dashboards](https://grafana
 - **JWT** column — `auto` or `on`
 - Rotation: `grafana.php?d=<key>`
 
-Signage appends `kiosk`, theme, refresh, and a fresh `auth_token` automatically.
+Signage appends `kiosk=true`, theme, refresh, and a fresh `auth_token` automatically.
 
 ### Token lifetime
 

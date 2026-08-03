@@ -38,7 +38,7 @@ Example row:
 | **Dashboard URL** | `https://monitor.example.edu/d/uid/dashboard-name?orgId=1` |
 | **Extra params** | `from=now-15m&to=now&timezone=browser` |
 
-Signage appends `kiosk`, theme, refresh, and `auth_token=` automatically.
+Signage appends `kiosk=true`, theme, refresh, and `auth_token=` automatically.
 
 **Note:** Signage does **not** refresh this token (no automatic re-signing). Many orgs issue **non-expiring** embed tokens — set once and leave it. If IT ever rotates the token, update **Global embed auth token** here. For short-lived JWTs that signage mints itself, use [JWT signing](#grafana-server-setup) instead.
 
