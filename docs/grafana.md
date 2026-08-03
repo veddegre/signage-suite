@@ -225,6 +225,7 @@ php scripts/diagnose-grafana.php --test --key=ops
 | User not found | Email not in Grafana | Create user or set `auto_sign_up=true` |
 | Empty dashboard / no permission | Viewer lacks folder access | Add user to team/folder with Viewer role |
 | Blank iframe | `allow_embedding = false` | Set `[security] allow_embedding = true` |
+| Works in incognito / with `auth_token` URL, broken in signage | Logged-in Grafana cookies in the same browser conflict with `auth_token` embeds | Log out of Grafana on the display browser, use a dedicated profile, or rely on signage’s `credentialless` iframe (Chromium) |
 | Token works briefly then fails | TTL too short vs refresh | Increase **JWT lifetime** or check browser network to `?api=1` |
 
 Manual check: open (once) in a browser:

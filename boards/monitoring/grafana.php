@@ -125,12 +125,12 @@ $showClock = signage_show_clock();
     </div>
     <div class="signage-embed-frame">
       <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen" scrolling="no"
-              referrerpolicy="no-referrer-when-downgrade"></iframe>
+              credentialless referrerpolicy="no-referrer-when-downgrade"></iframe>
     </div>
     <div id="embed-warn" class="embed-warn" hidden>
-      <p>If this frame stays blank, Grafana may be blocking embeds from this signage server.
-         Ask your Grafana admin to set <code>allow_embedding = true</code> in <code>grafana.ini</code>
-         and allow this site in <code>frame-ancestors</code>. The auth token must also work without a browser login session.</p>
+      <p>If this frame stays blank: log out of Grafana in this browser (session cookies conflict with
+         <code>auth_token</code> embeds), use a dedicated signage browser profile, or ask IT for
+         <code>allow_embedding = true</code> and <code>frame-ancestors</code> on the Grafana server.</p>
     </div>
   </div>
   <script>
