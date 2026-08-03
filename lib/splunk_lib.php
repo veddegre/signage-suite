@@ -4,6 +4,7 @@
  */
 
 require_once dirname(__DIR__) . '/config.php';
+require_once __DIR__ . '/users_lib.php';
 
 /** @return list<string> */
 function splunk_panel_type_options(): array
@@ -463,7 +464,7 @@ function splunk_page_label(string $pageKey): string
 }
 
 /** Echo one draggable panel card in admin. */
-function splunk_admin_panel_card(string $pageKey, int $spi, array $row): void
+function splunk_admin_panel_card(string $pageKey, int $spi, array $row, bool $readonly = false): void
 {
     $ptype = strtolower((string)($row['type'] ?? 'single'));
     if (!in_array($ptype, splunk_panel_type_options(), true)) {
@@ -471,6 +472,7 @@ function splunk_admin_panel_card(string $pageKey, int $spi, array $row): void
     }
     $ptitle = trim((string)($row['title'] ?? 'Panel'));
     $prefix = 'PAGES[' . $pageKey . '][panels][' . $spi . ']';
+    $ro = admin_form_ro_attr($readonly);
     ?>
             <div class="video-card splunk-panel-card<?= !empty($row['off']) ? ' is-off' : '' ?>" data-splunk-panel-card>
               <div class="video-card-head">
@@ -484,11 +486,11 @@ function splunk_admin_panel_card(string $pageKey, int $spi, array $row): void
               <div class="splunk-panel-card-grid">
                 <div>
                   <label class="mini">Title</label>
-                  <input type="text" name="<?= h($prefix) ?>[title]" value="<?= h($ptitle) ?>" placeholder="Events Today" data-splunk-title>
+                  <input type="text"<?= admin_form_name_attr($prefix . '[title]', $readonly) ?> value="<?= h($ptitle) ?>" placeholder="Events Today" data-splunk-title<?= $ro ?>>
                 </div>
                 <div>
                   <label class="mini">Type</label>
-                  <select name="<?= h($prefix) ?>[type]" data-splunk-type>
+                  <select<?= admin_form_name_attr($prefix . '[type]', $readonly) ?> data-splunk-type<?= $ro ?>>
                     <?php foreach (splunk_panel_type_options() as $opt): ?>
                     <option value="<?= h($opt) ?>" <?= $ptype === $opt ? 'selected' : '' ?>><?= h(splunk_panel_type_label($opt)) ?></option>
                     <?php endforeach; ?>
@@ -496,35 +498,35 @@ function splunk_admin_panel_card(string $pageKey, int $spi, array $row): void
                 </div>
                 <div data-splunk-field="single">
                   <label class="mini">Unit (single)</label>
-                  <input type="text" name="<?= h($prefix) ?>[unit]" value="<?= h((string)($row['unit'] ?? '')) ?>" placeholder="events">
+                  <input type="text"<?= admin_form_name_attr($prefix . '[unit]', $readonly) ?> value="<?= h((string)($row['unit'] ?? '')) ?>" placeholder="events"<?= $ro ?>>
                 </div>
                 <div class="span-3">
                   <label class="mini">SPL</label>
-                  <textarea name="<?= h($prefix) ?>[spl]" placeholder="index=main | stats count" data-splunk-spl><?= h((string)($row['spl'] ?? '')) ?></textarea>
+                  <textarea<?= admin_form_name_attr($prefix . '[spl]', $readonly) ?> placeholder="index=main | stats count" data-splunk-spl<?= $ro ?>><?= h((string)($row['spl'] ?? '')) ?></textarea>
                 </div>
                 <div data-splunk-field="single">
                   <label class="mini">Value field (single)</label>
-                  <input type="text" name="<?= h($prefix) ?>[field]" value="<?= h((string)($row['field'] ?? '')) ?>" placeholder="count">
+                  <input type="text"<?= admin_form_name_attr($prefix . '[field]', $readonly) ?> value="<?= h((string)($row['field'] ?? '')) ?>" placeholder="count"<?= $ro ?>>
                 </div>
                 <div data-splunk-field="list">
                   <label class="mini">Label field (list)</label>
-                  <input type="text" name="<?= h($prefix) ?>[label]" value="<?= h((string)($row['label'] ?? '')) ?>" placeholder="country">
+                  <input type="text"<?= admin_form_name_attr($prefix . '[label]', $readonly) ?> value="<?= h((string)($row['label'] ?? '')) ?>" placeholder="country"<?= $ro ?>>
                 </div>
                 <div data-splunk-field="list,trend">
                   <label class="mini">Value field (list / trend)</label>
-                  <input type="text" name="<?= h($prefix) ?>[value]" value="<?= h((string)($row['value'] ?? '')) ?>" placeholder="count">
+                  <input type="text"<?= admin_form_name_attr($prefix . '[value]', $readonly) ?> value="<?= h((string)($row['value'] ?? '')) ?>" placeholder="count"<?= $ro ?>>
                 </div>
                 <div>
                   <label class="mini">Earliest</label>
-                  <input type="text" name="<?= h($prefix) ?>[earliest]" value="<?= h((string)($row['earliest'] ?? '')) ?>" placeholder="-24h@h">
+                  <input type="text"<?= admin_form_name_attr($prefix . '[earliest]', $readonly) ?> value="<?= h((string)($row['earliest'] ?? '')) ?>" placeholder="-24h@h"<?= $ro ?>>
                 </div>
                 <div>
                   <label class="mini">Latest</label>
-                  <input type="text" name="<?= h($prefix) ?>[latest]" value="<?= h((string)($row['latest'] ?? '')) ?>" placeholder="now">
+                  <input type="text"<?= admin_form_name_attr($prefix . '[latest]', $readonly) ?> value="<?= h((string)($row['latest'] ?? '')) ?>" placeholder="now"<?= $ro ?>>
                 </div>
                 <div style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
-                  <label class="check" style="margin:0"><input type="checkbox" name="<?= h($prefix) ?>[wide]" <?= !empty($row['wide']) ? 'checked' : '' ?>> Wide (2 cols)</label>
-                  <label class="check" style="margin:0"><input type="checkbox" name="<?= h($prefix) ?>[off]" <?= !empty($row['off']) ? 'checked' : '' ?> data-splunk-off> Off wall</label>
+                  <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr($prefix . '[wide]', $readonly) ?> <?= !empty($row['wide']) ? 'checked' : '' ?><?= $ro ?>> Wide (2 cols)</label>
+                  <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr($prefix . '[off]', $readonly) ?> <?= !empty($row['off']) ? 'checked' : '' ?> data-splunk-off<?= $ro ?>> Off wall</label>
                 </div>
               </div>
               <div class="video-card-meta">

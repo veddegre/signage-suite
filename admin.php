@@ -3562,6 +3562,13 @@ function admin_field(array $f, $val, string $board): void
   .splunk-page-tab.active { border-color:var(--beacon); color:var(--beacon); font-weight:600; }
   .splunk-page-tab code { font-size:12px; color:var(--mist); margin-left:6px; }
   .splunk-page-editor { margin-top:8px; }
+  .splunk-page-editor[data-page-readonly="1"] { opacity:.92; }
+  .splunk-page-editor[data-page-readonly="1"] input:not([type=hidden]),
+  .splunk-page-editor[data-page-readonly="1"] select,
+  .splunk-page-editor[data-page-readonly="1"] textarea { cursor:default; }
+  .splunk-page-editor[data-page-readonly="1"] .addrow,
+  .splunk-page-editor[data-page-readonly="1"] .rowdel,
+  .splunk-page-editor[data-page-readonly="1"] .drag-handle { display:none !important; }
   .splunk-page-head { display:grid; grid-template-columns:1fr 1fr auto; gap:12px 14px; margin-bottom:14px; align-items:end; }
   .splunk-page-head label.mini { display:block; font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
   .splunk-page-head input { width:100%; padding:8px 10px; font-size:14px; background:var(--lake-night); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
@@ -5478,30 +5485,36 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <?php foreach ($splunkPages as $pk => $pg):
             $panelRows = is_array($pg['panels'] ?? null) ? $pg['panels'] : [];
+            $pageRo = admin_page_entry_readonly($pg);
           ?>
           <div class="splunk-page-editor" data-splunk-page-editor="<?= h($pk) ?>"
-               style="<?= $pk === $splunkActivePage ? '' : 'display:none' ?>">
+               style="<?= $pk === $splunkActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
             <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-splunk-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-splunk-page-key>
+            <?php endif; ?>
             <div class="splunk-page-head">
               <div>
                 <label class="mini">Page title</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
-                       placeholder="SOC Overview" data-splunk-page-title>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="SOC Overview" data-splunk-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div>
                 <label class="mini">Subtitle</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
-                       placeholder="Home network" data-splunk-page-sub>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Home network" data-splunk-page-sub<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
                    href="<?= h(splunk_preview_url($pk)) ?>" target="_blank" rel="noopener" data-splunk-page-preview>Preview ↗</a>
-                <?php if (count($splunkPages) > 1): ?>
+                <?php if (count($splunkPages) > 1 && !$pageRo): ?>
                 <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
                         onclick="removeSplunkPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
                 <?php endif; ?>
               </div>
             </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
             <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(splunk_page_url($pk)) ?></code></div>
 
@@ -5511,10 +5524,12 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <?php endif; ?>
               <?php foreach ($panelRows as $spi => $row):
                 if (!is_array($row)) continue;
-                splunk_admin_panel_card($pk, (int)$spi, $row);
+                splunk_admin_panel_card($pk, (int)$spi, $row, $pageRo);
               endforeach; ?>
             </div>
+            <?php if (!$pageRo): ?>
             <button type="button" class="addrow" style="margin-top:12px" onclick="addSplunkPanelCard('<?= h($pk) ?>')">+ Add panel</button>
+            <?php endif; ?>
           </div>
           <?php endforeach; ?>
 
@@ -5576,44 +5591,50 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <?php foreach ($zabbixPages as $pk => $pg):
             $minSev = max(0, min(5, (int)($pg['min_severity'] ?? 2)));
+            $pageRo = admin_page_entry_readonly($pg);
           ?>
           <div class="splunk-page-editor" data-zabbix-page-editor="<?= h($pk) ?>"
-               style="<?= $pk === $zabbixActivePage ? '' : 'display:none' ?>">
+               style="<?= $pk === $zabbixActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
             <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-zabbix-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-zabbix-page-key>
+            <?php endif; ?>
             <div class="splunk-page-head">
               <div>
                 <label class="mini">Page title</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
-                       placeholder="Network NOC" data-zabbix-page-title>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="Network NOC" data-zabbix-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div>
                 <label class="mini">Subtitle</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
-                       placeholder="Production hosts" data-zabbix-page-sub>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Production hosts" data-zabbix-page-sub<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
                    href="<?= h(zabbix_preview_url($pk)) ?>" target="_blank" rel="noopener" data-zabbix-page-preview>Preview ↗</a>
-                <?php if (count($zabbixPages) > 1): ?>
+                <?php if (count($zabbixPages) > 1 && !$pageRo): ?>
                 <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
                         onclick="removeZabbixPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
                 <?php endif; ?>
               </div>
             </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
             <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(zabbix_page_url($pk)) ?></code></div>
 
             <div class="field-grid" style="margin-bottom:12px">
               <div class="field span-2">
                 <label class="mini">Host groups</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][host_groups]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][host_groups]', $pageRo) ?>
                        value="<?= h(zabbix_host_groups_string($pg['host_groups'] ?? '')) ?>"
-                       placeholder="Linux servers, Network gear">
+                       placeholder="Linux servers, Network gear"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Exact Zabbix host group names, comma-separated — leave blank for <strong>all hosts</strong> the API token can read. Use quotes when a name contains a comma, e.g. <code>"Linux servers", Network gear</code>.</div>
               </div>
               <div class="field">
                 <label class="mini">Minimum severity</label>
-                <select name="PAGES[<?= h($pk) ?>][min_severity]">
+                <select<?= admin_form_name_attr('PAGES[' . $pk . '][min_severity]', $pageRo) ?><?= admin_form_ro_attr($pageRo) ?>>
                   <?php foreach (zabbix_severity_options() as $sev): ?>
                   <option value="<?= $sev ?>" <?= $minSev === $sev ? 'selected' : '' ?>><?= h(zabbix_severity_label($sev)) ?></option>
                   <?php endforeach; ?>
@@ -5621,24 +5642,24 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
               <div class="field">
                 <label class="mini">Max problems</label>
-                <input type="number" name="PAGES[<?= h($pk) ?>][max_problems]" min="1" max="50"
-                       value="<?= (int)($pg['max_problems'] ?? 12) ?>">
+                <input type="number"<?= admin_form_name_attr('PAGES[' . $pk . '][max_problems]', $pageRo) ?> min="1" max="50"
+                       value="<?= (int)($pg['max_problems'] ?? 12) ?>"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field">
                 <label class="mini">Max hosts</label>
-                <input type="number" name="PAGES[<?= h($pk) ?>][max_hosts]" min="1" max="100"
-                       value="<?= (int)($pg['max_hosts'] ?? 24) ?>">
+                <input type="number"<?= admin_form_name_attr('PAGES[' . $pk . '][max_hosts]', $pageRo) ?> min="1" max="100"
+                       value="<?= (int)($pg['max_hosts'] ?? 24) ?>"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Cap for group-scoped pages only — ignored when host groups are blank (all hosts are shown).</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][hide_acknowledged]"
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][hide_acknowledged]', $pageRo) ?>
                   <?= !empty($pg['hide_acknowledged']) || zabbix_host_groups_string($pg['host_groups'] ?? '') === '' ? 'checked' : '' ?>
-                  <?= zabbix_host_groups_string($pg['host_groups'] ?? '') === '' ? 'disabled' : '' ?>> Hide acknowledged</label>
+                  <?= zabbix_host_groups_string($pg['host_groups'] ?? '') === '' || $pageRo ? 'disabled' : '' ?>> Hide acknowledged</label>
                 <?php if (zabbix_host_groups_string($pg['host_groups'] ?? '') === ''): ?>
                 <span class="help" style="margin:0">Always on for all-hosts pages.</span>
                 <?php endif; ?>
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
-                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
+                  <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
               </div>
             </div>
           </div>
@@ -5702,91 +5723,97 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <?php foreach ($tdxPages as $pk => $pg):
             $pageAppId = (int)($pg['app_id'] ?? 0);
+            $pageRo = admin_page_entry_readonly($pg);
           ?>
           <div class="splunk-page-editor" data-tdx-page-editor="<?= h($pk) ?>"
-               style="<?= $pk === $tdxActivePage ? '' : 'display:none' ?>">
+               style="<?= $pk === $tdxActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
             <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-tdx-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-tdx-page-key>
+            <?php endif; ?>
             <div class="splunk-page-head">
               <div>
                 <label class="mini">Page title</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
-                       placeholder="ITSM NOC" data-tdx-page-title>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="ITSM NOC" data-tdx-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div>
                 <label class="mini">Subtitle</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
-                       placeholder="Open incidents" data-tdx-page-sub>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Open incidents" data-tdx-page-sub<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
                    href="<?= h(tdx_preview_url($pk)) ?>" target="_blank" rel="noopener" data-tdx-page-preview>Preview ↗</a>
-                <?php if (count($tdxPages) > 1): ?>
+                <?php if (count($tdxPages) > 1 && !$pageRo): ?>
                 <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
                         onclick="removeTdxPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
                 <?php endif; ?>
               </div>
             </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
             <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(tdx_page_url($pk)) ?></code></div>
 
             <div class="field-grid" style="margin-bottom:12px">
               <div class="field">
                 <label class="mini">Application ID</label>
-                <input type="number" name="PAGES[<?= h($pk) ?>][app_id]" min="1"
-                       value="<?= $pageAppId > 0 ? $pageAppId : '' ?>" placeholder="12345" list="tdxAppIds">
+                <input type="number"<?= admin_form_name_attr('PAGES[' . $pk . '][app_id]', $pageRo) ?> min="1"
+                       value="<?= $pageAppId > 0 ? $pageAppId : '' ?>" placeholder="12345" list="tdxAppIds"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Ticketing app ID from TDAdmin or metadata table below.</div>
               </div>
               <div class="field">
                 <label class="mini">Max tickets</label>
-                <input type="number" name="PAGES[<?= h($pk) ?>][max_tickets]" min="1" max="50"
-                       value="<?= (int)($pg['max_tickets'] ?? 20) ?>">
+                <input type="number"<?= admin_form_name_attr('PAGES[' . $pk . '][max_tickets]', $pageRo) ?> min="1" max="50"
+                       value="<?= (int)($pg['max_tickets'] ?? 20) ?>"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field span-2">
                 <label class="mini">Type IDs</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][type_ids]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][type_ids]', $pageRo) ?>
                        value="<?= h(tdx_ids_string($pg['type_ids'] ?? '')) ?>"
-                       placeholder="Incident, Service Request — comma-separated numeric IDs" list="tdxTypeIds">
+                       placeholder="Incident, Service Request — comma-separated numeric IDs" list="tdxTypeIds"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field span-2">
                 <label class="mini">Status IDs</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][status_ids]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][status_ids]', $pageRo) ?>
                        value="<?= h(tdx_ids_string($pg['status_ids'] ?? '')) ?>"
-                       placeholder="Leave blank for open/in-process/on-hold" list="tdxStatusIds">
+                       placeholder="Leave blank for open/in-process/on-hold" list="tdxStatusIds"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field span-2">
                 <label class="mini">Responsible users</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][responsible_users]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][responsible_users]', $pageRo) ?>
                        value="<?= h(tdx_users_string($pg['responsible_users'] ?? '')) ?>"
-                       placeholder="jane.doe@example.com, jdoe — email or username">
+                       placeholder="jane.doe@example.com, jdoe — email or username"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Tickets where this person is <strong>Responsible</strong>. Comma-separated; each entry is looked up via TDX people search.</div>
               </div>
               <div class="field span-2">
                 <label class="mini">Responsible user UIDs</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][responsible_uids]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][responsible_uids]', $pageRo) ?>
                        value="<?= h(tdx_uids_string($pg['responsible_uids'] ?? '')) ?>"
-                       placeholder="Optional GUIDs if you already know them">
+                       placeholder="Optional GUIDs if you already know them"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Direct person GUIDs (<code>ResponsibilityUids</code>). Use when email lookup is ambiguous.</div>
               </div>
               <div class="field span-2">
                 <label class="mini">Responsible group IDs</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][group_ids]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][group_ids]', $pageRo) ?>
                        value="<?= h(tdx_ids_string($pg['group_ids'] ?? '')) ?>"
-                       placeholder="Help Desk, Network Team — comma-separated IDs" list="tdxGroupIds">
+                       placeholder="Help Desk, Network Team — comma-separated IDs" list="tdxGroupIds"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Tickets owned by / assigned to these groups (<code>ResponsibilityGroupIDs</code>).</div>
               </div>
               <div class="field span-2">
                 <label class="mini">Priority IDs</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][priority_ids]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][priority_ids]', $pageRo) ?>
                        value="<?= h(tdx_ids_string($pg['priority_ids'] ?? '')) ?>"
-                       placeholder="Optional — comma-separated IDs" list="tdxPriorityIds">
+                       placeholder="Optional — comma-separated IDs" list="tdxPriorityIds"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][include_closed]"
-                  <?= !empty($pg['include_closed']) ? 'checked' : '' ?>> Include closed</label>
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][include_cancelled]"
-                  <?= !empty($pg['include_cancelled']) ? 'checked' : '' ?>> Include cancelled</label>
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
-                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][include_closed]', $pageRo) ?>
+                  <?= !empty($pg['include_closed']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Include closed</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][include_cancelled]', $pageRo) ?>
+                  <?= !empty($pg['include_cancelled']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Include cancelled</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
+                  <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
               </div>
             </div>
           </div>
@@ -5914,56 +5941,63 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <input type="hidden" name="share_role" value="infra">
           <?php endif; ?>
 
-          <?php foreach ($kumaPages as $pk => $pg): ?>
+          <?php foreach ($kumaPages as $pk => $pg):
+            $pageRo = admin_page_entry_readonly($pg);
+          ?>
           <div class="splunk-page-editor" data-kuma-page-editor="<?= h($pk) ?>"
-               style="<?= $pk === $kumaActivePage ? '' : 'display:none' ?>">
+               style="<?= $pk === $kumaActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
             <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-kuma-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-kuma-page-key>
+            <?php endif; ?>
             <div class="splunk-page-head">
               <div>
                 <label class="mini">Page title</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
-                       placeholder="Production" data-kuma-page-title>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="Production" data-kuma-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div>
                 <label class="mini">Subtitle</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][sub]" value="<?= h((string)($pg['sub'] ?? '')) ?>"
-                       placeholder="Public services" data-kuma-page-sub>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Public services" data-kuma-page-sub<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
                    href="<?= h(kuma_preview_url($pk)) ?>" target="_blank" rel="noopener" data-kuma-page-preview>Preview ↗</a>
-                <?php if (count($kumaPages) > 1): ?>
+                <?php if (count($kumaPages) > 1 && !$pageRo): ?>
                 <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
                         onclick="removeKumaPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
                 <?php endif; ?>
               </div>
             </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
             <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(kuma_page_url($pk)) ?></code></div>
 
             <div class="field-grid" style="margin-bottom:12px">
               <div class="field span-2">
                 <label class="mini">Status page slug</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][status_slug]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][status_slug]', $pageRo) ?>
                        value="<?= h((string)($pg['status_slug'] ?? '')) ?>"
-                       placeholder="my-status-page">
+                       placeholder="my-status-page"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">From <strong>Status Pages</strong> in Uptime Kuma — the slug in the public URL. Works without an API key.</div>
               </div>
               <div class="field span-2">
                 <label class="mini">Tag filter</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][tags]"
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][tags]', $pageRo) ?>
                        value="<?= h((string)($pg['tags'] ?? '')) ?>"
-                       placeholder="prod, web">
+                       placeholder="prod, web"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Comma-separated tags — show only monitors with any listed tag (optional; mainly with API key mode).</div>
               </div>
               <div class="field">
                 <label class="mini">Max monitors</label>
-                <input type="number" name="PAGES[<?= h($pk) ?>][max_monitors]" min="4" max="60"
-                       value="<?= (int)($pg['max_monitors'] ?? kuma_max_monitors()) ?>">
+                <input type="number"<?= admin_form_name_attr('PAGES[' . $pk . '][max_monitors]', $pageRo) ?> min="4" max="60"
+                       value="<?= (int)($pg['max_monitors'] ?? kuma_max_monitors()) ?>"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
-                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
+                  <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
               </div>
             </div>
           </div>
@@ -6034,25 +6068,31 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             if (!in_array($jwtAuth, ['auto', 'on', 'off'], true)) {
                 $jwtAuth = 'auto';
             }
+            $pageRo = admin_page_entry_readonly($pg);
           ?>
           <div class="splunk-page-editor" data-grafana-page-editor="<?= h($pk) ?>"
-               style="<?= $pk === $grafanaActivePage ? '' : 'display:none' ?>">
+               style="<?= $pk === $grafanaActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
             <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-grafana-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-grafana-page-key>
+            <?php endif; ?>
             <div class="splunk-page-head">
               <div>
                 <label class="mini">Page title</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][title]" value="<?= h((string)($pg['title'] ?? '')) ?>"
-                       placeholder="NOC overview" data-grafana-page-title>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="NOC overview" data-grafana-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
                    href="<?= h(grafana_preview_url($pk)) ?>" target="_blank" rel="noopener" data-grafana-page-preview>Preview ↗</a>
-                <?php if (count($grafanaPages) > 1): ?>
+                <?php if (count($grafanaPages) > 1 && !$pageRo): ?>
                 <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
                         onclick="removeGrafanaPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
                 <?php endif; ?>
               </div>
             </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
             <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(grafana_page_url($pk)) ?></code>
               · <strong>Save</strong> before preview if you just added this page.</div>
@@ -6060,14 +6100,14 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <div class="field-grid" style="margin-bottom:12px">
               <div class="field span-2">
                 <label class="mini">Dashboard URL</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][url]" value="<?= h((string)($pg['url'] ?? '')) ?>"
-                       placeholder="https://grafana.example.com/d/uid/slug">
-                <div class="help">Self-hosted <code>/d/…</code>, Grafana Cloud <code>*.grafana.net/d/…</code>, or a public-dashboard URL. Do not paste <code>auth_token</code> — signage adds embed auth when configured.</div>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][url]', $pageRo) ?> value="<?= h((string)($pg['url'] ?? '')) ?>"
+                       placeholder="https://grafana.example.com/d/uid/slug"<?= admin_form_ro_attr($pageRo) ?>>
+                <div class="help">Self-hosted <code>/d/…</code>, Grafana Cloud <code>*.grafana.net/d/…</code>, or a public-dashboard URL. Do not paste <code>auth_token</code> or <code>kiosk</code> — signage adds <code>kiosk=true</code>, theme, refresh, and embed auth when the wall loads.</div>
               </div>
               <?php if (!$grafStaticOn): ?>
               <div class="field">
                 <label class="mini">JWT</label>
-                <select name="PAGES[<?= h($pk) ?>][jwt_auth]">
+                <select<?= admin_form_name_attr('PAGES[' . $pk . '][jwt_auth]', $pageRo) ?><?= admin_form_ro_attr($pageRo) ?>>
                   <?php foreach (['auto' => 'Auto', 'on' => 'On', 'off' => 'Off'] as $optVal => $optLabel): ?>
                   <option value="<?= h($optVal) ?>" <?= $jwtAuth === $optVal ? 'selected' : '' ?>><?= h($optLabel) ?></option>
                   <?php endforeach; ?>
@@ -6076,8 +6116,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
               <div class="field">
                 <label class="mini">JWT email override</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][jwt_email]" value="<?= h((string)($pg['jwt_email'] ?? '')) ?>"
-                       placeholder="Optional Grafana user email">
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][jwt_email]', $pageRo) ?> value="<?= h((string)($pg['jwt_email'] ?? '')) ?>"
+                       placeholder="Optional Grafana user email"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <?php else: ?>
               <div class="field span-2">
@@ -6086,18 +6126,18 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <?php endif; ?>
               <div class="field">
                 <label class="mini">Refresh</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][refresh]" value="<?= h((string)($pg['refresh'] ?? '')) ?>"
-                       placeholder="30s">
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][refresh]', $pageRo) ?> value="<?= h((string)($pg['refresh'] ?? '')) ?>"
+                       placeholder="30s"<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div class="field span-2">
                 <label class="mini">Extra params</label>
-                <input type="text" name="PAGES[<?= h($pk) ?>][params]" value="<?= h((string)($pg['params'] ?? '')) ?>"
-                       placeholder="var-host=web01&orgId=1">
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][params]', $pageRo) ?> value="<?= h((string)($pg['params'] ?? '')) ?>"
+                       placeholder="var-host=web01&orgId=1"<?= admin_form_ro_attr($pageRo) ?>>
                 <div class="help">Query string without <code>?</code> — omit kiosk, theme, refresh, and auth_token (signage adds those).</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
-                <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][off]"
-                  <?= !empty($pg['off']) ? 'checked' : '' ?>> Off wall</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
+                  <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
               </div>
             </div>
           </div>
@@ -6137,12 +6177,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
               </div>
-              <form method="post" action="?board=grafana" style="margin-top:14px">
-                <input type="hidden" name="action" value="grafana_test">
-                <input type="hidden" name="board" value="grafana">
-                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <button class="secondary" type="submit">Test JWT signing</button>
-              </form>
+              <button type="submit" name="action" value="grafana_test" class="secondary" style="margin-top:14px">Test JWT signing</button>
             </div>
           </details>
 
@@ -7023,7 +7058,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
         <?php endif; ?>
 
         <div class="actions">
-          <button class="save">Save</button>
+          <button class="save" type="submit" form="boardform">Save</button>
           <?php if (admin_can_tools()): ?>
           <label class="check"><input type="checkbox" name="clear_cache"> Clear cache after save</label>
           <?php endif; ?>
@@ -10783,6 +10818,22 @@ function splunkCsrf() {
   return el ? el.value : '';
 }
 
+function boardFormEl() {
+  return document.getElementById('boardform');
+}
+
+/** Insert a tabbed page editor inside #boardform (before Advanced JSON if present). */
+function mountPageEditor(editor) {
+  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
+  const mount = jsonDetails ? jsonDetails.closest('details') : null;
+  const form = boardFormEl();
+  if (mount && mount.parentNode) {
+    mount.parentNode.insertBefore(editor, mount);
+  } else if (form) {
+    form.appendChild(editor);
+  }
+}
+
 function syncSplunkPanelTypeFields(card) {
   const type = (card.querySelector('[data-splunk-type]') || {}).value || 'single';
   card.querySelectorAll('[data-splunk-field]').forEach(function (el) {
@@ -11051,10 +11102,7 @@ function addSplunkPage() {
     '</div>' +
     '<button type="button" class="addrow" style="margin-top:12px" onclick="addSplunkPanelCard(\'' + pageKey + '\')">+ Add panel</button>';
 
-  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
-  const mount = jsonDetails ? jsonDetails.closest('details') : null;
-  if (mount && mount.parentNode) mount.parentNode.insertBefore(editor, mount);
-  else document.getElementById('boardform').appendChild(editor);
+  mountPageEditor(editor);
 
   const titleInp = editor.querySelector('[data-splunk-page-title]');
   if (titleInp) titleInp.addEventListener('input', function () { syncSplunkPageTabLabel(titleInp); });
@@ -11197,13 +11245,7 @@ function addZabbixPage() {
       '</div>' +
     '</div>';
 
-  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
-  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
-  if (jsonDetails && jsonDetails.closest('details')) {
-    jsonDetails.closest('details').before(editor);
-  } else if (form) {
-    form.appendChild(editor);
-  }
+  mountPageEditor(editor);
   editor.querySelector('[data-zabbix-page-title]').addEventListener('input', function () { syncZabbixPageTabLabel(this); });
   showZabbixPage(pageKey);
 }
@@ -11309,13 +11351,7 @@ function addTdxPage() {
       '</div>' +
     '</div>';
 
-  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
-  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
-  if (jsonDetails && jsonDetails.closest('details')) {
-    jsonDetails.closest('details').before(editor);
-  } else if (form) {
-    form.appendChild(editor);
-  }
+  mountPageEditor(editor);
   editor.querySelector('[data-tdx-page-title]').addEventListener('input', function () { syncTdxPageTabLabel(this); });
   showTdxPage(pageKey);
 }
@@ -11442,13 +11478,7 @@ function addKumaPage() {
       '</div>' +
     '</div>';
 
-  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
-  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
-  if (jsonDetails && jsonDetails.closest('details')) {
-    jsonDetails.closest('details').before(editor);
-  } else if (form) {
-    form.appendChild(editor);
-  }
+  mountPageEditor(editor);
   editor.querySelector('[data-kuma-page-title]').addEventListener('input', function () { syncKumaPageTabLabel(this); });
   showKumaPage(pageKey);
 }
@@ -11580,13 +11610,7 @@ function addGrafanaPage() {
       '</div>' +
     '</div>';
 
-  const jsonDetails = document.querySelector('textarea[name="PAGES_JSON"]');
-  const form = document.getElementById('adminForm') || document.querySelector('form[method="post"]');
-  if (jsonDetails && jsonDetails.closest('details')) {
-    jsonDetails.closest('details').before(editor);
-  } else if (form) {
-    form.appendChild(editor);
-  }
+  mountPageEditor(editor);
   editor.querySelector('[data-grafana-page-title]').addEventListener('input', function () { syncGrafanaPageTabLabel(this); });
   showGrafanaPage(pageKey);
 }

@@ -310,6 +310,67 @@ function grafana_embed_query_keys_to_strip(): array
     return ['auth_token', 'kiosk', 'theme', 'refresh'];
 }
 
+/** Kiosk query value appended to every embed URL (hides Grafana app chrome on the wall). */
+function grafana_kiosk_mode(): string
+{
+    $mode = trim((string)cfg('grafana.GRAFANA_KIOSK', 'true'));
+    if ($mode === '') {
+        return 'true';
+    }
+
+    return $mode;
+}
+
+/**
+ * Merge signage embed params onto a dashboard URL (always includes kiosk).
+ *
+ * @param array<string,mixed> $dash
+ */
+function grafana_dashboard_embed_url(string $url, array $dash): string
+{
+    $url = grafana_normalize_dashboard_url(trim($url));
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return $url;
+    }
+
+    $params = [];
+    if (!empty($parts['query'])) {
+        parse_str((string)$parts['query'], $params);
+        if (!is_array($params)) {
+            $params = [];
+        }
+    }
+    $params = grafana_strip_embed_query_params($params);
+
+    $extra = grafana_clean_extra_params((string)($dash['params'] ?? ''));
+    if ($extra !== '') {
+        parse_str($extra, $extraParams);
+        if (is_array($extraParams)) {
+            foreach ($extraParams as $k => $v) {
+                if ($k !== '') {
+                    $params[$k] = $v;
+                }
+            }
+        }
+    }
+
+    $params['kiosk'] = grafana_kiosk_mode();
+    $params['theme'] = (string)cfg('grafana.GRAFANA_THEME', 'dark');
+    if (!empty($dash['refresh'])) {
+        $params['refresh'] = (string)$dash['refresh'];
+    }
+
+    $auth = grafana_dashboard_auth($dash);
+    if ($auth !== null) {
+        $params['auth_token'] = $auth['token'];
+    }
+
+    $base = grafana_rebuild_url_with_query($url, []);
+
+    return grafana_rebuild_url_with_query($base, $params);
+}
+
 /** @param array<string, scalar|null> $params */
 function grafana_strip_embed_query_params(array $params): array
 {
@@ -598,32 +659,21 @@ function grafana_jwt_create(array $dash = []): ?string
  */
 function grafana_dashboard_iframe_src(string $registryKey, array $dash): array
 {
-    $url = grafana_normalize_dashboard_url(trim((string)($dash['url'] ?? '')));
+    $url = trim((string)($dash['url'] ?? ''));
     if ($url === '' || str_contains($url, 'REPLACE')) {
         return ['ok' => false, 'error' => 'Dashboard URL not configured'];
     }
 
-    $theme = (string)cfg('grafana.GRAFANA_THEME', 'dark');
-    $qs = 'kiosk=true&theme=' . rawurlencode($theme);
-    if (!empty($dash['refresh'])) {
-        $qs .= '&refresh=' . rawurlencode((string)$dash['refresh']);
-    }
-    $extra = grafana_clean_extra_params((string)($dash['params'] ?? ''));
-    if ($extra !== '') {
-        $qs .= '&' . $extra;
-    }
-
-    $authMode = 'none';
-    $auth = grafana_dashboard_auth($dash);
-    if ($auth === null && grafana_dashboard_uses_jwt($dash)) {
+    if (grafana_dashboard_uses_jwt($dash) && grafana_dashboard_auth($dash) === null) {
         return ['ok' => false, 'error' => 'JWT enabled but signing key or login email missing'];
     }
+
+    $src = grafana_dashboard_embed_url($url, $dash);
+    $auth = grafana_dashboard_auth($dash);
+    $authMode = 'none';
     if ($auth !== null) {
-        $qs .= '&auth_token=' . rawurlencode($auth['token']);
         $authMode = $auth['mode'];
     }
-
-    $src = $url . (str_contains($url, '?') ? '&' : '?') . $qs;
 
     return [
         'ok' => true,

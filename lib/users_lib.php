@@ -1152,7 +1152,27 @@ function admin_entry_visible_for_user(?array $entry, ?string $userId): bool
 
 function admin_can_edit_entry(?array $entry): bool
 {
-    return admin_entry_visible($entry);
+    return admin_entry_owned_by_current_user($entry);
+}
+
+/** True when a multi-page board tab is shared with the user but owned by someone else. */
+function admin_page_entry_readonly(?array $entry): bool
+{
+    return !admin_is_super()
+        && is_array($entry)
+        && admin_entry_visible($entry)
+        && !admin_entry_owned_by_current_user($entry);
+}
+
+/** Omit `name` on shared read-only form rows so POST cannot overwrite them. */
+function admin_form_name_attr(string $name, bool $readonly): string
+{
+    return $readonly ? '' : ' name="' . h($name) . '"';
+}
+
+function admin_form_ro_attr(bool $readonly): string
+{
+    return $readonly ? ' readonly disabled tabindex="-1"' : '';
 }
 
 /** True when the current user may delete or drop this deck/registry row (operators: own entries only). */
@@ -1425,6 +1445,22 @@ function admin_entry_sharing_fields(string $prefix, ?array $entry, array $users,
     }
 }
 
+/** Read-only access summary for shared registry rows (operators). */
+function admin_entry_sharing_readonly_html(?array $entry): void
+{
+    if (!admin_page_entry_readonly($entry)) {
+        return;
+    }
+    $summary = admin_entry_access_summary($entry);
+    echo '<div class="entry-sharing-readonly help" style="margin:0 0 12px;padding:10px 14px;border:1px dashed var(--hairline);border-radius:10px">';
+    echo '<strong>Shared with you</strong>';
+    if ($summary !== '') {
+        echo ' — ' . h($summary);
+    }
+    echo '. Settings are read-only — use <strong>Preview</strong> and add the rotation URL to your display.';
+    echo '</div>';
+}
+
 /** Super-admin: owner dropdown + shared-with checkboxes. */
 function admin_entry_sharing_html(string $prefix, ?array $entry, bool $compact = false): void
 {
@@ -1538,16 +1574,31 @@ function admin_merge_owned_map(array $existing, array $posted): array
             $out[(string)$k] = $row;
         }
     }
+    $postedKeys = [];
     foreach ($posted as $k => $row) {
         if (!is_array($row)) {
             continue;
         }
         $key = (string)$k;
+        $postedKeys[$key] = true;
         $prev = is_array($existing[$key] ?? null) ? $existing[$key] : null;
         if ($prev !== null && !admin_entry_visible($prev)) {
             continue;
         }
+        if ($prev !== null && admin_entry_visible($prev) && !admin_entry_owned_by_current_user($prev)) {
+            $out[$key] = $prev;
+            continue;
+        }
         $out[$key] = admin_finalize_entry($row, $prev, $row);
+    }
+    foreach ($existing as $k => $row) {
+        $key = (string)$k;
+        if (!is_array($row) || isset($out[$key]) || isset($postedKeys[$key])) {
+            continue;
+        }
+        if (admin_entry_visible($row) && !admin_entry_owned_by_current_user($row)) {
+            $out[$key] = $row;
+        }
     }
     return $out;
 }
@@ -1977,7 +2028,7 @@ function admin_can_delete_registry_entry(?array $registry, string $key, ?callabl
 }
 
 /**
- * Remove one keyed registry row. Operators only drop entries they own or that are shared with them.
+ * Remove one keyed registry row. Operators may only drop entries they own.
  * @param array<string,array<string,mixed>|mixed> $registry
  * @return array<string,array<string,mixed>|mixed>
  */
@@ -1994,7 +2045,7 @@ function admin_remove_registry_entry(array $registry, string $key, ?callable $no
         return $registry;
     }
     $entry = $registry[$resolved];
-    if (is_array($entry) && admin_entry_visible($entry)) {
+    if (is_array($entry) && admin_entry_owned_by_current_user($entry)) {
         unset($registry[$resolved]);
     }
 
