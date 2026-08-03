@@ -1926,6 +1926,19 @@ function admin_filter_scalar_map_for_display(array $map): array
 /** @param array<string,array<string,mixed>|mixed> $map */
 function admin_filter_registry_for_display(array $map, ?callable $normalize = null): array
 {
+    if (!admin_preview_session_ready()) {
+        // Kiosk / player — rotation URLs are authoritative; do not hide entries owned by
+        // another admin user (e.g. infra Grafana pages on an operator display).
+        $out = [];
+        foreach ($map as $k => $entry) {
+            if (is_array($entry) && empty($entry['off'])) {
+                $out[$k] = $entry;
+            }
+        }
+
+        return $out;
+    }
+
     return admin_filter_map_for_scope($map, admin_display_scope_user_id());
 }
 

@@ -175,8 +175,8 @@ function grafana_preview_url(string $key): string
 /**
  * Resolve one dashboard for the wall or admin preview.
  * Logged-in admin preview checks visibility against the full registry (super admin
- * sees ownerless rows; operators see owned/shared entries). Kiosk rotation uses
- * display-scoped registry (screen assignment).
+ * sees ownerless rows; operators see owned/shared entries). Kiosk / player rotation
+ * resolves from the full registry by key — the playlist already chose the page.
  *
  * @return array<string,mixed>|null
  */
