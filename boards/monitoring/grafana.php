@@ -89,15 +89,15 @@ $showClock = signage_show_clock();
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; }
-  .board { width:1920px; height:100%; display:flex; flex-direction:column; min-height:0; }
-  .head { flex:0 0 auto; display:flex; align-items:baseline; justify-content:space-between;
-          padding:18px 32px 10px; min-height:56px; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:52px; line-height:1.05; }
+  .head { position:absolute; top:0; left:0; right:0; z-index:10; display:flex; align-items:baseline;
+          justify-content:space-between; padding:14px 32px 18px; pointer-events:none;
+          background:linear-gradient(180deg, rgba(12,20,34,.98) 0%, rgba(12,20,34,.94) 65%, rgba(12,20,34,0) 100%); }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:48px; line-height:1.05;
+             text-shadow:0 2px 18px rgba(0,0,0,.65); }
   .head h1 span { color:var(--beacon); }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
-           font-variant-numeric:tabular-nums; }
-  .frame { flex:1; min-height:0; }
-  iframe { width:100%; height:100%; border:0; display:block; pointer-events:none; background:var(--lake-night); }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px; color:var(--mist);
+           font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
+  iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; background:var(--lake-night); }
   .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
@@ -111,15 +111,11 @@ $showClock = signage_show_clock();
     <p><?= h((string)($embed['error'] ?? 'Configure dashboard URL and JWT settings in admin.')) ?></p>
   </div>
 <?php else: ?>
-  <div class="board">
-    <div class="head">
-      <h1><?= h($boardTitle) ?><?php if ($boardSub !== ''): ?> <span>&middot; <?= h($boardSub) ?></span><?php endif; ?></h1>
-      <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
-    </div>
-    <div class="frame">
-      <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen"></iframe>
-    </div>
+  <div class="head">
+    <h1><?= h($boardTitle) ?><?php if ($boardSub !== ''): ?> <span>&middot; <?= h($boardSub) ?></span><?php endif; ?></h1>
+    <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
+  <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen" scrolling="no"></iframe>
   <script>
   (function () {
     const frame = document.getElementById('dash');
