@@ -5614,6 +5614,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <label class="mini">Max hosts</label>
                 <input type="number" name="PAGES[<?= h($pk) ?>][max_hosts]" min="1" max="100"
                        value="<?= (int)($pg['max_hosts'] ?? 24) ?>">
+                <div class="help">Cap for group-scoped pages only — ignored when host groups are blank (all hosts are shown).</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
                 <label class="check" style="margin:0"><input type="checkbox" name="PAGES[<?= h($pk) ?>][hide_acknowledged]"

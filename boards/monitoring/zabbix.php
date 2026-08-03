@@ -36,7 +36,11 @@ $hostsWithProblems = count(array_filter($data['hosts'] ?? [], static fn($h) => i
 
 $boardH = signage_frame_height();
 $hostCols = 2;
-if ($hostCount > 20) {
+if ($hostCount > 150) {
+    $hostCols = 6;
+} elseif ($hostCount > 80) {
+    $hostCols = 5;
+} elseif ($hostCount > 20) {
     $hostCols = 4;
 } elseif ($hostCount > 12) {
     $hostCols = 3;
@@ -46,8 +50,8 @@ if ($hostCount > 20) {
 $hostCompact = $hostCount > 14 || $boardH < 1008;
 $hostGap = $hostCompact ? 8 : 12;
 $hostPad = $hostCompact ? '8px 12px' : '12px 14px';
-$hostFont = $hostCount > 20 ? 17 : ($hostCount > 14 ? 19 : 22);
-$hostMinH = $hostCompact ? 38 : 46;
+$hostFont = $hostCount > 150 ? 13 : ($hostCount > 80 ? 14 : ($hostCount > 20 ? 17 : ($hostCount > 14 ? 19 : 22)));
+$hostMinH = $hostCompact ? 34 : 46;
 
 $minSevLabel = zabbix_severity_label(max(0, min(5, (int)($page['min_severity'] ?? 2))));
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }

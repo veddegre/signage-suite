@@ -875,6 +875,112 @@ function zabbix_sort_problems(array $problems): array
 }
 
 /**
+ * Fetch hosts for a wall page — all hosts when $maxHosts is null, else capped.
+ *
+ * @param array<string,mixed> $scopeParams groupids and other host.get filters (no output/limit)
+ * @return list<array<string,mixed>>
+ */
+function zabbix_fetch_hosts_for_scope(array $scopeParams, ?int $maxHosts, ?string &$error = null): array
+{
+    $base = $scopeParams;
+    unset($base['output'], $base['limit'], $base['sortfield'], $base['sortorder']);
+
+    if ($maxHosts !== null) {
+        $hosts = zabbix_api_call('host.get', $base + [
+            'output' => ['hostid', 'name', 'status'],
+            'sortfield' => 'name',
+            'limit' => $maxHosts,
+        ], $error);
+
+        return is_array($hosts) ? $hosts : [];
+    }
+
+    $count = zabbix_api_call('host.get', $base + ['countOutput' => true], $error);
+    $total = is_numeric($count) ? (int)$count : 0;
+    if ($total === 0) {
+        return [];
+    }
+
+    $params = $base + [
+        'output' => ['hostid', 'name', 'status'],
+        'sortfield' => 'name',
+        'limit' => $total,
+    ];
+    $hosts = zabbix_api_call('host.get', $params, $error);
+    if (is_array($hosts) && count($hosts) >= $total) {
+        return $hosts;
+    }
+
+    $byId = [];
+    if (is_array($hosts)) {
+        foreach ($hosts as $host) {
+            if (is_array($host) && isset($host['hostid'])) {
+                $byId[(string)$host['hostid']] = $host;
+            }
+        }
+    }
+
+    $groupParams = ['output' => ['groupid']];
+    if (isset($base['groupids']) && is_array($base['groupids']) && $base['groupids'] !== []) {
+        $groupParams['groupids'] = $base['groupids'];
+    }
+    $groups = zabbix_api_call('hostgroup.get', $groupParams, $error);
+    if (is_array($groups)) {
+        foreach ($groups as $group) {
+            if (!is_array($group) || !isset($group['groupid'])) {
+                continue;
+            }
+            $batch = zabbix_api_call('host.get', $base + [
+                'output' => ['hostid', 'name', 'status'],
+                'groupids' => [(string)$group['groupid']],
+                'limit' => 10000,
+            ], $error);
+            if (!is_array($batch)) {
+                continue;
+            }
+            foreach ($batch as $host) {
+                if (is_array($host) && isset($host['hostid'])) {
+                    $byId[(string)$host['hostid']] = $host;
+                }
+            }
+        }
+    }
+
+    if ($byId === []) {
+        return is_array($hosts) ? $hosts : [];
+    }
+
+    $merged = array_values($byId);
+    usort($merged, static fn(array $a, array $b): int => strcasecmp(
+        (string)($a['name'] ?? ''),
+        (string)($b['name'] ?? '')
+    ));
+
+    return $merged;
+}
+
+/** @param list<array<string,mixed>> $hostRows */
+function zabbix_sort_hosts_for_wall(array $hostRows): array
+{
+    usort($hostRows, static function (array $a, array $b): int {
+        $aProblem = !empty($a['problem']);
+        $bProblem = !empty($b['problem']);
+        if ($aProblem !== $bProblem) {
+            return $bProblem <=> $aProblem;
+        }
+        $aDisabled = !empty($a['disabled']);
+        $bDisabled = !empty($b['disabled']);
+        if ($aDisabled !== $bDisabled) {
+            return $aDisabled <=> $bDisabled;
+        }
+
+        return strcasecmp((string)($a['name'] ?? ''), (string)($b['name'] ?? ''));
+    });
+
+    return $hostRows;
+}
+
+/**
  * Return last good wall payload when a refresh fails (expired cache file).
  *
  * @param array<string,mixed> $fallback
@@ -955,7 +1061,7 @@ function zabbix_fetch_wall_data(array $page): array
         $allHosts ? '__all__' : $groupNames,
         $minSeverity,
         $maxProblems,
-        $maxHosts,
+        $allHosts ? 0 : $maxHosts,
         $hideAck,
     ]));
     $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
@@ -1007,17 +1113,17 @@ function zabbix_fetch_wall_data(array $page): array
     $problems = zabbix_attach_problem_hosts($problems, $error);
     $problems = zabbix_sort_problems($problems);
 
-    $hostParams = [
-        'output' => ['hostid', 'name', 'status'],
-        'sortfield' => 'name',
-        'limit' => $maxHosts,
-    ];
+    $hostScope = [];
     if ($groupIds !== []) {
-        $hostParams['groupids'] = $groupIds;
+        $hostScope['groupids'] = $groupIds;
     }
 
-    $hosts = zabbix_api_call('host.get', $hostParams, $error);
-    if (!is_array($hosts)) {
+    $hosts = zabbix_fetch_hosts_for_scope(
+        $hostScope,
+        $allHosts ? null : $maxHosts,
+        $error
+    );
+    if ($hosts === [] && ($error ?? '') !== '') {
         $empty['error'] = $error ?: 'host.get failed';
         $empty['group_names'] = $groupNames;
         $empty['group_ids'] = $groupIds;
@@ -1026,15 +1132,18 @@ function zabbix_fetch_wall_data(array $page): array
         return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
     }
 
+    $problemScope = $hostScope;
+    $problemScope['withProblems'] = true;
+    $problemScope['severities'] = zabbix_severities_from_min($minSeverity);
+    $problemHostsRaw = zabbix_fetch_hosts_for_scope($problemScope, null, $error);
     $problemHosts = [];
-    foreach ($problems as $problem) {
-        if (!is_array($problem)) {
+    foreach ($problemHostsRaw as $host) {
+        if (!is_array($host)) {
             continue;
         }
-        foreach ((array)($problem['hosts'] ?? []) as $hostRow) {
-            if (is_array($hostRow) && ($hostRow['name'] ?? '') !== '') {
-                $problemHosts[(string)$hostRow['name']] = true;
-            }
+        $pName = (string)($host['name'] ?? '');
+        if ($pName !== '') {
+            $problemHosts[$pName] = true;
         }
     }
 
@@ -1052,6 +1161,7 @@ function zabbix_fetch_wall_data(array $page): array
             'problem' => $hasProblem,
         ];
     }
+    $hostRows = zabbix_sort_hosts_for_wall($hostRows);
 
     $counts = [];
     foreach (zabbix_severity_options() as $sev) {
