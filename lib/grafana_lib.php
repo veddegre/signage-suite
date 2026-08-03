@@ -187,6 +187,20 @@ function grafana_resolve_dashboard(?string $pageKey = null): ?array
     $normalize = static fn($k) => grafana_normalize_key((string)$k);
     $requested = (string)($pageKey ?? '');
 
+    if (!admin_preview_session_ready()) {
+        // Kiosk / player — playlist URL already chose this dashboard; only honor Off wall.
+        $resolved = admin_registry_resolve_key($registry, $requested, $normalize);
+        if ($resolved === null || !isset($registry[$resolved])) {
+            return null;
+        }
+        $entry = $registry[$resolved];
+        if (!is_array($entry) || !empty($entry['off'])) {
+            return null;
+        }
+
+        return ['key' => $resolved] + $entry;
+    }
+
     if (admin_preview_session_ready()) {
         $resolved = admin_registry_resolve_key($registry, $requested, $normalize);
         if ($resolved === null || !isset($registry[$resolved])) {
@@ -209,13 +223,7 @@ function grafana_resolve_dashboard(?string $pageKey = null): ?array
         return ['key' => $resolved] + $entry;
     }
 
-    $pages = admin_filter_registry_for_display($registry);
-    $resolved = admin_resolve_display_registry_key($pages, $requested, $normalize);
-    if ($resolved === null || !isset($pages[$resolved])) {
-        return null;
-    }
-
-    return ['key' => $resolved] + $pages[$resolved];
+    return null;
 }
 
 /** @return 'hs256'|'rs256' */

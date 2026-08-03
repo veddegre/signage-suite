@@ -1535,18 +1535,36 @@ function rotation_merge_pages_from_post(string $screen, array $rawRows): array
         return [];
     }
     require_once __DIR__ . '/rotation_pages_store_lib.php';
-    $existing = rotation_pages_store_read_file($screen);
-    if ($existing === []) {
-        cfg('_', null);
-        $legacyKey = 'rotation.PAGES_' . $screen;
-        $conf = $GLOBALS['__cfg_cache'] ?? [];
-        if (is_array($conf) && is_array($conf[$legacyKey] ?? null)) {
-            $existing = rotation_pages_store_apply_url_fixes($conf[$legacyKey]);
-        }
-    }
+    $existing = rotation_pages_store_read($screen);
     $parsed = rotation_parse_pages_rows($rawRows);
     if (admin_is_super()) {
         return $parsed;
+    }
+    $postedUrls = [];
+    foreach ($parsed as $row) {
+        $url = trim((string)($row['url'] ?? ''));
+        if ($url !== '') {
+            $postedUrls[$url] = true;
+        }
+    }
+    $kept = [];
+    foreach ($existing as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $url = trim((string)($entry['url'] ?? ''));
+        if ($url === '' || isset($postedUrls[$url])) {
+            continue;
+        }
+        if (!admin_entry_visible($entry)) {
+            $kept[] = $entry;
+            continue;
+        }
+        $owner = admin_entry_owner($entry);
+        $uid = admin_user_id();
+        if ($owner !== null && $owner !== '' && $owner !== $uid) {
+            $kept[] = $entry;
+        }
     }
     $out = [];
     foreach ($parsed as $row) {
@@ -1574,7 +1592,25 @@ function rotation_merge_pages_from_post(string $screen, array $rawRows): array
         $out[] = admin_finalize_entry($row, $prev, $postRow ?? $row);
     }
 
-    return $out;
+    return array_merge($out, $kept);
+}
+
+/** Where a display's playlist rows come from: own file, mirror main, legacy main, or starter. */
+function rotation_screen_playlist_source(string $screen = 'main'): string
+{
+    $screen = rotation_normalize_screen_key($screen);
+    if (rotation_screen_own_pages($screen) !== []) {
+        return 'own';
+    }
+    if ($screen !== 'main') {
+        return 'mirror_main';
+    }
+    $legacy = cfg('rotation.PAGES', []);
+    if (is_array($legacy) && $legacy !== []) {
+        return 'legacy_main';
+    }
+
+    return 'starter';
 }
 
 /** @return list<array<string,mixed>> Pages that will play on the wall (matches board.php). */
@@ -1846,6 +1882,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
 
     $runtime = [
         'screen' => $screen,
+        'playlist_source' => rotation_screen_playlist_source($screen),
         'timezone' => rotation_timezone(),
         'pages' => rotation_pages_labeled(rotation_screen_active_pages($screen)),
         'shuffle' => $settings['shuffle'] && !$settings['weighted'],

@@ -156,14 +156,10 @@ function rotation_pages_store_migrate_all_from_settings(): void
     cfg_reload();
 }
 
-/** @return list<array<string,mixed>> */
-function rotation_pages_store_read(string $screen): array
+/** @return list<array<string,mixed>> Legacy rotation.PAGES_<screen> from settings.json when present. */
+function rotation_pages_store_read_legacy(string $screen): array
 {
     $screen = rotation_pages_store_normalize_screen($screen);
-    $path = rotation_pages_store_path($screen);
-    if ($path !== null && is_file($path)) {
-        return rotation_pages_store_read_file($screen);
-    }
     $key = 'rotation.PAGES_' . $screen;
     cfg('_', null);
     $conf = $GLOBALS['__cfg_cache'] ?? [];
@@ -172,4 +168,19 @@ function rotation_pages_store_read(string $screen): array
     }
 
     return rotation_pages_store_apply_url_fixes($conf[$key]);
+}
+
+/** @return list<array<string,mixed>> */
+function rotation_pages_store_read(string $screen): array
+{
+    $screen = rotation_pages_store_normalize_screen($screen);
+    $path = rotation_pages_store_path($screen);
+    if ($path !== null && is_file($path)) {
+        $fromFile = rotation_pages_store_read_file($screen);
+        if ($fromFile !== []) {
+            return $fromFile;
+        }
+    }
+
+    return rotation_pages_store_read_legacy($screen);
 }
