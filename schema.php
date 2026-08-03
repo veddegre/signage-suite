@@ -116,7 +116,7 @@ function admin_schema(): array
              'help' => 'Lets fonts/maps finish before reveal'],
             ['key' => 'HANG_MS', 'label' => 'Hung-page timeout (ms)', 'type' => 'number'],
         ])],
-        'index' => ['title' => 'Weather', 'file' => 'index.php', 'fields' => [
+        'index' => ['title' => 'Weather', 'file' => 'weather.php', 'fields' => [
             ['key' => 'OWM_API_KEY', 'label' => 'OpenWeatherMap API key', 'type' => 'password'],
             ['key' => 'LOCATION', 'label' => 'Location name', 'type' => 'text'],
             ['key' => 'LAT', 'label' => 'Latitude', 'type' => 'number', 'step' => 'any',

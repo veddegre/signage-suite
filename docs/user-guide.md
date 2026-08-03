@@ -230,7 +230,7 @@ Grouped as in admin. **Rotation URL** = what you add to a playlist (parameterize
 
 | Admin board | Wall file | Rotation URL | Data source |
 |-------------|-----------|--------------|-------------|
-| **Weather** | `index.php` | `index.php` | OpenWeatherMap |
+| **Weather** | `weather.php` | `boards/weather/index.php` | OpenWeatherMap |
 | **Lake Michigan** | `lake.php` | `lake.php` | NDBC buoy + NWS |
 | **Webcam** | `webcam.php` | `webcam.php?cam=KEY` | External streams / images |
 | **Mackinac Bridge cam** | `bridgecam.php` | `bridgecam.php` | MDOT feed |

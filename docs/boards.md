@@ -8,7 +8,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 
 | Group | Board | File | Rotation URL | Keys |
 |-------|-------|------|--------------|------|
-| Weather & home | Weather | `index.php` | `index.php` | OpenWeatherMap |
+| Weather & home | Weather | `weather.php` | `boards/weather/index.php` | OpenWeatherMap |
 | | Lake Michigan | `lake.php` | `lake.php` | — |
 | | Webcam | `webcam.php?cam=grpm` | `webcam.php?cam=KEY` | — |
 | | Mackinac Bridge cam | `bridgecam.php` | `bridgecam.php` | — |
@@ -63,7 +63,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 
 ## Weather & home
 
-### index.php — Weather
+### weather.php — Weather
 
 Allendale weather, RainViewer animated radar, sunrise arc. **Latitude / longitude** here are the site default for every location-aware board (weather, air, UV, photo, traffic, **NWS alert ticker**) unless a display overrides them under **Rotation → Kiosk settings**.
 

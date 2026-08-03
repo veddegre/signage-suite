@@ -1962,7 +1962,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
 function rotation_starter_pages(): array
 {
     return [
-        ['url' => 'index.php',   'dwell' => 180],
+        ['url' => 'weather.php',   'dwell' => 180],
         ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
         ['url' => 'webcam.php?cam=grpm', 'dwell' => 120, 'from' => 7, 'to' => 22],
@@ -2240,6 +2240,7 @@ function rotation_page_label(string $url): string
     }
 
     static $boards = [
+        'weather.php' => 'Weather',
         'index.php' => 'Weather',
         'lake.php' => 'Lake Michigan',
         'webcam.php' => 'Webcam',
@@ -2421,7 +2422,7 @@ function rotation_rss_feed_dwell(array $feed): int
 function rotation_quick_add_items(): array
 {
     $items = [
-        ['label' => 'Weather', 'url' => 'index.php', 'dwell' => 180, 'group' => 'Boards'],
+        ['label' => 'Weather', 'url' => 'weather.php', 'dwell' => 180, 'group' => 'Boards'],
         ['label' => 'Lake Michigan', 'url' => 'lake.php', 'dwell' => 60, 'group' => 'Boards'],
         ['label' => 'Mackinac Bridge cam', 'url' => 'bridgecam.php', 'dwell' => 90, 'group' => 'Boards'],
         ['label' => 'Photo conditions', 'url' => 'photo.php', 'dwell' => 60, 'group' => 'Boards'],
@@ -3908,14 +3909,14 @@ function rotation_playlist_builtin_templates(): array
     return [
         'Kitchen weeknight' => [
             ['url' => 'meals.php', 'dwell' => 60, 'from' => 16, 'to' => 21],
-            ['url' => 'index.php', 'dwell' => 90, 'from' => 16, 'to' => 21],
+            ['url' => 'weather.php', 'dwell' => 90, 'from' => 16, 'to' => 21],
             ['url' => 'slides.php?slide=dinner-menu.png', 'dwell' => 45, 'from' => 16, 'to' => 21],
             ['url' => 'traffic.php', 'dwell' => 75, 'from' => 16, 'to' => 20],
         ],
         'Weekly planner' => [
             ['url' => 'glance.php', 'dwell' => 90, 'from' => 6, 'to' => 21],
             ['url' => 'calendar.php', 'dwell' => 90, 'from' => 6, 'to' => 21],
-            ['url' => 'index.php', 'dwell' => 120],
+            ['url' => 'weather.php', 'dwell' => 120],
         ],
         'Security wall' => [
             ['url' => 'kev.php', 'dwell' => 60],

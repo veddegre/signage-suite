@@ -39,6 +39,8 @@ function rotation_pages_store_apply_url_fixes(array $pages): array
         $url = trim((string)($page['url'] ?? ''));
         if ($url === 'family.php' || str_starts_with($url, 'family.php?')) {
             $pages[$i]['url'] = preg_replace('/^family\.php/', 'calendar.php', $url) ?? 'calendar.php';
+        } elseif ($url === 'index.php' || str_starts_with($url, 'index.php?')) {
+            $pages[$i]['url'] = preg_replace('/^index\.php/', 'weather.php', $url) ?? 'weather.php';
         }
     }
 
