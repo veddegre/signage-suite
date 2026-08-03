@@ -39,8 +39,10 @@ Most settings save to **`config/settings.json`**. **Playlist rows** (URLs, dwell
 Each TV or monitor points at:
 
 ```
-http://your-server/boards/board.php?screen=garage
+https://your-server/boards/board.php?screen=garage
 ```
+
+Use **`https://`** when the server or reverse proxy serves TLS (required for many iframe embed boards). Kiosks ignore self-signed cert warnings by default — see [kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates).
 
 The **`screen`** key matches a playlist under **Rotation**. One server can serve many displays (`main`, `garage`, `lobby`, …).
 
@@ -95,14 +97,14 @@ Same as operator, plus admin access to **Homelab**, **UniFi**, **SignalTrace**, 
 
 ### First-time setup checklist
 
-1. **Install server** — `sudo bash setup-server.sh` (see README).
+1. **Install server** — `sudo bash setup-server.sh` (see README). HTTPS is enabled by default; see [HTTPS and TLS](rotation-and-deployment.md#https-and-tls) for reverse-proxy and `--no-https` setups.
 2. **Create super admin** — open admin.php; use one-time key from `config/setup.key` (SSH only).
 3. **Security** — idle timeout, **Allow private URL fetches** if you use LAN Zabbix/TDX/homelab URLs.
 4. **Weather** — set OpenWeatherMap key and default lat/lon (used by many boards).
 5. **Rotation** — create display keys (`main`, `lobby`, …); build playlists.
 6. **Users** — create operator/infrastructure accounts; assign displays.
 7. **Integrations** — configure API credentials per board (Zabbix, TDX, Grafana, …).
-8. **Kiosk** — point displays at `board.php?screen=<key>` ([kiosk-setup.md](kiosk-setup.md)).
+8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)).
 9. **SSO** (optional) — [admin-and-security.md → SSO](admin-and-security.md#sso-setup-entra-id--authentik).
 
 ### Day-to-day tasks

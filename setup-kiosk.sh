@@ -4,10 +4,11 @@
 # Server (24.04+) box into a signage kiosk pointed at the rotation shell.
 # Run once as the default user:
 #
-#     sudo bash setup-kiosk.sh http://your-server/boards/board.php [scale] [--no-cec]
+#     sudo bash setup-kiosk.sh https://your-server/boards/board.php [scale] [--no-cec] [--strict-ssl]
 #
 # Options:
 #   --no-cec           Skip HDMI-CEC power scheduling (TV on/off from admin)
+#   --strict-ssl       Enforce certificate validation (default: accept self-signed LAN HTTPS)
 #   --no-auto-update   Skip unattended-upgrades and nightly update/reboot timers
 #   --repo-path=DIR    Git checkout to pull for kiosk script updates (default: this repo if .git)
 #   --update-time=HH:MM  Daily apt + git pull (default 03:30)
@@ -36,6 +37,7 @@ WITH_CEC=1
 AUTO_UPDATE=1
 SKIP_APT=0
 FROM_UPDATE=0
+IGNORE_SSL=1
 REPO_PATH=""
 UPDATE_TIME="03:30"
 MAINT_TIME="04:00"
@@ -43,6 +45,7 @@ ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --no-cec) WITH_CEC=0 ;;
+    --strict-ssl) IGNORE_SSL=0 ;;
     --no-auto-update) AUTO_UPDATE=0 ;;
     --skip-apt) SKIP_APT=1 ;;
     --from-update) FROM_UPDATE=1; SKIP_APT=1 ;;
@@ -56,7 +59,7 @@ done
 KIOSK_URL="${ARGS[0]:-}"
 SCALE="${ARGS[1]:-1}"
 if [[ -z "$KIOSK_URL" ]]; then
-  echo "Usage: sudo bash setup-kiosk.sh http://server/boards/board.php [scale] [--no-cec] [--no-auto-update] [--repo-path=DIR] [--update-time=HH:MM] [--maint-time=HH:MM]" >&2
+  echo "Usage: sudo bash setup-kiosk.sh http://server/boards/board.php [scale] [--no-cec] [--strict-ssl] [--no-auto-update] [--repo-path=DIR] [--update-time=HH:MM] [--maint-time=HH:MM]" >&2
   exit 1
 fi
 if [[ $EUID -ne 0 ]]; then
@@ -102,6 +105,7 @@ echo "==> Screen key: $SCREEN"
 echo "==> Boards API: $BOARDS_URL"
 echo "==> Scale:      $SCALE (use 2 for a 4K display)"
 echo "==> HDMI-CEC:   $([[ $WITH_CEC -eq 1 ]] && echo enabled || echo skipped)"
+echo "==> TLS certs:  $([[ $IGNORE_SSL -eq 1 ]] && echo 'ignore self-signed (use --strict-ssl to enforce)' || echo strict)"
 echo "==> Auto update: $([[ $AUTO_UPDATE -eq 1 ]] && echo "on ($UPDATE_TIME apt/git, $MAINT_TIME maint)" || echo disabled)"
 [[ -n "$REPO_PATH" ]] && echo "==> Git repo:   $REPO_PATH"
 
@@ -186,11 +190,43 @@ SIGNAGE_AUTO_UPDATE="$AUTO_UPDATE"
 SIGNAGE_REPO="$REPO_PATH"
 SIGNAGE_UPDATE_TIME="$UPDATE_TIME"
 SIGNAGE_MAINT_TIME="$MAINT_TIME"
+KIOSK_IGNORE_SSL="$IGNORE_SSL"
 EOF
 chmod 644 /etc/signage/kiosk.conf
 
 echo "==> Writing /usr/local/bin/signage-kiosk"
-cat > /usr/local/bin/signage-kiosk <<EOF
+if [[ $IGNORE_SSL -eq 1 ]]; then
+  cat > /usr/local/bin/signage-kiosk <<EOF
+#!/usr/bin/env bash
+# Launched by signage.service — cage runs Chromium as the sole fullscreen app.
+export XCURSOR_THEME=signage-blank
+export XCURSOR_SIZE=24
+
+# Cage always draws a compositor cursor when a pointer device is present.
+# Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
+if command -v signage-hide-cursor >/dev/null; then
+  pkill -u "\$(id -u)" -f '^/usr/local/bin/signage-hide-cursor' 2>/dev/null || true
+  signage-hide-cursor &
+fi
+
+exec cage -- "$CHROMIUM" \\
+  --kiosk "\$1" \\
+  --force-device-scale-factor=$SCALE \\
+  --noerrdialogs \\
+  --disable-infobars \\
+  --disable-session-crashed-bubble \\
+  --disable-features=TranslateUI \\
+  --disable-dev-shm-usage \\
+  --autoplay-policy=no-user-gesture-required \\
+  --check-for-update-interval=31536000 \\
+  --enable-features=VaapiVideoDecoder \\
+  --ozone-platform=wayland \\
+  --ignore-certificate-errors \\
+  --allow-insecure-localhost \\
+  --start-fullscreen
+EOF
+else
+  cat > /usr/local/bin/signage-kiosk <<EOF
 #!/usr/bin/env bash
 # Launched by signage.service — cage runs Chromium as the sole fullscreen app.
 export XCURSOR_THEME=signage-blank
@@ -217,6 +253,7 @@ exec cage -- "$CHROMIUM" \\
   --ozone-platform=wayland \\
   --start-fullscreen
 EOF
+fi
 chmod +x /usr/local/bin/signage-kiosk
 
 if [[ $WITH_CEC -eq 1 ]]; then
@@ -426,6 +463,12 @@ GIT / SCRIPT UPDATES
   Clone signage-suite on the Pi and re-run setup once — SIGNAGE_REPO is saved in
   /etc/signage/kiosk.conf. Nightly git pull re-runs setup-kiosk.sh (--skip-apt).
   Content on the wall still comes from the server (admin.php).
+
+HTTPS / SELF-SIGNED CERTS
+  Kiosks accept self-signed and LAN HTTPS by default (--ignore-certificate-errors).
+  Use https:// in the kiosk URL when the server or reverse proxy serves TLS.
+  Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
+  a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
 CURSOR (if the mouse pointer is still visible after a server update):
   sudo apt install -y ydotool

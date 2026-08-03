@@ -750,6 +750,8 @@ Splunk Enterprise 10.x / Cloud published Dashboard Studio dashboards.
 
 Keyed sites: `web.php?d=<key>`. Target URLs must allow iframe embedding. Per-site **Access** (owner, users, roles).
 
+**HTTPS:** The wall must load over HTTPS for many embeds to work. Kiosks use `https://` with self-signed certs ignored by default ([HTTPS and TLS](rotation-and-deployment.md#https-and-tls)).
+
 ---
 
 ## ticker.php — Weather alert ticker (shared)

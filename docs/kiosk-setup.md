@@ -16,10 +16,12 @@ Turn a dedicated Linux box into a fullscreen Chromium display pointed at your si
 1. **Signage server** already running (`setup-server.sh`) and reachable on the LAN.
 2. A **display** defined in **admin.php → Rotation** (e.g. `main`, `garage`) so you know the URL:
    ```
-   http://your-server/boards/board.php?screen=garage
+   https://your-server/boards/board.php?screen=garage
    ```
-   Omit `?screen=` for the default **main** screen.
+   Use **`https://`** when the server or reverse proxy serves TLS (recommended for iframe embed boards). Omit `?screen=` for the default **main** screen.
 3. On the kiosk machine: a fresh OS install, network, and a user you can `sudo` with (script uses `$SUDO_USER`, often `pi` or your login).
+
+See also: [HTTPS and TLS](rotation-and-deployment.md#https-and-tls) — server certs, reverse proxies, and when to use `--strict-ssl`.
 
 ---
 
@@ -28,14 +30,17 @@ Turn a dedicated Linux box into a fullscreen Chromium display pointed at your si
 From a clone of this repo on the kiosk (or copy `setup-kiosk.sh` + `scripts/` onto the box):
 
 ```bash
-# 1080p display
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage"
+# 1080p display — https recommended for iframe embeds (self-signed OK on kiosk)
+sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 # 4K display — pixel-double to fill the panel
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage" 2
+sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage" 2
 
 # Skip HDMI-CEC TV power control
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage" --no-cec
+sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage" --no-cec
+
+# Trusted public cert (e.g. Let's Encrypt on reverse proxy) — enforce TLS validation
+sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict-ssl
 ```
 
 **Quote URLs** that contain `?screen=` so the shell does not eat the query string.
@@ -63,11 +68,45 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **Blank cursor** | Transparent theme + off-screen pointer helper (cage still draws a cursor if a USB mouse / CEC “pointer” is present) |
 
-Config written to **`/etc/signage/kiosk.conf`** (`KIOSK_URL`, `BOARDS_URL`, `SCREEN`, scale, CEC, git repo path, update schedule). Launcher: **`/usr/local/bin/signage-kiosk`**.
+Config written to **`/etc/signage/kiosk.conf`** (`KIOSK_URL`, `BOARDS_URL`, `SCREEN`, scale, CEC, git repo path, update schedule, **`KIOSK_IGNORE_SSL`**). Launcher: **`/usr/local/bin/signage-kiosk`**.
 
 If you run setup from a **git clone** of signage-suite, that directory is saved as **`SIGNAGE_REPO`** so nightly `git pull` can refresh kiosk scripts and re-run `setup-kiosk.sh --skip-apt`.
 
 Chromium packaging differs by distro (Pi OS deb vs Ubuntu snap); the script tries `chromium-browser`, then `chromium`, then `snap install chromium`.
+
+---
+
+## HTTPS and self-signed certificates
+
+Wall boards that embed external sites (`web.php`, Grand Haven / EarthCam webcams, WMTA streams, etc.) require the **rotation shell** to load over **HTTPS**. The server installer enables TLS by default ([setup-server.sh](rotation-and-deployment.md#setup-serversh--web-host)); many home installs use a **self-signed** cert.
+
+**Kiosk default:** Chromium starts with `--ignore-certificate-errors` and `--allow-insecure-localhost`, so a self-signed server cert does **not** show “Your connection is not private” — the wall goes straight to `board.php`.
+
+```bash
+# Self-signed or LAN HTTPS (default)
+sudo bash setup-kiosk.sh "https://192.168.1.50/boards/board.php?screen=main"
+
+# Public URL with Let's Encrypt on your reverse proxy — validate certs normally
+sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict-ssl
+```
+
+| Flag | When to use |
+|------|-------------|
+| *(none)* | Self-signed cert on server, or HTTPS via LAN IP/hostname |
+| **`--strict-ssl`** | Trusted public certificate (e.g. Let's Encrypt at reverse proxy) |
+
+**Reverse proxy:** Point the proxy at **`http://signage-host/boards/`** on port 80. Give kiosks the proxy’s **`https://`** URL. The server installer does **not** redirect port 80 to 443 by default. Full diagram: [HTTPS and TLS → Reverse proxy](rotation-and-deployment.md#reverse-proxy-recommended-production).
+
+After changing URL or SSL flags, re-run setup and restart:
+
+```bash
+sudo bash setup-kiosk.sh "https://…/board.php?screen=garage"
+sudo systemctl restart signage
+```
+
+**Note:** [`player.php`](rotation-and-deployment.md#playerphp--pwa-player) (phone/tablet PWA) uses the user’s normal browser — it does **not** get these Chromium flags. Use a trusted cert or accept the warning manually on that device.
+
+---
 
 ### Automatic updates (default on)
 
@@ -87,13 +126,13 @@ sudo /usr/local/bin/signage-kiosk-update    # manual run
 Customize schedule when installing:
 
 ```bash
-sudo bash setup-kiosk.sh "http://…/board.php?screen=garage" --update-time=02:30 --maint-time=03:15
+sudo bash setup-kiosk.sh "https://…/board.php?screen=garage" --update-time=02:30 --maint-time=03:15
 ```
 
 Disable timers (legacy 04:00 browser-only restart):
 
 ```bash
-sudo bash setup-kiosk.sh "http://…" --no-auto-update
+sudo bash setup-kiosk.sh "https://…" --no-auto-update
 ```
 
 **Signage server (PHP app)** updates remain on the server — `git pull` and `setup-server.sh` there, not on the Pi.
@@ -139,7 +178,7 @@ sudo /usr/local/bin/signage-kiosk-update
 
 ```bash
 cd ~/signage-suite && git pull
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage"
+sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 ```
 
 (Pass the same URL, scale, and `--no-cec` you used originally.)

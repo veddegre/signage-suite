@@ -50,7 +50,7 @@ flowchart LR
 sudo bash setup-server.sh --with-video-cron
 ```
 
-Creates Apache/nginx, PHP, writable dirs, and blocks direct HTTP access to secrets. See [rotation guide → setup-server.sh](docs/rotation-and-deployment.md#setup-serversh--web-host) for flags.
+Creates Apache/nginx, PHP, writable dirs, **HTTPS** (self-signed on `:443`; `:80` stays plain HTTP for reverse-proxy backends), and blocks direct HTTP access to secrets. See [rotation guide → HTTPS](docs/rotation-and-deployment.md#https-and-tls) and [setup-server.sh](docs/rotation-and-deployment.md#setup-serversh--web-host).
 
 ### 2. Open admin
 
@@ -61,18 +61,21 @@ Browse to **admin.php**, create your super admin (one-time key in `config/setup.
 **Dedicated kiosk** (Pi / mini PC → fullscreen Chromium + optional HDMI-CEC):
 
 ```bash
-sudo bash setup-kiosk.sh "http://your-server/boards/board.php?screen=garage"
-# 4K: add scale 2 · skip CEC: --no-cec
+# Use https:// — required for iframe embeds (EarthCam, WMTA, etc.)
+sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
+# 4K: add scale 2 · skip CEC: --no-cec · trusted public cert: --strict-ssl
 sudo reboot
 ```
 
+Kiosks **ignore self-signed certificate warnings by default** so LAN HTTPS from `setup-server.sh` loads without a browser interstitial. See [HTTPS and TLS](docs/rotation-and-deployment.md#https-and-tls).
+
 → **[Kiosk machine setup](docs/kiosk-setup.md)** — hardware, CEC, cursor, freezes, re-running after updates
 
-**Or** open any browser / smart TV:
+**Or** open any browser / smart TV (HTTPS recommended when using embed boards):
 
 ```
-http://your-server/boards/board.php
-http://your-server/boards/board.php?screen=garage
+https://your-server/boards/board.php
+https://your-server/boards/board.php?screen=garage
 ```
 
 Add boards to the playlist under **Rotation**. Each screen has its own URL: `board.php?screen=<key>`.
@@ -318,14 +321,14 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 | Doc | Contents |
 |-----|----------|
 | **[docs/user-guide.md](docs/user-guide.md)** | **Admin & operator manual** — roles, sidebar reference, rotation playbook, sharing, integration index, troubleshooting |
-| [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, CEC, cursor, freezes, updates |
+| [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, HTTPS/self-signed, CEC, cursor, freezes, updates |
 | [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
 | [docs/tdx.md](docs/tdx.md) | **TeamDynamix** — TDAdmin BEID/key, multi-page filters, responsible users/groups, API reference |
 | [docs/grafana.md](docs/grafana.md) | **Grafana JWT embed (self-hosted)** — HS256, grafana.ini, JWK file |
 | [docs/grafana-cloud.md](docs/grafana-cloud.md) | **Grafana Cloud** — RS256, JWKS URL, public dashboards, support enablement |
 | [docs/powerbi.md](docs/powerbi.md) | **Power BI private embed** — Entra app registration, API permissions, workspace access, RLS, troubleshooting |
-| [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, server scripts, PWA, DVR |
+| [docs/rotation-and-deployment.md](docs/rotation-and-deployment.md) | Playlists, hero strip, shared editing, emergency override, **HTTPS/TLS**, server scripts, PWA, DVR |
 | [docs/video-youtube.md](docs/video-youtube.md) | yt-dlp, cookies, headless YouTube |
 
 ---

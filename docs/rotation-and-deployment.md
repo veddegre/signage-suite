@@ -197,6 +197,75 @@ sudo bash setup-server.sh --skip-apt --source /var/www/html/boards --webroot /va
 
 ---
 
+## HTTPS and TLS
+
+Many boards need a **secure context** — the page must be loaded over HTTPS or browsers block iframe embeds (EarthCam, WMTA / WetMet, some map tiles), geolocation, and PWA features (`player.php` install + wake lock).
+
+### Server (`setup-server.sh`)
+
+| Default | Behavior |
+|---------|----------|
+| **Port 443** | Self-signed cert at `/etc/ssl/signage/signage.crt` (hostname + LAN IP in SAN) |
+| **Port 80** | Plain HTTP — **no redirect** (reverse-proxy friendly) |
+| **Printed URL** | `http://…` unless you pass `--https-redirect` or `--url-base` |
+
+```bash
+sudo bash setup-server.sh                              # HTTP + optional direct HTTPS
+sudo bash setup-server.sh --no-https                   # HTTP only (TLS only at proxy)
+sudo bash setup-server.sh --https-redirect             # standalone: force 80 → HTTPS
+sudo bash setup-server.sh --domain host.example.com --letsencrypt   # public trusted cert
+sudo bash setup-server.sh --url-base https://signage.example.com/boards   # match proxy URL in summary
+sudo bash setup-server.sh --tls-regen                # new self-signed cert
+```
+
+### Reverse proxy (recommended production)
+
+Terminate TLS at **Caddy**, **nginx**, **Traefik**, or **Cloudflare** — upstream to the signage box over **HTTP**:
+
+```
+Browser / kiosk  ──HTTPS──►  reverse proxy  ──HTTP──►  Apache :80 /boards/
+```
+
+- On the signage server: **`--no-https`** *or* leave HTTPS enabled but point the proxy at **`http://signage-host/boards/`** (port 80 is not redirected by default).
+- For kiosks and browsers: use the proxy’s public **`https://`** URL.
+- Set **`--url-base https://your.public.host/boards`** when re-running setup if you want the install summary to show the proxy URL.
+
+### Kiosk displays (`setup-kiosk.sh`)
+
+Dedicated Pis/mini PCs use Chromium with **`--ignore-certificate-errors`** by default so **self-signed** server or LAN certs load without a “Your connection is not private” screen.
+
+```bash
+# Self-signed or LAN HTTPS (default — cert warnings ignored)
+sudo bash setup-kiosk.sh "https://signage.lan/boards/board.php?screen=main"
+
+# Public Let's Encrypt / trusted cert on proxy — enforce validation
+sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict-ssl
+```
+
+Re-run `setup-kiosk.sh` after changing the URL or SSL behavior, then `sudo systemctl restart signage`.
+
+| Flag | Effect |
+|------|--------|
+| *(default)* | Accept self-signed / untrusted HTTPS |
+| **`--strict-ssl`** | Normal certificate validation (use with trusted certs) |
+
+Config: **`KIOSK_IGNORE_SSL`** in `/etc/signage/kiosk.conf`. Launcher flags: **`/usr/local/bin/signage-kiosk`**.
+
+### `player.php` (PWA / phone / tablet)
+
+Runs in the user’s normal browser — **not** the kiosk launcher. It still requires a **trusted** HTTPS URL (or the user accepts the cert manually once). Self-signed ignore flags do not apply.
+
+### Quick reference
+
+| Scenario | Server | Kiosk / browser URL |
+|----------|--------|---------------------|
+| LAN, self-signed on box | `setup-server.sh` (default) | `https://server/boards/…` — kiosk ignores cert warning |
+| TLS at reverse proxy | `--no-https` or proxy → `:80` | `https://public-host/boards/…` |
+| Standalone, force HTTPS | `--https-redirect` | `https://server/boards/…` |
+| Public trusted cert | `--letsencrypt` or proxy LE | `https://…` + optional `--strict-ssl` on kiosk |
+
+---
+
 ## Dedicated kiosk machines
 
 Fullscreen Chromium on a Pi or mini PC is covered in a dedicated guide (install, CEC, cursor, freezes, re-running after updates):
@@ -210,6 +279,8 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"   
 sudo reboot
 ```
 
+Self-signed HTTPS is fine on kiosks — Chromium ignores cert warnings by default. Use **`--strict-ssl`** only with a publicly trusted certificate. Details: [HTTPS and TLS](#https-and-tls).
+
 CEC blank hours are configured per display under **Rotation → Display settings**; set **Rotation → Timezone** on the server. Content changes stay in **admin.php** on the server — the kiosk only needs OS updates and occasional re-runs of `setup-kiosk.sh` after Chromium-flag changes.
 
 ---
@@ -218,7 +289,7 @@ CEC blank hours are configured per display under **Rotation → Display settings
 
 Scales `board.php` to any viewport — laptops, tablets, phones. Same screens: `player.php?screen=garage`.
 
-Add to home screen for fullscreen landscape. Wake lock keeps display on. Install and wake lock require HTTPS.
+Add to home screen for fullscreen landscape. Wake lock keeps display on. Install and wake lock require **HTTPS** with a **trusted** certificate (or manual cert acceptance in the browser). Unlike kiosks, `player.php` does not bypass self-signed warnings — see [HTTPS and TLS](#https-and-tls).
 
 Service worker is minimal — no dynamic cache; auto-retry when server unreachable.
 
