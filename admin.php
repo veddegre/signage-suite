@@ -6083,6 +6083,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
                        placeholder="NOC overview" data-grafana-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
+              <div>
+                <label class="mini">Subtitle</label>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Network security" data-grafana-page-sub<?= admin_form_ro_attr($pageRo) ?>>
+              </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
                    href="<?= h(grafana_preview_url($pk)) ?>" target="_blank" rel="noopener" data-grafana-page-preview>Preview ↗</a>
@@ -11590,6 +11595,7 @@ function addGrafanaPage() {
     '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-grafana-page-key>' +
     '<div class="splunk-page-head">' +
       '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="NOC overview" data-grafana-page-title></div>' +
+      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Network security" data-grafana-page-sub></div>' +
       '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
         '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + grafanaPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-grafana-page-preview>Preview ↗</a>' +
         '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeGrafanaPage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +

@@ -698,7 +698,7 @@ See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
 
 ### grafana.php — Grafana (iframe + JWT)
 
-`grafana.php?d=<key>`. Kiosk mode, theme, and refresh params are appended automatically. Per-dashboard **Access** (owner, users, roles) is editable by **super admin only**; operators see shared dashboards as read-only (preview + rotation URL). Admin uses tabbed **+ Add page** editors (same pattern as Zabbix/Splunk) — not the wide row table.
+`grafana.php?d=<key>`. Kiosk mode, theme, and refresh params are appended automatically. Each page shows its **Page title** (and optional **Subtitle**) above the iframe — same pattern as Zabbix/Kuma walls. Per-dashboard **Access** (owner, users, roles) is editable by **super admin only**; operators see shared dashboards as read-only (preview + rotation URL). Admin uses tabbed **+ Add page** editors (same pattern as Zabbix/Splunk) — not the wide row table.
 
 | Auth path | When |
 |-----------|------|

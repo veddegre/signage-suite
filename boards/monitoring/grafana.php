@@ -71,18 +71,33 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
 
 $embed = grafana_dashboard_iframe_src((string)$key, $dash);
 $useJwt = ($embed['auth'] ?? '') === 'jwt';
+$boardTitle = trim((string)($dash['title'] ?? $key));
+$boardSub = trim((string)($dash['sub'] ?? ''));
+$showClock = signage_show_clock();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title><?= h($dash['title'] ?? $key) ?></title>
+<title><?= h($boardTitle) ?></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   <?= signage_theme_css() ?>
   <?= signage_kiosk_cursor_css() ?>
-  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night); }
-  iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; background:var(--lake-night); }
+  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; }
+  .board { width:1920px; height:100%; display:flex; flex-direction:column; min-height:0; }
+  .head { flex:0 0 auto; display:flex; align-items:baseline; justify-content:space-between;
+          padding:18px 32px 10px; min-height:56px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:52px; line-height:1.05; }
+  .head h1 span { color:var(--beacon); }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px; color:var(--mist);
+           font-variant-numeric:tabular-nums; }
+  .frame { flex:1; min-height:0; }
+  iframe { width:100%; height:100%; border:0; display:block; pointer-events:none; background:var(--lake-night); }
   .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
@@ -92,14 +107,36 @@ $useJwt = ($embed['auth'] ?? '') === 'jwt';
 <body>
 <?php if (empty($embed['ok'])): ?>
   <div class="empty">
-    <h2>Grafana &ldquo;<?= h($dash['title'] ?? $key) ?>&rdquo; not ready</h2>
+    <h2>Grafana &ldquo;<?= h($boardTitle) ?>&rdquo; not ready</h2>
     <p><?= h((string)($embed['error'] ?? 'Configure dashboard URL and JWT settings in admin.')) ?></p>
   </div>
 <?php else: ?>
-  <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen"></iframe>
+  <div class="board">
+    <div class="head">
+      <h1><?= h($boardTitle) ?><?php if ($boardSub !== ''): ?> <span>&middot; <?= h($boardSub) ?></span><?php endif; ?></h1>
+      <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
+    </div>
+    <div class="frame">
+      <iframe id="dash" src="<?= h((string)$embed['src']) ?>" allow="fullscreen"></iframe>
+    </div>
+  </div>
   <script>
   (function () {
     const frame = document.getElementById('dash');
+    <?php if ($showClock): ?>
+    (function () {
+      const tz = <?= json_encode(TIMEZONE) ?>;
+      function tick() {
+        const el = document.getElementById('clock');
+        if (!el) return;
+        el.textContent = new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
+        });
+      }
+      tick();
+      setInterval(tick, 1000);
+    })();
+    <?php endif; ?>
     <?php if ($useJwt): ?>
     const API = 'grafana.php?api=1&d=' + encodeURIComponent(<?= json_encode((string)$key) ?>);
     let refreshTimer = null;

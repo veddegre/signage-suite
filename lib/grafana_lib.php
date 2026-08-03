@@ -44,6 +44,7 @@ function grafana_normalize_pages_registry(array $raw): array
 function grafana_normalize_page(array $page, string $key): ?array
 {
     $title = trim((string)($page['title'] ?? ''));
+    $sub = trim((string)($page['sub'] ?? ''));
     $url = trim((string)($page['url'] ?? ''));
     if ($url !== '') {
         $url = grafana_normalize_dashboard_url($url);
@@ -81,6 +82,9 @@ function grafana_normalize_page(array $page, string $key): ?array
         $out['title'] = 'Grafana';
     } else {
         $out['title'] = ucfirst(str_replace(['_', '-'], ' ', $key));
+    }
+    if ($sub !== '') {
+        $out['sub'] = $sub;
     }
 
     require_once __DIR__ . '/users_lib.php';
