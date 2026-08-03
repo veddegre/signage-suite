@@ -6054,7 +6054,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
             </div>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
-            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(grafana_page_url($pk)) ?></code></div>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(grafana_page_url($pk)) ?></code>
+              · <strong>Save</strong> before preview if you just added this page.</div>
 
             <div class="field-grid" style="margin-bottom:12px">
               <div class="field span-2">

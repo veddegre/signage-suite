@@ -168,6 +168,52 @@ function grafana_preview_url(string $key): string
     return signage_board_preview_url(grafana_page_url($key));
 }
 
+/**
+ * Resolve one dashboard for the wall or admin preview.
+ * Logged-in admin preview checks visibility against the full registry (super admin
+ * sees ownerless rows; operators see owned/shared entries). Kiosk rotation uses
+ * display-scoped registry (screen assignment).
+ *
+ * @return array<string,mixed>|null
+ */
+function grafana_resolve_dashboard(?string $pageKey = null): ?array
+{
+    require_once __DIR__ . '/users_lib.php';
+    $registry = grafana_dashboard_registry();
+    $normalize = static fn($k) => grafana_normalize_key((string)$k);
+    $requested = (string)($pageKey ?? '');
+
+    if (admin_preview_session_ready()) {
+        $resolved = admin_registry_resolve_key($registry, $requested, $normalize);
+        if ($resolved === null || !isset($registry[$resolved])) {
+            if (trim($requested) !== '') {
+                return null;
+            }
+            foreach ($registry as $k => $entry) {
+                if (is_array($entry) && admin_entry_visible($entry)) {
+                    return ['key' => (string)$k] + $entry;
+                }
+            }
+
+            return null;
+        }
+        $entry = $registry[$resolved];
+        if (!is_array($entry) || !admin_entry_visible($entry)) {
+            return null;
+        }
+
+        return ['key' => $resolved] + $entry;
+    }
+
+    $pages = admin_filter_registry_for_display($registry);
+    $resolved = admin_resolve_display_registry_key($pages, $requested, $normalize);
+    if ($resolved === null || !isset($pages[$resolved])) {
+        return null;
+    }
+
+    return ['key' => $resolved] + $pages[$resolved];
+}
+
 /** @return 'hs256'|'rs256' */
 function grafana_jwt_algorithm(): string
 {

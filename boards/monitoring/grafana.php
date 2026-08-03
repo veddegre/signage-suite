@@ -13,21 +13,23 @@ require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/grafana_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
 
-define('DASHBOARDS', grafana_dashboards_for_display());
 define('TIMEZONE', cfg('grafana.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-$key = admin_resolve_display_registry_key(DASHBOARDS, (string)($_GET['d'] ?? ''));
-if ($key === null || !isset(DASHBOARDS[$key])) {
+$dashResolved = grafana_resolve_dashboard((string)($_GET['d'] ?? ''));
+if ($dashResolved === null) {
     if (isset($_GET['api']) && $_GET['api'] === '1') {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
         echo json_encode(['ok' => false, 'error' => 'Dashboard not found'], JSON_UNESCAPED_SLASHES);
         exit;
     }
+    $previewHint = admin_preview_session_ready()
+        ? 'Save the page in admin first, then preview again — or check Access sharing.'
+        : 'Pick a dashboard from the list in admin, or add one you own.';
     ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -47,7 +49,7 @@ if ($key === null || !isset(DASHBOARDS[$key])) {
 <body>
   <div>
     <h1>No dashboard to preview</h1>
-    <p>Pick a dashboard from the list in admin, or add one you own.</p>
+    <p><?= h($previewHint) ?></p>
   </div>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>
 </body>
@@ -56,7 +58,9 @@ if ($key === null || !isset(DASHBOARDS[$key])) {
     exit;
 }
 
-$dash = DASHBOARDS[$key];
+$key = (string)$dashResolved['key'];
+$dash = $dashResolved;
+unset($dash['key']);
 
 if (isset($_GET['api']) && $_GET['api'] === '1') {
     header('Content-Type: application/json; charset=utf-8');
