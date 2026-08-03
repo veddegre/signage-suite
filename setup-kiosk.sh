@@ -4,15 +4,24 @@
 # Server (24.04+) box into a signage kiosk pointed at the rotation shell.
 # Run once as the default user:
 #
-#     sudo bash setup-kiosk.sh https://your-server/boards/board.php [scale] [--no-cec] [--strict-ssl]
+#     sudo bash setup-kiosk.sh
+#
+# Setup prompts for signage server URL, screen name, timezone, and 4K scale,
+# tests board.php, then installs. Flags and legacy positional args still work.
+#
+#     sudo bash setup-kiosk.sh --server=https://your-server --screen=garage
+#     sudo bash setup-kiosk.sh https://your-server/board.php?screen=garage [scale] [--no-cec]
 #
 # Options:
+#   --server=URL       Signage server base (https://host — no /boards path)
+#   --screen=KEY       Rotation screen name (default main)
 #   --no-cec           Skip HDMI-CEC power scheduling (TV on/off from admin)
 #   --strict-ssl       Enforce certificate validation (default: accept self-signed LAN HTTPS)
 #   --no-auto-update   Skip unattended-upgrades and nightly update/reboot timers
 #   --repo-path=DIR    Git checkout to pull for kiosk script updates (default: this repo if .git)
 #   --update-time=HH:MM  Daily apt + git pull (default 03:30)
 #   --maint-time=HH:MM   Daily reboot-if-needed else browser restart (default 04:00)
+#   --timezone=ZONE      IANA timezone (e.g. America/Detroit); prompts if omitted
 #   --skip-apt         Internal: refresh systemd/scripts only (used by signage-kiosk-update.sh)
 #
 # Full guide: docs/kiosk-setup.md
@@ -41,6 +50,10 @@ IGNORE_SSL=1
 REPO_PATH=""
 UPDATE_TIME="03:30"
 MAINT_TIME="04:00"
+TIMEZONE=""
+SIGNAGE_SERVER=""
+SCREEN=""
+KIOSK_URL=""
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
@@ -52,16 +65,25 @@ for arg in "$@"; do
     --repo-path=*) REPO_PATH="${arg#*=}" ;;
     --update-time=*) UPDATE_TIME="${arg#*=}" ;;
     --maint-time=*) MAINT_TIME="${arg#*=}" ;;
+    --timezone=*) TIMEZONE="${arg#*=}" ;;
+    --server=*) SIGNAGE_SERVER="${arg#*=}" ;;
+    --screen=*) SCREEN="${arg#*=}" ;;
+    --scale=*) SCALE="${arg#*=}" ;;
     *) ARGS+=("$arg") ;;
   esac
 done
 
-KIOSK_URL="${ARGS[0]:-}"
-SCALE="${ARGS[1]:-1}"
-if [[ -z "$KIOSK_URL" ]]; then
-  echo "Usage: sudo bash setup-kiosk.sh http://server/boards/board.php [scale] [--no-cec] [--strict-ssl] [--no-auto-update] [--repo-path=DIR] [--update-time=HH:MM] [--maint-time=HH:MM]" >&2
-  exit 1
+LEGACY_KIOSK_URL="${ARGS[0]:-}"
+if [[ -z "$KIOSK_URL" && -n "$LEGACY_KIOSK_URL" && "$LEGACY_KIOSK_URL" != -* ]]; then
+  KIOSK_URL="$LEGACY_KIOSK_URL"
 fi
+SCALE="${ARGS[1]:-1}"
+if [[ "$SCALE" != "1" && "$SCALE" != "2" && -n "${ARGS[1]:-}" ]]; then
+  if [[ "$SCALE" == -* ]]; then
+    SCALE="1"
+  fi
+fi
+
 if [[ $EUID -ne 0 ]]; then
   echo "Run with sudo." >&2
   exit 1
@@ -71,6 +93,221 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -z "$REPO_PATH" && -d "$SCRIPT_DIR/.git" ]]; then
   REPO_PATH="$SCRIPT_DIR"
 fi
+
+load_kiosk_conf() {
+  [[ -f /etc/signage/kiosk.conf ]] || return 0
+  # shellcheck disable=SC1091
+  source /etc/signage/kiosk.conf
+  SIGNAGE_SERVER="${SIGNAGE_SERVER:-${BOARDS_URL:-}}"
+  SCREEN="${SCREEN:-main}"
+  KIOSK_URL="${KIOSK_URL:-}"
+  SCALE="${KIOSK_SCALE:-$SCALE}"
+  TIMEZONE="${TIMEZONE:-${SIGNAGE_TIMEZONE:-}}"
+}
+
+sanitize_screen() {
+  local s
+  s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  s="$(printf '%s' "$s" | tr -cd 'a-z0-9_-')"
+  [[ -n "$s" ]] && printf '%s' "$s" || printf '%s' "main"
+}
+
+normalize_server_url() {
+  local u="$1"
+  u="${u#"${u%%[![:space:]]*}"}"
+  u="${u%"${u##*[![:space:]]}"}"
+  u="${u%/}"
+  u="${u%%\?*}"
+  u="${u%/boards/board.php}"
+  u="${u%/board.php}"
+  u="${u%/boards}"
+  printf '%s' "$u"
+}
+
+ensure_server_scheme() {
+  local u="$1"
+  if [[ "$u" != http://* && "$u" != https://* ]]; then
+    u="https://$u"
+  fi
+  printf '%s' "$u"
+}
+
+parse_legacy_kiosk_url() {
+  local url="$1"
+  local path screen
+  path="${url%%\?*}"
+  SIGNAGE_SERVER="$(normalize_server_url "$(dirname "$path")")"
+  SCREEN=main
+  if [[ "$url" == *"screen="* ]]; then
+    screen="$(printf '%s' "$url" | sed -n 's/.*[?&]screen=\([^&]*\).*/\1/p')"
+    SCREEN="$(sanitize_screen "$screen")"
+  fi
+}
+
+build_kiosk_url() {
+  local server screen
+  server="$(normalize_server_url "$(ensure_server_scheme "$SIGNAGE_SERVER")")"
+  screen="$(sanitize_screen "$SCREEN")"
+  SIGNAGE_SERVER="$server"
+  SCREEN="$screen"
+  BOARDS_URL="$server"
+  KIOSK_URL="${server}/board.php?screen=${screen}"
+}
+
+curl_test_args() {
+  local args=(-fsS --max-time 20)
+  [[ $IGNORE_SSL -eq 1 ]] && args+=(-k)
+  printf '%s\n' "${args[@]}"
+}
+
+test_kiosk_url() {
+  local url="$1"
+  local curl_args=()
+  mapfile -t curl_args < <(curl_test_args)
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "    curl not installed yet — skipping connectivity test" >&2
+    return 0
+  fi
+  echo ""
+  echo "==> Testing $url"
+  if curl "${curl_args[@]}" "$url" | grep -q 'const PAGES'; then
+    echo "    OK — rotation shell responded"
+    return 0
+  fi
+  echo "    Could not verify board.php (server unreachable, wrong screen, or not signage yet)" >&2
+  return 1
+}
+
+prompt_yes_no() {
+  local prompt="$1" default="${2:-y}" input=""
+  local hint="Y/n"
+  [[ "$default" == "n" ]] && hint="y/N"
+  read -r -p "$prompt [$hint]: " input || true
+  input="${input:-$default}"
+  [[ "$input" =~ ^[Yy] ]]
+}
+
+prompt_signage_server() {
+  local guess="${1:-}"
+  echo ""
+  echo "==> Signage server"
+  echo "    Base URL of your signage server (HTTPS recommended)."
+  echo "    Example: https://192.168.1.50 or https://signage.lan"
+  local input=""
+  while [[ -z "$input" ]]; do
+    read -r -p "    Server URL${guess:+ [$guess]}: " input || true
+    input="${input:-$guess}"
+    input="$(normalize_server_url "$(ensure_server_scheme "$input")")"
+    if [[ -z "$input" || "$input" == "https://" || "$input" == "http://" ]]; then
+      echo "    Enter the server hostname or URL." >&2
+      input=""
+    fi
+  done
+  SIGNAGE_SERVER="$input"
+}
+
+prompt_screen_name() {
+  local guess
+  guess="$(sanitize_screen "${1:-main}")"
+  echo ""
+  echo "==> Screen name"
+  echo "    Same key as admin → Rotation → Displays (default: main)."
+  local input=""
+  read -r -p "    Screen [$guess]: " input || true
+  SCREEN="$(sanitize_screen "${input:-$guess}")"
+}
+
+prompt_scale() {
+  local guess="${1:-1}"
+  echo ""
+  echo "==> Display resolution"
+  echo "    Boards are designed for 1080p. Choose 2 for a 4K panel (pixel-doubled)."
+  local input=""
+  read -r -p "    Scale (1=1080p, 2=4K) [$guess]: " input || true
+  input="${input:-$guess}"
+  case "$input" in
+    1|2) SCALE="$input" ;;
+    *) SCALE="$guess" ;;
+  esac
+}
+
+prompt_kiosk_wizard() {
+  local guess_server guess_screen
+  guess_server="$(normalize_server_url "${SIGNAGE_SERVER:-}")"
+  guess_screen="$(sanitize_screen "${SCREEN:-main}")"
+  prompt_signage_server "$guess_server"
+  prompt_screen_name "$guess_screen"
+  build_kiosk_url
+  prompt_timezone
+  prompt_scale "${SCALE:-1}"
+  while ! test_kiosk_url "$KIOSK_URL"; do
+    if ! prompt_yes_no "    Continue anyway?"; then
+      echo "Aborted." >&2
+      exit 1
+    fi
+    break
+  done
+  echo ""
+  echo "==> Ready to install"
+  echo "    Server:  $SIGNAGE_SERVER"
+  echo "    Screen:  $SCREEN"
+  echo "    URL:     $KIOSK_URL"
+  echo "    Scale:   $SCALE"
+  echo "    TZ:      $TIMEZONE"
+  if ! prompt_yes_no "    Proceed?"; then
+    echo "Aborted." >&2
+    exit 1
+  fi
+}
+
+resolve_kiosk_target() {
+  local cli_server="$SIGNAGE_SERVER"
+  local cli_screen="$SCREEN"
+  local cli_url="$KIOSK_URL"
+  local cli_scale="$SCALE"
+
+  load_kiosk_conf
+
+  [[ -n "$cli_server" ]] && SIGNAGE_SERVER="$cli_server"
+  [[ -n "$cli_screen" ]] && SCREEN="$cli_screen"
+  [[ -n "$cli_url" ]] && KIOSK_URL="$cli_url"
+  if [[ -n "${ARGS[1]:-}" && "${ARGS[1]}" =~ ^[12]$ ]]; then
+    SCALE="${ARGS[1]}"
+  elif [[ -n "$cli_scale" ]]; then
+    SCALE="$cli_scale"
+  fi
+
+  if [[ -n "$cli_server" || -n "$cli_screen" ]]; then
+    [[ -z "$SCREEN" ]] && SCREEN=main
+    build_kiosk_url
+  elif [[ -n "$cli_url" || -n "$KIOSK_URL" ]]; then
+    [[ -n "$cli_url" ]] && KIOSK_URL="$cli_url"
+    parse_legacy_kiosk_url "$KIOSK_URL"
+    build_kiosk_url
+  elif [[ -n "$SIGNAGE_SERVER" ]]; then
+    [[ -z "$SCREEN" ]] && SCREEN=main
+    build_kiosk_url
+  fi
+
+  if [[ -n "$KIOSK_URL" ]]; then
+    return 0
+  fi
+
+  if [[ $FROM_UPDATE -eq 1 ]]; then
+    echo "Missing kiosk URL in /etc/signage/kiosk.conf — re-run setup interactively." >&2
+    exit 1
+  fi
+
+  if [[ -t 0 ]]; then
+    prompt_kiosk_wizard
+    return 0
+  fi
+
+  echo "Usage: sudo bash setup-kiosk.sh" >&2
+  echo "       sudo bash setup-kiosk.sh --server=https://HOST --screen=KEY [options]" >&2
+  echo "       sudo bash setup-kiosk.sh https://HOST/board.php?screen=KEY [scale] [options]" >&2
+  exit 1
+}
 
 calendar_time() {
   local t="$1"
@@ -85,29 +322,88 @@ calendar_time() {
   printf '*-*-* %02d:%02d:00' "$h" "$m"
 }
 
+current_timezone() {
+  if command -v timedatectl >/dev/null 2>&1; then
+    timedatectl show -p Timezone --value 2>/dev/null || true
+  elif [[ -f /etc/timezone ]]; then
+    tr -d '[:space:]' < /etc/timezone
+  else
+    echo "UTC"
+  fi
+}
+
+valid_timezone() {
+  local tz="$1"
+  [[ -n "$tz" && -e "/usr/share/zoneinfo/$tz" ]]
+}
+
+prompt_timezone() {
+  local guess
+  guess="$(current_timezone)"
+  [[ -z "$guess" ]] && guess="America/Detroit"
+  echo ""
+  echo "==> System timezone"
+  echo "    Nightly update timers and the local clock use the kiosk OS timezone."
+  echo "    Enter an IANA name (e.g. America/Detroit, America/Chicago, America/Los_Angeles)."
+  echo "    Current: $guess"
+  local input=""
+  read -r -p "    Timezone [$guess]: " input || true
+  input="${input:-$guess}"
+  if ! valid_timezone "$input"; then
+    echo "Unknown timezone: $input" >&2
+    echo "List zones: timedatectl list-timezones | grep America" >&2
+    exit 1
+  fi
+  TIMEZONE="$input"
+}
+
+apply_timezone() {
+  local tz="$1"
+  if ! valid_timezone "$tz"; then
+    echo "Unknown timezone: $tz" >&2
+    exit 1
+  fi
+  local cur
+  cur="$(current_timezone)"
+  if [[ "$cur" == "$tz" ]]; then
+    echo "==> Timezone already $tz"
+    return
+  fi
+  if command -v timedatectl >/dev/null 2>&1; then
+    timedatectl set-timezone "$tz"
+    echo "==> Timezone set to $tz"
+  else
+    echo "$tz" > /etc/timezone
+    ln -sf "/usr/share/zoneinfo/$tz" /etc/localtime
+    echo "==> Timezone set to $tz (via /etc/timezone)"
+  fi
+}
+
 UPDATE_CAL="$(calendar_time "$UPDATE_TIME")"
 MAINT_CAL="$(calendar_time "$MAINT_TIME")"
 
-# Derive boards base URL and ?screen= key from the kiosk URL.
-KIOSK_PATH="${KIOSK_URL%%\?*}"
-BOARDS_URL="$(dirname "$KIOSK_PATH")"
-SCREEN=main
-if [[ "$KIOSK_URL" == *"screen="* ]]; then
-  SCREEN="$(printf '%s' "$KIOSK_URL" | sed -n 's/.*[?&]screen=\([^&]*\).*/\1/p' | tr '[:upper:]' '[:lower:]')"
-  SCREEN="$(printf '%s' "$SCREEN" | tr -cd 'a-z0-9_-')"
+resolve_kiosk_target
+
+if [[ -z "$TIMEZONE" && $FROM_UPDATE -eq 0 && -t 0 ]]; then
+  prompt_timezone
 fi
-[[ -z "$SCREEN" ]] && SCREEN=main
+if [[ -z "$TIMEZONE" ]]; then
+  TIMEZONE="$(current_timezone)"
+fi
 
 KIOSK_USER="${SUDO_USER:-pi}"
 echo "==> Kiosk user: $KIOSK_USER"
+echo "==> Server:     $SIGNAGE_SERVER"
 echo "==> Kiosk URL:  $KIOSK_URL"
 echo "==> Screen key: $SCREEN"
-echo "==> Boards API: $BOARDS_URL"
 echo "==> Scale:      $SCALE (use 2 for a 4K display)"
 echo "==> HDMI-CEC:   $([[ $WITH_CEC -eq 1 ]] && echo enabled || echo skipped)"
 echo "==> TLS certs:  $([[ $IGNORE_SSL -eq 1 ]] && echo 'ignore self-signed (use --strict-ssl to enforce)' || echo strict)"
 echo "==> Auto update: $([[ $AUTO_UPDATE -eq 1 ]] && echo "on ($UPDATE_TIME apt/git, $MAINT_TIME maint)" || echo disabled)"
+echo "==> Timezone:   $TIMEZONE"
 [[ -n "$REPO_PATH" ]] && echo "==> Git repo:   $REPO_PATH"
+
+apply_timezone "$TIMEZONE"
 
 CHROMIUM=""
 if [[ $SKIP_APT -eq 0 ]]; then
@@ -181,6 +477,7 @@ echo "==> Writing /etc/signage/kiosk.conf"
 mkdir -p /etc/signage
 cat > /etc/signage/kiosk.conf <<EOF
 # Signage kiosk — sourced by CEC sync, watchdog, and update scripts
+SIGNAGE_SERVER="$SIGNAGE_SERVER"
 KIOSK_URL="$KIOSK_URL"
 BOARDS_URL="$BOARDS_URL"
 SCREEN="$SCREEN"
@@ -190,6 +487,7 @@ SIGNAGE_AUTO_UPDATE="$AUTO_UPDATE"
 SIGNAGE_REPO="$REPO_PATH"
 SIGNAGE_UPDATE_TIME="$UPDATE_TIME"
 SIGNAGE_MAINT_TIME="$MAINT_TIME"
+SIGNAGE_TIMEZONE="$TIMEZONE"
 KIOSK_IGNORE_SSL="$IGNORE_SSL"
 EOF
 chmod 644 /etc/signage/kiosk.conf

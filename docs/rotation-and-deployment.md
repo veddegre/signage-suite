@@ -231,16 +231,21 @@ Browser / kiosk  ──HTTPS──►  reverse proxy  ──HTTP──►  Apach
 - Set **`--url-base https://your.public.host/boards`** when re-running setup if you want the install summary to show the proxy URL.
 - In admin → **Security**, set **Trusted reverse proxies** so kiosk **Status** heartbeats and login lockouts see the real client IP — see [admin-and-security.md → Trusted reverse proxies](admin-and-security.md#trusted-reverse-proxies).
 
+After `setup-server.sh`, the app is served at the site root (`/board.php`, `/admin.php`). Older `/boards/…` URLs redirect automatically.
+
 ### Kiosk displays (`setup-kiosk.sh`)
 
 Dedicated Pis/mini PCs use Chromium with **`--ignore-certificate-errors`** by default so **self-signed** server or LAN certs load without a “Your connection is not private” screen.
 
 ```bash
+# Interactive (prompts for server, screen, timezone, 4K, then tests board.php)
+sudo bash setup-kiosk.sh
+
 # Self-signed or LAN HTTPS (default — cert warnings ignored)
-sudo bash setup-kiosk.sh "https://signage.lan/boards/board.php?screen=main"
+sudo bash setup-kiosk.sh --server=https://signage.lan --screen=main
 
 # Public Let's Encrypt / trusted cert on proxy — enforce validation
-sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict-ssl
+sudo bash setup-kiosk.sh --server=https://signage.example.com --screen=main --strict-ssl
 ```
 
 Re-run `setup-kiosk.sh` after changing the URL or SSL behavior, then `sudo systemctl restart signage`.
@@ -260,9 +265,9 @@ Runs in the user’s normal browser — **not** the kiosk launcher. It still req
 
 | Scenario | Server | Kiosk / browser URL |
 |----------|--------|---------------------|
-| LAN, self-signed on box | `setup-server.sh` (default) | `https://server/boards/…` — kiosk ignores cert warning |
-| TLS at reverse proxy | `--no-https` or proxy → `:80` | `https://public-host/boards/…` |
-| Standalone, force HTTPS | `--https-redirect` | `https://server/boards/…` |
+| LAN, self-signed on box | `setup-server.sh` (default) | `https://server/board.php?screen=…` — kiosk ignores cert warning |
+| TLS at reverse proxy | `--no-https` or proxy → `:80` | `https://public-host/board.php?screen=…` |
+| Standalone, force HTTPS | `--https-redirect` | `https://server/board.php?screen=…` |
 | Public trusted cert | `--letsencrypt` or proxy LE | `https://…` + optional `--strict-ssl` on kiosk |
 
 ---
@@ -276,8 +281,8 @@ Fullscreen Chromium on a Pi or mini PC is covered in a dedicated guide (install,
 Short version:
 
 ```bash
-sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"   # add 2 for 4K
-sudo reboot
+sudo bash setup-kiosk.sh   # interactive — or --server=https://your-server --screen=garage
+sudo reboot                # add --scale=2 for 4K
 ```
 
 Self-signed HTTPS is fine on kiosks — Chromium ignores cert warnings by default. Use **`--strict-ssl`** only with a publicly trusted certificate. Details: [HTTPS and TLS](#https-and-tls).

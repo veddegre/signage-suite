@@ -63,9 +63,20 @@ if [[ -n "$repo" && -d "$repo/.git" ]]; then
       if [[ "${KIOSK_WITH_CEC:-1}" == "0" ]]; then
         cec_args=(--no-cec)
       fi
+      tz_args=()
+      if [[ -n "${SIGNAGE_TIMEZONE:-}" ]]; then
+        tz_args=(--timezone="$SIGNAGE_TIMEZONE")
+      fi
+      server="${SIGNAGE_SERVER:-${BOARDS_URL:-}}"
+      screen="${SCREEN:-main}"
       if [[ -x "$repo/setup-kiosk.sh" ]]; then
-        bash "$repo/setup-kiosk.sh" --skip-apt --from-update "${cec_args[@]}" \
-          "${KIOSK_URL:-}" "$scale"
+        if [[ -n "$server" ]]; then
+          bash "$repo/setup-kiosk.sh" --skip-apt --from-update "${cec_args[@]}" "${tz_args[@]}" \
+            --server="$server" --screen="$screen" --scale="$scale"
+        else
+          bash "$repo/setup-kiosk.sh" --skip-apt --from-update "${cec_args[@]}" "${tz_args[@]}" \
+            --scale="$scale" "${KIOSK_URL:-}"
+        fi
       else
         log "setup-kiosk.sh missing in $repo"
       fi

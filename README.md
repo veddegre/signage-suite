@@ -62,8 +62,9 @@ Browse to **admin.php**, create your super admin (one-time key in `config/setup.
 
 ```bash
 # Use https:// — required for iframe embeds (EarthCam, WMTA, etc.)
-sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
-# 4K: add scale 2 · skip CEC: --no-cec · trusted public cert: --strict-ssl
+sudo bash setup-kiosk.sh
+# Or: sudo bash setup-kiosk.sh --server=https://your-server --screen=garage
+# 4K: --scale=2 · skip CEC: --no-cec · trusted public cert: --strict-ssl
 sudo reboot
 ```
 
@@ -74,8 +75,8 @@ Kiosks **ignore self-signed certificate warnings by default** so LAN HTTPS from 
 **Or** open any browser / smart TV (HTTPS recommended when using embed boards):
 
 ```
-https://your-server/boards/board.php
-https://your-server/boards/board.php?screen=garage
+https://your-server/board.php
+https://your-server/board.php?screen=garage
 ```
 
 Add boards to the playlist under **Rotation**. Each screen has its own URL: `board.php?screen=<key>`.

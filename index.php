@@ -1,2 +1,3 @@
 <?php
-require __DIR__ . '/boards/weather/index.php';
+header('Location: board.php', true, 302);
+exit;

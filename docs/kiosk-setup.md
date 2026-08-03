@@ -14,10 +14,8 @@ Turn a dedicated Linux box into a fullscreen Chromium display pointed at your si
 ## Prerequisites
 
 1. **Signage server** already running (`setup-server.sh`) and reachable on the LAN.
-2. A **display** defined in **admin.php → Rotation** (e.g. `main`, `garage`) so you know the URL:
-   ```
-   https://your-server/boards/board.php?screen=garage
-   ```
+2. A **display** defined in **admin.php → Rotation** (e.g. `main`, `garage`) so you know the screen key.
+   The kiosk URL will be `https://your-server/board.php?screen=garage`.
    Use **`https://`** when the server or reverse proxy serves TLS (recommended for iframe embed boards). Omit `?screen=` for the default **main** screen.
 3. On the kiosk machine: a fresh OS install, network, and a user you can `sudo` with (script uses `$SUDO_USER`, often `pi` or your login).
 
@@ -30,20 +28,24 @@ See also: [HTTPS and TLS](rotation-and-deployment.md#https-and-tls) — server c
 From a clone of this repo on the kiosk (or copy `setup-kiosk.sh` + `scripts/` onto the box):
 
 ```bash
-# 1080p display — https recommended for iframe embeds (self-signed OK on kiosk)
-sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
+# Interactive — prompts for server, screen, timezone, 4K, then tests board.php
+sudo bash setup-kiosk.sh
+
+# Non-interactive
+sudo bash setup-kiosk.sh --server=https://your-server --screen=garage
+
+# Legacy full URL (still accepted; /boards/ prefix is stripped automatically)
+sudo bash setup-kiosk.sh "https://your-server/board.php?screen=garage"
 
 # 4K display — pixel-double to fill the panel
-sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage" 2
+sudo bash setup-kiosk.sh --server=https://your-server --screen=garage --scale=2
 
 # Skip HDMI-CEC TV power control
-sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage" --no-cec
+sudo bash setup-kiosk.sh --server=https://your-server --screen=garage --no-cec
 
 # Trusted public cert (e.g. Let's Encrypt on reverse proxy) — enforce TLS validation
-sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict-ssl
+sudo bash setup-kiosk.sh --server=https://signage.example.com --screen=main --strict-ssl
 ```
-
-**Quote URLs** that contain `?screen=` so the shell does not eat the query string.
 
 Then:
 
@@ -68,7 +70,9 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **Blank cursor** | Transparent theme + off-screen pointer helper (cage still draws a cursor if a USB mouse / CEC “pointer” is present) |
 
-Config written to **`/etc/signage/kiosk.conf`** (`KIOSK_URL`, `BOARDS_URL`, `SCREEN`, scale, CEC, git repo path, update schedule, **`KIOSK_IGNORE_SSL`**). Launcher: **`/usr/local/bin/signage-kiosk`**.
+On first run, setup **prompts for the signage server** (hostname only — no `/boards` path), **screen name**, **timezone**, and **4K scale**, then **tests** `board.php` before installing. Pass **`--server`**, **`--screen`**, and **`--timezone`** to skip prompts (used by unattended git refresh).
+
+Config written to **`/etc/signage/kiosk.conf`** (`SIGNAGE_SERVER`, `KIOSK_URL`, `SCREEN`, scale, CEC, git repo path, update schedule, **`SIGNAGE_TIMEZONE`**, **`KIOSK_IGNORE_SSL`**). Launcher: **`/usr/local/bin/signage-kiosk`**.
 
 If you run setup from a **git clone** of signage-suite, that directory is saved as **`SIGNAGE_REPO`** so nightly `git pull` can refresh kiosk scripts and re-run `setup-kiosk.sh --skip-apt`.
 
@@ -84,10 +88,10 @@ Wall boards that embed external sites (`web.php`, Grand Haven / EarthCam webcams
 
 ```bash
 # Self-signed or LAN HTTPS (default)
-sudo bash setup-kiosk.sh "https://192.168.1.50/boards/board.php?screen=main"
+sudo bash setup-kiosk.sh --server=https://192.168.1.50 --screen=main
 
 # Public URL with Let's Encrypt on your reverse proxy — validate certs normally
-sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict-ssl
+sudo bash setup-kiosk.sh --server=https://signage.example.com --screen=main --strict-ssl
 ```
 
 | Flag | When to use |
@@ -100,7 +104,7 @@ sudo bash setup-kiosk.sh "https://signage.example.com/boards/board.php" --strict
 After changing URL or SSL flags, re-run setup and restart:
 
 ```bash
-sudo bash setup-kiosk.sh "https://…/board.php?screen=garage"
+sudo bash setup-kiosk.sh --server=https://… --screen=garage
 sudo systemctl restart signage
 ```
 
@@ -126,7 +130,7 @@ sudo /usr/local/bin/signage-kiosk-update    # manual run
 Customize schedule when installing:
 
 ```bash
-sudo bash setup-kiosk.sh "https://…/board.php?screen=garage" --update-time=02:30 --maint-time=03:15
+sudo bash setup-kiosk.sh --server=https://… --screen=garage --update-time=02:30 --maint-time=03:15
 ```
 
 Disable timers (legacy 04:00 browser-only restart):
