@@ -167,6 +167,7 @@ curl_test_args() {
 test_kiosk_url() {
   local url="$1"
   local curl_args=()
+  local tmp=""
   mapfile -t curl_args < <(curl_test_args)
   if ! command -v curl >/dev/null 2>&1; then
     echo "    curl not installed yet — skipping connectivity test" >&2
@@ -174,10 +175,20 @@ test_kiosk_url() {
   fi
   echo ""
   echo "==> Testing $url"
-  if curl "${curl_args[@]}" "$url" | grep -q 'const PAGES'; then
+  tmp="$(mktemp)"
+  # Write to a file — curl | grep -q triggers SIGPIPE (exit 23) under pipefail even
+  # when grep finds a match and the page is valid.
+  if ! curl "${curl_args[@]}" -o "$tmp" "$url"; then
+    rm -f "$tmp"
+    echo "    Could not verify board.php (server unreachable, wrong screen, or not signage yet)" >&2
+    return 1
+  fi
+  if grep -q 'const PAGES' "$tmp"; then
+    rm -f "$tmp"
     echo "    OK — rotation shell responded"
     return 0
   fi
+  rm -f "$tmp"
   echo "    Could not verify board.php (server unreachable, wrong screen, or not signage yet)" >&2
   return 1
 }
