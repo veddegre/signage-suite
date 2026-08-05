@@ -38,7 +38,7 @@ function webcam_default_cameras(): array
         'grpm' => [
             'name' => 'GR Public Museum',
             'url' => 'https://api.wetmet.net/widgets/stream/frame.php?uid=7bcde7d22d900d7061461d4953482c4b',
-            'kind' => 'iframe',
+            'kind' => 'stream',
             'attribution' => 'Grand Rapids Public Museum · WMTA',
         ],
         'grandhaven' => [
@@ -361,23 +361,42 @@ function webcam_board_image_src(array $cam): string
     return $url;
 }
 
+function webcam_is_wetmet_host(string $host): bool
+{
+    return preg_match('#(^|\.)wetmet\.net$#', strtolower($host)) === 1;
+}
+
+/** @return array{ua:string,referer:?string} */
+function webcam_http_context(string $url, ?string $referer = null): array
+{
+    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+    $ua = 'HomeSignage/1.0';
+    if (webcam_is_wetmet_host($host)) {
+        $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+        if ($referer === null) {
+            $referer = 'https://api.wetmet.net/';
+        }
+    } elseif ($referer === null && str_contains($host, 'earthcam.net')) {
+        $referer = 'https://share.earthcam.net/';
+    }
+
+    return ['ua' => $ua, 'referer' => $referer];
+}
+
 function webcam_http_get(string $url, int $timeout = 12, bool $noCache = false, ?string $referer = null, string $accept = '*/*'): ?string
 {
     $url = webcam_validate_url($url);
     if ($url === null || !function_exists('curl_init')) {
         return null;
     }
-    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
-    if ($referer === null && str_contains($host, 'earthcam.net')) {
-        $referer = 'https://share.earthcam.net/';
-    }
+    $ctx = webcam_http_context($url, $referer);
     $headers = ['Accept: ' . $accept];
     if ($noCache) {
         $headers[] = 'Cache-Control: no-cache, no-store';
         $headers[] = 'Pragma: no-cache';
     }
-    if ($referer !== null && $referer !== '') {
-        $headers[] = 'Referer: ' . $referer;
+    if ($ctx['referer'] !== null && $ctx['referer'] !== '') {
+        $headers[] = 'Referer: ' . $ctx['referer'];
     }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -385,7 +404,7 @@ function webcam_http_get(string $url, int $timeout = 12, bool $noCache = false, 
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_USERAGENT => 'HomeSignage/1.0',
+        CURLOPT_USERAGENT => $ctx['ua'],
         CURLOPT_HTTPHEADER => $headers,
     ]);
     $body = curl_exec($ch);
@@ -675,7 +694,7 @@ function webcam_apply_earthcam_iframe_defaults(array $entry, string $key): array
     return $entry;
 }
 
-/** Upgrade legacy GRPM saves to the WMTA live stream iframe URL. */
+/** Upgrade legacy GRPM saves to the WMTA live WetMet stream (native HLS on wall). */
 function webcam_apply_grpm_defaults(array $entry, string $key): array
 {
     $key = webcam_normalize_key($key);
@@ -689,7 +708,7 @@ function webcam_apply_grpm_defaults(array $entry, string $key): array
     $needsUpgrade = $url === ''
         || str_contains($url, $legacyImageUid)
         || webcam_is_widget_frame_url($url)
-        || in_array($kind, ['widget', 'image', 'stream'], true);
+        || in_array($kind, ['widget', 'image', 'iframe'], true);
     if ($needsUpgrade) {
         return array_merge($entry, [
             'name' => (string)$defaults['name'],
@@ -1033,15 +1052,24 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
 
         return webcam_hls_playlist_is_live($mediaBody);
     }
+    $ctx = webcam_http_context($url);
+    $probeHeaders = [];
+    if ($ctx['referer'] !== null && $ctx['referer'] !== '') {
+        $probeHeaders[] = 'Referer: ' . $ctx['referer'];
+    }
     $ch = curl_init($url);
-    curl_setopt_array($ch, [
+    $opts = [
         CURLOPT_RETURNTRANSFER => $kind === 'image',
         CURLOPT_NOBODY => $kind !== 'image',
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_USERAGENT => 'HomeSignage/1.0',
-    ]);
+        CURLOPT_USERAGENT => $ctx['ua'],
+    ];
+    if ($probeHeaders !== []) {
+        $opts[CURLOPT_HTTPHEADER] = $probeHeaders;
+    }
+    curl_setopt_array($ch, $opts);
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);
