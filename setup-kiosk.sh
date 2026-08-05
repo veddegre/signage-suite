@@ -105,6 +105,10 @@ load_kiosk_conf() {
   TIMEZONE="${TIMEZONE:-${SIGNAGE_TIMEZONE:-}}"
 }
 
+kiosk_conf_exists() {
+  [[ -f /etc/signage/kiosk.conf ]]
+}
+
 sanitize_screen() {
   local s
   s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
@@ -260,11 +264,34 @@ prompt_kiosk_wizard() {
   fi
 }
 
+prompt_existing_kiosk_config() {
+  echo ""
+  echo "==> Existing kiosk configuration"
+  echo "    Server:  ${SIGNAGE_SERVER:-?}"
+  echo "    Screen:  ${SCREEN:-main}"
+  echo "    URL:     ${KIOSK_URL:-?}"
+  if [[ -n "${SCALE:-}" && "$SCALE" != "1" ]]; then
+    echo "    Scale:   $SCALE (4K)"
+  fi
+  echo ""
+  echo "    Re-run setup to point at a new server or display (e.g. after moving hardware)."
+  if prompt_yes_no "    Keep this server and screen?" "y"; then
+    return 0
+  fi
+  prompt_kiosk_wizard
+  return 0
+}
+
 resolve_kiosk_target() {
   local cli_server="$SIGNAGE_SERVER"
   local cli_screen="$SCREEN"
   local cli_url="$KIOSK_URL"
   local cli_scale="$SCALE"
+  local had_existing=0
+  local cli_explicit=0
+
+  kiosk_conf_exists && had_existing=1
+  [[ -n "$cli_server" || -n "$cli_screen" || -n "$cli_url" ]] && cli_explicit=1
 
   load_kiosk_conf
 
@@ -290,6 +317,9 @@ resolve_kiosk_target() {
   fi
 
   if [[ -n "$KIOSK_URL" ]]; then
+    if [[ $had_existing -eq 1 && $cli_explicit -eq 0 && $FROM_UPDATE -eq 0 && -t 0 ]]; then
+      prompt_existing_kiosk_config
+    fi
     return 0
   fi
 

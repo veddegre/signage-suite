@@ -72,6 +72,8 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 
 On first run, setup **prompts for the signage server** (hostname only — no `/boards` path), **screen name**, **timezone**, and **4K scale**, then **tests** `board.php` before installing. Pass **`--server`**, **`--screen`**, and **`--timezone`** to skip prompts (used by unattended git refresh).
 
+**Re-running setup** on a box that already has `/etc/signage/kiosk.conf` shows the saved server and screen and asks whether to keep them or reconfigure (e.g. point at a new server after moving hardware). Pass **`--server`** and/or **`--screen`** on the command line to apply changes without that prompt. Nightly **`signage-kiosk-update`** passes those flags automatically and never prompts.
+
 Config written to **`/etc/signage/kiosk.conf`** (`SIGNAGE_SERVER`, `KIOSK_URL`, `SCREEN`, scale, CEC, git repo path, update schedule, **`SIGNAGE_TIMEZONE`**, **`KIOSK_IGNORE_SSL`**). Launcher: **`/usr/local/bin/signage-kiosk`**.
 
 If you run setup from a **git clone** of signage-suite, that directory is saved as **`SIGNAGE_REPO`** so nightly `git pull` can refresh kiosk scripts and re-run `setup-kiosk.sh --skip-apt`.
