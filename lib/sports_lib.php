@@ -311,12 +311,14 @@ function sports_cached_json(string $url, string $cacheKey, int $ttl): ?array
             return $d;
         }
     }
+    $curlVer = curl_version()['version'] ?? '8.0.0';
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
-        CURLOPT_USERAGENT => 'HomeSignage/SportsBoard/1.0',
+        CURLOPT_USERAGENT => 'curl/' . $curlVer,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);

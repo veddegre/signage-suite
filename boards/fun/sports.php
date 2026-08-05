@@ -11,6 +11,7 @@ require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/sports_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/signage_theme_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/rotation_lib.php';
 
 $themePreset = signage_theme_preset(signage_active_theme_key());
 $themeLight = $themePreset !== null && ($themePreset['light'] ?? '0') === '1';
@@ -20,6 +21,8 @@ const SPORTS_CACHE_DIR = SIGNAGE_ROOT . '/cache';
 ob_start();
 
 $SCREEN = signage_request_screen();
+$sportsRuntime = rotation_screen_runtime($SCREEN);
+$showDebug = !empty($sportsRuntime['show_debug']) || (isset($_GET['debug']) && (string)$_GET['debug'] === '1');
 $sportsLabels = rotation_screen_sports_labels($SCREEN);
 define('TITLE', $sportsLabels['title']);
 define('SUBTITLE', $sportsLabels['subtitle']);
@@ -41,12 +44,12 @@ if (isset($_GET['api']) && $_GET['api'] === '1') {
         'next_strip' => $board['next_strip'],
         'recent_strip' => $board['recent_strip'],
         'cache_age' => (int)$board['cache_age'],
-        'stamp' => sports_board_stamp_text($board),
+        'stamp' => sports_board_stamp_text($board, $showDebug),
     ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 
-function sports_board_stamp_text(array $board): string
+function sports_board_stamp_text(array $board, bool $showDebug = false): string
 {
     $parts = ['ESPN'];
     $age = (int)($board['cache_age'] ?? 0);
@@ -56,7 +59,7 @@ function sports_board_stamp_text(array $board): string
     if (!empty($board['any_live'])) {
         $parts[] = 'Live poll ' . (int)($board['reload_sec'] ?? 120) . 's';
     }
-    if (!empty($GLOBALS['diag']) && is_array($GLOBALS['diag'])) {
+    if ($showDebug && !empty($GLOBALS['diag']) && is_array($GLOBALS['diag'])) {
         $parts[] = implode('; ', array_map(
             static fn($k, $v) => "$k: $v",
             array_keys($GLOBALS['diag']),
@@ -315,7 +318,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   <div class="empty">Sports data unavailable — check network or try again shortly.</div>
   <?php endif; ?>
 
-  <div class="stamp" id="sports-stamp"><?= h(sports_board_stamp_text($board)) ?></div>
+  <div class="stamp" id="sports-stamp"><?= h(sports_board_stamp_text($board, $showDebug)) ?></div>
 </div>
 <script>
 <?php if (!$embedded): ?>
