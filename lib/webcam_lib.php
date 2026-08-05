@@ -989,6 +989,19 @@ function webcam_status_write_cache(string $url, array $data): void
     ], JSON_UNESCAPED_SLASHES), LOCK_EX);
 }
 
+function webcam_probe_uses_hls(string $url, string $kind): bool
+{
+    if ($kind === 'stream' || webcam_is_ant_media_play_url($url)) {
+        return true;
+    }
+    // WetMet stream frame URLs used as iframe embeds — rotation only needs the frame page up.
+    if ($kind === 'iframe' && webcam_is_stream_frame_url($url)) {
+        return false;
+    }
+
+    return webcam_is_stream_frame_url($url);
+}
+
 function webcam_probe_url(string $url, string $kind = 'iframe'): bool
 {
     $url = webcam_validate_url($url);
@@ -1000,7 +1013,7 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
 
         return $img !== null && webcam_probe_url($img, 'image');
     }
-    if ($kind === 'stream' || webcam_is_stream_frame_url($url) || webcam_is_ant_media_play_url($url)) {
+    if (webcam_probe_uses_hls($url, $kind)) {
         $master = webcam_stream_playlist_url($url);
         if ($master === null) {
             return false;
