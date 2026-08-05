@@ -142,7 +142,11 @@ function signage_safe_bottom(): int
     return max(0, min(120, (int)($_GET['safebottom'] ?? 0)));
 }
 
-/** Usable board viewport height — 1080 minus ticker/safe-bottom inset when framed. */
+/**
+ * Logical viewport height for responsive board typography (px).
+ * Rotation iframes use height:100% and follow the shell ticker inset dynamically;
+ * this returns the design canvas unless legacy ?safebottom= is present.
+ */
 function signage_frame_height(): int
 {
     $full = 1080;
@@ -151,9 +155,6 @@ function signage_frame_height(): int
         $sb = signage_safe_bottom();
         if ($sb > 0) {
             return max(720, $full - $sb);
-        }
-        if (signage_ticker_enabled()) {
-            return max(720, $full - SIGNAGE_TICKER_H);
         }
 
         return $full;
@@ -166,10 +167,10 @@ function signage_frame_height(): int
     return $full;
 }
 
-/** True when loaded in the board.php rotation iframe (not admin preview). */
+/** True when loaded inside board.php rotation iframe (?noticker=1&settle=… from the shell). */
 function signage_rotation_frame(): bool
 {
-    return isset($_GET['noticker']) && signage_safe_bottom() === 0;
+    return isset($_GET['noticker']) && isset($_GET['settle']);
 }
 
 /** CSS height value for html/body on signage boards. */

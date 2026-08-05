@@ -12,7 +12,8 @@
  *
  * The weather-alert ticker lives HERE, in the shell — genuinely persistent
  * across page transitions. Framed boards get ?noticker=1 so they don't render
- * a second copy (they still show their own ticker when opened directly).
+ * a second copy; the shell shrinks iframes when the ticker is visible via
+ * --signage-ticker-inset (boards use height:100% inside the frame).
  *
  * Two stacked iframes preload each board fully before it's revealed, so there
  * are no white flashes; a safety timeout moves on if a page ever hangs.
@@ -181,8 +182,6 @@ if (($_GET['api'] ?? '') === 'presence') {
   const WEIGHTED = <?= json_encode((bool)$runtime['weighted']) ?>;
   const ROTATION_TZ = <?= json_encode($runtime['timezone']) ?>;
   const SHOW_CLOCK = <?= json_encode((bool)$runtime['show_clock']) ?>;
-  const SHOW_TICKER = <?= json_encode($showTicker) ?>;
-  const TICKER_H = <?= (int)SIGNAGE_TICKER_H ?>;
   const BLANK_INIT = <?= json_encode($blankActive) ?>;
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
@@ -650,7 +649,6 @@ if (($_GET['api'] ?? '') === 'presence') {
     let revealed = false;
     const sep = p.url.includes('?') ? '&' : '?';
     let qs = 'noticker=1&settle=' + SETTLE;
-    if (SHOW_TICKER) qs += '&safebottom=' + TICKER_H;
     if (boardIsLocalSignage(p.url)) {
       if (SCREEN) qs += '&screen=' + encodeURIComponent(SCREEN);
       if (THEME) qs += '&theme=' + encodeURIComponent(THEME);

@@ -7491,7 +7491,7 @@ $adminPreviewScreen = signage_preview_screen_key();
 $adminPreviewTheme = signage_theme_for_screen($adminPreviewScreen);
 ?>
 const RSS_PREVIEW_SUFFIX = <?= json_encode(
-    signage_board_rotation_query($adminPreviewScreen, $adminPreviewTheme, signage_ticker_enabled())
+    signage_board_rotation_query($adminPreviewScreen, $adminPreviewTheme)
 ) ?>;
 
 function rotationPreviewUrl(url) {

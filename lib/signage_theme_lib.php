@@ -668,7 +668,7 @@ function signage_board_url_with_rotation_query(
         $themeKey = signage_theme_for_screen($screen);
     }
     if ($includeTickerSafeBottom === null) {
-        $includeTickerSafeBottom = signage_ticker_enabled();
+        $includeTickerSafeBottom = false;
     }
     $url = signage_board_url_strip_rotation_query($url);
     $sep = str_contains($url, '?') ? '&' : '?';
@@ -691,11 +691,12 @@ function signage_board_url_is_local(string $url): bool
 }
 
 /** Merge theme (and other kiosk params) onto a board URL for rotation iframes. */
-function signage_board_rotation_query(string $screen, string $themeKey, bool $includeTickerSafeBottom = true): string
+function signage_board_rotation_query(string $screen, string $themeKey, bool $includeTickerSafeBottom = false): string
 {
     require_once __DIR__ . '/rotation_lib.php';
     $qs = 'noticker=1';
-    if ($includeTickerSafeBottom && signage_ticker_enabled()) {
+    // Legacy: ?safebottom= pins board height; rotation shell resizes iframes via --signage-ticker-inset instead.
+    if ($includeTickerSafeBottom) {
         $qs .= '&safebottom=' . (int)SIGNAGE_TICKER_H;
     }
     $screen = rotation_normalize_screen_key($screen);
