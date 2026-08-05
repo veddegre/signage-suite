@@ -726,7 +726,7 @@ Multi-page: `splunk.php?d=<key>` with per-page panel decks and **Access** (owner
 
 Splunk Enterprise 10.x / Cloud published Dashboard Studio dashboards.
 
-**Setup:** publish in Splunk, copy URL to registry. Set `x_frame_options_sameorigin = false` in Splunk `web.conf` for LAN embeds. Wrapper reloads iframe on `reload` interval (default 300s).
+**Setup:** In Splunk open Dashboard Studio → **Actions → Publish dashboard**, copy the published URL, then in admin open **Dashboards → Splunk Published** → **+ Add dashboard** and paste the URL. Set `x_frame_options_sameorigin = false` in Splunk `web.conf` for LAN embeds. Wrapper reloads iframe on `reload` interval (default 300s).
 
 ### powerbi.php — Power BI (iframe + embed tokens)
 

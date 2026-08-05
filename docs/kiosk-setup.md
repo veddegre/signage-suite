@@ -206,6 +206,34 @@ Unplug unused USB mice if the pointer keeps waking.
 
 ---
 
+## Brief flash of the Linux console / terminal text
+
+This is **not** the rotation playlist ending — `board.php` loops forever (shuffle/sequential/weighted). When you see shell scrollback or a login prompt, **Chromium or cage exited** and the TV is showing **tty1** underneath until the browser comes back.
+
+Common triggers:
+
+| Cause | When |
+|-------|------|
+| **Chromium crash / OOM** | Random, often on heavy iframe boards (Grafana, Splunk, webcam) |
+| **signage-maint.timer** | Daily ~04:00 — intentional `systemctl restart signage` (memory flush) |
+| **signage-watchdog** | After 3 failed health checks (~15 min apart if the server was unreachable) |
+| **Package updates** | Reboot when kernel/apt updates require it |
+| **board.php reload** | Every 8h or after admin saves rotation — stays in-browser (usually a dark flash, not the console) |
+
+**Diagnose on the kiosk**
+
+```bash
+journalctl -u signage --since "1 hour ago" --no-pager
+systemctl status signage
+systemctl list-timers 'signage-*'
+```
+
+Look for `Main process exited`, `code=killed`, or `signage-maint: restarting signage.service`.
+
+**Mitigation (in repo):** `signage-kiosk` now blackens tty1 and restarts cage in a loop (~1s) instead of leaving the console visible during systemd’s restart window. Re-run `setup-kiosk.sh` (or copy updated `/usr/local/bin/signage-kiosk` and `signage-kiosk-watchdog`) on each Pi/box.
+
+---
+
 ## Freezes or stops rotating
 
 Recovery is layered (board shell + systemd):

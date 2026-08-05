@@ -538,8 +538,19 @@ if [[ $IGNORE_SSL -eq 1 ]]; then
   cat > /usr/local/bin/signage-kiosk <<EOF
 #!/usr/bin/env bash
 # Launched by signage.service — cage runs Chromium as the sole fullscreen app.
+# If cage exits (crash/OOM), blackout tty1 and restart immediately so the Linux
+# console does not flash through during systemd's restart window.
 export XCURSOR_THEME=signage-blank
 export XCURSOR_SIZE=24
+
+signage_kiosk_blackout_tty() {
+  if command -v setterm >/dev/null 2>&1; then
+    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
+  fi
+  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
+}
+
+signage_kiosk_blackout_tty
 
 # Cage always draws a compositor cursor when a pointer device is present.
 # Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
@@ -548,21 +559,26 @@ if command -v signage-hide-cursor >/dev/null; then
   signage-hide-cursor &
 fi
 
-exec cage -- "$CHROMIUM" \\
-  --kiosk "\$1" \\
-  --force-device-scale-factor=$SCALE \\
-  --noerrdialogs \\
-  --disable-infobars \\
-  --disable-session-crashed-bubble \\
-  --disable-features=TranslateUI \\
-  --disable-dev-shm-usage \\
-  --autoplay-policy=no-user-gesture-required \\
-  --check-for-update-interval=31536000 \\
-  --enable-features=VaapiVideoDecoder \\
-  --ozone-platform=wayland \\
-  --ignore-certificate-errors \\
-  --allow-insecure-localhost \\
-  --start-fullscreen
+KIOSK_URL="\$1"
+while true; do
+  cage -- "$CHROMIUM" \\
+    --kiosk "\$KIOSK_URL" \\
+    --force-device-scale-factor=$SCALE \\
+    --noerrdialogs \\
+    --disable-infobars \\
+    --disable-session-crashed-bubble \\
+    --disable-features=TranslateUI \\
+    --disable-dev-shm-usage \\
+    --autoplay-policy=no-user-gesture-required \\
+    --check-for-update-interval=31536000 \\
+    --enable-features=VaapiVideoDecoder \\
+    --ozone-platform=wayland \\
+    --ignore-certificate-errors \\
+    --allow-insecure-localhost \\
+    --start-fullscreen || true
+  signage_kiosk_blackout_tty
+  sleep 1
+done
 EOF
 else
   cat > /usr/local/bin/signage-kiosk <<EOF
@@ -571,6 +587,15 @@ else
 export XCURSOR_THEME=signage-blank
 export XCURSOR_SIZE=24
 
+signage_kiosk_blackout_tty() {
+  if command -v setterm >/dev/null 2>&1; then
+    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
+  fi
+  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
+}
+
+signage_kiosk_blackout_tty
+
 # Cage always draws a compositor cursor when a pointer device is present.
 # Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
 if command -v signage-hide-cursor >/dev/null; then
@@ -578,19 +603,24 @@ if command -v signage-hide-cursor >/dev/null; then
   signage-hide-cursor &
 fi
 
-exec cage -- "$CHROMIUM" \\
-  --kiosk "\$1" \\
-  --force-device-scale-factor=$SCALE \\
-  --noerrdialogs \\
-  --disable-infobars \\
-  --disable-session-crashed-bubble \\
-  --disable-features=TranslateUI \\
-  --disable-dev-shm-usage \\
-  --autoplay-policy=no-user-gesture-required \\
-  --check-for-update-interval=31536000 \\
-  --enable-features=VaapiVideoDecoder \\
-  --ozone-platform=wayland \\
-  --start-fullscreen
+KIOSK_URL="\$1"
+while true; do
+  cage -- "$CHROMIUM" \\
+    --kiosk "\$KIOSK_URL" \\
+    --force-device-scale-factor=$SCALE \\
+    --noerrdialogs \\
+    --disable-infobars \\
+    --disable-session-crashed-bubble \\
+    --disable-features=TranslateUI \\
+    --disable-dev-shm-usage \\
+    --autoplay-policy=no-user-gesture-required \\
+    --check-for-update-interval=31536000 \\
+    --enable-features=VaapiVideoDecoder \\
+    --ozone-platform=wayland \\
+    --start-fullscreen || true
+  signage_kiosk_blackout_tty
+  sleep 1
+done
 EOF
 fi
 chmod +x /usr/local/bin/signage-kiosk
@@ -645,7 +675,7 @@ Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
 Restart=always
-RestartSec=5
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target

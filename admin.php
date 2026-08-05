@@ -336,7 +336,7 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
     }
     $pagesKey = match ($shareBoard) {
         'zabbix', 'kuma', 'splunk', 'tdx' => $shareBoard . '.PAGES',
-        'grafana' => 'grafana.DASHBOARDS',
+        'grafana', 'splunkdash' => $shareBoard . '.DASHBOARDS',
         default => '',
     };
     if ($pagesKey === '') {
@@ -422,6 +422,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             continue;
         }
         if ($board === 'grafana' && $f['key'] === 'DASHBOARDS') {
+            continue;
+        }
+        if ($board === 'splunkdash' && $f['key'] === 'DASHBOARDS') {
             continue;
         }
         if ($board === 'rotation' && $f['key'] === 'SCREENS') {
@@ -785,6 +788,44 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 unset($conf['grafana.DASHBOARDS']);
             } else {
                 $conf['grafana.DASHBOARDS'] = $mergedPages;
+            }
+        }
+    }
+    if ($board === 'splunkdash') {
+        if (!admin_is_super() && !empty($_POST['splunkdash_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['splunkdash_use_json'])) {
+            require_once __DIR__ . '/lib/splunkdash_lib.php';
+            $parsed = splunkdash_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Pages JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['splunkdash.DASHBOARDS']);
+            } else {
+                $conf['splunkdash.DASHBOARDS'] = $parsed;
+            }
+        } else {
+            require_once __DIR__ . '/lib/splunkdash_lib.php';
+            $existingPages = is_array($conf['splunkdash.DASHBOARDS'] ?? null) ? $conf['splunkdash.DASHBOARDS'] : [];
+            $outV = splunkdash_pages_from_post($_POST['PAGES'] ?? []);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = splunkdash_normalize_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
+            if ($mergedPages === []) {
+                unset($conf['splunkdash.DASHBOARDS']);
+            } else {
+                $conf['splunkdash.DASHBOARDS'] = $mergedPages;
             }
         }
     }
@@ -2082,6 +2123,7 @@ $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TI
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
+$splunkdashBoardKeys = ['DEFAULT_RELOAD', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = ($authed && $board === 'rotation') ? rotation_quick_add_items() : [];
@@ -2220,6 +2262,16 @@ if ($board === 'grafana') {
     $grafanaActivePage = grafana_normalize_key((string)($_GET['page'] ?? ''));
     if (!isset($grafanaPages[$grafanaActivePage])) {
         $grafanaActivePage = (string)(array_key_first($grafanaPages) ?: 'main');
+    }
+}
+$splunkdashPages = [];
+$splunkdashActivePage = 'main';
+if ($board === 'splunkdash') {
+    require_once __DIR__ . '/lib/splunkdash_lib.php';
+    $splunkdashPages = admin_filter_owned_map(splunkdash_admin_pages($rawConf));
+    $splunkdashActivePage = splunkdash_normalize_key((string)($_GET['page'] ?? ''));
+    if (!isset($splunkdashPages[$splunkdashActivePage])) {
+        $splunkdashActivePage = (string)(array_key_first($splunkdashPages) ?: 'main');
     }
 }
 $tdxPages = [];
@@ -4197,7 +4249,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — use <strong>+ Add page</strong> below.
           Super admins configure embed auth once under <strong>Board settings</strong> — see <code>docs/grafana.md</code>.
         <?php elseif ($board === 'splunkdash'): ?>
-          Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — preview per row below.
+          Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — use <strong>+ Add dashboard</strong> below and paste the Splunk publish URL.
         <?php elseif ($board === 'powerbi'): ?>
           Each report is <code>powerbi.php?d=<em>key</em></code> in rotation — preview per row below.
           <strong>Private reports:</strong> set Azure tenant / app / secret, add workspace + report IDs (or paste a
@@ -6183,6 +6235,117 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <?php endforeach; ?>
               </div>
               <button type="submit" name="action" value="grafana_test" class="secondary" style="margin-top:14px">Test JWT signing</button>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'splunkdash'): ?>
+          <?php admin_operator_board_preamble('splunkdash'); ?>
+          <?php admin_super_registry_share_hint('Splunk published'); ?>
+          <div class="section-title">Splunk published dashboards</div>
+          <div class="help" style="margin-bottom:4px">Each dashboard is its own 1080p wall — add to rotation as
+            <code>splunkdash.php?d=<em>key</em></code>. In Splunk: Dashboard Studio → <strong>Actions → Publish dashboard</strong>, then paste the published URL below.</div>
+          <?php if ($splunkdashPages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No dashboards yet — click <strong>+ Add dashboard</strong> below, paste your Splunk publish URL, then Save.
+          </div>
+          <?php endif; ?>
+
+          <div class="splunk-pages-bar" id="splunkdashPagesBar">
+            <?php foreach ($splunkdashPages as $pk => $pg): ?>
+            <button type="button" class="splunk-page-tab<?= $pk === $splunkdashActivePage ? ' active' : '' ?>"
+                    data-splunkdash-page-tab="<?= h($pk) ?>">
+              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="addrow" onclick="addSplunkdashPage()">+ Add dashboard</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=splunkdash" formmethod="post"
+                    onclick="this.form.share_board.value='splunkdash'; return confirm('Share every Splunk published dashboard with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
+          </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="operator">
+          <?php endif; ?>
+
+          <?php foreach ($splunkdashPages as $pk => $pg):
+            $pageRo = admin_page_entry_readonly($pg);
+          ?>
+          <div class="splunk-page-editor" data-splunkdash-page-editor="<?= h($pk) ?>"
+               style="<?= $pk === $splunkdashActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
+            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-splunkdash-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-splunkdash-page-key>
+            <?php endif; ?>
+            <div class="splunk-page-head">
+              <div>
+                <label class="mini">Title</label>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="SOC overview" data-splunkdash-page-title<?= admin_form_ro_attr($pageRo) ?>>
+              </div>
+              <div>
+                <label class="mini">Key</label>
+                <input type="text" value="<?= h($pk) ?>" readonly tabindex="-1"
+                       title="Used in splunkdash.php?d=KEY — set when adding the dashboard">
+                <div class="help" style="margin-top:4px">Rotation: <code><?= h(splunkdash_page_url($pk)) ?></code></div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
+                   href="<?= h(splunkdash_preview_url($pk)) ?>" target="_blank" rel="noopener" data-splunkdash-page-preview>Preview ↗</a>
+                <?php if (count($splunkdashPages) > 1 && !$pageRo): ?>
+                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
+                        onclick="removeSplunkdashPage('<?= h($pk) ?>')" title="Remove dashboard">Remove</button>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+
+            <div class="field-grid" style="margin-bottom:12px">
+              <div class="field span-2">
+                <label class="mini">Published URL</label>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][url]', $pageRo) ?> value="<?= h((string)($pg['url'] ?? '')) ?>"
+                       placeholder="https://splunk.example.com/en-US/app/search/dashboard_studio?id=…"<?= admin_form_ro_attr($pageRo) ?>>
+                <div class="help">Paste the full URL from Splunk after <strong>Publish dashboard</strong>. On the Splunk server set
+                  <code>x_frame_options_sameorigin = false</code> in <code>web.conf</code> so the kiosk can iframe it.</div>
+              </div>
+              <div class="field">
+                <label class="mini">Iframe reload (s)</label>
+                <input type="number" min="0"<?= admin_form_name_attr('PAGES[' . $pk . '][reload]', $pageRo) ?>
+                       value="<?= h((string)($pg['reload'] ?? '')) ?>" placeholder="<?= (int)cfg('splunkdash.DEFAULT_RELOAD', 300) ?>"<?= admin_form_ro_attr($pageRo) ?>>
+                <div class="help">Optional backstop — 0 disables; board default applies when blank.</div>
+              </div>
+              <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
+                  <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
+              </div>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="splunkdash_use_json"> Replace all dashboards from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Keyed object: <code>{"noc":{"title":"…","url":"https://…"}}</code>.</div>
+              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($splunkdashPages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('splunkdash') ? '' : ' hidden' ?>>
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if ($f['key'] === 'DASHBOARDS' || !in_array($f['key'], $splunkdashBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
             </div>
           </details>
 
@@ -11654,6 +11817,111 @@ function removeGrafanaPage(pageKey) {
   const remaining = document.querySelector('[data-grafana-page-tab]');
   if (remaining) showGrafanaPage(remaining.getAttribute('data-grafana-page-tab'));
 }
+
+function splunkdashNormalizePageKey(raw) {
+  return String(raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '') || 'main';
+}
+
+function splunkdashPreviewHref(pageKey) {
+  return keyedBoardPreviewUrl('splunkdash.php', pageKey);
+}
+
+function showSplunkdashPage(pageKey) {
+  document.querySelectorAll('[data-splunkdash-page-editor]').forEach(function (el) {
+    el.style.display = el.getAttribute('data-splunkdash-page-editor') === pageKey ? '' : 'none';
+  });
+  document.querySelectorAll('[data-splunkdash-page-tab]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-splunkdash-page-tab') === pageKey);
+  });
+}
+
+function syncSplunkdashPageTabLabel(titleInp) {
+  const editor = titleInp.closest('[data-splunkdash-page-editor]');
+  if (!editor) return;
+  const pageKey = editor.getAttribute('data-splunkdash-page-editor');
+  const tab = document.querySelector('[data-splunkdash-page-tab="' + pageKey + '"]');
+  if (!tab) return;
+  const label = titleInp.value.trim() || pageKey;
+  tab.childNodes[0].textContent = label + ' ';
+}
+
+function bindSplunkdashPageTab(btn) {
+  btn.addEventListener('click', function () {
+    showSplunkdashPage(btn.getAttribute('data-splunkdash-page-tab'));
+  });
+}
+
+function addSplunkdashPage() {
+  const key = prompt('Dashboard key (letters, numbers, underscore — used in splunkdash.php?d=KEY):', 'dashboard2');
+  if (key === null) return;
+  const pageKey = splunkdashNormalizePageKey(key);
+  if (document.querySelector('[data-splunkdash-page-editor="' + pageKey + '"]')) {
+    alert('A dashboard with key "' + pageKey + '" already exists.');
+    showSplunkdashPage(pageKey);
+    return;
+  }
+  const bar = document.getElementById('splunkdashPagesBar');
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'splunk-page-tab';
+  tab.setAttribute('data-splunkdash-page-tab', pageKey);
+  tab.appendChild(document.createTextNode('New dashboard '));
+  const tabCode = document.createElement('code');
+  tabCode.textContent = pageKey;
+  tab.appendChild(tabCode);
+  if (bar) {
+    const addBtn = bar.querySelector('.addrow');
+    if (addBtn) bar.insertBefore(tab, addBtn);
+    else bar.appendChild(tab);
+  }
+  bindSplunkdashPageTab(tab);
+
+  const editor = document.createElement('div');
+  editor.className = 'splunk-page-editor';
+  editor.setAttribute('data-splunkdash-page-editor', pageKey);
+  editor.style.display = 'none';
+  editor.innerHTML =
+    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-splunkdash-page-key>' +
+    '<div class="splunk-page-head">' +
+      '<div><label class="mini">Title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="SOC overview" data-splunkdash-page-title></div>' +
+      '<div><label class="mini">Key</label><input type="text" value="' + pageKey + '" readonly tabindex="-1">' +
+        '<div class="help" style="margin-top:4px">Rotation: <code>splunkdash.php?d=' + pageKey + '</code></div></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
+        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + splunkdashPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-splunkdash-page-preview>Preview ↗</a>' +
+        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeSplunkdashPage(\'' + pageKey + '\')" title="Remove dashboard">Remove</button>' +
+      '</div>' +
+    '</div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
+    '<div class="field-grid" style="margin-bottom:12px">' +
+      '<div class="field span-2"><label class="mini">Published URL</label>' +
+        '<input type="text" name="PAGES[' + pageKey + '][url]" placeholder="https://splunk.example.com/en-US/app/search/dashboard_studio?id=…">' +
+        '<div class="help">Paste the full URL from Splunk after <strong>Publish dashboard</strong>.</div></div>' +
+      '<div class="field"><label class="mini">Iframe reload (s)</label>' +
+        '<input type="number" min="0" name="PAGES[' + pageKey + '][reload]" placeholder="300"></div>' +
+      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
+      '</div>' +
+    '</div>';
+
+  mountPageEditor(editor);
+  editor.querySelector('[data-splunkdash-page-title]').addEventListener('input', function () { syncSplunkdashPageTabLabel(this); });
+  showSplunkdashPage(pageKey);
+}
+
+function removeSplunkdashPage(pageKey) {
+  if (!confirm('Remove dashboard "' + pageKey + '"?')) return;
+  const editor = document.querySelector('[data-splunkdash-page-editor="' + pageKey + '"]');
+  const tab = document.querySelector('[data-splunkdash-page-tab="' + pageKey + '"]');
+  if (editor) editor.remove();
+  if (tab) tab.remove();
+  const remaining = document.querySelector('[data-splunkdash-page-tab]');
+  if (remaining) showSplunkdashPage(remaining.getAttribute('data-splunkdash-page-tab'));
+}
+
+document.querySelectorAll('[data-splunkdash-page-tab]').forEach(bindSplunkdashPageTab);
+document.querySelectorAll('[data-splunkdash-page-title]').forEach(function (inp) {
+  inp.addEventListener('input', function () { syncSplunkdashPageTabLabel(inp); });
+});
 
 function heroStripKeySelectHtml(name, source, selectedKey) {
   const opts = window.HERO_STRIP_KEY_OPTIONS || {};

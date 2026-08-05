@@ -19,7 +19,14 @@ STATE_DIR=/run/signage-watchdog
 mkdir -p "$STATE_DIR"
 FAIL_FILE="$STATE_DIR/failures"
 
-if curl -fsS --max-time 20 "$URL" | grep -q 'const PAGES'; then
+curl_args=(-fsS --max-time 20)
+if [[ "${KIOSK_IGNORE_SSL:-1}" == "1" ]]; then
+  curl_args+=(-k)
+fi
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+if curl "${curl_args[@]}" -o "$tmp" "$URL" && grep -q 'const PAGES' "$tmp"; then
   rm -f "$FAIL_FILE"
   exit 0
 fi
@@ -33,5 +40,6 @@ echo "$fails" > "$FAIL_FILE"
 
 if [[ "$fails" -ge 3 ]]; then
   rm -f "$FAIL_FILE"
+  logger -t signage-watchdog "restarting signage.service after $fails failed health checks ($URL)"
   systemctl restart signage.service
 fi
