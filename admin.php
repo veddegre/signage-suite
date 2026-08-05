@@ -2139,8 +2139,12 @@ if ($authed && $board === 'rotation') {
 $sportsCatalogGroups = ($authed && $board === 'rotation') ? sports_team_catalog_groups_for_admin() : [];
 $rssTickerFeeds = ($authed && $board === 'rotation') ? admin_filter_owned_map(rss_feed_registry()) : [];
 $rotationQuickGroups = [];
+$rotationHasSplunkPublishedQuickAdd = false;
 foreach ($rotationQuickAdd as $item) {
     $rotationQuickGroups[$item['group']][] = $item;
+    if (!$rotationHasSplunkPublishedQuickAdd && str_starts_with((string)($item['url'] ?? ''), 'splunkdash.php')) {
+        $rotationHasSplunkPublishedQuickAdd = true;
+    }
 }
 $rotationStarterPages = rotation_starter_pages();
 $rotationMainPages = [];
@@ -4774,6 +4778,13 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <button type="button" class="addrow" id="rotationBoardAddBtn">Add selected to playlist</button>
                 </div>
                 <p class="help" style="margin:0">Double-click a row to add just that board. Need a one-off URL? Use <strong>+ Custom URL</strong>.</p>
+                <?php if (!$rotationHasSplunkPublishedQuickAdd && admin_can_board('splunkdash')): ?>
+                <p class="help" style="margin:10px 0 0;padding:10px 12px;border:1px dashed var(--hairline);border-radius:8px">
+                  <strong>Splunk published</strong> dashboards are not listed here until you register them:
+                  open <a href="?board=splunkdash">Dashboards → Splunk Published</a>, click <strong>+ Add dashboard</strong>,
+                  paste the Splunk publish URL, then <strong>Save</strong>. (This is different from <a href="?board=splunk">Splunk Panels</a>.)
+                </p>
+                <?php endif; ?>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="kiosk" role="tabpanel" hidden>
                 <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, sports, and glance headline columns. Matches the display chosen above.</p>
