@@ -950,6 +950,9 @@ function webcam_cam_label(string $key): string
     return 'Webcam — ' . ($name !== '' ? $name : $key);
 }
 
+/** Bump when probe logic changes — invalidates stale cache entries on deploy. */
+const WEBCAM_PROBE_CACHE_VER = 2;
+
 function webcam_status_cache_path(string $url): string
 {
     $dir = SIGNAGE_ROOT . '/cache';
@@ -957,7 +960,7 @@ function webcam_status_cache_path(string $url): string
         @mkdir($dir, 0775, true);
     }
 
-    return $dir . '/webcam_probe_' . substr(sha1($url), 0, 16) . '.json';
+    return $dir . '/webcam_probe_v' . WEBCAM_PROBE_CACHE_VER . '_' . substr(sha1($url), 0, 16) . '.json';
 }
 
 /** @return array{last_ok:?int,last_fail:?int,last_probe:?int} */
@@ -1067,11 +1070,19 @@ function webcam_url_status(string $url, string $kind = 'iframe'): array
     $now = time();
     $needsProbe = ($cache['last_probe'] ?? null) === null
         || ($now - (int)$cache['last_probe']) >= WEBCAM_PROBE_TTL_SEC;
+    // Don't hold skip/offline for the full TTL when last success is already stale.
+    if (!$needsProbe && ($cache['last_ok'] ?? null) !== null) {
+        $okAgeMin = (int)round(($now - (int)$cache['last_ok']) / 60);
+        if ($okAgeMin >= WEBCAM_ONLINE_MAX_AGE_MIN) {
+            $needsProbe = true;
+        }
+    }
 
     if ($needsProbe) {
         $ok = webcam_probe_url($url, $kind);
         if ($ok) {
             $cache['last_ok'] = $now;
+            $cache['last_fail'] = null;
         } else {
             $cache['last_fail'] = $now;
         }

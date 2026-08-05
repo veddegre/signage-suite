@@ -37,8 +37,11 @@ foreach ($registry as $key => $entry) {
     if ($refresh && $url !== '') {
         $cachePath = webcam_status_cache_path($url);
         if (is_file($cachePath)) {
-            @unlink($cachePath);
-            echo "  cache: cleared\n";
+            if (@unlink($cachePath)) {
+                echo "  cache: cleared\n";
+            } else {
+                echo "  cache: could not delete {$cachePath} (try sudo)\n";
+            }
         }
     }
 
