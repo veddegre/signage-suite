@@ -38,7 +38,7 @@ function webcam_default_cameras(): array
         'grpm' => [
             'name' => 'GR Public Museum',
             'url' => 'https://api.wetmet.net/widgets/stream/frame.php?uid=7bcde7d22d900d7061461d4953482c4b',
-            'kind' => 'stream',
+            'kind' => 'iframe',
             'attribution' => 'Grand Rapids Public Museum · WMTA',
         ],
         'grandhaven' => [
@@ -254,6 +254,35 @@ function webcam_is_widget_frame_url(string $url): bool
 function webcam_is_stream_frame_url(string $url): bool
 {
     return preg_match('#wetmet\.net/widgets/stream/frame\.php#i', $url) === 1;
+}
+
+/** WetMet signed HLS is browser-only; signage embeds their frame player instead of proxying HLS. */
+function webcam_wetmet_stream_frame_url(string $url): bool
+{
+    return webcam_is_stream_frame_url($url);
+}
+
+/** @param array<string,mixed> $cam */
+function webcam_board_is_available(array $cam): bool
+{
+    if (!empty($cam['off']) || trim((string)($cam['url'] ?? '')) === '') {
+        return false;
+    }
+    if (!webcam_uses_stream_tag($cam)) {
+        return true;
+    }
+    $url = (string)($cam['url'] ?? '');
+    if (webcam_wetmet_stream_frame_url($url)) {
+        return webcam_probe_url($url, 'iframe');
+    }
+
+    return webcam_hls_proxied_playlist($cam) !== null;
+}
+
+/** @param array<string,mixed> $cam */
+function webcam_stream_prefers_iframe_embed(array $cam): bool
+{
+    return webcam_wetmet_stream_frame_url((string)($cam['url'] ?? ''));
 }
 
 function webcam_is_ant_media_play_url(string $url): bool
@@ -694,7 +723,7 @@ function webcam_apply_earthcam_iframe_defaults(array $entry, string $key): array
     return $entry;
 }
 
-/** Upgrade legacy GRPM saves to the WMTA live WetMet stream (native HLS on wall). */
+/** Upgrade legacy GRPM saves to the WMTA live WetMet iframe (browser-side player). */
 function webcam_apply_grpm_defaults(array $entry, string $key): array
 {
     $key = webcam_normalize_key($key);
@@ -708,7 +737,7 @@ function webcam_apply_grpm_defaults(array $entry, string $key): array
     $needsUpgrade = $url === ''
         || str_contains($url, $legacyImageUid)
         || webcam_is_widget_frame_url($url)
-        || in_array($kind, ['widget', 'image', 'iframe'], true);
+        || in_array($kind, ['widget', 'image', 'stream'], true);
     if ($needsUpgrade) {
         return array_merge($entry, [
             'name' => (string)$defaults['name'],
@@ -1013,15 +1042,15 @@ function webcam_status_write_cache(string $url, array $data): void
 
 function webcam_probe_uses_hls(string $url, string $kind): bool
 {
+    // WetMet frame pages embed Video.js; signed CDN playlists reject server-side fetches.
+    if (webcam_is_stream_frame_url($url)) {
+        return false;
+    }
     if ($kind === 'stream' || webcam_is_ant_media_play_url($url)) {
         return true;
     }
-    // WetMet stream frame URLs used as iframe embeds — rotation only needs the frame page up.
-    if ($kind === 'iframe' && webcam_is_stream_frame_url($url)) {
-        return false;
-    }
 
-    return webcam_is_stream_frame_url($url);
+    return false;
 }
 
 function webcam_probe_url(string $url, string $kind = 'iframe'): bool

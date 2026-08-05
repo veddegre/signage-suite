@@ -37,17 +37,14 @@ $usesImage = webcam_uses_image_tag($cam);
 $usesStream = webcam_uses_stream_tag($cam);
 $imageSrc = $usesImage ? webcam_board_image_src($cam) : '';
 $streamPlaylist = $usesStream ? webcam_hls_proxy_url((string)$cam['key']) : null;
-$streamReady = true;
-if ($usesStream) {
-    $streamReady = webcam_hls_proxied_playlist($cam) !== null;
-}
-$available = !$cam['off'] && trim($cam['url']) !== '' && (!$usesStream || $streamReady);
+$available = webcam_board_is_available($cam);
 $attribution = $boardAttribution !== '' ? $boardAttribution : (string)$cam['attribution'];
 $camJson = $cam;
 $camJson['imageSrc'] = $imageSrc;
 $camJson['streamPlaylist'] = $streamPlaylist;
 $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . '&api=1';
 $camJson['streamIframe'] = (string)$cam['url'];
+$camJson['preferIframe'] = webcam_stream_prefers_iframe_embed($cam);
 $earthcamIframeWarmup = webcam_earthcam_iframe_warmup($cam);
 $iframeEmbed = $available && !$usesImage && !$usesStream;
 $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
@@ -110,7 +107,7 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
     <?php elseif ($usesImage): ?>
     <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
-    <iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen" loading="eager"<?php
+    <iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager"<?php
       if (!$earthcamIframeWarmup): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
     <?php endif; ?>
   </div>
@@ -207,6 +204,11 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
         loadStream(data.playlist);
       }
     } catch (e) {}
+  }
+
+  if (cam.preferIframe && cam.streamIframe) {
+    showStreamIframe(cam.streamIframe);
+    return;
   }
 
   if (cam.streamPlaylist) {

@@ -50,18 +50,23 @@ foreach ($registry as $key => $entry) {
     echo '  skip rotation: ' . ($status['skip_rotation'] ? 'yes' : 'no') . "\n";
 
     if (webcam_is_stream_frame_url($url) || webcam_is_ant_media_play_url($url) || $kind === 'stream') {
-        $hlsNote = ($kind === 'iframe') ? ' (informational — board uses iframe embed)' : '';
+        $hlsNote = ($kind === 'iframe' || webcam_is_stream_frame_url($url))
+            ? ' (informational — board uses iframe embed; CDN may reject server fetches)'
+            : '';
         $master = webcam_stream_playlist_url($url);
         echo '  hls master' . $hlsNote . ': ' . ($master ?? '(none)') . "\n";
         if ($master !== null) {
             $masterBody = webcam_http_get($master);
+            if ($masterBody === null) {
+                echo '  hls fetch' . $hlsNote . ': failed (expected for WetMet from server IP)' . "\n";
+            }
             $mediaUrl = $masterBody !== null ? webcam_hls_pick_media_playlist($master, $masterBody) : null;
             $mediaBody = $mediaUrl !== null ? webcam_http_get($mediaUrl) : $masterBody;
             if (is_string($mediaBody) && preg_match('#EXT-X-PROGRAM-DATE-TIME:([^\n]+)#', $mediaBody, $m)) {
                 echo '  last segment: ' . trim($m[1]) . "\n";
             }
             echo '  hls live' . $hlsNote . ': ' . (is_string($mediaBody) && webcam_hls_playlist_is_live($mediaBody) ? 'yes' : 'no') . "\n";
-            if ($kind === 'stream') {
+            if ($kind === 'stream' && !webcam_is_stream_frame_url($url)) {
                 echo '  board playlist: ' . (webcam_hls_proxied_playlist(['key' => $key, 'url' => $url, 'kind' => 'stream']) !== null ? 'ok' : 'unavailable') . "\n";
             }
         }
