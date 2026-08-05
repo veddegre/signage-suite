@@ -34,8 +34,7 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
-require_once dirname(__DIR__, 2) . '/lib/rotation_lib.php';
-require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/splunkdash_lib.php';
 
 define('DASHBOARDS', splunkdash_dashboards_for_display());
 
@@ -78,6 +77,8 @@ if ($key === null || !isset(DASHBOARDS[$key])) {
 $dash       = DASHBOARDS[$key];
 $reload     = max(0, (int)($dash['reload'] ?? DEFAULT_RELOAD));
 $configured = !str_contains($dash['url'], 'REPLACE');
+$embedUrl   = splunkdash_embed_url((string)$dash['url'], $dash);
+$cropTop    = splunkdash_crop_top_px($dash);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -91,8 +92,19 @@ $configured = !str_contains($dash['url'], 'REPLACE');
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
               font-family:system-ui,sans-serif; }
+  .dash-wrap { width:1920px; height:100%; overflow:hidden; }
+  .dash-wrap iframe { width:1920px; border:0; display:block; background:var(--lake-night);
+                       pointer-events:none; }
   iframe { width:1920px; height:100%; border:0; display:block; background:var(--lake-night);
-            pointer-events:none; }
+           pointer-events:none; }
+  <?php if ($cropTop > 0): ?>
+  .dash-wrap iframe {
+    height: calc(100% + <?= (int)$cropTop ?>px);
+    margin-top: -<?= (int)$cropTop ?>px;
+  }
+  <?php else: ?>
+  .dash-wrap iframe { height:100%; }
+  <?php endif; ?>
   .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
@@ -111,7 +123,9 @@ $configured = !str_contains($dash['url'], 'REPLACE');
        and restart Splunk — see the comments at the top of this file.</p>
   </div>
 <?php else: ?>
-  <iframe id="dash" src="<?= h($dash['url']) ?>" allow="fullscreen"></iframe>
+  <div class="dash-wrap">
+    <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen"></iframe>
+  </div>
   <script>
     <?php if ($reload > 0): ?>
     // Backstop: re-pull the published page in case its own auto-refresh

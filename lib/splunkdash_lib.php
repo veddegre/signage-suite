@@ -31,6 +31,8 @@ function splunkdash_normalize_page(array $page, string $key): ?array
     $url = trim((string)($page['url'] ?? ''));
     $reloadRaw = trim((string)($page['reload'] ?? ''));
     $reload = $reloadRaw === '' ? null : max(0, (int)$reloadRaw);
+    $cropRaw = trim((string)($page['crop_top'] ?? ''));
+    $cropTop = $cropRaw === '' ? null : max(0, min(400, (int)$cropRaw));
 
     $out = [];
     if ($url !== '') {
@@ -38,6 +40,12 @@ function splunkdash_normalize_page(array $page, string $key): ?array
     }
     if ($reload !== null) {
         $out['reload'] = $reload;
+    }
+    if ($cropTop !== null) {
+        $out['crop_top'] = $cropTop;
+    }
+    if (!empty($page['show_chrome'])) {
+        $out['show_chrome'] = true;
     }
     if (!empty($page['off'])) {
         $out['off'] = true;
@@ -112,4 +120,80 @@ function splunkdash_pages_from_json_string(string $raw): ?array
     }
 
     return splunkdash_normalize_pages_registry($dec);
+}
+
+/** @param array<string, scalar|null> $add */
+function splunkdash_merge_query_params(string $url, array $add): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return $url;
+    }
+    $params = [];
+    if (!empty($parts['query'])) {
+        parse_str((string)$parts['query'], $params);
+    }
+    foreach ($add as $key => $value) {
+        if (!array_key_exists((string)$key, $params)) {
+            $params[(string)$key] = $value;
+        }
+    }
+
+    $rebuilt = '';
+    if (isset($parts['scheme'])) {
+        $rebuilt .= $parts['scheme'] . '://';
+    }
+    if (isset($parts['user'])) {
+        $rebuilt .= $parts['user'];
+        if (isset($parts['pass'])) {
+            $rebuilt .= ':' . $parts['pass'];
+        }
+        $rebuilt .= '@';
+    }
+    if (isset($parts['host'])) {
+        $rebuilt .= $parts['host'];
+    }
+    if (isset($parts['port'])) {
+        $rebuilt .= ':' . $parts['port'];
+    }
+    $rebuilt .= (string)($parts['path'] ?? '');
+    if ($params !== []) {
+        $rebuilt .= '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+    }
+    if (isset($parts['fragment'])) {
+        $rebuilt .= '#' . $parts['fragment'];
+    }
+
+    return $rebuilt;
+}
+
+/** Splunk iframe URL with kiosk-friendly chrome hidden (Splunk-side title bar). */
+function splunkdash_embed_url(string $url, array $dash = []): string
+{
+    $url = trim($url);
+    if ($url === '' || str_contains($url, 'REPLACE')) {
+        return $url;
+    }
+    if (!empty($dash['show_chrome'])) {
+        return $url;
+    }
+    if (!(bool)cfg('splunkdash.HIDE_CHROME', true)) {
+        return $url;
+    }
+
+    return splunkdash_merge_query_params($url, [
+        'hideChrome' => 'true',
+        'hideTitle' => 'true',
+    ]);
+}
+
+/** @param array<string,mixed> $dash */
+function splunkdash_crop_top_px(array $dash): int
+{
+    $raw = trim((string)($dash['crop_top'] ?? ''));
+    if ($raw === '') {
+        return max(0, min(400, (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0)));
+    }
+
+    return max(0, min(400, (int)$raw));
 }
