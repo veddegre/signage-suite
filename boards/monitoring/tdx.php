@@ -30,8 +30,6 @@ $cacheTtl = tdx_cache_ttl();
 $tickets = is_array($data['tickets'] ?? null) ? $data['tickets'] : [];
 $ticketCount = count($tickets);
 $counts = is_array($data['counts'] ?? null) ? $data['counts'] : [];
-$appLabel = (string)($data['app_label'] ?? '');
-$appId = (int)($data['app_id'] ?? 0);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -110,7 +108,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     </div>
   <?php else: ?>
     <div class="summary">
-      <div class="pill"><?php if ($appLabel !== ''): ?><strong><?= h($appLabel) ?></strong><?php else: ?>App <strong><?= $appId > 0 ? (int)$appId : '—' ?></strong><?php endif; ?></div>
       <div class="pill">Open <strong><?= (int)$ticketCount ?></strong></div>
       <?php if ((int)($counts['overdue'] ?? 0) > 0): ?>
       <div class="pill bad">Overdue <strong><?= (int)$counts['overdue'] ?></strong></div>
