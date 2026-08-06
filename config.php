@@ -216,6 +216,14 @@ function signage_theme_css(): string
         . signage_theme_sun_widget_css();
 }
 
+/** Preconnect + Google Fonts stylesheet for board &lt;head&gt; (safe before signage_theme_css()). */
+function signage_theme_fonts_head_html(?string $key = null): string
+{
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
+
+    return signage_theme_fonts_head_markup($key);
+}
+
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */
 function signage_board_preview_url(string $file): string
 {

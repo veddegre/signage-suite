@@ -438,6 +438,23 @@ function rotation_blank_hours_from_post_row(array $row): array
     ];
 }
 
+/** Merge Display settings table POST onto an existing screen registry entry (preserves theme, hero, location, …). */
+function rotation_apply_screens_table_post_row(array $existing, array $row, string $key): array
+{
+    $base = $existing;
+    if (!is_array($base)) {
+        $base = is_string($base) && trim($base) !== '' ? ['name' => trim($base)] : [];
+    }
+    $name = trim((string)($row['name'] ?? ''));
+    if ($name !== '') {
+        $base['name'] = $name;
+    } elseif (!isset($base['name']) || trim((string)$base['name']) === '') {
+        $base['name'] = $key === 'main' ? 'Main Display' : $key;
+    }
+
+    return rotation_apply_screen_post_row($base, $row, true, false, $key, true, false);
+}
+
 /**
  * Kiosk-tab-only fields (hero bar, location, sports, glance, RSS ticker fallback) — not the Display settings table.
  *
@@ -464,7 +481,8 @@ function rotation_apply_screen_post_row(
     bool $includeIdentity = false,
     bool $kioskExtrasOnly = false,
     string $screenKey = '',
-    bool $applyKioskDisplayFlags = true
+    bool $applyKioskDisplayFlags = true,
+    bool $applyScopeExtras = true
 ): array {
     if ($kioskExtrasOnly) {
         if (isset($row['hero_strip'])) {
@@ -623,7 +641,7 @@ function rotation_apply_screen_post_row(
         }
     }
 
-    if ($includeIdentity || !empty($row['_screen_opts_form'])) {
+    if ($applyScopeExtras && ($includeIdentity || !empty($row['_screen_opts_form']))) {
         require_once __DIR__ . '/screen_scope_lib.php';
         $entry = rotation_apply_screen_scope_post_row($entry, $row, $screenKey);
     }

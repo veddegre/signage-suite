@@ -354,7 +354,7 @@ function signage_theme_fonts_google_url(string $key): string
 }
 
 /** Preconnect + stylesheet tags for board &lt;head&gt; (pass null for active theme). */
-function signage_theme_fonts_head_html(?string $key = null): string
+function signage_theme_fonts_head_markup(?string $key = null): string
 {
     if ($key === null) {
         $key = signage_active_theme_key();

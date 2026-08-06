@@ -916,14 +916,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             if ($key === '') {
                 continue;
             }
-            $name = trim((string)($row['name'] ?? ''));
-            $entry = rotation_apply_screen_post_row(
-                ['name' => $name !== '' ? $name : ($key === 'main' ? 'Main Display' : $key)],
-                $row,
-                true,
-                false,
-                $key
-            );
+            $prev = $existingScreens[$key] ?? null;
+            $base = is_array($prev) ? $prev : (is_string($prev) && trim($prev) !== '' ? ['name' => trim($prev)] : []);
+            $entry = rotation_apply_screens_table_post_row($base, $row, $key);
             $screensOut[$key] = $entry;
         }
         foreach ($screensOut as $sk => &$screenEntry) {
