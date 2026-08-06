@@ -28,6 +28,7 @@ function splunkdash_normalize_pages_registry(array $raw): array
 function splunkdash_normalize_page(array $page, string $key): ?array
 {
     $title = trim((string)($page['title'] ?? ''));
+    $sub = trim((string)($page['sub'] ?? ''));
     $url = trim((string)($page['url'] ?? ''));
     $reloadRaw = trim((string)($page['reload'] ?? ''));
     $reload = $reloadRaw === '' ? null : max(0, (int)$reloadRaw);
@@ -63,6 +64,9 @@ function splunkdash_normalize_page(array $page, string $key): ?array
         $out['title'] = 'Splunk dashboard';
     } else {
         $out['title'] = ucfirst(str_replace(['_', '-'], ' ', $key));
+    }
+    if ($sub !== '') {
+        $out['sub'] = $sub;
     }
 
     return admin_merge_entry_access_meta($out, $page);

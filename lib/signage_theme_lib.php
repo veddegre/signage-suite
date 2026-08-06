@@ -790,13 +790,39 @@ CSS;
 }
 
 /** CSS for clipping the top of a cross-origin iframe embed (Splunk publish, etc.). */
-function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap', bool $hideScrollbars = false): string
+function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap', bool $hideScrollbars = false, bool $fluid = false): string
 {
     $boardH = max(720, $boardH);
     $cropTop = max(0, min(400, $cropTop));
-    $frameH = $boardH + $cropTop;
     $wrap = preg_replace('/[^a-z0-9_-]/', '', $wrapClass) ?: 'dash-wrap';
     $scrollbarGutter = $hideScrollbars ? 24 : 0;
+
+    if ($fluid) {
+        $iframeHExpr = "calc(100% + {$cropTop}px + {$scrollbarGutter}px)";
+        $iframeWExpr = $scrollbarGutter > 0 ? "calc(100% + {$scrollbarGutter}px)" : '100%';
+
+        return <<<CSS
+  .{$wrap} {
+    position: relative;
+    overflow: hidden;
+    background: var(--lake-night);
+  }
+  .{$wrap} iframe {
+    position: absolute;
+    left: 0;
+    top: -{$cropTop}px;
+    width: {$iframeWExpr};
+    height: {$iframeHExpr};
+    border: 0;
+    display: block;
+    pointer-events: none;
+    background: var(--lake-night);
+    overflow: hidden;
+  }
+CSS;
+    }
+
+    $frameH = $boardH + $cropTop;
     $iframeW = 1920 + $scrollbarGutter;
     $iframeH = $frameH + $scrollbarGutter;
 

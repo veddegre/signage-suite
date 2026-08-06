@@ -2208,7 +2208,7 @@ function rotation_page_label(string $url): string
         $d = is_array($dashboards[$key] ?? null) ? $dashboards[$key] : null;
         $title = is_array($d) ? trim((string)($d['title'] ?? '')) : '';
 
-        return 'Splunk published — ' . ($title !== '' ? $title : $key);
+        return 'Splunk — ' . ($title !== '' ? $title : $key);
     }
 
     if (preg_match('/^powerbi\.php\?d=([^&]+)/', $url, $m)) {
@@ -2336,8 +2336,7 @@ function rotation_page_label(string $url): string
         'slides.php' => 'Custom slides',
         'rss.php' => 'RSS stories',
         'video.php' => 'Video board',
-        'splunk.php' => 'Splunk panels',
-        'splunkdash.php' => 'Splunk dashboard',
+        'splunkdash.php' => 'Splunk',
         'powerbi.php' => 'Power BI',
         'zabbix.php' => 'Zabbix monitoring',
         'tdx.php' => 'TeamDynamix tickets',
@@ -2603,7 +2602,7 @@ function rotation_quick_add_items(): array
             }
             $title = trim((string)($d['title'] ?? $key));
             $items[] = [
-                'label' => 'Splunk published — ' . $title,
+                'label' => 'Splunk — ' . $title,
                 'url' => splunkdash_page_url((string)$key),
                 'dwell' => 60,
                 'group' => 'Dashboards',
@@ -2632,23 +2631,6 @@ function rotation_quick_add_items(): array
                 'group' => 'Dashboards',
             ];
         }
-    }
-
-    require_once __DIR__ . '/splunk_lib.php';
-    foreach (splunk_pages_config() as $key => $page) {
-        if (!is_array($page)) {
-            continue;
-        }
-        if (!rotation_quick_add_entry_allowed($page)) {
-            continue;
-        }
-        $title = trim((string)($page['title'] ?? $key));
-        $items[] = [
-            'label' => 'Splunk — ' . $title,
-            'url' => splunk_page_url((string)$key),
-            'dwell' => 60,
-            'group' => 'Dashboards',
-        ];
     }
 
     require_once __DIR__ . '/zabbix_lib.php';

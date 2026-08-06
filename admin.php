@@ -21,7 +21,6 @@ require_once __DIR__ . '/lib/video_lib.php';
 require_once __DIR__ . '/lib/rotation_lib.php';
 require_once __DIR__ . '/lib/presence_lib.php';
 require_once __DIR__ . '/lib/traffic_lib.php';
-require_once __DIR__ . '/lib/splunk_lib.php';
 require_once __DIR__ . '/lib/zabbix_lib.php';
 require_once __DIR__ . '/lib/kuma_lib.php';
 require_once __DIR__ . '/lib/tdx_lib.php';
@@ -266,22 +265,6 @@ if ($authed && $board === 'slides' && isset($_GET['replaced'])) {
     }
 }
 
-if ($authed && $board === 'splunk' && admin_can_board('splunk') && ($_POST['action'] ?? '') === 'splunk_test_panel' && csrf_ok()) {
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(splunk_test_panel([
-        'title' => $_POST['title'] ?? '',
-        'type' => $_POST['type'] ?? 'single',
-        'spl' => $_POST['spl'] ?? '',
-        'field' => $_POST['field'] ?? '',
-        'label' => $_POST['label'] ?? '',
-        'value' => $_POST['value'] ?? '',
-        'unit' => $_POST['unit'] ?? '',
-        'earliest' => $_POST['earliest'] ?? '',
-        'latest' => $_POST['latest'] ?? '',
-    ]), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
-}
-
 if ($authed && in_array($board, ['rotation', 'status'], true) && ($_GET['action'] ?? '') === 'presence') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -333,7 +316,7 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
         $shareRole = 'operator';
     }
     $pagesKey = match ($shareBoard) {
-        'zabbix', 'kuma', 'splunk', 'tdx' => $shareBoard . '.PAGES',
+        'zabbix', 'kuma', 'tdx' => $shareBoard . '.PAGES',
         'grafana', 'splunkdash' => $shareBoard . '.DASHBOARDS',
         default => '',
     };
@@ -674,44 +657,6 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 } else {
                     $conf['rotator.PHOTOS'] = $mergedPhotos;
                 }
-            }
-        }
-    }
-    if ($board === 'splunk') {
-        if (!admin_is_super() && !empty($_POST['splunk_use_json'])) {
-            $errors[] = 'Advanced JSON import is restricted to super admins.';
-        } elseif (!empty($_POST['splunk_use_json'])) {
-            $parsed = splunk_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
-            if ($parsed === null) {
-                $errors[] = 'Pages JSON: invalid — not saved.';
-            } elseif ($parsed === []) {
-                unset($conf['splunk.PAGES'], $conf['splunk.PANELS']);
-            } else {
-                $conf['splunk.PAGES'] = $parsed;
-                unset($conf['splunk.PANELS']);
-            }
-        } else {
-            $existingPages = is_array($conf['splunk.PAGES'] ?? null) ? $conf['splunk.PAGES'] : [];
-            $outV = splunk_pages_from_post($_POST['PAGES'] ?? []);
-            $finalized = [];
-            foreach ($_POST['PAGES'] ?? [] as $prow) {
-                if (!is_array($prow)) {
-                    continue;
-                }
-                $prow = admin_normalize_form_row($prow);
-                $key = splunk_normalize_page_key((string)($prow['_key'] ?? ''));
-                if ($key === '' || !isset($outV[$key])) {
-                    continue;
-                }
-                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
-                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
-            }
-            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
-            if ($mergedPages === []) {
-                unset($conf['splunk.PAGES'], $conf['splunk.PANELS']);
-            } else {
-                $conf['splunk.PAGES'] = $mergedPages;
-                unset($conf['splunk.PANELS']);
             }
         }
     }
@@ -2118,11 +2063,10 @@ $navGroups = [
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
     'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix', 'tdx'],
     'Media'           => ['slides', 'rotator', 'video', 'rss'],
-    'Dashboards'      => ['grafana', 'splunk', 'splunkdash', 'powerbi', 'web'],
+    'Dashboards'      => ['grafana', 'splunkdash', 'powerbi', 'web'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
-$splunkBoardKeys = ['SPLUNK_BASE', 'SPLUNK_TOKEN', 'SPLUNK_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
@@ -2231,15 +2175,6 @@ $rotatorLibrary = ($board === 'rotator')
         static fn($e) => rotator_safe_filename((string)($e['file'] ?? ''))
     )
     : [];
-$splunkPages = [];
-$splunkActivePage = 'main';
-if ($board === 'splunk') {
-    $splunkPages = admin_filter_owned_map(splunk_admin_pages($rawConf));
-    $splunkActivePage = splunk_normalize_page_key((string)($_GET['page'] ?? ''));
-    if (!isset($splunkPages[$splunkActivePage])) {
-        $splunkActivePage = (string)(array_key_first($splunkPages) ?: 'main');
-    }
-}
 $zabbixPages = [];
 $zabbixActivePage = 'main';
 if ($board === 'zabbix') {
@@ -4312,8 +4247,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <?php else: ?>
           <span class="help" style="margin:0">No display assigned — ask a super admin under <strong>Users</strong>.</span>
           <?php endif; ?>
-        <?php elseif ($board === 'splunk'): ?>
-          Each page is <code>splunk.php?d=<em>key</em></code> in rotation — preview per tab below.
         <?php elseif ($board === 'zabbix'): ?>
           Each page is <code>zabbix.php?d=<em>key</em></code> in rotation — filter by Zabbix host group per tab below.
         <?php elseif ($board === 'tdx'): ?>
@@ -4324,7 +4257,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each dashboard is <code>grafana.php?d=<em>key</em></code> in rotation — use <strong>+ Add page</strong> below.
           Super admins configure embed auth once under <strong>Board settings</strong> — see <code>docs/grafana.md</code>.
         <?php elseif ($board === 'splunkdash'): ?>
-          Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — use <strong>+ Add dashboard</strong> below and paste the Splunk publish URL.
+          Each dashboard is <code>splunkdash.php?d=<em>key</em></code> in rotation — set the wall title and subtitle below; Splunk&rsquo;s own header is cropped automatically.
         <?php elseif ($board === 'powerbi'): ?>
           Each report is <code>powerbi.php?d=<em>key</em></code> in rotation — preview per row below.
           <strong>Private reports:</strong> set Azure tenant / app / secret, add workspace + report IDs (or paste a
@@ -4851,9 +4784,9 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <p class="help" style="margin:0">Double-click a row to add just that board. Need a one-off URL? Use <strong>+ Custom URL</strong>.</p>
                 <?php if (!$rotationHasSplunkPublishedQuickAdd && admin_can_board('splunkdash')): ?>
                 <p class="help" style="margin:10px 0 0;padding:10px 12px;border:1px dashed var(--hairline);border-radius:8px">
-                  <strong>Splunk published</strong> dashboards are not listed here until you register them:
-                  open <a href="?board=splunkdash">Dashboards → Splunk Published</a>, click <strong>+ Add dashboard</strong>,
-                  paste the Splunk publish URL, then <strong>Save</strong>. (This is different from <a href="?board=splunk">Splunk Panels</a>.)
+                  <strong>Splunk</strong> dashboards are not listed here until you register them:
+                  open <a href="?board=splunkdash">Dashboards → Splunk</a>, click <strong>+ Add dashboard</strong>,
+                  paste the Splunk publish URL, then <strong>Save</strong>.
                 </p>
                 <?php endif; ?>
               </div>
@@ -5586,112 +5519,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             </div>
           </details>
 
-        <?php elseif ($board === 'splunk'): ?>
-          <?php admin_operator_board_preamble('splunk'); ?>
-          <?php admin_super_registry_share_hint('Splunk'); ?>
-          <div class="section-title">Splunk panel pages</div>
-          <div class="help" style="margin-bottom:4px">Each page is its own 1080p wall — add them separately to rotation as
-            <code>splunk.php?d=<em>key</em></code> (like Grafana). Drag panels to reorder within a page.</div>
-          <?php if ($splunkPages === [] && !admin_is_super()): ?>
-          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
-            No pages yet — click <strong>+ Add page</strong> below to create your first Splunk wall.
-          </div>
-          <?php endif; ?>
-
-          <div class="splunk-pages-bar" id="splunkPagesBar">
-            <?php foreach ($splunkPages as $pk => $pg): ?>
-            <button type="button" class="splunk-page-tab<?= $pk === $splunkActivePage ? ' active' : '' ?>"
-                    data-splunk-page-tab="<?= h($pk) ?>">
-              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
-            </button>
-            <?php endforeach; ?>
-            <button type="button" class="addrow" onclick="addSplunkPage()">+ Add page</button>
-            <?php if (admin_is_super()): ?>
-            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
-                    formaction="?board=splunk" formmethod="post"
-                    onclick="this.form.share_board.value='splunk'; return confirm('Share every Splunk page with the Operators role?');">Share all with Operators</button>
-            <?php endif; ?>
-          </div>
-          <?php if (admin_is_super()): ?>
-          <input type="hidden" name="share_board" value="">
-          <input type="hidden" name="share_role" value="operator">
-          <?php endif; ?>
-
-          <?php foreach ($splunkPages as $pk => $pg):
-            $panelRows = is_array($pg['panels'] ?? null) ? $pg['panels'] : [];
-            $pageRo = admin_page_entry_readonly($pg);
-          ?>
-          <div class="splunk-page-editor" data-splunk-page-editor="<?= h($pk) ?>"
-               style="<?= $pk === $splunkActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
-            <?php if (!$pageRo): ?>
-            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-splunk-page-key>
-            <?php else: ?>
-            <input type="hidden" value="<?= h($pk) ?>" data-splunk-page-key>
-            <?php endif; ?>
-            <div class="splunk-page-head">
-              <div>
-                <label class="mini">Page title</label>
-                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
-                       placeholder="SOC Overview" data-splunk-page-title<?= admin_form_ro_attr($pageRo) ?>>
-              </div>
-              <div>
-                <label class="mini">Subtitle</label>
-                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
-                       placeholder="Home network" data-splunk-page-sub<?= admin_form_ro_attr($pageRo) ?>>
-              </div>
-              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
-                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
-                   href="<?= h(splunk_preview_url($pk)) ?>" target="_blank" rel="noopener" data-splunk-page-preview>Preview ↗</a>
-                <?php if (count($splunkPages) > 1 && !$pageRo): ?>
-                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
-                        onclick="removeSplunkPage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
-                <?php endif; ?>
-              </div>
-            </div>
-            <?php admin_entry_sharing_readonly_html($pg); ?>
-            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
-            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(splunk_page_url($pk)) ?></code></div>
-
-            <div class="splunk-playlist video-playlist" data-splunk-panels-deck="<?= h($pk) ?>">
-              <?php if ($panelRows === []): ?>
-              <div class="rotation-playlist-empty">No panels yet — add one below.</div>
-              <?php endif; ?>
-              <?php foreach ($panelRows as $spi => $row):
-                if (!is_array($row)) continue;
-                splunk_admin_panel_card($pk, (int)$spi, $row, $pageRo);
-              endforeach; ?>
-            </div>
-            <?php if (!$pageRo): ?>
-            <button type="button" class="addrow" style="margin-top:12px" onclick="addSplunkPanelCard('<?= h($pk) ?>')">+ Add panel</button>
-            <?php endif; ?>
-          </div>
-          <?php endforeach; ?>
-
-          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
-            <summary>Advanced — paste JSON</summary>
-            <div class="panel-body">
-              <label class="check"><input type="checkbox" name="splunk_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
-              <div class="help" style="margin:10px 0">Keyed object: <code>{"soc":{"title":"…","panels":[…]}}</code>.
-                A legacy panel array becomes the <code>main</code> page.</div>
-              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
-                h(json_encode($splunkPages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
-              ?></textarea>
-            </div>
-          </details>
-
-          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('splunk') ? '' : ' hidden' ?>>
-            <summary>Board settings</summary>
-            <div class="panel-body">
-              <div class="field-grid">
-                <?php foreach ($b['fields'] as $f):
-                  if (!in_array($f['key'], $splunkBoardKeys, true)) continue;
-                  $val = current_val($rawConf, $board, $f['key']); ?>
-                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
-                <?php endforeach; ?>
-              </div>
-            </div>
-          </details>
-
         <?php elseif ($board === 'zabbix'): ?>
           <?php admin_operator_board_preamble('zabbix'); ?>
           <?php admin_super_registry_share_hint('Zabbix'); ?>
@@ -6322,10 +6149,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
         <?php elseif ($board === 'splunkdash'): ?>
           <?php admin_operator_board_preamble('splunkdash'); ?>
-          <?php admin_super_registry_share_hint('Splunk published'); ?>
-          <div class="section-title">Splunk published dashboards</div>
+          <?php admin_super_registry_share_hint('Splunk'); ?>
+          <div class="section-title">Splunk dashboards</div>
           <div class="help" style="margin-bottom:4px">Each dashboard is its own 1080p wall — add to rotation as
-            <code>splunkdash.php?d=<em>key</em></code>. In Splunk: Dashboard Studio → <strong>Actions → Publish dashboard</strong>, then paste the published URL below.</div>
+            <code>splunkdash.php?d=<em>key</em></code>. Set the wall <strong>title</strong> and <strong>subtitle</strong> here (shown over the themed border like Grafana); Splunk&rsquo;s own header is cropped from the iframe.</div>
           <?php if ($splunkdashPages === [] && !admin_is_super()): ?>
           <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
             No dashboards yet — click <strong>+ Add dashboard</strong> below, paste your Splunk publish URL, then Save.
@@ -6343,7 +6170,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <?php if (admin_is_super()): ?>
             <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
                     formaction="?board=splunkdash" formmethod="post"
-                    onclick="this.form.share_board.value='splunkdash'; return confirm('Share every Splunk published dashboard with the Operators role?');">Share all with Operators</button>
+                    onclick="this.form.share_board.value='splunkdash'; return confirm('Share every Splunk dashboard with the Operators role?');">Share all with Operators</button>
             <?php endif; ?>
           </div>
           <?php if (admin_is_super()): ?>
@@ -6363,15 +6190,14 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <?php endif; ?>
             <div class="splunk-page-head">
               <div>
-                <label class="mini">Title</label>
+                <label class="mini">Page title</label>
                 <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
                        placeholder="SOC overview" data-splunkdash-page-title<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div>
-                <label class="mini">Key</label>
-                <input type="text" value="<?= h($pk) ?>" readonly tabindex="-1"
-                       title="Used in splunkdash.php?d=KEY — set when adding the dashboard">
-                <div class="help" style="margin-top:4px">Rotation: <code><?= h(splunkdash_page_url($pk)) ?></code></div>
+                <label class="mini">Subtitle</label>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Network security" data-splunkdash-page-sub<?= admin_form_ro_attr($pageRo) ?>>
               </div>
               <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
                 <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
@@ -6384,6 +6210,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             </div>
             <?php admin_entry_sharing_readonly_html($pg); ?>
             <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(splunkdash_page_url($pk)) ?></code>
+              · In Splunk: Dashboard Studio → <strong>Actions → Publish dashboard</strong>, then paste the URL below.</div>
 
             <div class="field-grid" style="margin-bottom:12px">
               <div class="field span-2">
@@ -10254,7 +10082,6 @@ document.addEventListener('DOMContentLoaded', function () {
     initScreenPickers(document.getElementById('usersList'));
   }
   initVideoPlaylist();
-  initSplunkPanels();
   initZabbixPages();
   initKumaPages();
   initGrafanaPages();
@@ -10657,7 +10484,7 @@ function rotationLabelFromUrl(url) {
   if (/^video\.php\?v=/.test(url)) return 'Video — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'video');
   if (/^rss\.php\?feed=/.test(url)) return 'RSS — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'feed');
   if (/^grafana\.php\?d=/.test(url)) return 'Grafana — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'dashboard');
-  if (/^splunkdash\.php\?d=/.test(url)) return 'Splunk published — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'dashboard');
+  if (/^splunkdash\.php\?d=/.test(url)) return 'Splunk — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'dashboard');
   if (/^powerbi\.php\?d=/.test(url)) return 'Power BI — ' + decodeURIComponent((url.split('=')[1] || '').split('&')[0] || 'report');
   if (/^splunk\.php/.test(url)) {
     const m = url.match(/[?&]d=([^&]+)/);
@@ -10677,7 +10504,7 @@ function rotationLabelFromUrl(url) {
     'weather.php': 'Weather', 'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
     'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'camwall.php': 'MDOT Cams', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'kev.php': 'CISA KEV', 'certexp.php': 'TLS cert expiry', 'ransomware.php': 'Ransomware tracker', 'phish.php': 'Phishing & brand threats', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
-    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunk.php': 'Splunk panels', 'splunkdash.php': 'Splunk dashboard', 'powerbi.php': 'Power BI',
+    'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunkdash.php': 'Splunk', 'powerbi.php': 'Power BI',
     'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'
   };
   const base = url.split('?')[0];
@@ -11991,14 +11818,14 @@ function addSplunkdashPage() {
   editor.innerHTML =
     '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-splunkdash-page-key>' +
     '<div class="splunk-page-head">' +
-      '<div><label class="mini">Title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="SOC overview" data-splunkdash-page-title></div>' +
-      '<div><label class="mini">Key</label><input type="text" value="' + pageKey + '" readonly tabindex="-1">' +
-        '<div class="help" style="margin-top:4px">Rotation: <code>splunkdash.php?d=' + pageKey + '</code></div></div>' +
+      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="SOC overview" data-splunkdash-page-title></div>' +
+      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Network security" data-splunkdash-page-sub></div>' +
       '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
         '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + splunkdashPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-splunkdash-page-preview>Preview ↗</a>' +
         '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeSplunkdashPage(\'' + pageKey + '\')" title="Remove dashboard">Remove</button>' +
       '</div>' +
     '</div>' +
+    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>splunkdash.php?d=' + pageKey + '</code></div>' +
     entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
     '<div class="field-grid" style="margin-bottom:12px">' +
       '<div class="field span-2"><label class="mini">Published URL</label>' +

@@ -1,43 +1,17 @@
 <?php
 /**
  * SPLUNK PUBLISHED DASHBOARD BOARD — 1920×1080 signage
- * Wraps Splunk's published Dashboard Studio dashboards (Splunk 10.x /
- * Cloud 9.3.2411+) so they join the rotation and get the alert ticker.
- * Published dashboards need no login, which makes them perfect kiosk material —
- * this is the "whole dashboard, pixel for pixel" companion to splunk.php's
- * REST-API panel grid.
+ * Wraps Splunk Dashboard Studio published URLs with the same title overlay,
+ * themed border, and iframe crop used for a polished kiosk wall (like Grafana).
  *
- * Splunk-side setup:
- *   1. Open the Dashboard Studio dashboard → Actions → Publish dashboard.
- *      Pick a data refresh schedule and (optionally) a link expiration, then
- *      copy the published URL into DASHBOARDS below.
- *   2. Published pages are served by Splunk Web, which by default refuses to
- *      be iframed from another origin. On the Splunk server set, in
- *      $SPLUNK_HOME/etc/system/local/web.conf:
- *
- *          [settings]
- *          x_frame_options_sameorigin = false
- *
- *      and restart Splunk. (LAN-appropriate; it removes clickjacking
- *      protection for Splunk Web, so don't do this on an internet-exposed
- *      instance. If you'd rather not change it, load the published URL
- *      directly in your rotator — you just lose the ticker overlay.)
- *
- * Notes:
- *   - Published dashboards refresh on their *scheduled search* cadence;
- *     searches don't run on demand. Set the publish refresh schedule to match
- *     how live you want the wall to be.
- *   - Playlist usage: each entry is splunkdash.php?d=<key> (no ?d= = first).
- *   - 'reload' (seconds, optional) hard-reloads the iframe as a backstop in
- *     case the published page's own auto-refresh ever stalls in a long
- *     kiosk session. Default 300, 0 disables.
+ * Splunk-side: Dashboard Studio → Actions → Publish dashboard. Set
+ * x_frame_options_sameorigin = false in web.conf if the frame stays blank.
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/splunkdash_lib.php';
 
 define('DASHBOARDS', splunkdash_dashboards_for_display());
-
 define('DEFAULT_RELOAD', cfg('splunkdash.DEFAULT_RELOAD', 300));
 define('TIMEZONE', cfg('splunkdash.TIMEZONE', 'America/Detroit'));
 
@@ -66,7 +40,7 @@ if ($key === null || !isset(DASHBOARDS[$key])) {
 <body>
   <div>
     <h1>No dashboard to preview</h1>
-    <p>Pick a dashboard from the list in admin, or add one you own.</p>
+    <p>Pick a dashboard from the list in admin, or add one you own under Dashboards → Splunk.</p>
   </div>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>
 </body>
@@ -74,31 +48,47 @@ if ($key === null || !isset(DASHBOARDS[$key])) {
     <?php
     exit;
 }
-$dash       = DASHBOARDS[$key];
-$reload     = max(0, (int)($dash['reload'] ?? DEFAULT_RELOAD));
-$configured = !str_contains($dash['url'], 'REPLACE');
-$embedUrl   = splunkdash_embed_url((string)$dash['url'], $dash);
-$cropTop    = splunkdash_crop_top_px($dash);
-$boardH     = signage_frame_height();
+
+$dash = DASHBOARDS[$key];
+$reload = max(0, (int)($dash['reload'] ?? DEFAULT_RELOAD));
+$configured = !str_contains((string)($dash['url'] ?? ''), 'REPLACE');
+$embedUrl = splunkdash_embed_url((string)($dash['url'] ?? ''), $dash);
+$cropTop = splunkdash_crop_top_px($dash);
 $hideScrollbars = splunkdash_hide_scrollbars($dash);
+$boardTitle = trim((string)($dash['title'] ?? $key));
+$boardSub = trim((string)($dash['sub'] ?? ''));
+$showClock = signage_show_clock();
+$embedH = max(720, signage_frame_height() - 16);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title><?= h($dash['title']) ?></title>
+<title><?= h($boardTitle) ?></title>
+<?= signage_theme_fonts_head_html() ?>
 <style>
-  <?= signage_theme_css() ?>
-
   * { margin:0; padding:0; box-sizing:border-box; }
+  <?= signage_theme_css() ?>
   <?= signage_kiosk_cursor_css() ?>
-  html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
-              font-family:system-ui,sans-serif; }
-  <?= signage_iframe_crop_css($boardH, $cropTop, 'dash-wrap', $hideScrollbars) ?>
-  .empty { width:1920px; height:<?= (int)$boardH ?>px; display:flex; flex-direction:column; gap:18px;
-           align-items:center; justify-content:center; color:var(--mist); }
+  html,body { width:100%; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
+              color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; }
+  .wall { width:1920px; max-width:100%; height:100%; margin:0 auto; position:relative;
+          padding:0 16px 16px; box-sizing:border-box; }
+  .head { position:absolute; top:0; left:16px; right:16px; z-index:10; display:flex; align-items:baseline;
+          justify-content:space-between; padding:14px 32px 18px; pointer-events:none;
+          background:linear-gradient(180deg, rgba(12,20,34,.98) 0%, rgba(12,20,34,.94) 65%, rgba(12,20,34,0) 100%); }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:48px; line-height:1.05;
+             text-shadow:0 2px 18px rgba(0,0,0,.65); }
+  .head h1 span { color:var(--beacon); }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px; color:var(--mist);
+           font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
+  <?= signage_embed_frame_css() ?>
+  .signage-embed-frame .dash-wrap { width:100%; height:100%; }
+  <?= signage_iframe_crop_css($embedH, $cropTop, 'dash-wrap', $hideScrollbars, true) ?>
+  .empty { width:1920px; max-width:100%; height:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;
+           align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
-  .empty p { font-size:27px; max-width:1150px; text-align:center; line-height:1.65; }
+  .empty p { font-size:27px; max-width:1100px; line-height:1.65; }
   .empty code { color:var(--beacon); background:var(--harbor); padding:2px 12px; border-radius:6px; }
 </style>
 </head>
@@ -106,26 +96,49 @@ $hideScrollbars = splunkdash_hide_scrollbars($dash);
 <?php if (!$configured): ?>
   <div class="empty">
     <h2>No published dashboard configured for &ldquo;<?= h($key) ?>&rdquo;</h2>
-    <p>In Splunk: open the Dashboard Studio dashboard &rarr; <code>Actions</code> &rarr;
-       <code>Publish dashboard</code>, copy the published URL into
-       <code>DASHBOARDS</code> in this file. If the frame stays blank after that,
-       set <code>x_frame_options_sameorigin&nbsp;=&nbsp;false</code> in web.conf
-       and restart Splunk — see the comments at the top of this file.</p>
+    <p>In Splunk: open the Dashboard Studio dashboard → <code>Actions</code> →
+       <code>Publish dashboard</code>, copy the published URL into admin under
+       <strong>Dashboards → Splunk</strong>. If the frame stays blank, set
+       <code>x_frame_options_sameorigin&nbsp;=&nbsp;false</code> in <code>web.conf</code>
+       and restart Splunk.</p>
   </div>
 <?php else: ?>
-  <div class="dash-wrap">
-    <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen" scrolling="no"></iframe>
+  <div class="wall">
+    <div class="head">
+      <h1><?= h($boardTitle) ?><?php if ($boardSub !== ''): ?> <span>&middot; <?= h($boardSub) ?></span><?php endif; ?></h1>
+      <?php if ($showClock): ?><div id="clock">--:--</div><?php endif; ?>
+    </div>
+    <div class="signage-embed-frame">
+      <div class="dash-wrap">
+        <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen" scrolling="no"></iframe>
+      </div>
+    </div>
   </div>
   <script>
+  (function () {
+    <?php if ($showClock): ?>
+    (function () {
+      const tz = <?= json_encode(TIMEZONE) ?>;
+      function tick() {
+        const el = document.getElementById('clock');
+        if (!el) return;
+        el.textContent = new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
+        });
+      }
+      tick();
+      setInterval(tick, 1000);
+    })();
+    <?php endif; ?>
     <?php if ($reload > 0): ?>
-    // Backstop: re-pull the published page in case its own auto-refresh
-    // stalls during a long kiosk session.
-    setInterval(() => {
+    setInterval(function () {
       const f = document.getElementById('dash');
+      if (!f) return;
       f.src = f.src.split('#')[0];
     }, <?= $reload ?> * 1000);
     <?php endif; ?>
-    setTimeout(() => location.reload(), 60 * 60 * 1000);
+    setTimeout(function () { location.reload(); }, 60 * 60 * 1000);
+  })();
   </script>
 <?php endif; ?>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>

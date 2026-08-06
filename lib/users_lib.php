@@ -14,7 +14,7 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
     'rotation', 'slides', 'rotator', 'rss', 'web', 'video', 'webcam',
-    'grafana', 'splunk', 'splunkdash', 'powerbi', 'zabbix', 'tdx', 'announce', 'calendar', 'account',
+    'grafana', 'splunkdash', 'powerbi', 'zabbix', 'tdx', 'announce', 'calendar', 'account',
 ];
 
 /** Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy — super admin only (also gated by install profile). */
@@ -2597,13 +2597,12 @@ function admin_operator_board_preamble(string $board): void
                 'Add pages with a <strong>status page slug</strong> per tab, then quick-add under <strong>Uptime Kuma</strong> in rotation.',
             ];
             break;
-        case 'splunk':
-            require_once __DIR__ . '/splunk_lib.php';
+        case 'splunkdash':
             $lines = [
-                splunk_configured()
-                    ? 'Splunk connection is configured by your super admin.'
-                    : 'Splunk base URL and token are not configured — ask a super admin under Board settings.',
-                'Use <strong>+ Add page</strong> for your own panel walls; quick-add under <strong>Dashboards</strong> in rotation.',
+                'In Splunk: Dashboard Studio → <strong>Actions → Publish dashboard</strong>, then paste the published URL here.',
+                'Set the wall <strong>title</strong> and <strong>subtitle</strong> for the overlay (like Grafana). Splunk&rsquo;s own header is cropped from the iframe.',
+                'Use <strong>+ Add dashboard</strong> for each wall, then quick-add under <strong>Dashboards</strong> in rotation.',
+                'Dashboards you create are owned by you. Super-admin entries require <strong>Access</strong> sharing before you can use them.',
             ];
             break;
         case 'grafana':
