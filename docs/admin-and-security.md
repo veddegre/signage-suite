@@ -18,10 +18,9 @@ Accounts live in `config/users.json`, blocked from direct HTTP like `settings.js
 | Role | Access |
 |------|--------|
 | **Super admin** | All boards, **Users**, **Tools**, **Security**, every display |
-| **Infrastructure** | Same as **Operator**, plus **Homelab**, **UniFi Network**, **SignalTrace**, **Uptime Kuma**, **Tailscale**, and **ntfy** admin boards |
-| **Operator** | Content boards + **Rotation** for assigned display(s) and shared-editor displays; **Account**, **Status** — not the infrastructure-only monitoring boards above |
+| **Operator** | Content boards + **Rotation** for assigned display(s) and shared-editor displays; **Account**, **Status** — not homelab/monitoring setup boards (Homelab, UniFi, Kuma, Tailscale, ntfy, …) |
 
-→ **[User guide](user-guide.md)** — full manual for super admins, infrastructure, and operators (sidebar reference, rotation, sharing, integrations).
+→ **[User guide](user-guide.md)** — full manual for super admins and operators (sidebar reference, rotation, sharing, integrations).
 
 ### Sidebar layout
 
@@ -31,7 +30,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 |-------|--------|
 | **Setup** | Security, Rotation, Ticker |
 | **Weather & home** | Weather, Lake, Webcam, Photo, Air, Sports, Calendar, Traffic |
-| **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy (Infrastructure + super admin), Zabbix, TeamDynamix, cloud outages, … |
+| **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy (super admin only), Zabbix, TeamDynamix, cloud outages, … |
 | **Daily** | Word of the day, This day in history, Dad jokes, Announcements, XKCD |
 | **Media** | Slides, Photo Rotator, Video, RSS |
 | **Dashboards** | Grafana, Splunk Panels, Splunk Published, Power BI, Websites |
@@ -41,21 +40,21 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 | Admin page | Purpose |
 |------------|---------|
 | **Account** | Change local password (hidden for SSO-linked accounts) |
-| **Users** | Create users, assign roles (super / infrastructure / operator), assign display(s) |
+| **Users** | Create users, assign roles (super / operator), assign display(s) |
 | **Status** | Kiosk heartbeats, play log, slide/photo deploy sync |
 | **Security** | Idle timeout, outbound URL policy, SSO, multi-display policy, audit settings, **trusted reverse proxies** |
 | **Audit** | Sign-ins, saves, user changes (not cleared with API cache) |
 
 **Login:** local username/password and/or SSO, CSRF-protected sessions, configurable idle logout, lockout after repeated failures.
 
-### Display assignment (operators & infrastructure)
+### Display assignment (operators)
 
-Each physical display (rotation screen) has **one primary owner** — enforced on save so the same screen cannot be assigned to two people. **Infrastructure** users use the same display assignment rules as operators.
+Each physical display (rotation screen) has **one primary owner** — enforced on save so the same screen cannot be assigned to two people.
 
 | Mode | Setting | Behavior |
 |------|---------|----------|
-| **Single display** (legacy) | **Security → Operators may manage multiple displays** off | Each operator or infrastructure user gets exactly one display via a dropdown |
-| **Multiple displays** (default) | Same setting **on** (also toggled on **Users** when saving) | Checkbox picker — assign one or more screens per operator or infrastructure user |
+| **Single display** (legacy) | **Security → Operators may manage multiple displays** off | Each operator gets exactly one display via a dropdown |
+| **Multiple displays** (default) | Same setting **on** (also toggled on **Users** when saving) | Checkbox picker — assign one or more screens per operator |
 
 When assigning displays on **Users**, the picker lists only:
 
@@ -98,10 +97,9 @@ Stored in settings as `owner`, `shared` (user ids), and `shared_roles` (e.g. `["
 - Team slide deck — set owner to one person, check **Operators** under roles so the whole team can edit without listing every username.
 - One-off collaboration — add specific users under **Shared with users** only.
 - **Slides** deck toolbar — **All operators** bulk-adds the Operators role to selected slides; **All users** adds every account individually.
-- **Zabbix / Splunk / TeamDynamix** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** to create their own walls (owned automatically).
-- **Uptime Kuma** — Infrastructure-only admin; super admin **Share all with Infrastructure** on the page bar when multiple people need the same Kuma pages.
+- **Zabbix / Splunk / TeamDynamix / Uptime Kuma** — super admin **Share all with Operators** on the page bar shares every tab at once; operators can also **+ Add page** on Zabbix/TDX/Splunk/Grafana to create their own walls (owned automatically).
 
-Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin configuration** stays **super admin** or **Infrastructure** only — operators do not see those sidebar entries or board settings, and those boards are omitted from rotation **quick-add** and hero-strip source pickers. Other monitoring walls (Cloudflare Radar, outages, Zabbix pages when shared, etc.) stay selectable in playlists. Setup/security boards (Users, Security, …) stay super-admin only. API tokens on infra boards stay super-admin **Board settings** unless you delegate via Infrastructure role.
+Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin configuration** stays **super admin** only — operators do not see those sidebar entries or board settings, and those boards are omitted from rotation **quick-add** and hero-strip source pickers. On work deployments, **Site → Install profile → work** hides home-only boards (homelab, UniFi, Kuma, Tailscale, ntfy, meal calendar, …) entirely. Other monitoring walls (Cloudflare Radar, outages, Zabbix pages when shared, etc.) stay selectable in playlists. Setup/security boards (Users, Security, …) stay super-admin only. API tokens on monitoring setup boards stay super-admin **Board settings**.
 
 Board-level API secrets (Splunk token, Zabbix token, TeamDynamix BEID/key, Grafana JWT secret, Power BI Azure client secret, TomTom key, etc.) remain super-admin only. Grafana JWT setup: [grafana.md](grafana.md). Power BI Azure setup: [powerbi.md](powerbi.md). TeamDynamix TDAdmin setup: [tdx.md](tdx.md).
 

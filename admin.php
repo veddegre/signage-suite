@@ -331,9 +331,6 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
     if (!isset(ADMIN_SHARING_ROLES[$shareRole])) {
         $shareRole = 'operator';
     }
-    if (in_array($shareBoard, ADMIN_INFRA_BOARDS, true)) {
-        $shareRole = 'infra';
-    }
     $pagesKey = match ($shareBoard) {
         'zabbix', 'kuma', 'splunk', 'tdx' => $shareBoard . '.PAGES',
         'grafana', 'splunkdash' => $shareBoard . '.DASHBOARDS',
@@ -2142,7 +2139,7 @@ $heroStripKeyOptions = [];
 $heroStripSources = [];
 if ($authed && $board === 'rotation') {
     $heroStripKeyOptions = hero_strip_key_options();
-    if (!admin_is_super() && !admin_is_infra()) {
+    if (!admin_is_super()) {
         unset($heroStripKeyOptions['kuma'], $heroStripKeyOptions['ntfy']);
     }
     $heroStripSources = admin_hero_strip_source_options();
@@ -4078,7 +4075,7 @@ function admin_field(array $f, $val, string $board): void
     <?php elseif ($accountBoard): ?>
       <h2>Account</h2>
       <div class="sub">Signed in as <strong><?= h(admin_username()) ?></strong>
-        — <?= admin_is_super() ? 'super admin (full access)' : (admin_is_infra() ? 'infrastructure' : 'screen operator') ?>.</div>
+        — <?= admin_is_super() ? 'super admin (full access)' : 'screen operator' ?>.</div>
       <?php if (!admin_is_super()):
         $allowed = admin_allowed_screen_keys();
       ?>
@@ -4208,7 +4205,7 @@ function admin_field(array $f, $val, string $board): void
             <?php endforeach; ?>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> and <strong>Infrastructure</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. Infrastructure adds Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards are super-admin only.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -5054,7 +5051,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <div class="help" style="margin-bottom:10px"><strong>Shared editing</strong> — primary owner is set under <a href="?board=users">Users</a><?php if ($screenOwner): ?> (<code><?= h($screenOwner) ?></code>)<?php else: ?> (unassigned)<?php endif; ?>. Shared editors manage the <strong>full display</strong>: playlist, display options, hero strip, and deploy targets (including the primary owner’s slides and quick-add boards).</div>
             <div class="field-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
               <?php foreach (users_by_id() as $ou):
-                if (!is_array($ou) || !in_array(users_normalize_role((string)($ou['role'] ?? '')), ['operator', 'infra'], true)) {
+                if (!is_array($ou) || users_normalize_role((string)($ou['role'] ?? '')) !== 'operator') {
                     continue;
                 }
                 $uid = (string)($ou['id'] ?? '');
@@ -6007,12 +6004,12 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             <?php if (admin_is_super()): ?>
             <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
                     formaction="?board=kuma" formmethod="post"
-                    onclick="this.form.share_board.value='kuma'; this.form.share_role.value='infra'; return confirm('Share every Kuma page with the Infrastructure role?');">Share all with Infrastructure</button>
+                    onclick="this.form.share_board.value='kuma'; return confirm('Share every Kuma page with the Operators role?');">Share all with Operators</button>
             <?php endif; ?>
           </div>
           <?php if (admin_is_super()): ?>
           <input type="hidden" name="share_board" value="">
-          <input type="hidden" name="share_role" value="infra">
+          <input type="hidden" name="share_role" value="operator">
           <?php endif; ?>
 
           <?php foreach ($kumaPages as $pk => $pg):
@@ -9983,7 +9980,7 @@ function initOperatorMultiScreenToggle() {
     window.OPERATOR_MULTI_SCREEN = toggle.checked;
     document.querySelectorAll('.user-card').forEach(function (card) {
       const role = card.dataset.role || '';
-      if (role === 'operator' || role === 'infra') refreshUserDisplayCell(card);
+      if (role === 'operator') refreshUserDisplayCell(card);
     });
   });
 }
@@ -10036,7 +10033,7 @@ function addUserRow() {
       '<div class="field user-field-auth"><label class="l">Auth</label>' +
         '<select name="USERS[' + idx + '][auth_provider]" class="user-auth-select"><option value="local" selected>Local</option><option value="sso">SSO</option></select></div>' +
       '<div class="field user-field-role"><label class="l">Role</label>' +
-        '<select name="USERS[' + idx + '][role]" class="user-role-select"><option value="operator" selected>Operator</option><option value="infra">Infrastructure</option><option value="super">Super admin</option></select></div>' +
+        '<select name="USERS[' + idx + '][role]" class="user-role-select"><option value="operator" selected>Operator</option><option value="super">Super admin</option></select></div>' +
       '<div class="field user-field-disabled"><label class="check"><input type="checkbox" name="USERS[' + idx + '][disabled]" value="1"> Disabled</label></div>' +
       '<div class="field user-field-password"><label class="l">Password</label>' +
         '<input type="password" class="user-password-input" name="USERS[' + idx + '][new_password]" autocomplete="new-password" placeholder="Required for new user" data-new-user="1"></div>' +

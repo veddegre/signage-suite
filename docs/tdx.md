@@ -169,12 +169,6 @@ Super admin only — replace entire `tdx.PAGES` from JSON. Useful for bulk migra
 3. **Share all with Operators** or per-page **Access**
 4. Add pages to rotation templates
 
-### Infrastructure
-
-- Use TDX pages **shared** via Access (same as operators)
-- Cannot edit **Board settings** or BEID/key
-- May own rotation for assigned displays including `tdx.php?d=…` rows
-
 ### Operator
 
 1. Confirm preamble says connection is configured (or ask super admin)
@@ -259,7 +253,6 @@ Same model as **Zabbix Monitoring**:
 |------|-------------|
 | **Super admin** | Sets global URL + credentials; can share all pages with Operators |
 | **Operators** | Create pages for their team; **Access** controls who sees each page |
-| **Infrastructure** | Can use pages shared to them via **Access** |
 
 - Pages without an owner are super-admin only on the wall and in rotation quick-add.
 - **Share all with Operators** — bulk-shares every page tab.
@@ -444,6 +437,6 @@ Search results omit full descriptions and custom attributes — sufficient for a
 
 ## Related docs
 
-- **[user-guide.md](user-guide.md)** — roles, rotation, sidebar reference (give this to operators and infra staff)
+- **[user-guide.md](user-guide.md)** — roles, rotation, sidebar reference (give this to operators)
 - [boards.md → tdx.php](boards.md#tdxphp--teamdynamix-tickets-tdwebapi) — board catalog entry
 - [admin-and-security.md](admin-and-security.md) — private URL fetches, operator roles, sharing

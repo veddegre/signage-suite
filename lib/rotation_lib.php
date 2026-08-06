@@ -2753,7 +2753,7 @@ function rotation_quick_add_board_key(string $url): ?string
     return preg_replace('/\.php$/', '', $base) ?: null;
 }
 
-/** Whether the current user may quick-add this rotation URL (infra-only boards excluded for operators). */
+/** Whether the current user may quick-add this rotation URL (super-only boards excluded for operators). */
 function rotation_quick_add_url_allowed(string $url): bool
 {
     if (!signage_profile_rotation_url_allowed($url)) {
@@ -2763,7 +2763,7 @@ function rotation_quick_add_url_allowed(string $url): bool
     if (!function_exists('admin_is_authenticated') || !admin_is_authenticated()) {
         return true;
     }
-    if (admin_is_super() || admin_is_infra()) {
+    if (admin_is_super()) {
         return true;
     }
     $board = rotation_quick_add_board_key($url);
@@ -2771,7 +2771,7 @@ function rotation_quick_add_url_allowed(string $url): bool
         return true;
     }
 
-    return !in_array($board, ADMIN_INFRA_BOARDS, true);
+    return !in_array($board, ADMIN_SUPER_ONLY_BOARDS, true);
 }
 
 /** @param array<string,mixed> $entry */

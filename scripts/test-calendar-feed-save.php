@@ -11,9 +11,9 @@ require_once __DIR__ . '/../lib/calendar_lib.php';
 
 $_SESSION['auth'] = true;
 $_SESSION['admin_user'] = [
-    'id' => 'infra-test-user',
-    'username' => 'infra',
-    'role' => 'infra',
+    'id' => 'operator-test-user',
+    'username' => 'operator',
+    'role' => 'operator',
     'screens' => ['main'],
     'auth_provider' => 'local',
     'disabled' => false,
@@ -83,7 +83,7 @@ assert_true(count($final) === 2, 'two Greg feeds kept in config');
 $ids = array_map(static fn($f) => $f['id'] ?? '', $final);
 assert_true(count(array_unique($ids)) === 2, 'each feed has a unique id');
 $visible = admin_filter_owned_list($final);
-assert_true(count($visible) === 1, 'infra sees only owned feed');
+assert_true(count($visible) === 1, 'operator sees only owned feed');
 assert_true(($visible[0]['key'] ?? '') === 'Greg', 'legend preserved');
 
 $filter = calendar_filter_feeds_by_keys($final, [$ids[1]]);

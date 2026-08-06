@@ -35,7 +35,7 @@ flowchart LR
 | [Getting started](#getting-started) | Install, first login, manual requirements |
 | [Kiosk display](#3-point-a-display-at-rotation) | Dedicated TV/Pi — [full guide](docs/kiosk-setup.md) |
 | [Admin & security](#admin--security) | Roles, display assignment, sharing (users + roles) — [full guide](docs/admin-and-security.md) |
-| [User guide](docs/user-guide.md) | **Manual for super admins, infrastructure & operators** |
+| [User guide](docs/user-guide.md) | **Manual for super admins & operators** |
 | [Boards](#boards) | Overview — [per-board reference](docs/boards.md) |
 | [Rotation & deployment](#rotation--deployment) | Playlists, scripts — [full guide](docs/rotation-and-deployment.md) |
 | [Documentation](#documentation) | Deep-dive docs in `docs/` |
@@ -111,11 +111,10 @@ Prefer `pipx install yt-dlp` over apt for YouTube (repo builds go stale).
 
 | Role | What they can do |
 |------|------------------|
-| **Super admin** | Everything — users, security, all displays |
-| **Infrastructure** | Operator access plus Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards |
+| **Super admin** | Everything — users, security, all displays, homelab/monitoring setup boards |
 | **Operator** | Own content boards + rotation for assigned display(s) — **one** by default, or **multiple** when **Security → Operators may manage multiple displays** is enabled |
 
-Operators and infrastructure users can **own** content and grant access to **individual users** or **roles** (e.g. all **Operators** or **Infrastructure**) on playlist rows. Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin** stay limited to super admins and infrastructure users; those boards are also omitted from operator rotation quick-add and hero-strip sources (other monitoring walls such as Cloudflare Radar and shared Zabbix pages remain available). Other setup/security boards stay super-admin only. API tokens on most boards stay super-admin **Board settings**.
+Operators can **own** content and grant access to **individual users** or the **Operators** role on playlist rows. Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy **admin** stay super-admin only; those boards are also omitted from operator rotation quick-add and hero-strip sources (other monitoring walls such as Cloudflare Radar and shared Zabbix pages remain available). On work deployments, set **Site → Install profile** to **work** to hide home-only boards entirely. Other setup/security boards stay super-admin only. API tokens on most boards stay super-admin **Board settings**.
 
 The admin **sidebar groups** (Setup, Weather & home, Monitoring, …) are **collapsible** — click a category header to expand or collapse; your choices are remembered in the browser.
 
@@ -125,7 +124,7 @@ Settings use file locking on **`settings.json`** so concurrent saves on differen
 
 → **[Admin, SSO, and hardening](docs/admin-and-security.md)** — Entra ID, Authentik, JIT provisioning, troubleshooting
 
-→ **[User guide](docs/user-guide.md)** — give this to super admins, infrastructure staff, and operators (roles, every board, rotation, sharing)
+→ **[User guide](docs/user-guide.md)** — give this to super admins and operators (roles, every board, rotation, sharing)
 
 ---
 
@@ -222,7 +221,7 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 
 **ntfy** (`ntfy.php`) — Recent alerts from webhook (`ntfy_webhook.php`) and/or **poll topic** mode. Use in rotation or wire into the hero strip.
 
-**Hero status strip** — Optional persistent bar above the weather ticker on `board.php` (per display under **Rotation → Display options**). Combine up to four sources (Kuma, Zabbix, announcement, ntfy for super admin / Infrastructure; Zabbix and announcements for operators). Each slot has a **Source** dropdown and a **Page / item** picker that lists every configured Kuma status page, Zabbix page, or announcement — not just “Default”. Polls every 30s with the rotation shell.
+**Hero status strip** — Optional persistent bar above the weather ticker on `board.php` (per display under **Rotation → Display options**). Combine up to four sources (Kuma, Zabbix, announcement, ntfy for super admin; Zabbix and announcements for operators). Each slot has a **Source** dropdown and a **Page / item** picker that lists every configured Kuma status page, Zabbix page, or announcement — not just “Default”. Polls every 30s with the rotation shell.
 
 **Lake Michigan** (`lake.php`) — NDBC buoy + NWS shoreline alerts + sunset. Nearshore buoys are seasonal (~Apr–Oct). When data goes stale the board still renders (offline message, alerts, sun times). **Rotation auto-skips** `lake.php` after **24 hours** with no fresh buoy observations and puts it back when the buoy is live again — no manual Skip toggle each winter. Open `lake.php` directly any time to see the offline layout.
 

@@ -17,8 +17,8 @@ const ADMIN_OPERATOR_BOARDS = [
     'grafana', 'splunk', 'splunkdash', 'powerbi', 'zabbix', 'tdx', 'announce', 'calendar', 'account',
 ];
 
-/** Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy — super admin and Infrastructure role only. */
-const ADMIN_INFRA_BOARDS = ['homelab', 'unifi', 'signaltrace', 'kuma', 'tailscale', 'ntfy'];
+/** Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy — super admin only (also gated by install profile). */
+const ADMIN_SUPER_ONLY_BOARDS = ['homelab', 'unifi', 'signaltrace', 'kuma', 'tailscale', 'ntfy'];
 
 /** Operators may edit board-level settings (paths, TTL) on these boards — not API secrets. */
 const ADMIN_OPERATOR_SETTINGS_BOARDS = ['rotation', 'slides', 'rotator'];
@@ -95,7 +95,26 @@ function users_list(): array
 {
     $data = users_load_raw();
     $users = $data['users'] ?? [];
-    return is_array($users) ? $users : [];
+    if (!is_array($users)) {
+        return [];
+    }
+    $needsSave = false;
+    foreach ($users as &$user) {
+        if (!is_array($user)) {
+            continue;
+        }
+        if (strtolower(trim((string)($user['role'] ?? ''))) === 'infra') {
+            $user['role'] = 'operator';
+            $needsSave = true;
+        }
+    }
+    unset($user);
+    if ($needsSave) {
+        $data['users'] = $users;
+        users_save_raw($data);
+    }
+
+    return $users;
 }
 
 /** @return array<string,array<string,mixed>> */
@@ -127,9 +146,6 @@ function users_normalize_role(string $role): string
     if ($role === 'super') {
         return 'super';
     }
-    if ($role === 'infra') {
-        return 'infra';
-    }
 
     return 'operator';
 }
@@ -139,7 +155,6 @@ function users_role_options(): array
 {
     return [
         'super' => 'Super admin',
-        'infra' => 'Infrastructure',
         'operator' => 'Operator',
     ];
 }
@@ -147,7 +162,6 @@ function users_role_options(): array
 /** Roles that may be granted on shared content (super admins already see everything). */
 const ADMIN_SHARING_ROLES = [
     'operator' => 'Operators',
-    'infra' => 'Infrastructure',
 ];
 
 /** @return list<string> */
@@ -606,13 +620,7 @@ function admin_is_super(): bool
     return is_array($user) && ($user['role'] ?? '') === 'super';
 }
 
-function admin_is_infra(): bool
-{
-    $user = admin_current_user();
-    return is_array($user) && users_normalize_role((string)($user['role'] ?? '')) === 'infra';
-}
-
-/** Operator or Infrastructure — display-assigned roles (not super admin). */
+/** Screen operator — display-assigned role (not super admin). */
 function admin_is_screen_operator(): bool
 {
     if (admin_is_super()) {
@@ -622,9 +630,8 @@ function admin_is_screen_operator(): bool
     if (!is_array($user)) {
         return false;
     }
-    $role = users_normalize_role((string)($user['role'] ?? ''));
 
-    return $role === 'operator' || $role === 'infra';
+    return users_normalize_role((string)($user['role'] ?? '')) === 'operator';
 }
 
 function admin_can_tools(): bool
@@ -2152,14 +2159,14 @@ function admin_can_board(string $board): bool
     if (admin_is_super()) {
         return true;
     }
-    if (in_array($board, ADMIN_INFRA_BOARDS, true)) {
-        return admin_is_infra();
+    if (in_array($board, ADMIN_SUPER_ONLY_BOARDS, true)) {
+        return false;
     }
 
     return in_array($board, ADMIN_OPERATOR_BOARDS, true);
 }
 
-/** Hero strip sources limited like infra boards (Kuma, ntfy). Zabbix and announcements stay operator-accessible. */
+/** Hero strip sources limited to super admin (Kuma, ntfy). Zabbix and announcements stay operator-accessible. */
 function admin_can_hero_strip_source(string $source): bool
 {
     $source = strtolower(trim($source));
@@ -2169,7 +2176,7 @@ function admin_can_hero_strip_source(string $source): bool
     if (!signage_profile_hero_strip_source_enabled($source)) {
         return false;
     }
-    if (admin_is_super() || admin_is_infra()) {
+    if (admin_is_super()) {
         return true;
     }
     if (in_array($source, ['kuma', 'ntfy'], true)) {
@@ -2193,7 +2200,7 @@ function admin_hero_strip_source_options(): array
             unset($all[$src]);
         }
     }
-    if (admin_is_super() || admin_is_infra()) {
+    if (admin_is_super()) {
         return $all;
     }
 
@@ -2402,15 +2409,14 @@ function users_save_from_post(array $rows): array
             'disabled' => !empty($row['disabled']),
         ];
 
-        if ($role === 'operator' || $role === 'infra') {
+        if ($role === 'operator') {
             $screens = $entry['screens'];
             $maxScreens = users_operator_screen_max();
             if (count($screens) > $maxScreens) {
                 $limitLabel = users_operator_multi_screen_enabled()
                     ? 'too many displays (' . $maxScreens . ' max)'
                     : 'only one display';
-                $roleLabel = $role === 'infra' ? 'Infrastructure user' : 'Operator';
-                return ['ok' => false, 'error' => $roleLabel . ' ' . $username . ' may have ' . $limitLabel . '.'];
+                return ['ok' => false, 'error' => 'Operator ' . $username . ' may have ' . $limitLabel . '.'];
             }
             foreach ($screens as $sk) {
                 if (isset($screenOwners[$sk])) {

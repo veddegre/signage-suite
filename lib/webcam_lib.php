@@ -824,7 +824,7 @@ function webcam_apply_builtin_operator_access(array $registry): array
         if (!is_array($roles)) {
             $roles = [];
         }
-        foreach (['operator', 'infra'] as $role) {
+        foreach (['operator'] as $role) {
             if (!in_array($role, $roles, true)) {
                 $roles[] = $role;
             }

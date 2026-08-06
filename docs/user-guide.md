@@ -1,6 +1,6 @@
 # Signage user guide
 
-Manual for **super admins**, **infrastructure** staff, and **operators** who configure wall displays through **admin.php**. Give this document to anyone who needs to understand what each board does, where data comes from, and how to configure rotation and sharing.
+Manual for **super admins** and **operators** who configure wall displays through **admin.php**. Give this document to anyone who needs to understand what each board does, where data comes from, and how to configure rotation and sharing.
 
 **Related deep dives:** [boards.md](boards.md) (every board) · [admin-and-security.md](admin-and-security.md) (SSO, hardening) · [rotation-and-deployment.md](rotation-and-deployment.md) (playlists, kiosk) · [tdx.md](tdx.md) · [grafana.md](grafana.md) · [powerbi.md](powerbi.md)
 
@@ -11,14 +11,13 @@ Manual for **super admins**, **infrastructure** staff, and **operators** who con
 1. [How signage works](#1-how-signage-works)
 2. [Roles — who can do what](#2-roles--who-can-do-what)
 3. [Super admin guide](#3-super-admin-guide)
-4. [Infrastructure guide](#4-infrastructure-guide)
-5. [Operator guide](#5-operator-guide)
-6. [Admin sidebar reference](#6-admin-sidebar-reference)
-7. [Rotation playbook](#7-rotation-playbook)
-8. [Content ownership & sharing](#8-content-ownership--sharing)
-9. [Integration setup index](#9-integration-setup-index)
-10. [Troubleshooting & diagnostics](#10-troubleshooting--diagnostics)
-11. [Glossary](#11-glossary)
+4. [Operator guide](#4-operator-guide)
+5. [Admin sidebar reference](#5-admin-sidebar-reference)
+6. [Rotation playbook](#6-rotation-playbook)
+7. [Content ownership & sharing](#7-content-ownership--sharing)
+8. [Integration setup index](#8-integration-setup-index)
+9. [Troubleshooting & diagnostics](#9-troubleshooting--diagnostics)
+10. [Glossary](#10-glossary)
 
 ---
 
@@ -68,28 +67,24 @@ Secrets (API tokens, passwords, BEID keys) **never** reach the display browser.
 
 ## 2. Roles — who can do what
 
-| Capability | Super admin | Infrastructure | Operator |
-|------------|:-----------:|:--------------:|:--------:|
-| All admin sidebar boards | ✓ | Partial | Partial |
-| **Users**, **Tools**, **Security**, **Audit** | ✓ | — | — |
-| Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy admin | ✓ | ✓ | — |
-| Zabbix, TeamDynamix, Grafana, Splunk, Power BI, slides, RSS, … | ✓ | ✓* | ✓* |
-| **Rotation** for any display | ✓ | Assigned only | Assigned only |
-| Set global API secrets (Board settings) | ✓ | —** | —** |
-| Create users & assign displays | ✓ | — | — |
-| Emergency override (all displays) | ✓ | — | — |
-| **Share all with Operators** on multi-page boards | ✓ | — | — |
+| Capability | Super admin | Operator |
+|------------|:-----------:|:--------:|
+| All admin sidebar boards | ✓ | Partial |
+| **Users**, **Tools**, **Security**, **Audit** | ✓ | — |
+| Homelab, UniFi, SignalTrace, Kuma, Tailscale, ntfy admin | ✓ | — |
+| Zabbix, TeamDynamix, Grafana, Splunk, Power BI, slides, RSS, … | ✓ | ✓* |
+| **Rotation** for any display | ✓ | Assigned only |
+| Set global API secrets (Board settings) | ✓ | —** |
+| Create users & assign displays | ✓ | — |
+| Emergency override (all displays) | ✓ | — |
+| **Share all with Operators** on multi-page boards | ✓ | — |
 
-\* Same as operators unless a board is infrastructure-only (Kuma admin config) or content is not shared with them.  
-\** Infrastructure users do not get **Board settings** with API secrets unless the board allows operator settings (slides/rotator paths only).
+\* Operators see boards they own or that are shared with them. Homelab/Kuma/Tailscale/ntfy admin is super-admin only; Kuma walls can still appear in rotation when shared.  
+\** Operators may edit paths/TTL on slides and rotator only — not API tokens.
 
 ### What “operator” means in practice
 
 Operators **own** content for their assigned display(s): slides, rotation playlist, RSS feeds, announcement pages, Zabbix/TDX pages they create, etc. They cannot see another operator’s display in the **Users** picker unless they are a **shared editor** on that display.
-
-### What “infrastructure” adds
-
-Same as operator, plus admin access to **Homelab**, **UniFi**, **SignalTrace**, **Uptime Kuma**, **Tailscale**, and **ntfy** — including **Board settings** with API keys for those systems. Kuma pages can be bulk-shared with the Infrastructure role.
 
 ---
 
@@ -102,7 +97,7 @@ Same as operator, plus admin access to **Homelab**, **UniFi**, **SignalTrace**, 
 3. **Security** — idle timeout, **Allow private URL fetches** if you use LAN Zabbix/TDX/homelab URLs.
 4. **Weather** — set OpenWeatherMap key and default lat/lon (used by many boards).
 5. **Rotation** — create display keys (`main`, `lobby`, …); build playlists.
-6. **Users** — create operator/infrastructure accounts; assign displays.
+6. **Users** — create operator accounts; assign displays.
 7. **Integrations** — configure API credentials per board (Zabbix, TDX, Grafana, …).
 8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)). If kiosks connect through a reverse proxy, set **Security → Trusted reverse proxies** ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)).
 9. **SSO** (optional) — [admin-and-security.md → SSO](admin-and-security.md#sso-setup-entra-id--authentik).
@@ -139,42 +134,7 @@ Operators configure **page tabs** and **content rows** once secrets exist — no
 
 ---
 
-## 4. Infrastructure guide
-
-You have operator capabilities **plus** monitoring infrastructure boards.
-
-### Your admin sidebar extras
-
-Under **Monitoring** (in addition to public feeds and shared Zabbix/TDX pages):
-
-| Board | Purpose | Typical config |
-|-------|---------|----------------|
-| **Homelab ops** | Proxmox + AdGuard summary | Proxmox URL/token, AdGuard URL |
-| **UniFi Network** | UDM/site health | Local admin cookie or API key |
-| **SignalTrace** | Export-driven network trace wall | Export token |
-| **Uptime Kuma** | Monitor grid | Kuma URL, status page slug per page, optional API key |
-| **Tailscale** | Tailnet device status | Tailscale API key |
-| **ntfy alerts** | Webhook/poll alert wall | Server URL, topic, webhook token |
-
-These boards are **omitted from operator rotation quick-add** and hero-strip pickers unless operators are given shared pages on Zabbix/TDX/etc.
-
-### Kuma multi-page workflow
-
-1. Super admin or you set **KUMA_URL** in **Board settings**.
-2. **+ Add page** per status page slug (or tag filter with API key).
-3. **Share all with Infrastructure** if multiple infra staff need the same pages.
-4. Quick-add **`kuma.php?d=<key>`** under **Monitoring** in Rotation.
-
-### When to escalate to super admin
-
-- New SSO user or display assignment conflict
-- Azure / Grafana / Power BI tenant-wide setup
-- Security policy changes (private URL fetches, audit)
-- Emergency override
-
----
-
-## 5. Operator guide
+## 4. Operator guide
 
 ### Your typical workflow
 
@@ -194,7 +154,7 @@ These boards are **omitted from operator rotation quick-add** and hero-strip pic
 **Monitoring:** Zabbix pages, **TeamDynamix pages** (when shared or self-created)  
 **Setup:** Rotation (your displays), Account, Status  
 
-You **cannot** open: Users, Tools, Security, Homelab, UniFi, Kuma admin, Tailscale admin, ntfy admin (unless your org grants Infrastructure role).
+You **cannot** open: Users, Tools, Security, Homelab, UniFi, Kuma admin, Tailscale admin, ntfy admin.
 
 ### Creating your own monitoring pages
 
@@ -214,7 +174,7 @@ Most boards have **Preview ↗** on each row or page tab — opens the wall with
 
 ---
 
-## 6. Admin sidebar reference
+## 5. Admin sidebar reference
 
 Grouped as in admin. **Rotation URL** = what you add to a playlist (parameterized boards need `?d=` / `?feed=` / etc.).
 
@@ -260,11 +220,11 @@ Per-display **location**, **sports teams**, and **glance columns** override glob
 
 | Admin board | Rotation URL | Keys / access |
 |-------------|--------------|---------------|
-| **Homelab ops** | `homelab.php` | Infra + super |
-| **UniFi Network** | `unifi.php` | Infra + super |
-| **Uptime Kuma** | `kuma.php?d=KEY` | Infra + super; multi-page |
-| **Tailscale** | `tailscale.php` | Infra + super |
-| **ntfy alerts** | `ntfy.php` | Infra + super |
+| **Homelab ops** | `homelab.php` | Super admin only |
+| **UniFi Network** | `unifi.php` | Super admin only |
+| **Uptime Kuma** | `kuma.php?d=KEY` | Super admin only; multi-page |
+| **Tailscale** | `tailscale.php` | Super admin only |
+| **ntfy alerts** | `ntfy.php` | Super admin only |
 | **Cloud outages** | `outages.php` | Optional M365 Graph |
 | **Internet infrastructure** | `internet.php` | IODA + `dig` |
 | **Internet attacks** | `attacks.php` | DShield — no key |
@@ -281,7 +241,7 @@ Per-display **location**, **sports teams**, and **glance columns** override glob
 | **TLS cert expiry** | `certexp.php` | Host list |
 | **Ransomware tracker** | `ransomware.php` | — |
 | **Phishing & brand** | `phish.php` | URLhaus key optional |
-| **SignalTrace** | `signaltrace.php` | Infra + super |
+| **SignalTrace** | `signaltrace.php` | Super admin only |
 | **Zabbix Monitoring** | `zabbix.php?d=KEY` | Super sets token; multi-page |
 | **TeamDynamix** | `tdx.php?d=KEY` | Super sets BEID/key; multi-page |
 
@@ -308,7 +268,7 @@ Full per-board setup: [boards.md](boards.md).
 
 ---
 
-## 7. Rotation playbook
+## 6. Rotation playbook
 
 Each display’s playlist is stored in **`config/rotation/pages/<screen>.json`**. Saving **Rotation** updates that file (plus display options in `settings.json`). After upgrading the server, open **Rotation** once or load each kiosk URL so legacy `rotation.PAGES_*` keys migrate out of `settings.json`.
 
@@ -358,7 +318,7 @@ Details: [rotation-and-deployment.md](rotation-and-deployment.md).
 
 ---
 
-## 8. Content ownership & sharing
+## 7. Content ownership & sharing
 
 On most content boards, each row or page tab has **Access**:
 
@@ -366,12 +326,11 @@ On most content boards, each row or page tab has **Access**:
 |---------|---------|
 | **Owner** | Primary editor; created automatically when operators add rows |
 | **Shared with users** | Named accounts |
-| **Shared with roles** | All **Operators** (or **Infrastructure** on Kuma share) |
+| **Shared with roles** | All **Operators** |
 
 **Bulk actions:**
 
-- **Zabbix / Splunk / TeamDynamix** — **Share all with Operators** (super admin)
-- **Uptime Kuma** — **Share all with Infrastructure**
+- **Zabbix / Splunk / TeamDynamix / Uptime Kuma** — **Share all with Operators** (super admin)
 - **Slides** — **All operators** on selected slides
 
 Unowned rows/pages are **super-admin only** on the wall and in quick-add.
@@ -380,7 +339,7 @@ Details: [admin-and-security.md → Content ownership](admin-and-security.md#con
 
 ---
 
-## 9. Integration setup index
+## 8. Integration setup index
 
 Use these guides for credential setup and troubleshooting — not duplicated here in full.
 
@@ -392,11 +351,11 @@ Use these guides for credential setup and troubleshooting — not duplicated her
 | **Grafana Cloud** | Dashboard rows | [grafana-cloud.md](grafana-cloud.md) |
 | **Power BI (private embed)** | Report rows | [powerbi.md](powerbi.md) |
 | **Splunk panels** | Multi-page | [boards.md → Splunk](boards.md) |
-| **Uptime Kuma** | Infra only (admin) | [boards.md → Kuma](boards.md) |
+| **Uptime Kuma** | Super admin configures; share pages with operators | [boards.md → Kuma](boards.md) |
 
 ---
 
-## 10. Troubleshooting & diagnostics
+## 9. Troubleshooting & diagnostics
 
 ### On the wall
 
@@ -414,7 +373,7 @@ Use these guides for credential setup and troubleshooting — not duplicated her
 | Cannot save rotation | Another save on the **same** display playlist — wait and retry (different displays use separate files) |
 | **veddersg / display playlist empty after upgrade** | Check `config/rotation/pages/<screen>.json.bak` (created on each save after upgrade), or run `php scripts/recover-rotation-pages.php --screen=veddersg --force` |
 | Board missing from sidebar | Your role lacks access |
-| Quick-add missing a board | Not shared with you, **Off wall**, or infra-only |
+| Quick-add missing a board | Not shared with you, **Off wall**, or super-admin-only board |
 | Preview works, rotation doesn’t | Wrong `?screen=` or row URL typo |
 
 ### CLI (on server)
@@ -440,7 +399,7 @@ If Zabbix, TDX, Grafana, homelab, or UniFi use an internal IP/hostname, enable *
 
 ---
 
-## 11. Glossary
+## 10. Glossary
 
 | Term | Definition |
 |------|------------|

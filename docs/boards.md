@@ -611,7 +611,7 @@ TeamDynamix Web in an iframe hits SSO. This board uses **`POST /api/{appId}/tick
 | Include closed / cancelled | Expand status filter when status IDs are blank |
 | Max tickets | 1–50 search results |
 | Off wall | Skip on kiosk and rotation quick-add |
-| Access | Owner; share with Operators or Infrastructure |
+| Access | Owner; share with Operators |
 
 **Wall layout:** summary pills (open, overdue, SLA, by priority), ticket list with ID, priority, status, group, age. Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
 
