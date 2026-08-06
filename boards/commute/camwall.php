@@ -10,10 +10,13 @@
 
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/emergency_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/camwall_lib.php';
 
-define('TITLE', cfg('camwall.TITLE', 'MDOT Cams'));
-define('SUBTITLE', cfg('camwall.SUBTITLE', 'Allendale ↔ Grand Rapids · I-96 · I-196 · US-131'));
+$screen = signage_request_screen();
+$labels = camwall_screen_labels($screen);
+define('TITLE', $labels['title']);
+define('SUBTITLE', $labels['subtitle']);
 define('ATTRIBUTION', cfg('camwall.ATTRIBUTION', 'MDOT Mi Drive'));
 define('SHOW_OVERLAY', cfg('camwall.SHOW_OVERLAY', true));
 define('REFRESH_SEC', max(15, (int)cfg('camwall.REFRESH_SEC', 45)));
@@ -25,13 +28,18 @@ $embedded = isset($_GET['noticker']);
 $boardH = signage_frame_height();
 $tickerOnPage = !$embedded && (signage_ticker_enabled() || emergency_ticker_forces_display());
 $grid = camwall_grid_size();
-$cameras = camwall_active_cameras();
+$tileRows = camwall_tiles_for_screen($screen);
+$cameras = array_values(array_filter($tileRows, static fn($t) => is_array($t)));
 $slots = $grid['slots'];
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 $tiles = [];
-foreach ($cameras as $cam) {
+foreach ($tileRows as $cam) {
+    if (!is_array($cam)) {
+        $tiles[] = ['key' => '', 'name' => '', 'route' => '', 'src' => '', 'focus' => 'center center'];
+        continue;
+    }
     $tiles[] = [
         'key' => $cam['key'],
         'name' => $cam['name'],

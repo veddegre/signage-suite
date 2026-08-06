@@ -204,7 +204,7 @@ Grouped as in admin. **Rotation URL** = what you add to a playlist (parameterize
 | **Traffic map** | `traffic.php` | `traffic.php` | TomTom |
 | **MDOT Cams** | `camwall.php` | `camwall.php` | MDOT camera grid |
 
-Per-display **location**, **sports teams**, and **glance columns** override globals under **Rotation → Kiosk settings**.
+Per-display **location**, **sports teams**, **MDOT cam layout**, and **glance columns** override globals under **Rotation → Kiosk settings**.
 
 ### Daily
 

@@ -970,8 +970,8 @@ function admin_schema(): array
             ['key' => 'ROWS', 'label' => 'Grid rows', 'type' => 'number', 'default' => 4,
              'help' => 'Default 4 — cameras beyond cols×rows are hidden'],
             ['key' => 'CAMS', 'label' => 'Cameras', 'type' => 'rows', 'keyed' => true,
-             'help' => 'Built-in corridor feeds are always available; rows here override URLs/names or add cameras. '
-                     . 'Set Off to drop a built-in slot from the wall.',
+             'help' => 'Built-in corridor + Grand Rapids metro preset; rows here override URLs/names or add cameras. '
+                     . 'Per-display slot picks under Rotation → Kiosk settings. Set Off to drop a built-in slot.',
              'columns' => [
                  ['key' => '_key', 'label' => 'Key', 'help' => 'matches built-in keys like i96-24th'],
                  ['key' => 'name', 'label' => 'Label'],

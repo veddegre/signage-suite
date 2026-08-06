@@ -2733,6 +2733,7 @@ function admin_rotation_kiosk_settings_panel(
 ): void {
     require_once __DIR__ . '/lib/signage_theme_lib.php';
     require_once __DIR__ . '/lib/rotation_calendar_lib.php';
+    require_once __DIR__ . '/lib/camwall_lib.php';
     $screenSettings = rotation_screen_settings($screenKey);
     $scrValOpts = current_val($rawConf, $board, 'SCREENS');
     $scrRaw = is_array($scrValOpts[$screenKey] ?? null) ? $scrValOpts[$screenKey] : [];
@@ -2756,6 +2757,14 @@ function admin_rotation_kiosk_settings_panel(
     }
     $sportsTitle = trim((string)($scrRaw['sports_title'] ?? ''));
     $sportsSubtitle = trim((string)($scrRaw['sports_subtitle'] ?? ''));
+    $camwallGrid = camwall_grid_size();
+    $camwallSlotKeys = camwall_screen_slot_keys($screenKey);
+    while (count($camwallSlotKeys) < (int)$camwallGrid['slots']) {
+        $camwallSlotKeys[] = '';
+    }
+    $camwallCatalogGroups = camwall_catalog_groups();
+    $camwallTitle = trim((string)($scrRaw['camwall_title'] ?? ''));
+    $camwallSubtitle = trim((string)($scrRaw['camwall_subtitle'] ?? ''));
     $tickerNewsFeed = trim((string)($scrRaw['ticker_news_feed'] ?? ''));
     $glanceH1Off = !empty($scrRaw['glance_h1_off']);
     $glanceH1Title = trim((string)($scrRaw['glance_h1_title'] ?? ''));
@@ -2792,6 +2801,9 @@ function admin_rotation_kiosk_settings_panel(
     if (array_filter($sportsTeamKeys)) {
         $hints[] = 'Custom sports teams';
     }
+    if (camwall_screen_has_layout($screenKey)) {
+        $hints[] = 'Custom MDOT cam layout';
+    }
     if ($screenCalendarFeedKeys !== []) {
         $hints[] = 'Custom calendar feeds';
     }
@@ -2820,7 +2832,7 @@ function admin_rotation_kiosk_settings_panel(
     <?php elseif ($hintSummary !== ''): ?>
     <p class="help rotation-kiosk-summary"><?= h($hintSummary) ?></p>
     <?php endif; ?>
-    <div class="help" style="margin-bottom:10px">Applies to the whole TV running <code>board.php?screen=<?= h($screenKey) ?></code> — not to individual playlist pages. Controls how pages rotate, the persistent bottom bar, optional hero status bar, and per-display weather/sports overrides.</div>
+    <div class="help" style="margin-bottom:10px">Applies to the whole TV running <code>board.php?screen=<?= h($screenKey) ?></code> — not to individual playlist pages. Controls how pages rotate, the persistent bottom bar, optional hero status bar, and per-display weather/sports/MDOT cam overrides.</div>
       <div class="field-grid rotation-options-grid">
         <div class="field span-2 rotation-section" style="border-top:0;padding-top:0;margin-top:0">
           <span class="mini">Color scheme</span>
@@ -3018,6 +3030,41 @@ function admin_rotation_kiosk_settings_panel(
             <label class="mini">Board subtitle (optional)</label>
             <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_subtitle]"
                    value="<?= h($sportsSubtitle) ?>" placeholder="Auto from team names when blank">
+          </div>
+        </div>
+        <div class="field span-2 rotation-section">
+          <span class="mini">MDOT camera wall override</span>
+          <div class="help" style="margin:6px 0 10px">Pick which cameras appear on <code>camwall.php</code> for this display and where each sits on the <?= (int)$camwallGrid['cols'] ?>×<?= (int)$camwallGrid['rows'] ?> grid (slot 1 = top-left). All choices are — site default — to use the global wall under <strong>MDOT Cams</strong>.</div>
+          <div class="rotation-subgrid camwall-subgrid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+            <?php foreach ($camwallSlotKeys as $ci => $picked):
+              if ($ci >= (int)$camwallGrid['slots']) {
+                  break;
+              }
+            ?>
+            <div class="field">
+              <label class="mini"><?= h(camwall_slot_label((int)$ci, (int)$camwallGrid['cols'])) ?></label>
+              <select name="SCREEN_OPTS[<?= h($screenKey) ?>][camwall_slots][<?= (int)$ci ?>]">
+                <option value="">— site default —</option>
+                <?php foreach ($camwallCatalogGroups as $groupLabel => $groupCams): ?>
+                <optgroup label="<?= h($groupLabel) ?>">
+                  <?php foreach ($groupCams as $opt): ?>
+                  <option value="<?= h($opt['key']) ?>" <?= $picked === $opt['key'] ? 'selected' : '' ?>><?= h($opt['label']) ?></option>
+                  <?php endforeach; ?>
+                </optgroup>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label class="mini">Board title (optional)</label>
+            <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][camwall_title]"
+                   value="<?= h($camwallTitle) ?>" placeholder="<?= h((string)cfg('camwall.TITLE', 'MDOT Cams')) ?>">
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label class="mini">Board subtitle (optional)</label>
+            <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][camwall_subtitle]"
+                   value="<?= h($camwallSubtitle) ?>" placeholder="<?= h((string)cfg('camwall.SUBTITLE', '')) ?>">
           </div>
         </div>
         <div class="field span-2 rotation-section">

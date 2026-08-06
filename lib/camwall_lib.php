@@ -5,12 +5,13 @@
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/webcam_lib.php';
+require_once __DIR__ . '/camwall_metro_data.php';
 
 const CAMWALL_DEFAULT_COLS = 3;
 const CAMWALL_DEFAULT_ROWS = 4;
 
 /** @return array<string,array<string,mixed>> Built-in Allendale ↔ Grand Rapids corridor set (3×4). */
-function camwall_default_cameras(): array
+function camwall_corridor_cameras(): array
 {
     return [
         'i96-24th' => [
@@ -87,6 +88,179 @@ function camwall_default_cameras(): array
             'sort' => 12,
         ],
     ];
+}
+
+/** Corridor preset plus Grand Rapids metro catalog (metro entries use sort 100+). */
+function camwall_default_cameras(): array
+{
+    return array_merge(camwall_corridor_cameras(), camwall_metro_cameras());
+}
+
+function camwall_catalog_label(string $key, array $entry): string
+{
+    $name = trim((string)($entry['name'] ?? $key));
+    $route = trim((string)($entry['route'] ?? ''));
+    if ($route !== '') {
+        return $route . ' · ' . $name;
+    }
+
+    return $name;
+}
+
+/** @return array<string,array<string,mixed>> Full camera catalog for admin pickers. */
+function camwall_catalog(): array
+{
+    return camwall_registry();
+}
+
+/**
+ * Cameras grouped by route badge for admin optgroups.
+ *
+ * @return array<string,list<array{key:string,label:string}>>
+ */
+function camwall_catalog_groups(): array
+{
+    $groups = [];
+    foreach (camwall_catalog() as $key => $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $route = trim((string)($entry['route'] ?? ''));
+        if ($route === '') {
+            $route = 'Other';
+        }
+        $groups[$route][] = [
+            'key' => (string)$key,
+            'label' => camwall_catalog_label((string)$key, $entry),
+        ];
+    }
+    ksort($groups);
+    foreach ($groups as $route => $items) {
+        usort($items, static fn(array $a, array $b): int => strcmp($a['label'], $b['label']));
+        $groups[$route] = $items;
+    }
+
+    return $groups;
+}
+
+function camwall_slot_label(int $index, int $cols): string
+{
+    $cols = max(1, $cols);
+    $row = intdiv($index, $cols) + 1;
+    $col = ($index % $cols) + 1;
+
+    return 'Row ' . $row . ', col ' . $col;
+}
+
+/** @return list<string> Per-slot camera keys; empty string = blank tile. */
+function camwall_screen_slot_keys(string $screen): array
+{
+    require_once __DIR__ . '/screen_scope_lib.php';
+    $scr = rotation_screen_raw_entry($screen);
+    if (!is_array($scr) || !isset($scr['camwall_slots']) || !is_array($scr['camwall_slots'])) {
+        return [];
+    }
+    $catalog = camwall_catalog();
+    $slots = camwall_grid_size()['slots'];
+    $out = [];
+    foreach ($scr['camwall_slots'] as $raw) {
+        if (count($out) >= $slots) {
+            break;
+        }
+        $key = camwall_normalize_key((string)$raw);
+        $out[] = ($key !== '' && isset($catalog[$key])) ? $key : '';
+    }
+
+    return $out;
+}
+
+function camwall_screen_has_layout(string $screen): bool
+{
+    foreach (camwall_screen_slot_keys($screen) as $key) {
+        if ($key !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @return array{title:string,subtitle:string}
+ */
+function camwall_screen_labels(string $screen): array
+{
+    require_once __DIR__ . '/screen_scope_lib.php';
+    $scr = rotation_screen_raw_entry($screen);
+    $title = is_array($scr) ? trim((string)($scr['camwall_title'] ?? '')) : '';
+    if ($title === '') {
+        $title = (string)cfg('camwall.TITLE', 'MDOT Cams');
+    }
+    $subtitle = is_array($scr) ? trim((string)($scr['camwall_subtitle'] ?? '')) : '';
+    if ($subtitle === '') {
+        $subtitle = (string)cfg('camwall.SUBTITLE', 'Allendale ↔ Grand Rapids · I-96 · I-196 · US-131');
+    }
+
+    return ['title' => $title, 'subtitle' => $subtitle];
+}
+
+/**
+ * Resolved grid tiles for one display — preserves empty slots when a per-display layout is set.
+ *
+ * @return list<array{key:string,name:string,route:string,url:string,sort:int,focus:string}|null>
+ */
+function camwall_tiles_for_screen(string $screen): array
+{
+    $grid = camwall_grid_size();
+    $slots = (int)$grid['slots'];
+    $registry = camwall_catalog();
+
+    if (!camwall_screen_has_layout($screen)) {
+        $rows = camwall_active_cameras();
+        $tiles = [];
+        foreach ($rows as $row) {
+            $tiles[] = $row;
+        }
+        while (count($tiles) < $slots) {
+            $tiles[] = null;
+        }
+
+        return array_slice($tiles, 0, $slots);
+    }
+
+    $layout = camwall_screen_slot_keys($screen);
+    $tiles = [];
+    for ($i = 0; $i < $slots; $i++) {
+        $key = camwall_normalize_key((string)($layout[$i] ?? ''));
+        if ($key === '' || !isset($registry[$key]) || !is_array($registry[$key])) {
+            $tiles[] = null;
+            continue;
+        }
+        $entry = $registry[$key];
+        $tiles[] = [
+            'key' => $key,
+            'name' => (string)($entry['name'] ?? $key),
+            'route' => (string)($entry['route'] ?? ''),
+            'url' => (string)($entry['url'] ?? ''),
+            'sort' => (int)($entry['sort'] ?? 0),
+            'focus' => camwall_normalize_focus((string)($entry['focus'] ?? '')),
+        ];
+    }
+
+    return $tiles;
+}
+
+/** @return list<array{key:string,name:string,route:string,url:string,sort:int,focus:string}> */
+function camwall_active_cameras_for_screen(string $screen): array
+{
+    $out = [];
+    foreach (camwall_tiles_for_screen($screen) as $tile) {
+        if (is_array($tile)) {
+            $out[] = $tile;
+        }
+    }
+
+    return $out;
 }
 
 function camwall_normalize_key(string $key): string

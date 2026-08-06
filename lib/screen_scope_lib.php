@@ -1,6 +1,6 @@
 <?php
 /**
- * Per-display overrides — weather location and sports teams for rotation screens.
+ * Per-display overrides — weather location, sports teams, and MDOT cam wall for rotation screens.
  */
 
 require_once __DIR__ . '/rotation_lib.php';
@@ -124,6 +124,44 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
         unset($entry['sports_teams']);
     } else {
         $entry['sports_teams'] = $keys;
+    }
+
+    require_once __DIR__ . '/camwall_lib.php';
+    $camSlotsPosted = $row['camwall_slots'] ?? null;
+    if (is_array($camSlotsPosted)) {
+        $catalog = camwall_catalog();
+        $maxSlots = camwall_grid_size()['slots'];
+        $slotKeys = [];
+        $any = false;
+        foreach ($camSlotsPosted as $raw) {
+            if (count($slotKeys) >= $maxSlots) {
+                break;
+            }
+            $key = camwall_normalize_key((string)$raw);
+            if ($key !== '' && isset($catalog[$key])) {
+                $slotKeys[] = $key;
+                $any = true;
+            } else {
+                $slotKeys[] = '';
+            }
+        }
+        if ($any) {
+            $entry['camwall_slots'] = $slotKeys;
+        } else {
+            unset($entry['camwall_slots']);
+        }
+    }
+    $camTitle = trim((string)($row['camwall_title'] ?? ''));
+    if ($camTitle !== '') {
+        $entry['camwall_title'] = $camTitle;
+    } else {
+        unset($entry['camwall_title']);
+    }
+    $camSub = trim((string)($row['camwall_subtitle'] ?? ''));
+    if ($camSub !== '') {
+        $entry['camwall_subtitle'] = $camSub;
+    } else {
+        unset($entry['camwall_subtitle']);
     }
 
     require_once __DIR__ . '/rotation_calendar_lib.php';

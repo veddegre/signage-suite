@@ -241,9 +241,9 @@ webcam.php?cam=grandhaven
 
 Admin → **Webcam** → **Cameras** — override built-in names/URLs or add rows with a unique **Key** (`?cam=yourkey`). Each camera appears in **Rotation → Add boards** quick-add (e.g. **Webcam — GR Public Museum**). Set **Off** on a row to hide it from quick-add. Still-image cameras refresh on a timer; iframe streams use an hourly reload backstop. **Rotation auto-skips** a camera after **24 hours** of failed probe checks and restores it when the feed responds again. Do not use plain `webcam.php` without `?cam=` — pick a keyed slot instead.
 
-**MDOT cams** (`camwall.php`) — A **3×4 grid** of live still-image traffic cameras on one rotation slot (unlike `webcam.php`, which is one full-screen feed per playlist line). Ships with a built-in **Allendale ↔ Grand Rapids** corridor preset on **I-96**, **I-196**, and **US-131** (MDOT [Mi Drive](https://mdotjboss.state.mi.us/MiDrive/map) snapshot URLs, proxied server-side via `camwall_img.php` so the kiosk never hits MDOT directly). Labels sit at the top of each tile so the weather/news ticker does not cover them.
+**MDOT cams** (`camwall.php`) — A **3×4 grid** of live still-image traffic cameras on one rotation slot (unlike `webcam.php`, which is one full-screen feed per playlist line). Ships with a built-in **Allendale ↔ Grand Rapids** corridor preset on **I-96**, **I-196**, and **US-131**, plus a **Grand Rapids metro catalog** (~100 MDOT feeds) for per-display picks. Snapshot URLs are proxied server-side via `camwall_img.php` so the kiosk never hits MDOT directly. Labels sit at the top of each tile so the weather/news ticker does not cover them.
 
-**Setup:** no API key — add `camwall.php` to rotation (~90–120s dwell pairs well with **`traffic.php`** TomTom flow map). Admin → **MDOT Cams** → set title/subtitle, grid size (**Cols** × **Rows**, default 3×4 = 12 tiles), and refresh interval (default 45s).
+**Setup:** no API key — add `camwall.php` to rotation (~90–120s dwell pairs well with **`traffic.php`** TomTom flow map). Admin → **MDOT Cams** → set title/subtitle, grid size (**Cols** × **Rows**, default 3×4 = 12 tiles), and refresh interval (default 45s). **Rotation → Kiosk settings** → **MDOT camera wall override** — pick a camera for each grid slot on that display (slot 1 = top-left); leave all as **site default** to use the global wall order.
 
 **Customize the built-in wall** — Under **Cameras**, each row overrides or extends the preset:
 
@@ -279,7 +279,7 @@ MDOT feeds are refreshed stills, not video; thumbs are modest resolution (~720×
 
 **Meal calendar** (`meals.php`) — Rolling **7-day meal plan** with today highlighted. Edit weekly defaults and **date overrides** (takeout night, holidays) under **Meal calendar** in admin — no external calendar feed. Pairs with the **Dinner menu** slide creator template and the built-in **Kitchen weeknight** rotation preset.
 
-**Per-display overrides** — Under **Rotation → Kiosk settings** for each display: transition timings, blank hours, **location** (weather, air, UV, photo, traffic map, **NWS alert ticker**), **sports teams** / title / subtitle, **glance headline columns** (left page URL / RSS fallback, right RSS feed), **hero strip** slots, and **news ticker fallback** (above). Leave location blank to use global **Weather** coordinates.
+**Per-display overrides** — Under **Rotation → Kiosk settings** for each display: transition timings, blank hours, **location** (weather, air, UV, photo, traffic map, **NWS alert ticker**), **sports teams** / title / subtitle, **MDOT cam wall** slot layout, **glance headline columns** (left page URL / RSS fallback, right RSS feed), **hero strip** slots, and **news ticker fallback** (above). Leave location blank to use global **Weather** coordinates.
 
 **Shared display editing** — Super admins assign **shared editors** on each display (Rotation). Shared editors manage the **full screen**: playlist, display options, hero strip, and deploy targets — including the primary owner’s slides and quick-add boards.
 
