@@ -209,7 +209,7 @@ function splunkdash_default_crop_top_px(): int
         return $configured;
     }
     if ((bool)cfg('splunkdash.HIDE_CHROME', true)) {
-        return 48;
+        return 56;
     }
 
     return 0;
@@ -218,7 +218,19 @@ function splunkdash_default_crop_top_px(): int
 /** Nudge iframe down so Dashboard Studio panel titles are not clipped after crop. */
 function splunkdash_embed_shift_down_px(): int
 {
-    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 28)));
+    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 22)));
+}
+
+/** Clip Splunk footer / bottom chrome and hide iframe scrollbars. */
+function splunkdash_crop_bottom_px(): int
+{
+    return max(0, min(120, (int)cfg('splunkdash.CROP_BOTTOM', 36)));
+}
+
+/** Extra width clip to push iframe scrollbars off-screen. */
+function splunkdash_scrollbar_gutter_px(): int
+{
+    return max(0, min(120, (int)cfg('splunkdash.SCROLLBAR_GUTTER', 52)));
 }
 
 /** @param array<string,mixed> $dash */

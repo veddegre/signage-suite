@@ -3588,8 +3588,9 @@ function admin_field(array $f, $val, string $board): void
   .video-card-title, .rotation-card-title { flex:1; min-width:0; }
   .video-card-title strong, .rotation-card-title strong { display:block; font-size:15px; color:var(--snow); margin-bottom:4px; }
   .video-card-title code, .rotation-card-title code { font-size:12px; color:var(--beacon); }
-  .video-card-grid, .rotation-card-grid { display:grid; grid-template-columns:120px 1fr 1fr; gap:12px 14px; }
+  .video-card-grid, .rotation-card-grid { display:grid; grid-template-columns:1fr; gap:14px; }
   .rotation-card-grid.cols-4 { grid-template-columns:1fr 100px 80px 80px; }
+  .rotation-card-grid .rotation-weight-field { max-width:140px; }
   .video-card-grid label.mini, .rotation-card-grid label.mini { display:block; font-size:11px; letter-spacing:.8px; text-transform:uppercase;
                                   color:var(--mist); margin-bottom:4px; }
   .video-card-grid input, .rotation-card-grid input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
@@ -3597,11 +3598,23 @@ function admin_field(array $f, $val, string $board): void
   .rotation-plays-now-list { display:flex; flex-direction:column; gap:6px; }
   .slide-plays-row { display:flex; gap:10px; align-items:baseline; font-size:13px; }
   .slide-bulk-time-panel[hidden] { display:none !important; }
-  .rotation-window-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px; }
-  .rotation-window-row input { width:4.5em; flex:0 0 auto; }
-  .rotation-window-row input.rotation-window-weight { width:3em; }
-  .rotation-window-row .rowdel { flex:0 0 auto; }
+  .rotation-window-row { display:grid; grid-template-columns:minmax(88px, 1fr) auto minmax(88px, 1fr) minmax(72px, 96px) auto;
+                         gap:8px 10px; align-items:end; margin-bottom:8px; padding:10px 12px;
+                         background:var(--lake-night); border:1px solid var(--line); border-radius:8px; }
+  .rotation-window-field { display:flex; flex-direction:column; min-width:0; }
+  .rotation-window-field label.mini { margin-bottom:4px; }
+  .rotation-window-field input { width:100%; min-width:0; padding:8px 10px; font-size:14px;
+                                 background:var(--harbor); border:1px solid var(--line); border-radius:8px; color:var(--snow); }
+  .rotation-window-sep { align-self:end; padding-bottom:10px; color:var(--mist); font-size:18px; line-height:1; }
+  .rotation-window-row .rowdel { align-self:end; margin-bottom:4px; flex:0 0 auto; }
   .rotation-window-add { margin-top:4px; padding:4px 10px; font-size:12px; }
+  .rotation-schedule-preview { padding:10px 12px; border-radius:8px; font-size:13px; line-height:1.5; color:var(--mist);
+                                background:rgba(255,179,71,.08); border:1px solid color-mix(in srgb, var(--beacon) 35%, transparent); }
+  .rotation-schedule-preview strong { color:var(--snow); font-weight:600; }
+  .rotation-schedule-preview.is-empty { opacity:.55; font-style:italic; }
+  .rotation-card-badges { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .rotation-card-badges .pill { font-size:11px; padding:2px 8px; }
+  .rotation-card-badges[hidden] { display:none !important; }
   .rotation-calendar-override { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:12px; background:var(--lake-night); }
   .rotation-calendar-override-head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .rotation-calendar-page-row input { width:100%; min-width:0; }
@@ -5283,6 +5296,17 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <div class="rotation-card-title">
                   <strong data-rotation-label><?= h(rotation_page_label($purl)) ?></strong>
                   <code data-rotation-url-display><?= h($purl !== '' ? $purl : 'board URL') ?></code>
+                  <?php
+                  $scheduleBadges = rotation_page_schedule_badges($prow);
+                  $hasScheduleConfig = rotation_page_windows_label($prow) !== ''
+                      || rotation_page_base_weight($prow) > 1
+                      || rotation_page_weekdays($prow) !== null;
+                  ?>
+                  <div class="rotation-card-badges" data-rotation-badges<?= $hasScheduleConfig ? '' : ' hidden' ?>>
+                    <?php foreach ($scheduleBadges as $badge): ?>
+                    <span class="pill"><?= h($badge) ?></span>
+                    <?php endforeach; ?>
+                  </div>
                 </div>
                 <div class="rotation-card-head-meta">
                   <label class="check" style="margin:0"><input type="checkbox" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][off]" <?= !empty($prow['off']) ? 'checked' : '' ?>> Skip</label>
@@ -5305,15 +5329,16 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               $dwellShow = trim((string)($prow['dwell'] ?? ''));
               $weightShow = trim((string)($prow['weight'] ?? ''));
               $scheduleLabel = rotation_page_schedule_label($prow);
-              $editSummary = 'Schedule & weight';
-              if ($weightShow !== '' && (int)$weightShow > 1) {
-                  $editSummary = 'Weight ' . (int)$weightShow;
-              }
-              if ($scheduleLabel !== '') {
-                  $editSummary .= ($editSummary !== 'Schedule & weight' ? ' · ' : '') . $scheduleLabel;
-              }
-              if ($editSummary === 'Schedule & weight' && ($weightShow === '' || (int)$weightShow <= 1)) {
-                  $editSummary = 'More options';
+              $schedulePreview = rotation_page_schedule_preview_text($prow);
+              $editSummary = rotation_page_schedule_label($prow);
+              if ($editSummary === '') {
+                  if ($weightShow !== '' && (int)$weightShow > 1) {
+                      $editSummary = 'Weight ' . (int)$weightShow;
+                  } else {
+                      $editSummary = 'Schedule & weight';
+                  }
+              } elseif ($weightShow !== '' && (int)$weightShow > 1) {
+                  $editSummary = 'Weight ' . (int)$weightShow . ' · ' . $editSummary;
               }
               $windowRows = rotation_page_windows_form_rows($prow);
               $pageWeekdays = rotation_page_weekdays($prow);
@@ -5321,36 +5346,48 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <details class="rotation-card-edit">
                 <summary><?= h($editSummary) ?></summary>
               <div class="rotation-card-grid">
-                <div style="grid-column:1 / -1">
+                <div>
                   <label class="mini">URL</label>
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][url]" value="<?= h($purl) ?>"
                          placeholder="weather.php or rss.php?feed=ars" data-rotation-url required>
                 </div>
+                <div class="rotation-schedule-preview<?= $schedulePreview === 'Plays all day' ? ' is-empty' : '' ?>"
+                     data-rotation-schedule-preview><strong>Schedule:</strong> <?= h($schedulePreview) ?></div>
                 <div class="rotation-windows" data-rotation-windows>
                   <label class="mini">Time windows</label>
-                  <div class="help" style="margin:0 0 6px">Leave blank for all day. Use whole hours (<code>7</code>) or minutes (<code>7:30</code>). Add multiple for split schedules. Optional <strong>Wt</strong> per row overrides page weight while that window is active (Weighted mode).</div>
+                  <div class="help" style="margin:0 0 8px">When this board may play. Leave <strong>From/To</strong> blank for all day. Per-window <strong>Weight</strong> overrides the default while that window is active (requires Weighted mode on the display).</div>
                   <?php foreach ($windowRows as $wi => $win): ?>
                   <div class="rotation-window-row" data-rotation-window-row>
-                    <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][from]"
-                           value="<?= h((string)($win['from'] ?? '')) ?>" placeholder="7 or 7:30" aria-label="From time">
-                    <span class="help" style="margin:0">–</span>
-                    <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][to]"
-                           value="<?= h((string)($win['to'] ?? '')) ?>" placeholder="9 or 9:00" aria-label="To time">
-                    <input type="text" class="rotation-window-weight" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][weight]"
-                           value="<?= h((string)($win['weight'] ?? '')) ?>" placeholder="Wt" title="<?= h(rotation_weight_tooltip()) ?>" aria-label="Window weight">
+                    <div class="rotation-window-field">
+                      <label class="mini">From</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][from]"
+                             value="<?= h((string)($win['from'] ?? '')) ?>" placeholder="7 or 7:30" aria-label="From time">
+                    </div>
+                    <span class="rotation-window-sep" aria-hidden="true">–</span>
+                    <div class="rotation-window-field">
+                      <label class="mini">To</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][to]"
+                             value="<?= h((string)($win['to'] ?? '')) ?>" placeholder="9 or 9:00" aria-label="To time">
+                    </div>
+                    <div class="rotation-window-field">
+                      <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
+                      <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][weight]"
+                             value="<?= h((string)($win['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>" aria-label="Window weight">
+                    </div>
                     <button type="button" class="rowdel rotation-window-remove" title="Remove window"<?= count($windowRows) <= 1 ? ' hidden' : '' ?>>×</button>
                   </div>
                   <?php endforeach; ?>
                   <button type="button" class="secondary rotation-window-add">+ Add window</button>
                 </div>
-                <div class="rotation-page-weekdays" style="grid-column:1 / -1">
+                <div class="rotation-page-weekdays">
                   <label class="mini">Active days</label>
                   <div class="help" style="margin:0 0 6px">Optional — limit this board to certain weekdays. All seven = every day.</div>
                   <?php rotation_admin_weekdays_html($fieldKey . '[' . (int)$pri . ']', $pageWeekdays); ?>
                 </div>
-                <div>
+                <div class="rotation-weight-field">
                   <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight (default)</label>
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>">
+                  <div class="help" style="margin-top:4px">Used when Weighted mode is on and no window weight applies.</div>
                 </div>
               </div>
               </details>
@@ -6235,7 +6272,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <label class="mini">Crop top (px)</label>
                 <input type="number" min="0" max="400"<?= admin_form_name_attr('PAGES[' . $pk . '][crop_top]', $pageRo) ?>
                        value="<?= h((string)($pg['crop_top'] ?? '')) ?>" placeholder="<?= (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0) ?>"<?= admin_form_ro_attr($pageRo) ?>>
-                <div class="help">Shift the iframe up to hide Splunk&rsquo;s title bar (default 48px when hide-chrome is on; set <strong>0</strong> to disable). Panel titles are nudged down automatically — increase crop if Splunk chrome reappears.</div>
+                <div class="help">Shift the iframe up to hide Splunk&rsquo;s title bar (default 56px when hide-chrome is on; set <strong>0</strong> to disable). Footer and scrollbars are clipped automatically.</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
@@ -7962,7 +7999,7 @@ function collectRotationCardRow(card) {
   const row = {};
   const urlInp = card.querySelector('[data-rotation-url], input[name*="[url]"]');
   const dwellInp = card.querySelector('input[name*="[dwell]"]');
-  const weightInp = card.querySelector('input[name*="[weight]"]');
+  const weightInp = card.querySelector('input[name*="[weight]"]:not([name*="[windows]"])');
   const offInp = card.querySelector('input[name*="[off]"]');
   if (urlInp) row.url = urlInp.value.trim();
   if (dwellInp) row.dwell = dwellInp.value.trim();
@@ -10580,6 +10617,83 @@ function rotationWindowsSummary(card) {
   return parts.join(', ');
 }
 
+function rotationSchedulePreviewText(card) {
+  const windowParts = [];
+  card.querySelectorAll('[data-rotation-window-row]').forEach(function (row) {
+    const fromInp = row.querySelector('input[name*="[from]"]');
+    const toInp = row.querySelector('input[name*="[to]"]');
+    const wtInp = row.querySelector('input[name*="[weight]"]');
+    const from = fromInp ? fromInp.value.trim() : '';
+    const to = toInp ? toInp.value.trim() : '';
+    const wt = wtInp ? parseInt(wtInp.value.trim(), 10) : NaN;
+    if (from !== '' && to !== '') {
+      let label = from + '–' + to;
+      if (!isNaN(wt) && wt > 1) label += ' (weight ' + wt + ')';
+      windowParts.push(label);
+    }
+  });
+
+  const parts = [];
+  if (windowParts.length === 0) {
+    parts.push('Plays all day');
+  } else {
+    parts.push('Plays ' + windowParts.join('; '));
+  }
+
+  const weightInp = card.querySelector('input[name*="[weight]"]:not([name*="[windows]"])');
+  const baseWeight = weightInp ? parseInt(weightInp.value.trim(), 10) : 1;
+  const safeBase = (!isNaN(baseWeight) && baseWeight > 0) ? Math.min(20, baseWeight) : 1;
+  let maxWindowWeight = 1;
+  card.querySelectorAll('[data-rotation-window-row] input[name*="[weight]"]').forEach(function (inp) {
+    const w = parseInt(inp.value.trim(), 10);
+    if (!isNaN(w) && w > 0) maxWindowWeight = Math.max(maxWindowWeight, Math.min(20, w));
+  });
+  if (safeBase > 1) {
+    parts.push('Default weight ' + safeBase + (maxWindowWeight > 1 ? ' (when no window weight applies)' : ''));
+  } else if (maxWindowWeight > 1) {
+    parts.push('Default weight 1 outside timed windows');
+  }
+
+  const wdAll = card.querySelectorAll('input[name*="[weekdays]"]');
+  const wdChecked = card.querySelectorAll('input[name*="[weekdays]"]:checked');
+  if (wdAll.length && wdChecked.length < wdAll.length && wdChecked.length > 0) {
+    const days = Array.from(wdChecked).map(function (cb) {
+      return (cb.parentElement ? cb.parentElement.textContent : cb.value).trim();
+    }).join('');
+    if (days) parts.push('Active ' + days);
+  }
+
+  return parts.join(' · ');
+}
+
+function rotationScheduleBadges(card) {
+  const badges = [];
+  const windows = rotationWindowsSummary(card);
+  badges.push(windows !== '' ? windows : 'All day');
+
+  const weightInp = card.querySelector('input[name*="[weight]"]:not([name*="[windows]"])');
+  const baseWeight = weightInp ? parseInt(weightInp.value.trim(), 10) : 1;
+  const safeBase = (!isNaN(baseWeight) && baseWeight > 0) ? Math.min(20, baseWeight) : 1;
+  let maxWindowWeight = 1;
+  card.querySelectorAll('[data-rotation-window-row] input[name*="[weight]"]').forEach(function (inp) {
+    const w = parseInt(inp.value.trim(), 10);
+    if (!isNaN(w) && w > 0) maxWindowWeight = Math.max(maxWindowWeight, Math.min(20, w));
+  });
+  if (maxWindowWeight > 1) badges.push('Wt up to ' + maxWindowWeight);
+  else if (safeBase > 1) badges.push('Wt ' + safeBase);
+
+  const wdAll = card.querySelectorAll('input[name*="[weekdays]"]');
+  const wdChecked = card.querySelectorAll('input[name*="[weekdays]"]:checked');
+  if (wdAll.length && wdChecked.length < wdAll.length && wdChecked.length > 0) {
+    const days = Array.from(wdChecked).map(function (cb) {
+      return (cb.parentElement ? cb.parentElement.textContent : cb.value).trim();
+    }).join('');
+    if (days) badges.push(days);
+  }
+
+  return badges;
+}
+
 function rotationScheduleSummary(card) {
   const time = rotationWindowsSummary(card);
   const wdAll = card.querySelectorAll('input[name*="[weekdays]"]');
@@ -10598,15 +10712,38 @@ function syncRotationCardSummary(card) {
   if (!card) return;
   const details = card.querySelector('.rotation-card-edit');
   const summary = details ? details.querySelector('summary') : null;
-  if (!summary) return;
-  const weightInp = card.querySelector('input[name*="[weight]"]');
-  const weight = weightInp ? parseInt(weightInp.value.trim(), 10) : 1;
+  const previewEl = card.querySelector('[data-rotation-schedule-preview]');
+  const badgesEl = card.querySelector('[data-rotation-badges]');
+
   const scheduleLabel = rotationScheduleSummary(card);
-  let text = 'Schedule & weight';
-  if (!isNaN(weight) && weight > 1) text = 'Weight ' + weight;
-  if (scheduleLabel) text += (text !== 'Schedule & weight' ? ' · ' : '') + scheduleLabel;
-  if (text === 'Schedule & weight') text = 'More options';
-  summary.textContent = text;
+  const weightInp = card.querySelector('input[name*="[weight]"]:not([name*="[windows]"])');
+  const weight = weightInp ? parseInt(weightInp.value.trim(), 10) : 1;
+  let summaryText = scheduleLabel;
+  if (summaryText === '' && !isNaN(weight) && weight > 1) {
+    summaryText = 'Weight ' + weight;
+  } else if (summaryText !== '' && !isNaN(weight) && weight > 1) {
+    summaryText = 'Weight ' + weight + ' · ' + summaryText;
+  }
+  if (summaryText === '') summaryText = 'Schedule & weight';
+  if (summary) summary.textContent = summaryText;
+
+  const previewText = rotationSchedulePreviewText(card);
+  if (previewEl) {
+    previewEl.innerHTML = '<strong>Schedule:</strong> ' + previewText.replace(/</g, '&lt;');
+    previewEl.classList.toggle('is-empty', previewText === 'Plays all day');
+  }
+
+  if (badgesEl) {
+    const badges = rotationScheduleBadges(card);
+    const hasConfig = scheduleLabel !== '' || (!isNaN(weight) && weight > 1)
+      || (card.querySelectorAll('input[name*="[weekdays]"]:checked').length
+          && card.querySelectorAll('input[name*="[weekdays]"]:checked').length
+          < card.querySelectorAll('input[name*="[weekdays]"]').length);
+    badgesEl.hidden = !hasConfig && previewText === 'Plays all day';
+    badgesEl.innerHTML = badges.map(function (b) {
+      return '<span class="pill">' + String(b).replace(/</g, '&lt;') + '</span>';
+    }).join('');
+  }
 }
 
 function appendRotationWindowRow(container, fieldPrefix) {
@@ -10617,10 +10754,13 @@ function appendRotationWindowRow(container, fieldPrefix) {
   row.className = 'rotation-window-row';
   row.setAttribute('data-rotation-window-row', '');
   row.innerHTML =
-    '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][from]" placeholder="from" aria-label="From hour">' +
-    '<span class="help" style="margin:0">–</span>' +
-    '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][to]" placeholder="to" aria-label="To hour">' +
-    '<input type="text" class="rotation-window-weight" name="' + fieldPrefix + '[windows][' + idx + '][weight]" placeholder="Wt" aria-label="Window weight">' +
+    '<div class="rotation-window-field"><label class="mini">From</label>' +
+      '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][from]" placeholder="7 or 7:30" aria-label="From time"></div>' +
+    '<span class="rotation-window-sep" aria-hidden="true">–</span>' +
+    '<div class="rotation-window-field"><label class="mini">To</label>' +
+      '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][to]" placeholder="9 or 9:00" aria-label="To time"></div>' +
+    '<div class="rotation-window-field"><label class="mini">Weight</label>' +
+      '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][weight]" placeholder="1" aria-label="Window weight"></div>' +
     '<button type="button" class="rowdel rotation-window-remove" title="Remove window">×</button>';
   if (addBtn) container.insertBefore(row, addBtn);
   else container.appendChild(row);
@@ -10695,8 +10835,10 @@ function fillRotationCardTimes(card, page) {
       if (!row) return;
       const fromInp = row.querySelector('input[name*="[from]"]');
       const toInp = row.querySelector('input[name*="[to]"]');
+      const wtInp = row.querySelector('input[name*="[weight]"]');
       if (fromInp) fromInp.value = String(w.from ?? '');
       if (toInp) toInp.value = String(w.to ?? '');
+      if (wtInp) wtInp.value = String(w.weight ?? '');
       row.querySelectorAll('input[name*="[windows]"]').forEach(function (inp) {
         inp.name = inp.name.replace(/\[windows\]\[\d+\]/, '[windows][' + wi + ']');
       });
@@ -10788,7 +10930,7 @@ function bindRotationCard(card, deck) {
     urlInp.dataset.bound = '1';
     urlInp.addEventListener('input', syncHead);
   }
-  const weightInp = card.querySelector('input[name*="[weight]"]');
+  const weightInp = card.querySelector('input[name*="[weight]"]:not([name*="[windows]"])');
   if (weightInp && !weightInp.dataset.summaryBound) {
     weightInp.dataset.summaryBound = '1';
     weightInp.addEventListener('input', function () { syncRotationCardSummary(card); });
@@ -10828,7 +10970,8 @@ function addRotationPage(deckId, url, dwell, scroll) {
     '<div class="rotation-card-head">' +
       '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
       '<div class="rotation-card-title"><strong data-rotation-label>' + rotationLabelFromUrl(url) + '</strong>' +
-      '<code data-rotation-url-display>' + (url || 'board URL') + '</code></div>' +
+      '<code data-rotation-url-display>' + (url || 'board URL') + '</code>' +
+      '<div class="rotation-card-badges" data-rotation-badges hidden></div></div>' +
       '<div class="rotation-card-head-meta">' +
         '<label class="check" style="margin:0"><input type="checkbox" name="' + field + '[' + idx + '][off]"> Skip</label>' +
         '<label class="rotation-inline-dwell" title="Seconds on screen before advancing">' +
@@ -10838,29 +10981,34 @@ function addRotationPage(deckId, url, dwell, scroll) {
         '<button type="button" class="rowdel" onclick="removeRotationCard(this, \'' + deck.id + '\')" title="Remove">×</button>' +
       '</div>' +
     '</div>' +
-    '<details class="rotation-card-edit"><summary>More options</summary>' +
+    '<details class="rotation-card-edit"><summary>Schedule & weight</summary>' +
     '<div class="rotation-card-grid">' +
-      '<div style="grid-column:1 / -1"><label class="mini">URL</label>' +
+      '<div><label class="mini">URL</label>' +
       '<input type="text" name="' + field + '[' + idx + '][url]" value="' + url.replace(/"/g, '&quot;') + '" placeholder="slides.php" data-rotation-url required></div>' +
+      '<div class="rotation-schedule-preview is-empty" data-rotation-schedule-preview><strong>Schedule:</strong> Plays all day</div>' +
       '<div class="rotation-windows" data-rotation-windows>' +
         '<label class="mini">Time windows</label>' +
-        '<div class="help" style="margin:0 0 6px">Leave blank for all day. Use whole hours (7) or minutes (7:30).</div>' +
+        '<div class="help" style="margin:0 0 8px">When this board may play. Per-window <strong>Weight</strong> overrides the default while that window is active.</div>' +
         '<div class="rotation-window-row" data-rotation-window-row>' +
-          '<input type="text" name="' + field + '[' + idx + '][windows][0][from]" placeholder="7 or 7:30" aria-label="From time">' +
-          '<span class="help" style="margin:0">–</span>' +
-          '<input type="text" name="' + field + '[' + idx + '][windows][0][to]" placeholder="9 or 9:00" aria-label="To time">' +
-          '<input type="text" class="rotation-window-weight" name="' + field + '[' + idx + '][windows][0][weight]" placeholder="Wt" aria-label="Window weight">' +
+          '<div class="rotation-window-field"><label class="mini">From</label>' +
+            '<input type="text" name="' + field + '[' + idx + '][windows][0][from]" placeholder="7 or 7:30" aria-label="From time"></div>' +
+          '<span class="rotation-window-sep" aria-hidden="true">–</span>' +
+          '<div class="rotation-window-field"><label class="mini">To</label>' +
+            '<input type="text" name="' + field + '[' + idx + '][windows][0][to]" placeholder="9 or 9:00" aria-label="To time"></div>' +
+          '<div class="rotation-window-field"><label class="mini">Weight</label>' +
+            '<input type="text" name="' + field + '[' + idx + '][windows][0][weight]" placeholder="1" aria-label="Window weight"></div>' +
           '<button type="button" class="rowdel rotation-window-remove" title="Remove window" hidden>×</button>' +
         '</div>' +
         '<button type="button" class="secondary rotation-window-add">+ Add window</button>' +
       '</div>' +
-      '<div class="rotation-page-weekdays" style="grid-column:1 / -1">' +
+      '<div class="rotation-page-weekdays">' +
         '<label class="mini">Active days</label>' +
         '<div class="help" style="margin:0 0 6px">Optional — limit this board to certain weekdays.</div>' +
         rotationWeekdaysHtml(field + '[' + idx + ']', null) +
       '</div>' +
-      '<div><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight (default)</label>' +
-      '<input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '"></div>' +
+      '<div class="rotation-weight-field"><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight (default)</label>' +
+      '<input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">' +
+      '<div class="help" style="margin-top:4px">Used when Weighted mode is on and no window weight applies.</div></div>' +
     '</div></details>';
   deck.appendChild(card);
   bindRotationCard(card, deck);

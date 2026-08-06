@@ -790,17 +790,33 @@ CSS;
 }
 
 /** CSS for clipping the top of a cross-origin iframe embed (Splunk publish, etc.). */
-function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap', bool $hideScrollbars = false, bool $fluid = false, int $shiftDown = 0): string
-{
+function signage_iframe_crop_css(
+    int $boardH,
+    int $cropTop,
+    string $wrapClass = 'dash-wrap',
+    bool $hideScrollbars = false,
+    bool $fluid = false,
+    int $shiftDown = 0,
+    int $cropBottom = 0,
+    ?int $scrollbarGutter = null
+): string {
     $boardH = max(720, $boardH);
     $cropTop = max(0, min(400, $cropTop));
     $shiftDown = max(0, min(120, $shiftDown));
+    $cropBottom = max(0, min(200, $cropBottom));
     $wrap = preg_replace('/[^a-z0-9_-]/', '', $wrapClass) ?: 'dash-wrap';
-    $scrollbarGutter = $hideScrollbars ? 24 : 0;
+    if ($scrollbarGutter === null) {
+        $scrollbarGutter = $hideScrollbars ? 24 : 0;
+    } else {
+        $scrollbarGutter = max(0, min(120, $scrollbarGutter));
+    }
     $iframeTop = $shiftDown > 0 ? "calc(-{$cropTop}px + {$shiftDown}px)" : "-{$cropTop}px";
+    $clipPath = ($scrollbarGutter > 0 || $cropBottom > 0)
+        ? "clip-path:inset(0 {$scrollbarGutter}px {$cropBottom}px 0);"
+        : '';
 
     if ($fluid) {
-        $iframeHExpr = "calc(100% + {$cropTop}px - {$shiftDown}px + {$scrollbarGutter}px)";
+        $iframeHExpr = "calc(100% + {$cropTop}px - {$shiftDown}px)";
         $iframeWExpr = $scrollbarGutter > 0 ? "calc(100% + {$scrollbarGutter}px)" : '100%';
 
         return <<<CSS
@@ -808,6 +824,7 @@ function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 
     position: relative;
     overflow: hidden;
     background: var(--lake-night);
+    {$clipPath}
   }
   .{$wrap} iframe {
     position: absolute;
@@ -826,7 +843,7 @@ CSS;
 
     $frameH = $boardH + $cropTop;
     $iframeW = 1920 + $scrollbarGutter;
-    $iframeH = $frameH + $scrollbarGutter - $shiftDown;
+    $iframeH = $frameH - $shiftDown;
 
     return <<<CSS
   .{$wrap} {
@@ -835,6 +852,7 @@ CSS;
     height: {$boardH}px;
     overflow: hidden;
     background: var(--lake-night);
+    {$clipPath}
   }
   .{$wrap} iframe {
     position: absolute;

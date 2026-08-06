@@ -1140,6 +1140,95 @@ function rotation_page_schedule_label(array $page): string
     return implode(' · ', $parts);
 }
 
+/** Plain-language schedule + weight explanation for admin cards. */
+function rotation_page_schedule_preview_text(array $page): string
+{
+    $parts = [];
+    $windows = rotation_page_window_ranges($page);
+    if ($windows === []) {
+        $parts[] = 'Plays all day';
+    } else {
+        $windowParts = [];
+        foreach ($windows as $w) {
+            $label = rotation_format_time_label($w['from_min']) . '–' . rotation_format_time_label($w['to_min']);
+            if (!empty($w['weight']) && (int)$w['weight'] > 1) {
+                $label .= ' (weight ' . (int)$w['weight'] . ')';
+            }
+            $windowParts[] = $label;
+        }
+        $parts[] = 'Plays ' . implode('; ', $windowParts);
+    }
+
+    $baseWeight = rotation_page_base_weight($page);
+    $hasWindowWeights = false;
+    foreach ($windows as $w) {
+        if (!empty($w['weight']) && (int)$w['weight'] > 1) {
+            $hasWindowWeights = true;
+            break;
+        }
+    }
+    if ($baseWeight > 1) {
+        $parts[] = 'Default weight ' . $baseWeight . ($hasWindowWeights ? ' (when no window weight applies)' : '');
+    } elseif ($hasWindowWeights) {
+        $parts[] = 'Default weight 1 outside timed windows';
+    }
+
+    $days = rotation_page_weekdays($page);
+    if ($days !== null) {
+        $abbrevs = [];
+        foreach (rotation_weekday_options() as $opt) {
+            if (in_array($opt['full'], $days, true)) {
+                $abbrevs[] = $opt['short'];
+            }
+        }
+        if ($abbrevs !== []) {
+            $parts[] = 'Active ' . implode('', $abbrevs);
+        }
+    }
+
+    return implode(' · ', $parts);
+}
+
+/** @return list<string> Short badge labels for card header (schedule, weight). */
+function rotation_page_schedule_badges(array $page): array
+{
+    $badges = [];
+    $windowsLabel = rotation_page_windows_label($page);
+    if ($windowsLabel !== '') {
+        $badges[] = $windowsLabel;
+    } else {
+        $badges[] = 'All day';
+    }
+
+    $baseWeight = rotation_page_base_weight($page);
+    $maxWindowWeight = 1;
+    foreach (rotation_page_window_ranges($page) as $w) {
+        if (!empty($w['weight'])) {
+            $maxWindowWeight = max($maxWindowWeight, (int)$w['weight']);
+        }
+    }
+    if ($maxWindowWeight > 1) {
+        $badges[] = 'Wt up to ' . $maxWindowWeight;
+    } elseif ($baseWeight > 1) {
+        $badges[] = 'Wt ' . $baseWeight;
+    }
+
+    $days = rotation_page_weekdays($page);
+    if ($days !== null && count($days) < 7) {
+        $abbrevs = [];
+        foreach (rotation_weekday_options() as $opt) {
+            if (in_array($opt['full'], $days, true)) {
+                $abbrevs[] = $opt['short'];
+            }
+        }
+        if ($abbrevs !== []) {
+            $badges[] = implode('', $abbrevs);
+        }
+    }
+
+    return $badges;
+}
+
 /** Admin form rows — at least one blank pair when unrestricted. @return list<array{from:mixed,to:mixed,weight:mixed}> */
 function rotation_page_windows_form_rows(array $page): array
 {

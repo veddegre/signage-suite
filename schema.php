@@ -883,7 +883,7 @@ function admin_schema(): array
             ['key' => 'HIDE_CHROME', 'label' => 'Hide Splunk title bar', 'type' => 'bool',
              'help' => 'Append hideChrome=true&hideTitle=true to published URLs (on by default)'],
             ['key' => 'DEFAULT_CROP_TOP', 'label' => 'Default crop top (px)', 'type' => 'number',
-             'help' => 'When blank per dashboard: 0 here = auto 48px crop while hide-chrome is on; set 0 on a dashboard row to disable crop'],
+             'help' => 'When blank per dashboard: 0 here = auto 56px crop while hide-chrome is on; set 0 on a dashboard row to disable crop'],
             ['key' => 'HIDE_SCROLLBARS', 'label' => 'Hide iframe scrollbars', 'type' => 'bool',
              'help' => 'Clip Splunk scrollbars on the wall (on by default; dashboard canvas should fit 1920×1080)'],
             ['key' => 'DEFAULT_RELOAD', 'label' => 'Default iframe reload (s)', 'type' => 'number', 'help' => '0 disables'],
