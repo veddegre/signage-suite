@@ -4842,7 +4842,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <?php endif; ?>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="kiosk" role="tabpanel" hidden>
-                <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, sports, and glance headline columns. Matches the display chosen above.</p>
+                <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, sports, <strong>MDOT cam wall</strong>, and glance headline columns. Matches the display chosen above.</p>
                 <?php foreach ($rotationScreens as $screenKey => $screenMeta):
                   admin_rotation_kiosk_settings_panel(
                       (string)$screenKey,
