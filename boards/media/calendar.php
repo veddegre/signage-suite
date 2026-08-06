@@ -1064,9 +1064,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 <head>
 <meta charset="UTF-8">
 <title>Calendar</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<?= signage_theme_fonts_head_html() ?>
 <style>
   <?= signage_theme_css() ?>
 

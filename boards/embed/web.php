@@ -33,9 +33,7 @@ $reload = $site['reload'];
 <head>
 <meta charset="UTF-8">
 <title><?= h($site['title']) ?> — Signage</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600&display=swap" rel="stylesheet">
+<?= signage_theme_fonts_head_html() ?>
 <style>
   <?= signage_theme_css() ?>
 

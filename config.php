@@ -209,6 +209,7 @@ function signage_theme_css(): string
     $key = signage_active_theme_key();
 
     return signage_theme_css_block($key)
+        . signage_theme_font_css($key)
         . signage_theme_inset_surface_css()
         . signage_theme_board_shell_css()
         . signage_theme_map_board_css()

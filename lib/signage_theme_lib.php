@@ -317,6 +317,98 @@ function signage_active_theme_key(): string
     return signage_theme_for_screen(signage_request_screen());
 }
 
+/**
+ * Font stacks per theme — GVSU uses Open Sans + EB Garamond per identity guidelines.
+ *
+ * @return array{sans:string,display:string,serif:string,mono:string}
+ */
+function signage_theme_font_stacks(string $key): array
+{
+    $key = signage_normalize_theme_key($key);
+    if ($key === 'gvsu_lakers') {
+        return [
+            'sans' => "'Open Sans', Arial, sans-serif",
+            'display' => "'Open Sans', Arial, sans-serif",
+            'serif' => "'EB Garamond', 'Times New Roman', serif",
+            'mono' => "ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace",
+        ];
+    }
+
+    return [
+        'sans' => "'IBM Plex Sans', system-ui, sans-serif",
+        'display' => "'Big Shoulders Display', system-ui, sans-serif",
+        'serif' => "'IBM Plex Serif', Georgia, serif",
+        'mono' => "'IBM Plex Mono', ui-monospace, monospace",
+    ];
+}
+
+/** Google Fonts stylesheet URL for the active theme (empty when not needed). */
+function signage_theme_fonts_google_url(string $key): string
+{
+    $key = signage_normalize_theme_key($key);
+    if ($key === 'gvsu_lakers') {
+        return 'https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Open+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap';
+    }
+
+    return 'https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap';
+}
+
+/** Preconnect + stylesheet tags for board &lt;head&gt; (pass null for active theme). */
+function signage_theme_fonts_head_html(?string $key = null): string
+{
+    if ($key === null) {
+        $key = signage_active_theme_key();
+    }
+    $url = signage_theme_fonts_google_url($key);
+    if ($url === '') {
+        return '';
+    }
+
+    return '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n"
+        . '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' . "\n"
+        . '<link href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" rel="stylesheet">' . "\n";
+}
+
+/**
+ * Map hardcoded board font-family rules to theme tokens so GVSU (and future themes) apply without editing every board.
+ */
+function signage_theme_font_css(string $key): string
+{
+    $fonts = signage_theme_font_stacks($key);
+    $display = [
+        '.board .head h1', '.board h1', '.board h2', '.board #clock', '.board .brand',
+        '.board .bignum', '.board .word', '.board .hero-title', '.board .hero-id',
+        '.board .hero-pct', '.board .tid', '.board .prio', '.board .pill',
+        '.board .panel h2', '.board .panel .k', '.board .countdown .num',
+        '.board .current .num', '.board .current .band', '.board .aqi-panel .num',
+        '.board .aqi-panel .band', '.board .stat .val', '.board .fday .max',
+        '.board .fday .aqi-num', '.board .verdict .t', '.board .row .val',
+        '.board .row .side', '.board .row .when', '.board .row .cnt',
+        '.board .hero .title', '.board .num', '.board .tev .t', '.board .day .n',
+        '.board .chip .v', '.board .setup h2', '.board .empty h2', '.board .topbar h1',
+    ];
+    $serif = [
+        '.board .hero-desc', '.board .def-text', '.board .phonetic', '.board .etym',
+        '.board .quote', '.board .thought',
+    ];
+    $mono = [
+        '.board code', '.board .mono', '.board td.mono', '.board .hero-host',
+        '.board .row .code', '.board .row .id', '.board .row .port',
+        '.board .prow .c', '.board .bar-wrap .hr', '.board .svcrow .ms',
+        '.board .hero .tag',
+    ];
+
+    $rules = [
+        'html,body,.board{font-family:' . $fonts['sans'] . '!important}',
+        implode(',', $display) . '{font-family:' . $fonts['display'] . '!important}',
+        implode(',', $serif) . '{font-family:' . $fonts['serif'] . '!important}',
+        implode(',', $mono) . '{font-family:' . $fonts['mono'] . '!important}',
+        '#signage-ticker{font-family:' . $fonts['sans'] . '!important}',
+    ];
+
+    return implode("\n", $rules);
+}
+
 /** CSS custom properties for native boards (echo inside &lt;style&gt;). */
 function signage_theme_css_block(string $key): string
 {
@@ -331,8 +423,13 @@ function signage_theme_css_block(string $key): string
         $dataAccent = '#DEC197';
     }
     $mapAccent = $key === 'gvsu_lakers' ? '#DEC197' : '#ffb347';
+    $fonts = signage_theme_font_stacks($key);
     $pairs = [
         '--signage-light' => $light ? '1' : '0',
+        '--font-sans' => $fonts['sans'],
+        '--font-display' => $fonts['display'],
+        '--font-serif' => $fonts['serif'],
+        '--font-mono' => $fonts['mono'],
         '--lake-night' => $preset['lake-night'],
         '--night' => $preset['lake-night'],
         '--harbor' => $preset['harbor'],
@@ -544,7 +641,7 @@ function signage_ticker_css_rules(): string
     return <<<'CSS'
   #signage-ticker-root { position:fixed; left:0; right:0; bottom:0; z-index:9999; pointer-events:none; }
   #signage-ticker { display:flex; align-items:stretch; height:72px;
-    font-family:'IBM Plex Sans',sans-serif;
+    font-family:var(--font-sans,'IBM Plex Sans',sans-serif);
     background:var(--tk-bar-bg); border-top:2px solid var(--tk-bar-border);
     box-shadow:0 -8px 30px rgba(0,0,0,.45); }
   #signage-ticker .tk-tag { flex:0 0 auto; display:flex; align-items:center; gap:14px;

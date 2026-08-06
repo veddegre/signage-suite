@@ -64,6 +64,15 @@ if (!preg_match('/--data-accent:#dec197/i', $gvsuCss)) {
     fwrite(STDERR, "FAIL: gvsu --data-accent should be GVSU gold (#DEC197)\n");
     $fail++;
 }
+if (!str_contains($gvsuCss, '--font-sans') || !str_contains($gvsuCss, 'Open Sans')) {
+    fwrite(STDERR, "FAIL: gvsu_lakers should expose Open Sans font tokens\n");
+    $fail++;
+}
+$gvsuFontCss = signage_theme_font_css('gvsu_lakers');
+if (!str_contains($gvsuFontCss, 'EB Garamond')) {
+    fwrite(STDERR, "FAIL: gvsu font css should include EB Garamond for serif slots\n");
+    $fail++;
+}
 $lakeCss = signage_theme_css_block('lake_night');
 if (!str_contains($lakeCss, '--tile-bg')) {
     fwrite(STDERR, "FAIL: lake_night missing tile tokens\n");

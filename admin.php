@@ -28,6 +28,7 @@ require_once __DIR__ . '/lib/tdx_lib.php';
 require_once __DIR__ . '/lib/announce_lib.php';
 require_once __DIR__ . '/lib/hero_strip_lib.php';
 require_once __DIR__ . '/lib/emergency_lib.php';
+require_once __DIR__ . '/lib/signage_theme_lib.php';
 require_once __DIR__ . '/lib/web_lib.php';
 require_once __DIR__ . '/lib/users_lib.php';
 require_once __DIR__ . '/lib/webcam_lib.php';
@@ -3278,9 +3279,7 @@ function admin_field(array $f, $val, string $board): void
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Signage Admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<?= signage_theme_fonts_head_html() ?>
 <style>
   :root { --night:#0c1422; --harbor:#141f33; --line:#26344d; --snow:#edf2fb;
           --mist:#8aa0c0; --beacon:#ffb347; --ok:#39c46d; --bad:#ff5d5d; }
