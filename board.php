@@ -207,6 +207,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   const WEIGHTED = <?= json_encode((bool)$runtime['weighted']) ?>;
   const ROTATION_TZ = <?= json_encode($runtime['timezone']) ?>;
   const SHOW_CLOCK = <?= json_encode((bool)$runtime['show_clock']) ?>;
+  const CLOCK_24H = <?= json_encode((bool)($runtime['clock_24h'] ?? false)) ?>;
   const BLANK_INIT = <?= json_encode($blankActive) ?>;
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
@@ -701,6 +702,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       if (FRAME_H >= 720 && FRAME_H < 1080) qs += '&frameh=' + FRAME_H;
     }
     if (!SHOW_CLOCK) qs += '&clock=0';
+    qs += '&clockfmt=' + (CLOCK_24H ? '24' : '12');
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();
     updateRotateDebug('loading…', p, idx, fullSrc);
     sendPresence('loading');

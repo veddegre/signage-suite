@@ -61,21 +61,7 @@ function slides_clock_js(): void
         return;
     }
 
-    echo <<<'JS'
-    (function () {
-      function tick() {
-        const el = document.getElementById('clock');
-        if (!el) return;
-        const n = new Date();
-        let h = n.getHours();
-        const ap = h >= 12 ? 'PM' : 'AM';
-        h = h % 12 || 12;
-        el.textContent = h + ':' + String(n.getMinutes()).padStart(2, '0') + ' ' + ap;
-      }
-      tick();
-      setInterval(tick, 1000);
-    })();
-    JS;
+    echo signage_clock_tick_script('clock', TIMEZONE);
 }
 
 // ── Image endpoint ───────────────────────────────────────────────────────────

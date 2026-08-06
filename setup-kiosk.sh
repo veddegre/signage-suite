@@ -553,7 +553,7 @@ signage_kiosk_blackout_tty() {
 signage_kiosk_blackout_tty
 
 if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 120
+  signage-kiosk-wait-for-runtime 30
 fi
 if command -v signage-kiosk-wait-for-server >/dev/null; then
   signage-kiosk-wait-for-server 240
@@ -607,7 +607,7 @@ signage_kiosk_blackout_tty() {
 signage_kiosk_blackout_tty
 
 if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 120
+  signage-kiosk-wait-for-runtime 30
 fi
 if command -v signage-kiosk-wait-for-server >/dev/null; then
   signage-kiosk-wait-for-server 240
@@ -693,7 +693,6 @@ StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
-ExecStartPre=/usr/local/bin/signage-kiosk-wait-for-runtime 120
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
 Restart=always
 RestartSec=2
@@ -809,6 +808,13 @@ fi
 
 echo "==> Disabling console getty on tty1 (kiosk owns the display)"
 systemctl disable --now getty@tty1.service || true
+
+echo "==> Kiosk session helpers (seatd + persistent runtime dir for cage)"
+systemctl enable seatd.service 2>/dev/null || true
+systemctl start seatd.service 2>/dev/null || true
+if command -v loginctl >/dev/null 2>&1; then
+  loginctl enable-linger "$KIOSK_USER" 2>/dev/null || true
+fi
 
 systemctl daemon-reload
 systemctl enable signage.service

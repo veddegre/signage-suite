@@ -153,7 +153,7 @@ $sun = date_sun_info(time(), LAT, LON);
         $bits = [];
         if ($obs['dpd'] !== null) $bits[] = 'Dominant period ' . number_format($obs['dpd'], 0) . ' s';
         if ($obs['wvht'] !== null && $obs['wvht_time'] !== null && ($obs['time'] - $obs['wvht_time']) > 1800) {
-            $bits[] = 'wave obs ' . date('g:i A', $obs['wvht_time']);
+            $bits[] = 'wave obs ' . signage_format_time((int)$obs['wvht_time']);
         }
         echo h(implode(' · ', $bits));
       ?></div>
@@ -186,7 +186,7 @@ $sun = date_sun_info(time(), LAT, LON);
       <?php if ($alerts): foreach (array_slice($alerts, 0, 5) as $a): ?>
         <div class="alert sev-<?= h($a['severity']) ?>">
           <span class="e"><?= h($a['event']) ?></span>
-          <span class="t"><?= $a['ends'] ? 'until ' . date('D g:i A', strtotime($a['ends'])) : '' ?></span>
+          <span class="t"><?= $a['ends'] ? 'until ' . h(signage_format_datetime(strtotime($a['ends']), 'D')) : '' ?></span>
         </div>
       <?php endforeach; else: ?>
         <div class="none">No active alerts — all clear.</div>
@@ -196,7 +196,7 @@ $sun = date_sun_info(time(), LAT, LON);
 
   <div class="foot">
     <div class="chip"><span class="k">Sunset over the lake</span>
-      <span class="v"><?= date('g:i A', $sun['sunset']) ?></span></div>
+      <span class="v"><?= h(signage_format_time((int)$sun['sunset'])) ?></span></div>
     <div class="chip"><span class="k">Gusts</span>
       <span class="v"><?= $buoyOnline && $obs['gst'] !== null ? (int)round($obs['gst']) . ' mph' : '—' ?></span></div>
     <div class="chip"><span class="k">Pressure</span>
@@ -208,10 +208,9 @@ $sun = date_sun_info(time(), LAT, LON);
 </div>
 <script>
   <?php if ($showClock): ?>
-  function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
-    document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
-  tick(); setInterval(tick, 1000);
+  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
   <?php endif; ?>
+
   setTimeout(() => location.reload(), 10 * 60 * 1000);
 </script>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>

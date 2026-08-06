@@ -693,8 +693,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     </div>
 
     <?php
-    $sunriseLbl = date('g:i A', $cw['sunrise']);
-    $sunsetLbl = date('g:i A', $cw['sunset']);
+    $sunriseLbl = signage_format_time((int)$cw['sunrise']);
+    $sunsetLbl = signage_format_time((int)$cw['sunset']);
     ?>
     <div class="sun">
       <svg viewBox="-16 -14 672 168" aria-hidden="true" preserveAspectRatio="xMidYMin meet">
@@ -754,7 +754,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     <?php endforeach; ?>
   </section>
 
-  <div class="stamp">Conditions updated <?= date('g:i A', $cw['updated']) ?> &middot; OpenWeatherMap &middot; NWS RIDGE</div>
+  <div class="stamp">Conditions updated <?= h(signage_format_time((int)$cw['updated'])) ?> &middot; OpenWeatherMap &middot; NWS RIDGE</div>
 
 </div>
 
@@ -763,12 +763,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   function tick() {
     const now = new Date();
     <?php if ($showClock): ?>
-    let h = now.getHours();
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    const m = String(now.getMinutes()).padStart(2, '0');
-    document.getElementById('clock').innerHTML =
-      h + ':' + m + '<span class="ampm">' + ampm + '</span>';
+    { const el = document.getElementById('clock'); if (el) el.textContent = <?= signage_js_format_time_expr('now') ?>; }
     <?php endif; ?>
     document.getElementById('dateline').textContent =
       now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -861,8 +856,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   }
 
   function fmtFrameTime(unix) {
-    return new Date(unix * 1000)
-      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return <?= signage_js_format_time_expr('new Date(unix * 1000)') ?>;
   }
 
   if (typeof L === 'undefined') {

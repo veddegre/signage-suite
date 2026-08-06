@@ -289,17 +289,7 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
   startIframeHourlyReload();
 })();
 <?php if ($showClock && SHOW_OVERLAY): ?>
-(function(){
-  const tz = <?= json_encode(TIMEZONE) ?>;
-  function tick(){
-    const el = document.getElementById('clock');
-    if (!el) return;
-    el.textContent = new Date().toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
-    });
-  }
-  tick(); setInterval(tick, 1000);
-})();
+<?= signage_clock_tick_script('clock', TIMEZONE) ?>
 <?php endif; ?>
 </script>
 <?php endif; ?>

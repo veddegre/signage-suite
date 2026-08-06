@@ -94,6 +94,8 @@ function admin_schema(): array
                            ['key' => 'name', 'label' => 'Display name'],
                            ['key' => 'show_ticker', 'label' => 'Weather ticker', 'type' => 'check'],
                            ['key' => 'show_clock', 'label' => 'Clock', 'type' => 'check'],
+                           ['key' => 'clock_format', 'label' => 'Time', 'type' => 'select',
+                            'options' => ['' => 'Default', '12' => '12-hour', '24' => '24-hour']],
                            ['key' => 'show_debug', 'label' => 'Debug', 'type' => 'check'],
                            ['key' => 'keyboard_nav', 'label' => 'Keys', 'type' => 'check'],
                            ['key' => 'fade_ms', 'label' => 'Crossfade (ms)'],
@@ -116,6 +118,8 @@ function admin_schema(): array
                      . 'CEC is optional HDMI standby on Pi kiosks.'],
         ], rotation_page_fields(), [
             $tz,
+            ['key' => 'CLOCK_24H', 'label' => '24-hour clock (global default)', 'type' => 'bool',
+             'help' => 'When off, wall clocks use 12-hour AM/PM. Each display can override under Screens → Time.'],
             ['key' => 'FADE_MS', 'label' => 'Crossfade (ms)', 'type' => 'number'],
             ['key' => 'SETTLE_MS', 'label' => 'Settle after load (ms)', 'type' => 'number',
              'help' => 'Lets fonts/maps finish before reveal'],

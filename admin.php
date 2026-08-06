@@ -392,7 +392,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         $flash = 'You do not have access to that section.';
         $flashOk = false;
     } else {
-    $rotationSuperFieldKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
+    $rotationSuperFieldKeys = ['TIMEZONE', 'CLOCK_24H', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
     $errors = [];
     $saveWarnFlash = null;
     $saveWarnFlashOk = true;
@@ -2073,7 +2073,7 @@ $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
 $splunkdashBoardKeys = ['HIDE_CHROME', 'HIDE_SCROLLBARS', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
-$rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
+$rotationBoardKeys = ['TIMEZONE', 'CLOCK_24H', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = ($authed && $board === 'rotation') ? rotation_quick_add_items() : [];
 $heroStripKeyOptions = [];
 $heroStripSources = [];
@@ -4052,7 +4052,7 @@ function admin_field(array $f, $val, string $board): void
       <div class="help" style="margin:0 0 16px;padding:14px 16px;border:2px solid var(--warn);border-radius:10px;background:rgba(255,93,93,.08);color:var(--warn)">
         <strong>Emergency override active</strong> — <?= h($emStatus['label']) ?>
         <?php if ($emStatus['by'] !== ''): ?> · activated by <code><?= h($emStatus['by']) ?></code><?php endif; ?>
-        <?php if ($emExpires > 0): ?> · auto-release <?= h(date('M j, g:i A', $emExpires)) ?><?php endif; ?>
+        <?php if ($emExpires > 0): ?> · auto-release <?= h(signage_format_datetime($emExpires, 'M j,')) ?><?php endif; ?>
         <?php if (admin_is_super()): ?> · <a href="?board=rotation" style="color:inherit">Manage in Rotation</a><?php endif; ?>
       </div>
       <?php endif; ?>
@@ -4588,7 +4588,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <?php if (emergency_active()): ?>
               <div class="help" style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px;color:var(--warn)">
                 <?= h(emergency_status_label()) ?><?php if (!empty($emergencyCfg['activated_by'])): ?> — activated by <code><?= h((string)$emergencyCfg['activated_by']) ?></code><?php endif; ?>
-                <?php if (!empty($emergencyCfg['expires_at'])): ?> · auto-release <?= h(date('M j, g:i A', (int)$emergencyCfg['expires_at'])) ?><?php endif; ?>
+                <?php if (!empty($emergencyCfg['expires_at'])): ?> · auto-release <?= h(signage_format_datetime((int)$emergencyCfg['expires_at'], 'M j,')) ?><?php endif; ?>
               </div>
               <form method="post" action="?board=rotation" style="margin-bottom:16px" onsubmit="return confirm('Release emergency override on all displays?');">
                 <input type="hidden" name="action" value="emergency_release">
@@ -4690,7 +4690,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</th><th title="Randomize play order once per full pass; every page appears once per cycle">Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th></th>
+                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Time</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</th><th title="Randomize play order once per full pass; every page appears once per cycle">Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow):
@@ -4705,6 +4705,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                          name="SCREENS[<?= (int)$sri ?>][show_ticker]" value="1" <?= !empty($srow['show_ticker']) ? 'checked' : '' ?>></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][show_clock]" value="1" <?= !empty($srow['show_clock']) ? 'checked' : '' ?>></td>
+                  <td><select name="SCREENS[<?= (int)$sri ?>][clock_format]" style="min-width:92px">
+                    <option value="" <?= ($srow['clock_format'] ?? '') === '' ? 'selected' : '' ?>>Default</option>
+                    <option value="12" <?= ($srow['clock_format'] ?? '') === '12' ? 'selected' : '' ?>>12-hour</option>
+                    <option value="24" <?= ($srow['clock_format'] ?? '') === '24' ? 'selected' : '' ?>>24-hour</option>
+                  </select></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][show_debug]" value="1" <?= !empty($srow['show_debug']) ? 'checked' : '' ?>></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
@@ -5404,7 +5409,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <details class="panel panel-muted" style="margin-top:22px">
             <summary>Default transition settings</summary>
             <div class="panel-body">
-              <div class="help" style="margin-bottom:12px">Used when a display leaves Crossfade / Settle / Hang blank in <strong>Kiosk settings</strong> above.</div>
+              <div class="help" style="margin-bottom:12px">Used when a display leaves Crossfade / Settle / Hang blank in <strong>Kiosk settings</strong> above. <strong>24-hour clock</strong> is the global default; override per display under <strong>Time</strong>.</div>
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
                   if (!in_array($f['key'], $rotationBoardKeys, true)) continue;
@@ -7623,12 +7628,22 @@ function addRow(btn) {
       const blank = document.createElement('option');
       blank.value = ''; blank.textContent = '';
       inp.appendChild(blank);
-      (c.options || []).forEach(function (o) {
-        const opt = document.createElement('option');
-        opt.value = o; opt.textContent = o;
-        if (field === 'ICS_FEEDS' && c.key === 'source' && o === 'ical') opt.selected = true;
-        inp.appendChild(opt);
-      });
+      const opts = c.options || [];
+      if (Array.isArray(opts)) {
+        opts.forEach(function (o) {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o;
+          if (field === 'ICS_FEEDS' && c.key === 'source' && o === 'ical') opt.selected = true;
+          inp.appendChild(opt);
+        });
+      } else {
+        Object.keys(opts).forEach(function (val) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = opts[val];
+          inp.appendChild(opt);
+        });
+      }
     } else if (c.password) {
       inp.type = 'password';
       inp.autocomplete = 'off';

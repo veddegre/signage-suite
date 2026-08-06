@@ -1203,9 +1203,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
   function tick(){
     const n = new Date();
     <?php if ($showClock): ?>
-    let h = n.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
-    document.getElementById('clock').innerHTML =
-      h + ':' + String(n.getMinutes()).padStart(2,'0') + '<span> ' + ap + '</span>';
+    { const el = document.getElementById('clock'); if (el) el.textContent = <?= signage_js_format_time_expr('n') ?>; }
     <?php endif; ?>
     document.getElementById('dateline').textContent =
       n.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });

@@ -121,18 +121,7 @@ $embedH = max(720, signage_frame_height() - 16);
   <script>
   (function () {
     <?php if ($showClock): ?>
-    (function () {
-      const tz = <?= json_encode(TIMEZONE) ?>;
-      function tick() {
-        const el = document.getElementById('clock');
-        if (!el) return;
-        el.textContent = new Date().toLocaleTimeString('en-US', {
-          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
-        });
-      }
-      tick();
-      setInterval(tick, 1000);
-    })();
+    <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
     <?php if ($reload > 0): ?>
     setInterval(function () {

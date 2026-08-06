@@ -93,7 +93,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   const tz = <?= json_encode(TIMEZONE, JSON_UNESCAPED_SLASHES) ?>;
   const el = document.getElementById('clock');
   function tick() {
-    el.textContent = new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', timeZone: tz });
+    el.textContent = <?= signage_js_format_time_expr('now', 'tz') ?>;
   }
   tick(); setInterval(tick, 1000);
 })();

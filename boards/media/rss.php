@@ -464,9 +464,7 @@ $payload = array_map(fn($i) => [
     }
 
     <?php if ($showClock): ?>
-    function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
-      document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
-    tick(); setInterval(tick, 1000);
+    <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
 
     // Refetch the feed periodically (rotation shell also reloads per cycle)

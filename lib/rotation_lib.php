@@ -27,6 +27,33 @@ function rotation_global_hang_ms(): int
     return max(0, (int)cfg('rotation.HANG_MS', 20000));
 }
 
+/** Global default wall-clock format (false = 12-hour AM/PM). */
+function rotation_global_clock_24h(): bool
+{
+    return (bool)cfg('rotation.CLOCK_24H', false);
+}
+
+/** Per-display clock format; screen may override global default. */
+function rotation_screen_clock_24h(string $screen): bool
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $screensCfg = cfg('rotation.SCREENS', ['main' => 'Main Display']);
+    if (!is_array($screensCfg)) {
+        return rotation_global_clock_24h();
+    }
+    foreach ($screensCfg as $k => $v) {
+        if (rotation_normalize_screen_key((string)$k) !== $screen || !is_array($v)) {
+            continue;
+        }
+        if (array_key_exists('clock_24h', $v)) {
+            return !empty($v['clock_24h']);
+        }
+        break;
+    }
+
+    return rotation_global_clock_24h();
+}
+
 /** @param array<string,mixed>|null $scr @return array{fade_ms:int,settle_ms:int,hang_ms:int} */
 function rotation_screen_transition_from_scr(?array $scr): array
 {
@@ -173,6 +200,9 @@ function rotation_admin_screen_row(string $key, $rv): array
         'shuffle' => !empty($row['shuffle']),
         'show_ticker' => !array_key_exists('show_ticker', $row) || !empty($row['show_ticker']),
         'show_clock' => !array_key_exists('show_clock', $row) || !empty($row['show_clock']),
+        'clock_format' => array_key_exists('clock_24h', $row)
+            ? (!empty($row['clock_24h']) ? '24' : '12')
+            : '',
         'show_debug' => !empty($row['show_debug']),
         'keyboard_nav' => !empty($row['keyboard_nav']),
         'weighted' => !empty($row['weighted']),
@@ -546,6 +576,14 @@ function rotation_apply_screen_post_row(
             unset($entry['keyboard_nav']);
         }
         $entry['show_clock'] = isset($row['show_clock']);
+        $cf = trim((string)($row['clock_format'] ?? ''));
+        if ($cf === '24') {
+            $entry['clock_24h'] = true;
+        } elseif ($cf === '12') {
+            $entry['clock_24h'] = false;
+        } else {
+            unset($entry['clock_24h']);
+        }
     }
     if ($includeIdentity || !empty($row['_screen_opts_form'])) {
         if (isset($row['shuffle'])) {
@@ -1455,7 +1493,7 @@ function rotation_schedule_snapshot(string $screen = 'main', ?DateTimeInterface 
 
     return [
         'screen' => $screen,
-        'now' => $now->format('g:i A'),
+        'now' => $now->format(rotation_screen_clock_24h($screen) ? 'H:i' : 'g:i A'),
         'timezone' => rotation_timezone(),
         'weekday' => $now->format('l'),
         'blank' => rotation_screen_blank_active($screen),
@@ -2106,6 +2144,7 @@ function rotation_config_revision(string $screen = 'main'): string
         'shuffle' => $settings['shuffle'] && !$settings['weighted'],
         'show_ticker' => $settings['show_ticker'],
         'show_clock' => $settings['show_clock'],
+        'clock_24h' => rotation_screen_clock_24h($screen),
         'show_debug' => $settings['show_debug'],
         'keyboard_nav' => $settings['keyboard_nav'],
         'weighted' => $settings['weighted'],
@@ -2153,6 +2192,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'weighted' => $settings['weighted'],
         'show_ticker' => rotation_screen_ticker_enabled($screen),
         'show_clock' => $settings['show_clock'],
+        'clock_24h' => rotation_screen_clock_24h($screen),
         'show_debug' => $settings['show_debug'],
         'keyboard_nav' => $settings['keyboard_nav'],
         'schedule' => $settings['schedule'],

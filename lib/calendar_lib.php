@@ -496,8 +496,12 @@ function ics_wall_time_on_day(int $dayMidnight, int $referenceTs): int
     return $day->getTimestamp();
 }
 
-function ics_format_local_time(int $ts, string $format = 'g:i A'): string
+function ics_format_local_time(int $ts, ?string $format = null): string
 {
+    if ($format === null) {
+        $format = signage_time_format_php();
+    }
+
     return (new DateTime('@' . $ts))->setTimezone(calendar_display_timezone())->format($format);
 }
 

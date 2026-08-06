@@ -696,20 +696,24 @@ function sports_format_game_time(string $iso, DateTimeZone $tz): string
         $gameDay = $local->setTime(0, 0);
         $daysAway = (int)$today->diff($gameDay)->format('%r%a');
 
+        $timeFmt = signage_time_format_php();
+
         if ($daysAway === 0) {
-            return 'Today · ' . $local->format('g:i A');
+            return 'Today · ' . $local->format($timeFmt);
         }
         if ($daysAway === 1) {
-            return 'Tomorrow · ' . $local->format('g:i A');
+            return 'Tomorrow · ' . $local->format($timeFmt);
         }
         // Weekday-only labels read like “this Sun” when the game is weeks/months out.
         if ($daysAway > 6) {
             if ($local->format('Y') === $now->format('Y')) {
-                return $local->format('M j · g:i A');
+                return $local->format('M j · ' . $timeFmt);
             }
-            return $local->format('M j, Y · g:i A');
+
+            return $local->format('M j, Y · ' . $timeFmt);
         }
-        return $local->format('D · g:i A');
+
+        return $local->format('D · ' . $timeFmt);
     } catch (Exception) {
         return '—';
     }

@@ -2766,7 +2766,7 @@ function slides_schedule_snapshot(?array $deck = null, ?string $screen = null, ?
 
     return [
         'screen' => $screen,
-        'now' => $now->format('g:i A'),
+        'now' => signage_dt_format_time($now, $screen),
         'timezone' => slides_timezone(),
         'weekday' => $now->format('l'),
         'calendar_slide_filter' => is_array($calSlideFilter) && $calSlideFilter !== [] ? $calSlideFilter : null,

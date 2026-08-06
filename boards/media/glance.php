@@ -370,14 +370,7 @@ $compact = $boardH < 1080;
   const dl = document.getElementById('dateline');
   if (dl) dl.textContent = fmtDate();
   <?php if ($showClock): ?>
-  function tick() {
-    const n = new Date();
-    let h = n.getHours();
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    document.getElementById('clock').innerHTML = h + ':' + String(n.getMinutes()).padStart(2, '0') + '<span> ' + ap + '</span>';
-  }
-  tick(); setInterval(tick, 1000);
+  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
   <?php endif; ?>
   setTimeout(function () { location.reload(); }, <?= (int)RELOAD_SEC ?> * 1000);
 </script>

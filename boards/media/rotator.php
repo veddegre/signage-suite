@@ -135,11 +135,7 @@ function rotator_clock_js(): void
     if (!SHOW_CLOCK) {
         return;
     }
-    echo <<<'JS'
-    function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
-      document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
-    tick(); setInterval(tick, 1000);
-    JS;
+    echo signage_clock_tick_script('clock', TIMEZONE);
 }
 
 function rotator_page_shell_open(string $title): void

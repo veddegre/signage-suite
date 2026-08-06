@@ -269,7 +269,7 @@ function photo_nearest_hourly(array $times, array $values, int $targetTs): ?floa
 
 function tspan(array $w): string
 {
-    return date('g:i', $w[0]) . '–' . date('g:i A', $w[1]);
+    return signage_format_time_range((int)$w[0], (int)$w[1]);
 }
 
 // ── Sun geometry ─────────────────────────────────────────────────────────────
@@ -727,9 +727,9 @@ $gap = $compact ? 12 : 16;
     <div class="win"><div class="k">Blue Hour AM</div><div class="v"><?= tspan($blueAm) ?></div>
       <div class="s">Civil twilight to sunrise</div></div>
     <div class="win"><div class="k">Golden Hour AM</div><div class="v"><?= tspan($goldenAm) ?></div>
-      <div class="s">Sunrise <?= date('g:i A', $sun['sunrise']) ?></div></div>
+      <div class="s">Sunrise <?= h(signage_format_time((int)$sun['sunrise'])) ?></div></div>
     <div class="win prime"><div class="k">Golden Hour PM</div><div class="v"><?= tspan($goldenPm) ?></div>
-      <div class="s">Sunset <?= date('g:i A', $sun['sunset']) ?></div></div>
+      <div class="s">Sunset <?= h(signage_format_time((int)$sun['sunset'])) ?></div></div>
     <div class="win"><div class="k">Blue Hour PM</div><div class="v"><?= tspan($bluePm) ?></div>
       <div class="s">Sunset to end of civil twilight</div></div>
   </section>
@@ -737,10 +737,9 @@ $gap = $compact ? 12 : 16;
 </div>
 <script>
   <?php if ($showClock): ?>
-  function tick(){ const n=new Date(); let h=n.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
-    document.getElementById('clock').textContent = h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ap; }
-  tick(); setInterval(tick, 1000);
+  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
   <?php endif; ?>
+
   setTimeout(() => location.reload(), 15 * 60 * 1000);
 </script>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>

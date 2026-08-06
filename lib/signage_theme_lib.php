@@ -1129,7 +1129,7 @@ function signage_board_url_strip_rotation_query(string $url): string
     if (!is_array($params)) {
         $params = [];
     }
-    foreach (['noticker', 'theme', 'font', 'screen', 'safebottom', 'frameh', 'clock', 'settle', 'r'] as $key) {
+    foreach (['noticker', 'theme', 'font', 'screen', 'safebottom', 'frameh', 'clock', 'clockfmt', 'settle', 'r'] as $key) {
         unset($params[$key]);
     }
     $query = http_build_query($params);
@@ -1213,6 +1213,7 @@ function signage_board_rotation_query(
     if ($fontPackKey !== '' && signage_font_pack($fontPackKey) !== null) {
         $qs .= '&font=' . rawurlencode($fontPackKey);
     }
+    $qs .= '&' . signage_clock_format_query($screen);
 
     return $qs;
 }

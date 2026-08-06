@@ -68,18 +68,7 @@ $reload = $site['reload'];
   <iframe id="site" src="<?= h($site['url']) ?>" allow="autoplay; fullscreen"></iframe>
   <script>
     <?php if (SHOW_CLOCK): ?>
-    (function () {
-      const tz = <?= json_encode(TIMEZONE) ?>;
-      function tick() {
-        const el = document.getElementById('clock');
-        if (!el) return;
-        el.textContent = new Date().toLocaleTimeString('en-US', {
-          hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz
-        });
-      }
-      tick();
-      setInterval(tick, 1000);
-    })();
+    <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
     <?php if ($reload > 0): ?>
     setInterval(function () {

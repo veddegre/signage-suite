@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Wait for the kiosk user's XDG runtime dir (needed by cage/Wayland at boot).
+# Must run under ExecStart (PAM session), not ExecStartPre — the dir is created at login.
 set -euo pipefail
 
-MAX_WAIT="${1:-120}"
+MAX_WAIT="${1:-30}"
 uid="$(id -u)"
 runtime="/run/user/$uid"
 deadline=$(( $(date +%s) + MAX_WAIT ))

@@ -123,7 +123,7 @@ function uv_peak(array $hours): array
 function uv_format_clock(?string $iso): string
 {
     if ($iso === null || $iso === '') return '—';
-    return date('g:i A', strtotime($iso));
+    return signage_format_time(strtotime($iso));
 }
 
 function uv_verdict(?float $uvNow, bool $isDay, ?float $maxToday, ?float $maxTomorrow): array
@@ -407,17 +407,7 @@ $rowMid  = max(260, (int)round(320 * $boardH / 1080));
 </div>
 <script>
   <?php if ($showClock): ?>
-  function tick() {
-    const n = new Date();
-    let h = n.getHours();
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    const m = String(n.getMinutes()).padStart(2, '0');
-    const el = document.getElementById('clock');
-    if (el) el.textContent = h + ':' + m + ' ' + ap;
-  }
-  tick();
-  setInterval(tick, 1000);
+  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
   <?php endif; ?>
   <?php if (!$embedded && RELOAD_SEC > 0): ?>
   setTimeout(() => location.reload(), <?= (int)RELOAD_SEC * 1000 ?>);

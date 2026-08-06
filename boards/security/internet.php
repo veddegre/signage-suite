@@ -42,7 +42,7 @@ function internet_format_time(int $ts): string
     if ($ts <= 0) {
         return '';
     }
-    return date('M j, g:i A', $ts);
+    return signage_format_datetime($ts, 'M j,');
 }
 
 function internet_level_class(string $level): string
@@ -269,17 +269,7 @@ function internet_level_class(string $level): string
 </div>
 <script>
   <?php if ($showClock): ?>
-  function tick() {
-    const n = new Date();
-    let h = n.getHours();
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    const m = String(n.getMinutes()).padStart(2, '0');
-    const el = document.getElementById('clock');
-    if (el) el.textContent = h + ':' + m + ' ' + ap;
-  }
-  tick();
-  setInterval(tick, 1000);
+  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
   <?php endif; ?>
   <?php if (!$embedded && RELOAD_SEC > 0): ?>
   setTimeout(() => location.reload(), <?= (int)RELOAD_SEC * 1000 ?>);

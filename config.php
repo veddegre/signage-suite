@@ -390,4 +390,5 @@ function signage_kiosk_hide_pointer_script(): void
 }
 
 require_once __DIR__ . '/lib/install_profile_lib.php';
+require_once __DIR__ . '/lib/signage_time_lib.php';
 signage_board_profile_gate();

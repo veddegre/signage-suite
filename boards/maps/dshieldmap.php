@@ -294,17 +294,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 
 <script>
   <?php if ($showClock): ?>
-  function tick() {
-    const n = new Date();
-    let h = n.getHours();
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    const m = String(n.getMinutes()).padStart(2, '0');
-    const el = document.getElementById('clock');
-    if (el) el.textContent = h + ':' + m + ' ' + ap;
-  }
-  tick();
-  setInterval(tick, 1000);
+  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
   <?php endif; ?>
 </script>
 <?php if (!$embedded): include dirname(__DIR__, 2) . '/ticker.php'; endif; ?>

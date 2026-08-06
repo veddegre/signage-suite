@@ -261,6 +261,32 @@ journalctl -u signage-watchdog -f
 
 ---
 
+## Stuck on `[ OK ] loading target graphical.target`
+
+This is usually **misleading** — the Pi is not starting a desktop. That line is just the **last boot message left on tty1** while `signage.service` has not taken over the display yet.
+
+The race-condition fix added **`ExecStartPre` wait-for-runtime**, which blocked for up to **2 minutes before any blackout or browser start**, because `/run/user/<uid>` does not exist until the PAM login session opens (which happens at `ExecStart`, not before). Boot scrollback — including `graphical.target` — stays frozen on the TV the whole time.
+
+**Fix on the player:**
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash setup-kiosk.sh --skip-apt   # removes ExecStartPre wait; enables linger + seatd
+sudo systemctl restart signage
+```
+
+If it still hangs, check logs (server wait can take up to ~4 min on a slow network):
+
+```bash
+journalctl -u signage -b --no-pager | tail -40
+grep KIOSK_URL /etc/signage/kiosk.conf
+curl -k "$(grep KIOSK_URL /etc/signage/kiosk.conf | cut -d= -f2- | tr -d '"')" | grep -q 'const PAGES' && echo server OK
+```
+
+Also confirm the new screen key has **pages in its playlist** in admin → Rotation.
+
+---
+
 ## Blank screen until `systemctl restart signage`
 
 Rebooting may not help; only restarting the **signage** service fixes it. Common cause: Chromium launched before the network or signage server was ready, loaded a blank/error page, and stayed running — so systemd thinks everything is fine.

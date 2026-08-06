@@ -96,26 +96,22 @@ function signage_presence_format_ago(?int $ts): string
 function signage_presence_format_time(int $ts): string
 {
     try {
-        $tz = rotation_timezone();
-        $dt = new DateTime('@' . $ts);
-        $dt->setTimezone(new DateTimeZone($tz));
+        $tz = new DateTimeZone(rotation_timezone());
 
-        return $dt->format('g:i A');
+        return signage_format_time($ts, $tz);
     } catch (Throwable $e) {
-        return date('g:i A', $ts);
+        return signage_format_time($ts);
     }
 }
 
 function signage_presence_format_datetime(int $ts): string
 {
     try {
-        $tz = rotation_timezone();
-        $dt = new DateTime('@' . $ts);
-        $dt->setTimezone(new DateTimeZone($tz));
+        $tz = new DateTimeZone(rotation_timezone());
 
-        return $dt->format('M j, g:i A');
+        return signage_format_datetime($ts, 'M j', $tz);
     } catch (Throwable $e) {
-        return date('M j, g:i A', $ts);
+        return signage_format_datetime($ts, 'M j');
     }
 }
 

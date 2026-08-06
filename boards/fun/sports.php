@@ -421,7 +421,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   function tick(){
     const el = document.getElementById('clock');
     if (!el) return;
-    el.textContent = new Date().toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', timeZone: tz });
+    el.textContent = <?= signage_js_format_time_expr('now', 'tz') ?>;
   }
   tick(); setInterval(tick, 1000);
 })();
