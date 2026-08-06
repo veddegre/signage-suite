@@ -51,6 +51,9 @@ function splunkdash_normalize_page(array $page, string $key): ?array
     if (!empty($page['show_chrome'])) {
         $out['show_chrome'] = true;
     }
+    if (!empty($page['show_scrollbars'])) {
+        $out['show_scrollbars'] = true;
+    }
     if (!empty($page['off'])) {
         $out['off'] = true;
     }
@@ -216,4 +219,14 @@ function splunkdash_crop_top_px(array $dash): int
     }
 
     return splunkdash_default_crop_top_px();
+}
+
+/** @param array<string,mixed> $dash */
+function splunkdash_hide_scrollbars(array $dash = []): bool
+{
+    if (!empty($dash['show_scrollbars'])) {
+        return false;
+    }
+
+    return (bool)cfg('splunkdash.HIDE_SCROLLBARS', true);
 }

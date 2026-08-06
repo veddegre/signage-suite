@@ -80,6 +80,7 @@ $configured = !str_contains($dash['url'], 'REPLACE');
 $embedUrl   = splunkdash_embed_url((string)$dash['url'], $dash);
 $cropTop    = splunkdash_crop_top_px($dash);
 $boardH     = signage_frame_height();
+$hideScrollbars = splunkdash_hide_scrollbars($dash);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -93,7 +94,7 @@ $boardH     = signage_frame_height();
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
               font-family:system-ui,sans-serif; }
-  <?= signage_iframe_crop_css($boardH, $cropTop) ?>
+  <?= signage_iframe_crop_css($boardH, $cropTop, 'dash-wrap', $hideScrollbars) ?>
   .empty { width:1920px; height:<?= (int)$boardH ?>px; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
@@ -113,7 +114,7 @@ $boardH     = signage_frame_height();
   </div>
 <?php else: ?>
   <div class="dash-wrap">
-    <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen"></iframe>
+    <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen" scrolling="no"></iframe>
   </div>
   <script>
     <?php if ($reload > 0): ?>

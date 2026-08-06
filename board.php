@@ -42,6 +42,8 @@ $heroStripHeight = !empty($heroStrip['enabled']) ? (int)($heroStrip['height'] ??
 $blankActive = (bool)$runtime['blank'];
 $emergencyTicker = emergency_ticker_forces_display();
 $showTicker = rotation_screen_ticker_enabled($SCREEN);
+$tickerInsetPx = ($showTicker || $emergencyTicker) ? SIGNAGE_TICKER_H : 0;
+$rotationFrameH = max(720, 1080 - $tickerInsetPx - $heroStripHeight);
 $showDebug = !empty($runtime['show_debug']) || (isset($_GET['debug']) && (string)$_GET['debug'] === '1');
 
 if (($_GET['api'] ?? '') === '1') {
@@ -187,6 +189,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
   const THEME   = <?= json_encode($signageThemeKey) ?>;
+  const FRAME_H = <?= (int)$rotationFrameH ?>;
   const HERO_STRIP = <?= json_encode(!empty($heroStrip['enabled'])) ?>;
   const POLL_MS = 30000;
   const BLANK_POLL_MS = 30000;
@@ -652,6 +655,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     if (boardIsLocalSignage(p.url)) {
       if (SCREEN) qs += '&screen=' + encodeURIComponent(SCREEN);
       if (THEME) qs += '&theme=' + encodeURIComponent(THEME);
+      if (FRAME_H >= 720 && FRAME_H < 1080) qs += '&frameh=' + FRAME_H;
     }
     if (!SHOW_CLOCK) qs += '&clock=0';
     const fullSrc = p.url + sep + qs + '&r=' + Date.now();

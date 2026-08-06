@@ -982,6 +982,9 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if ($operatorKioskFocusOnly && $sk !== $rotationFocusSk) {
                     continue;
                 }
+                if (!admin_is_super() && !$rotationKioskTabSave && empty($opts['_screen_opts_form'])) {
+                    continue;
+                }
                 $entry = is_array($screens[$sk] ?? null) ? $screens[$sk] : ['name' => rotation_screen_display_name($sk, rotation_screens())];
                 if (!is_array($entry)) {
                     $entry = ['name' => (string)$entry];
@@ -991,7 +994,15 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if ($superScreensTablePosted && !$rotationKioskTabSave) {
                     $screens[$sk] = rotation_apply_screen_kiosk_extras_post_row($entry, $opts, $sk);
                 } else {
-                    $screens[$sk] = rotation_apply_screen_post_row($entry, $opts, false, false, $sk);
+                    $applyKioskDisplayFlags = !empty($opts['_screen_opts_form']);
+                    $screens[$sk] = rotation_apply_screen_post_row(
+                        $entry,
+                        $opts,
+                        false,
+                        false,
+                        $sk,
+                        $applyKioskDisplayFlags
+                    );
                 }
                 if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
                     $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
@@ -2123,7 +2134,7 @@ $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TI
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
-$splunkdashBoardKeys = ['HIDE_CHROME', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
+$splunkdashBoardKeys = ['HIDE_CHROME', 'HIDE_SCROLLBARS', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
 $videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = ($authed && $board === 'rotation') ? rotation_quick_add_items() : [];
@@ -6340,6 +6351,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][show_chrome]', $pageRo) ?>
                   <?= !empty($pg['show_chrome']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Show Splunk title bar</label>
+                <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][show_scrollbars]', $pageRo) ?>
+                  <?= !empty($pg['show_scrollbars']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Show scrollbars</label>
               </div>
             </div>
           </div>
@@ -7517,7 +7530,7 @@ function rotationPreviewUrl(url) {
   if (q >= 0) {
     base = url.slice(0, q);
     const params = new URLSearchParams(url.slice(q + 1));
-    ['noticker', 'theme', 'screen', 'safebottom', 'clock', 'settle', 'r'].forEach(function (k) {
+    ['noticker', 'theme', 'screen', 'safebottom', 'frameh', 'clock', 'settle', 'r'].forEach(function (k) {
       params.delete(k);
     });
     const rest = params.toString();
@@ -10136,6 +10149,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if ((calendarOnlySave || !kioskOnlySave) && document.getElementById('rotationCalendarOverridePanels')) {
         serializeRotationCalendarOverridesForSave();
       }
+      document.querySelectorAll('.rotation-setup-panel[data-rotation-tab-panel="kiosk"]').forEach(function (panel) {
+        panel.hidden = false;
+      });
       document.querySelectorAll('.rotation-display-options-wrap[hidden]').forEach(function (wrap) {
         wrap.querySelectorAll('input, select, textarea').forEach(function (el) {
           el.disabled = true;
@@ -11923,6 +11939,7 @@ function addSplunkdashPage() {
       '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][show_chrome]"> Show Splunk title bar</label>' +
+        '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][show_scrollbars]"> Show scrollbars</label>' +
       '</div>' +
     '</div>';
 

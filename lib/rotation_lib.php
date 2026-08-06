@@ -458,8 +458,14 @@ function rotation_apply_screen_kiosk_extras_post_row(array $entry, array $row, s
  * @param array<string,mixed> $entry
  * @param array<string,mixed> $row SCREENS[] or SCREEN_OPTS[] row
  */
-function rotation_apply_screen_post_row(array $entry, array $row, bool $includeIdentity = false, bool $kioskExtrasOnly = false, string $screenKey = ''): array
-{
+function rotation_apply_screen_post_row(
+    array $entry,
+    array $row,
+    bool $includeIdentity = false,
+    bool $kioskExtrasOnly = false,
+    string $screenKey = '',
+    bool $applyKioskDisplayFlags = true
+): array {
     if ($kioskExtrasOnly) {
         if (isset($row['hero_strip'])) {
             $entry['hero_strip'] = true;
@@ -533,44 +539,46 @@ function rotation_apply_screen_post_row(array $entry, array $row, bool $includeI
         }
     }
 
-    $entry['show_ticker'] = isset($row['show_ticker']);
-    $entry['show_debug'] = isset($row['show_debug']);
+    if ($applyKioskDisplayFlags) {
+        $entry['show_ticker'] = isset($row['show_ticker']);
+        $entry['show_debug'] = isset($row['show_debug']);
 
-    foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
-        $tv = trim((string)($row[$transKey] ?? ''));
-        if ($tv === '') {
-            unset($entry[$transKey]);
-        } else {
-            $entry[$transKey] = max(0, (int)$tv);
+        foreach (['fade_ms', 'settle_ms', 'hang_ms'] as $transKey) {
+            $tv = trim((string)($row[$transKey] ?? ''));
+            if ($tv === '') {
+                unset($entry[$transKey]);
+            } else {
+                $entry[$transKey] = max(0, (int)$tv);
+            }
         }
-    }
 
-    $hours = rotation_blank_hours_from_post_row($row);
-    $schedule = [
-        'enabled' => isset($row['schedule_enabled']),
-        'off' => $hours['off'],
-        'on' => $hours['on'],
-    ];
-    $weekdaysPosted = rotation_weekdays_from_post_row($row);
-    if ($weekdaysPosted !== null) {
-        $normalized = rotation_normalize_weekdays_list($weekdaysPosted);
-        if (count($normalized) !== 7) {
-            $schedule['weekdays'] = $normalized;
-        }
-    } elseif (isset($entry['schedule']) && is_array($entry['schedule']) && array_key_exists('weekdays', $entry['schedule'])) {
-        $schedule['weekdays'] = $entry['schedule']['weekdays'];
-    }
-    $entry['schedule'] = $schedule;
-
-    if (isset($row['cec_enabled'])) {
-        $entry['cec'] = [
-            'enabled' => true,
+        $hours = rotation_blank_hours_from_post_row($row);
+        $schedule = [
+            'enabled' => isset($row['schedule_enabled']),
             'off' => $hours['off'],
             'on' => $hours['on'],
-            'device' => max(0, min(15, (int)($entry['cec']['device'] ?? 0))),
         ];
-    } else {
-        unset($entry['cec']);
+        $weekdaysPosted = rotation_weekdays_from_post_row($row);
+        if ($weekdaysPosted !== null) {
+            $normalized = rotation_normalize_weekdays_list($weekdaysPosted);
+            if (count($normalized) !== 7) {
+                $schedule['weekdays'] = $normalized;
+            }
+        } elseif (isset($entry['schedule']) && is_array($entry['schedule']) && array_key_exists('weekdays', $entry['schedule'])) {
+            $schedule['weekdays'] = $entry['schedule']['weekdays'];
+        }
+        $entry['schedule'] = $schedule;
+
+        if (isset($row['cec_enabled'])) {
+            $entry['cec'] = [
+                'enabled' => true,
+                'off' => $hours['off'],
+                'on' => $hours['on'],
+                'device' => max(0, min(15, (int)($entry['cec']['device'] ?? 0))),
+            ];
+        } else {
+            unset($entry['cec']);
+        }
     }
 
     if ($includeIdentity || !empty($row['_screen_opts_form'])) {

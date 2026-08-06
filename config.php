@@ -142,16 +142,26 @@ function signage_safe_bottom(): int
     return max(0, min(120, (int)($_GET['safebottom'] ?? 0)));
 }
 
+/** Explicit iframe height from board.php (?frameh=) — matches ticker/hero insets on the shell. */
+function signage_frame_height_query(): int
+{
+    return max(0, min(1080, (int)($_GET['frameh'] ?? 0)));
+}
+
 /**
  * Logical viewport height for responsive board typography (px).
  * Rotation iframes use height:100% and follow the shell ticker inset dynamically;
- * this returns the design canvas unless legacy ?safebottom= is present.
+ * board.php passes ?frameh= so grid math matches the shortened iframe.
  */
 function signage_frame_height(): int
 {
     $full = 1080;
 
     if (isset($_GET['noticker'])) {
+        $frameh = signage_frame_height_query();
+        if ($frameh >= 720) {
+            return $frameh;
+        }
         $sb = signage_safe_bottom();
         if ($sb > 0) {
             return max(720, $full - $sb);

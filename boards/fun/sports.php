@@ -321,7 +321,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   <div class="stamp" id="sports-stamp"><?= h(sports_board_stamp_text($board, $showDebug)) ?></div>
 </div>
 <script>
-<?php if (!$embedded): ?>
 (function () {
   var API = <?= json_encode($apiUrl) ?>;
   var POLL = <?= (int)$pollMs ?>;
@@ -418,7 +417,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     if (document.visibilityState === 'visible') refresh();
   });
 })();
-<?php endif; ?>
 <?php if ($showClock): ?>
 (function(){
   const tz = <?= json_encode(TIMEZONE) ?>;

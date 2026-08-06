@@ -431,12 +431,15 @@ CSS;
 }
 
 /** CSS for clipping the top of a cross-origin iframe embed (Splunk publish, etc.). */
-function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap'): string
+function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap', bool $hideScrollbars = false): string
 {
     $boardH = max(720, $boardH);
     $cropTop = max(0, min(400, $cropTop));
     $frameH = $boardH + $cropTop;
     $wrap = preg_replace('/[^a-z0-9_-]/', '', $wrapClass) ?: 'dash-wrap';
+    $scrollbarGutter = $hideScrollbars ? 24 : 0;
+    $iframeW = 1920 + $scrollbarGutter;
+    $iframeH = $frameH + $scrollbarGutter;
 
     return <<<CSS
   .{$wrap} {
@@ -450,12 +453,13 @@ function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 
     position: absolute;
     left: 0;
     top: -{$cropTop}px;
-    width: 1920px;
-    height: {$frameH}px;
+    width: {$iframeW}px;
+    height: {$iframeH}px;
     border: 0;
     display: block;
     pointer-events: none;
     background: var(--lake-night);
+    overflow: hidden;
   }
 CSS;
 }
@@ -668,7 +672,7 @@ function signage_board_url_strip_rotation_query(string $url): string
     if (!is_array($params)) {
         $params = [];
     }
-    foreach (['noticker', 'theme', 'screen', 'safebottom', 'clock', 'settle', 'r'] as $key) {
+    foreach (['noticker', 'theme', 'screen', 'safebottom', 'frameh', 'clock', 'settle', 'r'] as $key) {
         unset($params[$key]);
     }
     $query = http_build_query($params);
