@@ -44,6 +44,7 @@ function camwall_corridor_cameras(): array
             'url' => 'https://micamerasimages.net/thumbs/grand_cam_062.flv.jpg?item=1',
             'sort' => 5,
             'focus' => '50% 15%',
+            'also_routes' => ['I-196'],
         ],
         'i196-zeeland' => [
             'name' => 'Zeeland Rest Area',
@@ -125,14 +126,20 @@ function camwall_catalog_groups(): array
         if (!is_array($entry)) {
             continue;
         }
-        $route = trim((string)($entry['route'] ?? ''));
-        if ($route === '') {
-            $route = 'Other';
+        $routes = [trim((string)($entry['route'] ?? '')) ?: 'Other'];
+        foreach ((array)($entry['also_routes'] ?? []) as $alsoRoute) {
+            $alsoRoute = trim((string)$alsoRoute);
+            if ($alsoRoute !== '' && !in_array($alsoRoute, $routes, true)) {
+                $routes[] = $alsoRoute;
+            }
         }
-        $groups[$route][] = [
+        $item = [
             'key' => (string)$key,
             'label' => camwall_catalog_label((string)$key, $entry),
         ];
+        foreach ($routes as $route) {
+            $groups[$route][] = $item;
+        }
     }
     ksort($groups);
     foreach ($groups as $route => $items) {
