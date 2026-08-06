@@ -73,11 +73,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .panel .body { flex:1; min-height:0; overflow:hidden; }
 
   .tickets { display:flex; flex-direction:column; gap:8px; }
-  .ticket { display:grid; grid-template-columns:90px 130px 1fr 180px 120px; gap:16px; align-items:start;
+  .ticket { display:grid; grid-template-columns:minmax(120px,auto) minmax(110px,auto) 1fr 180px 100px; gap:16px; align-items:start;
             padding:12px 0; border-bottom:1px solid rgba(38,52,77,.55); }
   .ticket:last-child { border-bottom:none; }
-  .tid { font-size:22px; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums; }
-  .prio { font-size:18px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; }
+  .tid { font-size:22px; font-weight:600; color:var(--accent); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .prio { font-size:18px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; white-space:nowrap; }
   .ttitle { font-size:26px; line-height:1.25; }
   .tmeta { font-size:18px; color:var(--mist); margin-top:4px; }
   .tage { font-size:22px; color:var(--mist); text-align:right; white-space:nowrap; }
@@ -110,7 +110,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     </div>
   <?php else: ?>
     <div class="summary">
-      <div class="pill">App <strong><?= h($appLabel !== '' ? $appLabel : ($appId > 0 ? (string)$appId : '—')) ?></strong></div>
+      <div class="pill"><?php if ($appLabel !== ''): ?><strong><?= h($appLabel) ?></strong><?php else: ?>App <strong><?= $appId > 0 ? (int)$appId : '—' ?></strong><?php endif; ?></div>
       <div class="pill">Open <strong><?= (int)$ticketCount ?></strong></div>
       <?php if ((int)($counts['overdue'] ?? 0) > 0): ?>
       <div class="pill bad">Overdue <strong><?= (int)$counts['overdue'] ?></strong></div>

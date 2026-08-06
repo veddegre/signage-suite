@@ -992,9 +992,6 @@ function tdx_fetch_wall_data(array $page): array
 
     $meta = tdx_metadata_cached($appId);
     $appLabel = (string)($meta['app_name'] ?? '');
-    if ($appLabel === '') {
-        $appLabel = 'App ' . $appId;
-    }
 
     $out = [
         'ok' => true,
