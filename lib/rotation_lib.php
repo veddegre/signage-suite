@@ -986,7 +986,7 @@ function rotation_hour_in_range(int $from, int $to, int $hour): bool
 /**
  * Normalized minute windows for a playlist row.
  *
- * @return list<array{from_min:int,to_min:int}>
+ * @return list<array{from_min:int,to_min:int,weight?:int}>
  */
 function rotation_page_window_ranges(array $page): array
 {
@@ -999,7 +999,15 @@ function rotation_page_window_ranges(array $page): array
             $fromMin = rotation_parse_time($w['from'] ?? null);
             $toMin = rotation_parse_time($w['to'] ?? null);
             if ($fromMin !== null && $toMin !== null) {
-                $out[] = ['from_min' => $fromMin, 'to_min' => $toMin];
+                $row = ['from_min' => $fromMin, 'to_min' => $toMin];
+                $wRaw = trim((string)($w['weight'] ?? ''));
+                if ($wRaw !== '') {
+                    $wt = max(1, min(20, (int)$wRaw));
+                    if ($wt > 1) {
+                        $row['weight'] = $wt;
+                    }
+                }
+                $out[] = $row;
             }
         }
         if ($out !== []) {
@@ -1051,15 +1059,61 @@ function rotation_page_weekdays_active(array $page, ?DateTimeInterface $now = nu
     return rotation_today_in_weekdays($days, $now);
 }
 
-/** Human label for admin/diagnose, e.g. "7:30–9, 16–18". Empty when all day. */
+/** Human label for admin/diagnose, e.g. "7:30–9×5, 16–18". Empty when all day. */
 function rotation_page_windows_label(array $page): string
 {
     $parts = [];
     foreach (rotation_page_window_ranges($page) as $w) {
-        $parts[] = rotation_format_time_label($w['from_min']) . '–' . rotation_format_time_label($w['to_min']);
+        $label = rotation_format_time_label($w['from_min']) . '–' . rotation_format_time_label($w['to_min']);
+        if (!empty($w['weight']) && (int)$w['weight'] > 1) {
+            $label .= '×' . (int)$w['weight'];
+        }
+        $parts[] = $label;
     }
 
     return implode(', ', $parts);
+}
+
+/** Default page weight (1–20). */
+function rotation_page_base_weight(array $page): int
+{
+    $w = (int)($page['weight'] ?? 0);
+
+    return ($w > 0) ? max(1, min(20, $w)) : 1;
+}
+
+/** Effective weight for weighted rotation — uses the active window's weight when set. */
+function rotation_page_effective_weight(array $page, DateTimeInterface|int|null $now = null): int
+{
+    $base = rotation_page_base_weight($page);
+    if (!$now instanceof DateTimeInterface) {
+        if (is_int($now)) {
+            $now = rotation_now()->setTime($now, 0);
+        } else {
+            $now = rotation_now();
+        }
+    }
+    $windows = rotation_page_window_ranges($page);
+    if ($windows === []) {
+        return $base;
+    }
+    $nowMin = rotation_minutes_since_midnight($now);
+    $matched = null;
+    foreach ($windows as $w) {
+        if (!rotation_minutes_in_range((int)$w['from_min'], (int)$w['to_min'], $nowMin)) {
+            continue;
+        }
+        if (!empty($w['weight']) && (int)$w['weight'] > 1) {
+            $matched = $matched === null
+                ? (int)$w['weight']
+                : max($matched, (int)$w['weight']);
+        }
+    }
+    if ($matched !== null) {
+        return max(1, min(20, $matched));
+    }
+
+    return $base;
 }
 
 /** Full schedule label including weekdays when restricted. */
@@ -1086,7 +1140,7 @@ function rotation_page_schedule_label(array $page): string
     return implode(' · ', $parts);
 }
 
-/** Admin form rows — at least one blank pair when unrestricted. @return list<array{from:mixed,to:mixed}> */
+/** Admin form rows — at least one blank pair when unrestricted. @return list<array{from:mixed,to:mixed,weight:mixed}> */
 function rotation_page_windows_form_rows(array $page): array
 {
     if (!empty($page['windows']) && is_array($page['windows'])) {
@@ -1098,6 +1152,7 @@ function rotation_page_windows_form_rows(array $page): array
             $rows[] = [
                 'from' => (string)($w['from'] ?? ''),
                 'to' => (string)($w['to'] ?? ''),
+                'weight' => (string)($w['weight'] ?? ''),
             ];
         }
         if ($rows !== []) {
@@ -1107,16 +1162,16 @@ function rotation_page_windows_form_rows(array $page): array
     $from = $page['from'] ?? '';
     $to = $page['to'] ?? '';
     if ($from !== '' && $from !== null && $to !== '' && $to !== null) {
-        return [['from' => (string)$from, 'to' => (string)$to]];
+        return [['from' => (string)$from, 'to' => (string)$to, 'weight' => '']];
     }
 
-    return [['from' => '', 'to' => '']];
+    return [['from' => '', 'to' => '', 'weight' => '']];
 }
 
 /**
  * Parse time windows from a posted playlist row.
  *
- * @return list<array{from_min:int,to_min:int}>
+ * @return list<array{from_min:int,to_min:int,weight?:int}>
  */
 function rotation_parse_page_windows_from_row(array $row): array
 {
@@ -1130,7 +1185,15 @@ function rotation_parse_page_windows_from_row(array $row): array
             $fromMin = rotation_parse_time($w['from'] ?? null);
             $toMin = rotation_parse_time($w['to'] ?? null);
             if ($fromMin !== null && $toMin !== null) {
-                $windows[] = ['from_min' => $fromMin, 'to_min' => $toMin];
+                $entry = ['from_min' => $fromMin, 'to_min' => $toMin];
+                $wRaw = trim((string)($w['weight'] ?? ''));
+                if ($wRaw !== '') {
+                    $wt = max(1, min(20, (int)$wRaw));
+                    if ($wt > 1) {
+                        $entry['weight'] = $wt;
+                    }
+                }
+                $windows[] = $entry;
             }
         }
     }
@@ -1145,18 +1208,28 @@ function rotation_parse_page_windows_from_row(array $row): array
     return $windows;
 }
 
-/** @param list<array{from_min:int,to_min:int}> $ranges */
+/** @param list<array{from_min:int,to_min:int,weight?:int}> $ranges */
 function rotation_store_window_fields(array $ranges): array
 {
     if ($ranges === []) {
         return [];
     }
-    $serialize = static fn(array $w): array => [
-        'from' => rotation_format_time_value($w['from_min']),
-        'to' => rotation_format_time_value($w['to_min']),
-    ];
+    $serialize = static function (array $w): array {
+        $out = [
+            'from' => rotation_format_time_value($w['from_min']),
+            'to' => rotation_format_time_value($w['to_min']),
+        ];
+        if (!empty($w['weight']) && (int)$w['weight'] > 1) {
+            $out['weight'] = (int)$w['weight'];
+        }
+
+        return $out;
+    };
     if (count($ranges) === 1) {
         $one = $serialize($ranges[0]);
+        if (isset($one['weight'])) {
+            return ['windows' => [$one]];
+        }
 
         return ['from' => $one['from'], 'to' => $one['to']];
     }
@@ -1264,7 +1337,7 @@ function rotation_schedule_snapshot(string $screen = 'main', ?DateTimeInterface 
             'label' => rotation_page_label($url),
             'url' => $url,
             'dwell' => rotation_page_dwell($page),
-            'weight' => max(1, min(20, (int)($page['weight'] ?? 1) ?: 1)),
+            'weight' => rotation_page_effective_weight($page, $now),
             'schedule' => $schedLabel,
             'status' => $status,
             'reason' => $reason,
@@ -2163,6 +2236,7 @@ function rotation_weight_tooltip(): string
 {
     return 'Slots per weighted cycle when Weighted is on for the display. '
         . 'Blank or 1 = one slot per pass. 2–20 = that many slots (weight 3 ≈ 3× as often as weight 1). '
+        . 'Per-window weight (on each time row) overrides this while that window is active. '
         . 'Every in-window board plays at least once before the cycle repeats. '
         . 'Ignored when Weighted is off. Hour windows and Skip still apply.';
 }

@@ -3599,6 +3599,7 @@ function admin_field(array $f, $val, string $board): void
   .slide-bulk-time-panel[hidden] { display:none !important; }
   .rotation-window-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px; }
   .rotation-window-row input { width:4.5em; flex:0 0 auto; }
+  .rotation-window-row input.rotation-window-weight { width:3em; }
   .rotation-window-row .rowdel { flex:0 0 auto; }
   .rotation-window-add { margin-top:4px; padding:4px 10px; font-size:12px; }
   .rotation-calendar-override { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:12px; background:var(--lake-night); }
@@ -4981,7 +4982,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </span>
             </summary>
             <div class="panel-body">
-          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Boards (weather, RSS, …): set <strong>Dwell</strong> on each card header. Deployed slides: edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy. Expand a card for hour windows (multiple ranges OK, e.g. commute times) and <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong>. Save — kiosks pick up changes within ~30s.</div>
+          <div class="help" style="margin-bottom:8px">Drag <strong>⋮⋮</strong> to reorder. Boards (weather, RSS, …): set <strong>Dwell</strong> on each card header. Deployed slides: edit <strong>Sec</strong> on <a href="?board=slides">Custom Slides</a>, then Save &amp; Deploy. Expand a card for hour windows (multiple ranges OK, e.g. commute times), optional <strong>weight per window</strong>, and a page-level <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> fallback. Save — kiosks pick up changes within ~30s.</div>
           <?php if (!empty($screenSettings['weighted'])): ?>
           <div class="help" style="margin-bottom:8px"><strong>Weighted</strong> is on for this display — each page's <strong title="<?= h(rotation_weight_tooltip()) ?>">Weight</strong> (1–20, default 1) is how many slots it gets in each shuffled cycle. Higher weight = more airtime, but every board still plays at least once per cycle.</div>
           <?php endif; ?>
@@ -5327,7 +5328,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 </div>
                 <div class="rotation-windows" data-rotation-windows>
                   <label class="mini">Time windows</label>
-                  <div class="help" style="margin:0 0 6px">Leave blank for all day. Use whole hours (<code>7</code>) or minutes (<code>7:30</code>). Add multiple for split schedules.</div>
+                  <div class="help" style="margin:0 0 6px">Leave blank for all day. Use whole hours (<code>7</code>) or minutes (<code>7:30</code>). Add multiple for split schedules. Optional <strong>Wt</strong> per row overrides page weight while that window is active (Weighted mode).</div>
                   <?php foreach ($windowRows as $wi => $win): ?>
                   <div class="rotation-window-row" data-rotation-window-row>
                     <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][from]"
@@ -5335,6 +5336,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                     <span class="help" style="margin:0">–</span>
                     <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][to]"
                            value="<?= h((string)($win['to'] ?? '')) ?>" placeholder="9 or 9:00" aria-label="To time">
+                    <input type="text" class="rotation-window-weight" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][windows][<?= (int)$wi ?>][weight]"
+                           value="<?= h((string)($win['weight'] ?? '')) ?>" placeholder="Wt" title="<?= h(rotation_weight_tooltip()) ?>" aria-label="Window weight">
                     <button type="button" class="rowdel rotation-window-remove" title="Remove window"<?= count($windowRows) <= 1 ? ' hidden' : '' ?>>×</button>
                   </div>
                   <?php endforeach; ?>
@@ -5346,7 +5349,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <?php rotation_admin_weekdays_html($fieldKey . '[' . (int)$pri . ']', $pageWeekdays); ?>
                 </div>
                 <div>
-                  <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight</label>
+                  <label class="mini" title="<?= h(rotation_weight_tooltip()) ?>">Weight (default)</label>
                   <input type="text" name="<?= h($fieldKey) ?>[<?= (int)$pri ?>][weight]" value="<?= h((string)($prow['weight'] ?? '')) ?>" placeholder="1" title="<?= h(rotation_weight_tooltip()) ?>">
                 </div>
               </div>
@@ -6232,7 +6235,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <label class="mini">Crop top (px)</label>
                 <input type="number" min="0" max="400"<?= admin_form_name_attr('PAGES[' . $pk . '][crop_top]', $pageRo) ?>
                        value="<?= h((string)($pg['crop_top'] ?? '')) ?>" placeholder="<?= (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0) ?>"<?= admin_form_ro_attr($pageRo) ?>>
-                <div class="help">Shift the iframe up to hide Splunk&rsquo;s title bar (default 52px when hide-chrome is on; set <strong>0</strong> to disable). Panel titles are nudged down automatically — increase crop if Splunk chrome reappears.</div>
+                <div class="help">Shift the iframe up to hide Splunk&rsquo;s title bar (default 48px when hide-chrome is on; set <strong>0</strong> to disable). Panel titles are nudged down automatically — increase crop if Splunk chrome reappears.</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
@@ -10564,9 +10567,15 @@ function rotationWindowsSummary(card) {
   card.querySelectorAll('[data-rotation-window-row]').forEach(function (row) {
     const fromInp = row.querySelector('input[name*="[from]"]');
     const toInp = row.querySelector('input[name*="[to]"]');
+    const wtInp = row.querySelector('input[name*="[weight]"]');
     const from = fromInp ? fromInp.value.trim() : '';
     const to = toInp ? toInp.value.trim() : '';
-    if (from !== '' && to !== '') parts.push(from + '–' + to);
+    const wt = wtInp ? parseInt(wtInp.value.trim(), 10) : NaN;
+    if (from !== '' && to !== '') {
+      let label = from + '–' + to;
+      if (!isNaN(wt) && wt > 1) label += '×' + wt;
+      parts.push(label);
+    }
   });
   return parts.join(', ');
 }
@@ -10611,6 +10620,7 @@ function appendRotationWindowRow(container, fieldPrefix) {
     '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][from]" placeholder="from" aria-label="From hour">' +
     '<span class="help" style="margin:0">–</span>' +
     '<input type="text" name="' + fieldPrefix + '[windows][' + idx + '][to]" placeholder="to" aria-label="To hour">' +
+    '<input type="text" class="rotation-window-weight" name="' + fieldPrefix + '[windows][' + idx + '][weight]" placeholder="Wt" aria-label="Window weight">' +
     '<button type="button" class="rowdel rotation-window-remove" title="Remove window">×</button>';
   if (addBtn) container.insertBefore(row, addBtn);
   else container.appendChild(row);
@@ -10839,6 +10849,7 @@ function addRotationPage(deckId, url, dwell, scroll) {
           '<input type="text" name="' + field + '[' + idx + '][windows][0][from]" placeholder="7 or 7:30" aria-label="From time">' +
           '<span class="help" style="margin:0">–</span>' +
           '<input type="text" name="' + field + '[' + idx + '][windows][0][to]" placeholder="9 or 9:00" aria-label="To time">' +
+          '<input type="text" class="rotation-window-weight" name="' + field + '[' + idx + '][windows][0][weight]" placeholder="Wt" aria-label="Window weight">' +
           '<button type="button" class="rowdel rotation-window-remove" title="Remove window" hidden>×</button>' +
         '</div>' +
         '<button type="button" class="secondary rotation-window-add">+ Add window</button>' +
@@ -10848,7 +10859,7 @@ function addRotationPage(deckId, url, dwell, scroll) {
         '<div class="help" style="margin:0 0 6px">Optional — limit this board to certain weekdays.</div>' +
         rotationWeekdaysHtml(field + '[' + idx + ']', null) +
       '</div>' +
-      '<div><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight</label>' +
+      '<div><label class="mini" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '">Weight (default)</label>' +
       '<input type="text" name="' + field + '[' + idx + '][weight]" placeholder="1" title="' + (window.ROTATION_WEIGHT_TOOLTIP || '').replace(/"/g, '&quot;') + '"></div>' +
     '</div></details>';
   deck.appendChild(card);

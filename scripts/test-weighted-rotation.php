@@ -11,11 +11,9 @@ require_once $root . '/config.php';
 require_once $root . '/lib/rotation_lib.php';
 
 /** @param array<string,mixed> $page */
-function test_page_weight(array $page): int
+function test_page_weight(array $page, ?DateTimeInterface $now = null): int
 {
-    $w = (int)($page['weight'] ?? 0);
-
-    return ($w > 0) ? min(20, $w) : 1;
+    return rotation_page_effective_weight($page, $now);
 }
 
 // ── Hour windows (rotation_page_in_window) ────────────────────────────────────
@@ -105,6 +103,28 @@ if ($inCommuteHour !== $isWeekday) {
     exit(1);
 }
 echo "Weekday window checks: OK\n";
+
+$pageWindowWeight = [
+    'url' => 'traffic',
+    'weight' => 1,
+    'windows' => [
+        ['from' => 7, 'to' => 9, 'weight' => 5],
+        ['from' => 16, 'to' => 18, 'weight' => 3],
+    ],
+];
+$windowWeightExpect = [
+    8 => 5,
+    12 => 1, // not in window — effective weight still computed but page wouldn't be eligible
+    17 => 3,
+];
+foreach ($windowWeightExpect as $hour => $expect) {
+    $got = rotation_page_effective_weight($pageWindowWeight, rotation_now()->setTime((int)$hour, 0));
+    if ($got !== $expect) {
+        fwrite(STDERR, "FAIL window weight at h={$hour}: got {$got} expected {$expect}\n");
+        exit(1);
+    }
+}
+echo "Per-window weight checks: OK\n";
 
 /**
  * Mirrors board.php weighted deck (weight copies per cycle, shuffled).
@@ -228,14 +248,23 @@ if (($merged['weight'] ?? 0) !== 20 || ($merged['from'] ?? null) !== 8 || ($merg
 $prevMulti = [
     'url' => 'traffic.php',
     'dwell' => 90,
-    'windows' => [['from' => 7, 'to' => 9], ['from' => 16, 'to' => 18]],
+    'windows' => [['from' => 7, 'to' => 9, 'weight' => 5], ['from' => 16, 'to' => 18]],
 ];
 $mergedMulti = rotation_merge_page_meta(['url' => 'traffic.php', 'dwell' => 60], $prevMulti);
 $mergedWindows = $mergedMulti['windows'] ?? [];
 if (count($mergedWindows) !== 2
     || (int)($mergedWindows[0]['from'] ?? 0) !== 7
+    || (int)($mergedWindows[0]['weight'] ?? 0) !== 5
     || (int)($mergedWindows[1]['to'] ?? 0) !== 18) {
     fwrite(STDERR, "FAIL: rotation_merge_page_meta dropped multi-window metadata\n");
+    exit(1);
+}
+$stored = rotation_store_window_fields([
+    ['from_min' => 420, 'to_min' => 540, 'weight' => 4],
+    ['from_min' => 960, 'to_min' => 1080],
+]);
+if (($stored['windows'][0]['weight'] ?? 0) !== 4 || isset($stored['windows'][1]['weight'])) {
+    fwrite(STDERR, "FAIL: rotation_store_window_fields weight serialization\n");
     exit(1);
 }
 echo "Sync metadata preservation: OK\n";

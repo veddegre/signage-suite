@@ -397,7 +397,11 @@ if (($_GET['api'] ?? '') === 'presence') {
     if (Array.isArray(p.windows) && p.windows.length) raw = p.windows;
     else if (p.from != null && p.to != null && p.from !== '' && p.to !== '') raw = [{ from: p.from, to: p.to }];
     return raw.map(function (w) {
-      return { from: parseWindowTime(w.from), to: parseWindowTime(w.to) };
+      return {
+        from: parseWindowTime(w.from),
+        to: parseWindowTime(w.to),
+        weight: w.weight
+      };
     }).filter(function (w) {
       return w.from != null && w.to != null;
     });
@@ -428,8 +432,22 @@ if (($_GET['api'] ?? '') === 'presence') {
   }
 
   function pageWeight(p) {
-    const w = parseInt(p.weight, 10);
-    return (!isNaN(w) && w > 0) ? Math.min(20, w) : 1;
+    const baseRaw = parseInt(p.weight, 10);
+    const base = (!isNaN(baseRaw) && baseRaw > 0) ? Math.min(20, baseRaw) : 1;
+    const windows = pageWindows(p);
+    if (!windows.length) return base;
+    const nowMin = rotationMinutesNow();
+    let matched = null;
+    for (let i = 0; i < windows.length; i++) {
+      const w = windows[i];
+      if (!minutesInRange(nowMin, w.from, w.to)) continue;
+      const ww = parseInt(w.weight, 10);
+      if (!isNaN(ww) && ww > 0) {
+        const clamped = Math.min(20, ww);
+        matched = matched === null ? clamped : Math.max(matched, clamped);
+      }
+    }
+    return matched !== null ? matched : base;
   }
 
   // Play order: weighted deck, shuffled deck, or sequential list.
