@@ -3034,7 +3034,8 @@ function admin_rotation_kiosk_settings_panel(
         </div>
         <div class="field span-2 rotation-section">
           <span class="mini">MDOT camera wall override</span>
-          <div class="help" style="margin:6px 0 10px">Pick which cameras appear on <code>camwall.php</code> for this display and where each sits on the <?= (int)$camwallGrid['cols'] ?>×<?= (int)$camwallGrid['rows'] ?> grid (slot 1 = top-left). All choices are — site default — to use the global wall under <strong>MDOT Cams</strong>.</div>
+          <div class="help" style="margin:6px 0 10px">Pick which cameras appear on <code>camwall.php</code> for this display and where each sits on the <?= (int)$camwallGrid['cols'] ?>×<?= (int)$camwallGrid['rows'] ?> grid (slot 1 = top-left). All choices are — site default — to use the global wall under <strong>MDOT Cams</strong>. <strong>Save rotation</strong> before preview — unsaved picks are ignored. At least one slot must be a specific camera (not all site default).</div>
+          <p style="margin:0 0 10px"><a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h(signage_rotation_page_preview_url('camwall.php', $screenKey)) ?>" target="_blank" rel="noopener">Preview cam wall ↗</a> <span class="help" style="margin:0">Opens <code>camwall.php?screen=<?= h($screenKey) ?></code> with this display's saved layout.</span></p>
           <div class="rotation-subgrid camwall-subgrid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
             <?php foreach ($camwallSlotKeys as $ci => $picked):
               if ($ci >= (int)$camwallGrid['slots']) {
@@ -7560,7 +7561,7 @@ const RSS_PREVIEW_SUFFIX = <?= json_encode(
     signage_board_rotation_query($adminPreviewScreen, $adminPreviewTheme)
 ) ?>;
 
-function rotationPreviewUrl(url) {
+function rotationPreviewUrl(url, screenKey) {
   url = (url || '').trim();
   if (!url || /^https?:\/\//i.test(url) || !/\.php(?:[?#]|$)/i.test(url)) return url;
   let frag = '';
@@ -7580,8 +7581,18 @@ function rotationPreviewUrl(url) {
     const rest = params.toString();
     url = base + (rest ? '?' + rest : '');
   }
+  let suffix = RSS_PREVIEW_SUFFIX;
+  if (!screenKey) {
+    syncRotationFocusScreenField();
+    screenKey = (document.getElementById('rotationFocusScreen') || {}).value || '';
+  }
+  if (screenKey) {
+    const sp = new URLSearchParams(suffix);
+    sp.set('screen', screenKey);
+    suffix = sp.toString();
+  }
   const sep = url.includes('?') ? '&' : '?';
-  return url + sep + RSS_PREVIEW_SUFFIX + frag;
+  return url + sep + suffix + frag;
 }
 
 function rssPreviewUrl(key) {
@@ -10900,12 +10911,14 @@ function bindRotationCard(card, deck) {
   const labelEl = card.querySelector('[data-rotation-label]');
   const codeEl = card.querySelector('[data-rotation-url-display]');
   const preview = card.querySelector('[data-rotation-preview]');
+  const panel = card.closest('.rotation-playlist-panel[data-rotation-screen]');
+  const deckScreen = panel ? (panel.getAttribute('data-rotation-screen') || '') : '';
   function syncHead() {
     const u = urlInp ? urlInp.value.trim() : '';
     if (labelEl) labelEl.textContent = rotationLabelFromUrl(u);
     if (codeEl) codeEl.textContent = u || 'board URL';
     if (preview) {
-      if (u) { preview.href = rotationPreviewUrl(u); preview.style.display = ''; }
+      if (u) { preview.href = rotationPreviewUrl(u, deckScreen); preview.style.display = ''; }
       else { preview.style.display = 'none'; }
     } else if (u) {
       let actions = card.querySelector('.rotation-card-actions');
@@ -10916,7 +10929,7 @@ function bindRotationCard(card, deck) {
         if (meta) meta.appendChild(actions);
       }
       actions.innerHTML = '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="' +
-        rotationPreviewUrl(u).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" data-rotation-preview>Preview</a>';
+        rotationPreviewUrl(u, deckScreen).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" data-rotation-preview>Preview</a>';
     }
   }
   if (urlInp && !urlInp.dataset.bound) {
