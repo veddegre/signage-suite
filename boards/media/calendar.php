@@ -1081,7 +1081,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 
   .today { grid-area:today; background:var(--harbor); border:1px solid var(--hairline);
            border-radius:14px; padding:38px 42px; display:flex; flex-direction:column; min-height:0; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:110px; line-height:1; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px(110) ?>px; line-height:1; }
   #clock span { font-size:44px; color:var(--mist); }
   .dateline { font-size:30px; color:var(--mist); margin-top:6px; }
   .today .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist);

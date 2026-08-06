@@ -85,7 +85,7 @@ $sun = date_sun_info(time(), LAT, LON);
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:28px 32px; display:grid;
-           grid-template-columns: 760px 1fr; grid-template-rows: 96px minmax(0,1fr) 130px auto;
+           grid-template-columns: 760px 1fr; grid-template-rows: <?= signage_font_scaled_px(96) ?>px minmax(0,1fr) 130px auto;
            grid-template-areas: "head head" "wave side" "foot foot" "meta meta"; gap:24px; }
 
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }

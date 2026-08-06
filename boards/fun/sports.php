@@ -86,10 +86,10 @@ $heightCss = signage_viewport_height();
 $gap = $boardH < 1080 ? 14 : 18;
 $padY = ($boardH < 1080 ? 20 : 24) * 2;
 $stampH = 22;
-$rowHead = max(72, (int)round(88 * $boardH / 1080));
+$rowHead = signage_font_scaled_px(max(72, (int)round(88 * $boardH / 1080)));
 // Label + logo row + results line (~140px at 1080); fixed 88px was clipping .recent-item .line
-$rowRecent = $recentStrip !== [] ? max(112, (int)round(142 * $boardH / 1080)) : 0;
-$rowNext = $showNextStrip ? max(136, (int)round(162 * $boardH / 1080)) : 0;
+$rowRecent = $recentStrip !== [] ? signage_font_scaled_px(max(112, (int)round(142 * $boardH / 1080))) : 0;
+$rowNext = $showNextStrip ? signage_font_scaled_px(max(136, (int)round(162 * $boardH / 1080))) : 0;
 $extraRows = ($rowRecent > 0 ? 1 : 0) + ($rowNext > 0 ? 1 : 0);
 $rowCards = $boardH - $padY - ($gap * (2 + $extraRows)) - $stampH - $rowHead - $rowRecent - $rowNext;
 $rowCards = max(400, $rowCards);

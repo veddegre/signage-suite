@@ -206,10 +206,11 @@ function signage_viewport_css(): string
 function signage_theme_css(): string
 {
     require_once __DIR__ . '/lib/signage_theme_lib.php';
-    $key = signage_active_theme_key();
+    $themeKey = signage_active_theme_key();
+    $fontKey = signage_active_font_pack_key();
 
-    return signage_theme_css_block($key)
-        . signage_theme_font_css($key)
+    return signage_theme_css_block($themeKey, $fontKey)
+        . signage_theme_font_css($fontKey)
         . signage_theme_inset_surface_css()
         . signage_theme_board_shell_css()
         . signage_theme_map_board_css()
@@ -222,6 +223,22 @@ function signage_theme_fonts_head_html(?string $key = null): string
     require_once __DIR__ . '/lib/signage_theme_lib.php';
 
     return signage_theme_fonts_head_markup($key);
+}
+
+/** Scale a fixed px size for the active font pack (boards with tight grid rows / line-height:1). */
+function signage_font_scaled_px(int|float $px, ?string $fontPackKey = null): int
+{
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
+
+    return max(1, (int)round((float)$px * signage_font_display_scale($fontPackKey)));
+}
+
+/** Scale hero stat numbers (often larger than headlines). */
+function signage_font_scaled_bignum_px(int|float $px, ?string $fontPackKey = null): int
+{
+    require_once __DIR__ . '/lib/signage_theme_lib.php';
+
+    return max(1, (int)round((float)$px * signage_font_bignum_scale($fontPackKey)));
 }
 
 /** Admin / preview URL — matches what board.php loads in rotation iframes. */

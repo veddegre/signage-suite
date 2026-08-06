@@ -2815,6 +2815,7 @@ function admin_rotation_kiosk_settings_panel(
     }
     $hintSummary = implode(' · ', $hints);
     $savedTheme = (string)($screenSettings['theme'] ?? 'lake_night');
+    $savedFontPack = (string)($screenSettings['font_pack'] ?? 'signage');
     ?>
 <div class="rotation-display-options-wrap" data-display-options-screen="<?= h($screenKey) ?>"<?= $visible ? '' : ' hidden' ?>>
   <div class="rotation-display-options">
@@ -2837,6 +2838,14 @@ function admin_rotation_kiosk_settings_panel(
           <span class="l">Wall palette</span>
           <?php admin_rotation_theme_picker($screenKey, $savedTheme); ?>
           <div class="help" style="margin-top:8px">Themes are listed A–Z. <strong>Lake Night (default)</strong> is used for new displays unless you pick another. Each swatch shows the wall look and three ticker strips: <strong>themed</strong> (RSS fallback), <strong>yellow</strong> (watch/advisory), <strong>red</strong> (warning). Native boards and the rotation shell use the palette; Grafana, Splunk, and similar embeds keep their own themes.</div>
+        </div>
+        <div class="field span-2 rotation-section">
+          <span class="mini">Typography</span>
+        </div>
+        <div class="field span-2">
+          <span class="l">Font family</span>
+          <?php admin_rotation_font_picker($screenKey, $savedFontPack); ?>
+          <div class="help" style="margin-top:8px">Independent of the wall palette — mix any colors with any font pack. Samples show headline, body, and serif/mono accents. Headline sizes auto-tune on boards with tight layouts. <strong>Signage Classic</strong> is the default; <strong>GVSU Identity</strong> is still auto-selected when the palette is GVSU Lakers and no font is saved yet.</div>
         </div>
         <div class="field span-2 rotation-section">
           <span class="mini">Rotation behavior</span>
@@ -3800,6 +3809,18 @@ function admin_field(array $f, $val, string $board): void
   .rotation-theme-ticker-samples .tt-bar { flex:1; height:7px; border-radius:2px; border-top:2px solid transparent; box-sizing:border-box; }
   .rotation-theme-pick input:checked + .rotation-theme-swatch { border-color:var(--beacon); box-shadow:0 0 0 1px var(--beacon); }
   .rotation-theme-pick input:focus-visible + .rotation-theme-swatch { outline:2px solid var(--beacon); outline-offset:2px; }
+  .rotation-font-pick { display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:10px; margin-top:8px; }
+  .rotation-font-pick label { cursor:pointer; min-width:0; }
+  .rotation-font-pick input { position:absolute; opacity:0; pointer-events:none; }
+  .rotation-font-swatch { display:flex; flex-direction:column; gap:4px; min-height:118px; padding:10px 12px 8px;
+    border-radius:8px; border:2px solid var(--line); background:var(--lake-night); transition:border-color .15s, box-shadow .15s; }
+  .rotation-font-headline { font-size:22px; font-weight:700; line-height:1.15; color:var(--snow); }
+  .rotation-font-body { font-size:12px; line-height:1.35; color:var(--mist); }
+  .rotation-font-serif { font-size:11px; line-height:1.3; color:var(--beacon); font-style:italic; opacity:.92; }
+  .rotation-font-label { margin-top:auto; padding-top:6px; font-size:11px; color:var(--snow); line-height:1.25;
+    border-top:1px solid var(--hairline); }
+  .rotation-font-pick input:checked + .rotation-font-swatch { border-color:var(--beacon); box-shadow:0 0 0 1px var(--beacon); }
+  .rotation-font-pick input:focus-visible + .rotation-font-swatch { outline:2px solid var(--beacon); outline-offset:2px; }
   .bg-swatch span { position:absolute; left:8px; bottom:6px; z-index:1; font-size:11px; color:#edf2fb;
                      text-shadow:0 1px 4px rgba(0,0,0,.8); letter-spacing:.3px; font-weight:500; }
   .bg-swatch.photo::after { content:''; position:absolute; inset:0; pointer-events:none;

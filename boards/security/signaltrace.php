@@ -60,6 +60,7 @@ function st_get(string $path, string $key): ?array
     return null;
 }
 
+$signalHeadRow = signage_font_scaled_px(96);
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 function ago(int $ts): string
 {
@@ -187,17 +188,17 @@ if (is_array($clicks)) {
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:28px 32px; display:grid; gap:24px;
-           grid-template-columns: 640px 1fr; grid-template-rows: 96px minmax(0,1fr) auto;
+           grid-template-columns: 640px 1fr; grid-template-rows: <?= $signalHeadRow ?>px minmax(0,1fr) auto;
            grid-template-areas: "head head" "left feed" "meta meta"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:64px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_px(64) ?>px; }
   .head h1 span { color:var(--beacon); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:56px; color:var(--mist); }
 
   .left { grid-area:left; display:flex; flex-direction:column; gap:24px; min-height:0; }
   .totals { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px; padding:30px 34px; }
   .totals .k { font-size:20px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .totals .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:128px; line-height:1;
+  .totals .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px(128) ?>px; line-height:1;
                  color:var(--beacon); font-variant-numeric:tabular-nums; }
   .subtotals { display:flex; gap:40px; margin-top:14px; }
   .subtotals div { font-size:24px; color:var(--mist); }

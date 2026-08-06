@@ -110,9 +110,9 @@ $compact = $boardH < 1080;
            grid-template-areas: "head head" "today week" "meta meta"; }
 
   .head { grid-area:head; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 56 : 64 ?>px; line-height:1; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_px($compact ? 56 : 64) ?>px; line-height:1; }
   .head .sub { font-size:<?= $compact ? 22 : 24 ?>px; color:var(--mist); margin-top:6px; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 72 : 88 ?>px; line-height:1; text-align:right; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px($compact ? 72 : 88) ?>px; line-height:1; text-align:right; }
   #clock span { font-size:<?= $compact ? 30 : 36 ?>px; color:var(--mist); }
   .dateline { font-size:<?= $compact ? 22 : 26 ?>px; color:var(--mist); text-align:right; margin-top:4px; }
 

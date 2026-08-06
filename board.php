@@ -31,7 +31,13 @@ $SCREEN = rotation_normalize_screen_key((string)($_GET['screen'] ?? 'main'));
 
 require_once __DIR__ . '/lib/signage_theme_lib.php';
 $signageThemeKey = signage_theme_for_screen($SCREEN);
-$signageThemeCss = signage_theme_css_block($signageThemeKey);
+$signageFontPackKey = signage_font_pack_for_screen($SCREEN);
+$signageThemeCss = signage_theme_css_block($signageThemeKey, $signageFontPackKey)
+    . signage_theme_font_css($signageFontPackKey)
+    . signage_theme_inset_surface_css()
+    . signage_theme_board_shell_css()
+    . signage_theme_map_board_css()
+    . signage_theme_sun_widget_css();
 
 $runtime = rotation_screen_runtime($SCREEN);
 $screenRegistered = (bool)($runtime['screen_registered'] ?? rotation_screen_is_registered($SCREEN));
@@ -96,6 +102,7 @@ if (($_GET['api'] ?? '') === 'presence') {
 <head>
 <meta charset="UTF-8">
 <title>Signage</title>
+<?= signage_theme_fonts_head_html($signageFontPackKey) ?>
 <style>
   <?= $signageThemeCss ?>
   * { margin:0; padding:0; }
@@ -109,7 +116,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   #hero-strip { position:absolute; left:0; right:0; bottom:var(--signage-ticker-inset, 0px); height:var(--signage-hero-inset, 0px);
                display:flex; align-items:center; gap:18px; padding:0 28px; overflow:hidden;
                background:color-mix(in srgb, var(--harbor) 94%, transparent); border-top:1px solid var(--hairline); z-index:9000;
-               font:600 22px/1.3 'IBM Plex Sans',system-ui,sans-serif; color:var(--snow); }
+               font:600 22px/1.3 var(--font-sans, 'IBM Plex Sans', system-ui, sans-serif); color:var(--snow); }
   #hero-strip:empty { display:none; }
   #hero-strip .hero-strip-item { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:640px; }
   #hero-strip .hero-strip-item.label { color:var(--beacon); text-transform:uppercase; letter-spacing:.08em; font-size:18px; max-width:220px; }
@@ -189,6 +196,7 @@ if (($_GET['api'] ?? '') === 'presence') {
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
   const THEME   = <?= json_encode($signageThemeKey) ?>;
+  const FONT    = <?= json_encode($signageFontPackKey) ?>;
   const FRAME_H = <?= (int)$rotationFrameH ?>;
   const HERO_STRIP = <?= json_encode(!empty($heroStrip['enabled'])) ?>;
   const POLL_MS = 30000;
@@ -655,6 +663,7 @@ if (($_GET['api'] ?? '') === 'presence') {
     if (boardIsLocalSignage(p.url)) {
       if (SCREEN) qs += '&screen=' + encodeURIComponent(SCREEN);
       if (THEME) qs += '&theme=' + encodeURIComponent(THEME);
+      if (FONT) qs += '&font=' + encodeURIComponent(FONT);
       if (FRAME_H >= 720 && FRAME_H < 1080) qs += '&frameh=' + FRAME_H;
     }
     if (!SHOW_CLOCK) qs += '&clock=0';

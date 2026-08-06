@@ -59,18 +59,23 @@ if ($gvsu === null
     fwrite(STDERR, "FAIL: gvsu_lakers should use GVSU Blue background with secondary panel/accent colors\n");
     $fail++;
 }
-$gvsuCss = signage_theme_css_block('gvsu_lakers');
+$gvsuCss = signage_theme_css_block('gvsu_lakers', 'gvsu');
 if (!preg_match('/--data-accent:#dec197/i', $gvsuCss)) {
     fwrite(STDERR, "FAIL: gvsu --data-accent should be GVSU gold (#DEC197)\n");
     $fail++;
 }
 if (!str_contains($gvsuCss, '--font-sans') || !str_contains($gvsuCss, 'Open Sans')) {
-    fwrite(STDERR, "FAIL: gvsu_lakers should expose Open Sans font tokens\n");
+    fwrite(STDERR, "FAIL: gvsu_lakers + gvsu font pack should expose Open Sans font tokens\n");
     $fail++;
 }
-$gvsuFontCss = signage_theme_font_css('gvsu_lakers');
+$gvsuFontCss = signage_theme_font_css('gvsu');
 if (!str_contains($gvsuFontCss, 'EB Garamond')) {
     fwrite(STDERR, "FAIL: gvsu font css should include EB Garamond for serif slots\n");
+    $fail++;
+}
+$mixedCss = signage_theme_css_block('ember', 'signage');
+if (!str_contains($mixedCss, '--beacon:') || !str_contains($mixedCss, 'IBM Plex Sans')) {
+    fwrite(STDERR, "FAIL: palette and font pack should compose independently\n");
     $fail++;
 }
 $lakeCss = signage_theme_css_block('lake_night');

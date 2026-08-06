@@ -124,7 +124,7 @@ $compact = $boardH < 1080;
            grid-template-rows: minmax(0,1fr) auto;
            grid-template-areas: "agenda sky" "meta meta"; }
 
-  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 88 : 110 ?>px; line-height:1; }
+  #clock { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px($compact ? 88 : 110) ?>px; line-height:1; }
   #clock span { font-size:<?= $compact ? 36 : 44 ?>px; color:var(--mist); }
   .dateline { font-size:<?= $compact ? 24 : 30 ?>px; color:var(--mist); margin-top:6px; }
   .board-title { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $compact ? 28 : 32 ?>px;
@@ -169,7 +169,7 @@ $compact = $boardH < 1080;
   .weather-body { min-height:0; display:grid; grid-template-columns:minmax(240px,42%) 1fr; gap:<?= $compact ? 16 : 20 ?>px; }
   .weather-main { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; min-height:0; }
   .weather-main img { width:<?= $compact ? 120 : 150 ?>px; height:<?= $compact ? 120 : 150 ?>px; margin-bottom:<?= $compact ? 6 : 10 ?>px; }
-  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 96 : 118 ?>px; line-height:1; color:var(--beacon); }
+  .weather-temp { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px($compact ? 96 : 118) ?>px; line-height:1; color:var(--beacon); }
   .weather-desc { font-size:<?= $compact ? 24 : 28 ?>px; color:var(--snow); margin-top:6px; text-transform:capitalize; }
   .weather-feels { font-size:<?= $compact ? 20 : 22 ?>px; color:var(--mist); margin-top:6px; }
   .weather-meta { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:<?= $compact ? 10 : 12 ?>px; min-height:0; }

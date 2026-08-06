@@ -353,9 +353,12 @@ $tickerPollMs = TICKER_DEMO ? 15000 : 30000;
 $tickerApiUrl = signage_ticker_api_url($signageTickerScreen ?? null);
 require_once __DIR__ . '/lib/signage_theme_lib.php';
 $tickerThemeKey = signage_active_theme_key();
+$tickerFontKey = signage_active_font_pack_key();
 ?>
+<?= signage_theme_fonts_head_html($tickerFontKey) ?>
 <style>
-  <?= signage_theme_css_block($tickerThemeKey) ?>
+  <?= signage_theme_css_block($tickerThemeKey, $tickerFontKey) ?>
+  <?= signage_theme_font_css($tickerFontKey) ?>
   <?= signage_kiosk_cursor_css() ?>
   <?= signage_ticker_css_rules() ?>
 </style>

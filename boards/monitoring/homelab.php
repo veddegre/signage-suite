@@ -171,7 +171,7 @@ $wanMs    = $checks['wan_ms'] ?? null;
   .panel { background:var(--harbor); border:1px solid var(--hairline); border-radius:14px;
            padding:<?= $boardH < 1080 ? '18px 22px' : '26px 32px' ?>; min-height:0; overflow:hidden; }
   .panel .k { font-size:<?= $boardH < 1080 ? 18 : 20 ?>px; letter-spacing:3px; text-transform:uppercase; color:var(--mist); }
-  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 88 : 110 ?>px; line-height:1;
+  .bignum { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px($boardH < 1080 ? 88 : 110) ?>px; line-height:1;
             color:var(--beacon); font-variant-numeric:tabular-nums; }
   .bignum small { font-size:<?= $boardH < 1080 ? 36 : 44 ?>px; color:var(--mist); font-weight:600; }
   .sub { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; }

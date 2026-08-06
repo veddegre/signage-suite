@@ -301,7 +301,7 @@ $rowHead = max(72, (int)round(88 * $boardH / 1080));
   .hero { grid-area:hero; display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
           padding:<?= $boardH < 1080 ? '8px 4px 0' : '12px 8px 0' ?>; border-bottom:1px solid var(--hairline); }
   .hero-left { min-width:0; flex:1; }
-  .word { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 118 : 148 ?>px;
+  .word { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_px($boardH < 1080 ? 118 : 148) ?>px;
           line-height:0.95; color:var(--seafoam); letter-spacing:2px; text-transform:lowercase; }
   .word::first-letter { text-transform:uppercase; }
   .meta-row { display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-top:10px; }

@@ -36,6 +36,10 @@ $flowStyle = in_array(FLOW_STYLE, $flowStyles, true) ? FLOW_STYLE : 'relative0-d
 $tileBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/traffic.php')), '/')
     . '/traffic_tiles.php?style=' . rawurlencode($flowStyle) . '&';
 
+$headRow = signage_font_scaled_px(88);
+$headTitlePx = signage_font_scaled_px(58);
+$headClockPx = signage_font_scaled_px(52);
+
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 $markers = [
@@ -61,12 +65,12 @@ $markers = [
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
   .board { width:1920px; height:100%; padding:24px 32px 20px; display:grid; gap:18px;
-           grid-template-rows: 88px 1fr 64px; grid-template-areas: "head" "map" "legend"; }
+           grid-template-rows: <?= $headRow ?>px 1fr 64px; grid-template-areas: "head" "map" "legend"; }
   .head { grid-area:head; display:flex; align-items:baseline; justify-content:space-between; }
-  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:58px; letter-spacing:.5px; }
+  .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $headTitlePx ?>px; letter-spacing:.5px; }
   .head h1 span { color:var(--beacon); }
   .head .sub { font-size:26px; color:var(--mist); margin-left:18px; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:52px; color:var(--mist);
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:<?= $headClockPx ?>px; color:var(--mist);
            font-variant-numeric:tabular-nums; }
 
   .mapwrap { grid-area:map; position:relative; border-radius:14px; overflow:hidden;

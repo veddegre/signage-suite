@@ -79,6 +79,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'cec' => rotation_cec_defaults(),
         'hero_strip' => rotation_hero_strip_from_screen(null),
         'theme' => 'lake_night',
+        'font_pack' => 'signage',
     ];
     if ($scr === null) {
         return $defaults;
@@ -99,6 +100,7 @@ function rotation_screen_settings(string $screen = 'main'): array
             'cec' => rotation_cec_defaults(),
             'hero_strip' => rotation_hero_strip_from_screen(is_array($scr) ? $scr : null),
             'theme' => 'lake_night',
+            'font_pack' => 'signage',
         ];
     }
     if (!is_array($scr)) {
@@ -127,6 +129,7 @@ function rotation_screen_settings(string $screen = 'main'): array
         'cec' => rotation_cec_from_screen($scr),
         'hero_strip' => rotation_hero_strip_from_screen(is_array($scr) ? $scr : null),
         'theme' => signage_theme_for_screen($screen),
+        'font_pack' => signage_font_pack_for_screen($screen),
     ];
 }
 
@@ -656,21 +659,38 @@ function rotation_apply_screen_post_row(
 /** @param array<string,mixed> $entry @param array<string,mixed> $row */
 function rotation_apply_screen_theme_from_post_row(array $entry, array $row): array
 {
-    if (!array_key_exists('theme', $row)) {
+    if (!array_key_exists('theme', $row) && !array_key_exists('font_pack', $row)) {
         return $entry;
     }
-    require_once __DIR__ . '/signage_theme_lib.php';
-    $themeRaw = trim((string)($row['theme'] ?? ''));
-    if ($themeRaw === '') {
-        unset($entry['theme']);
 
-        return $entry;
+    if (array_key_exists('theme', $row)) {
+        require_once __DIR__ . '/signage_theme_lib.php';
+        $themeRaw = trim((string)($row['theme'] ?? ''));
+        if ($themeRaw === '') {
+            unset($entry['theme']);
+        } else {
+            $themeKey = signage_normalize_theme_key($themeRaw);
+            if ($themeKey !== '' && signage_theme_preset($themeKey) !== null) {
+                $entry['theme'] = $themeKey;
+            } else {
+                unset($entry['theme']);
+            }
+        }
     }
-    $themeKey = signage_normalize_theme_key($themeRaw);
-    if ($themeKey !== '' && signage_theme_preset($themeKey) !== null) {
-        $entry['theme'] = $themeKey;
-    } else {
-        unset($entry['theme']);
+
+    if (array_key_exists('font_pack', $row)) {
+        require_once __DIR__ . '/signage_theme_lib.php';
+        $fontRaw = trim((string)($row['font_pack'] ?? ''));
+        if ($fontRaw === '') {
+            unset($entry['font_pack']);
+        } else {
+            $fontKey = signage_normalize_font_pack_key($fontRaw);
+            if ($fontKey !== '' && signage_font_pack($fontKey) !== null) {
+                $entry['font_pack'] = $fontKey;
+            } else {
+                unset($entry['font_pack']);
+            }
+        }
     }
 
     return $entry;
@@ -1933,6 +1953,7 @@ function rotation_config_revision(string $screen = 'main'): string
         'settle_ms' => $settings['settle_ms'],
         'hang_ms' => $settings['hang_ms'],
         'theme' => $settings['theme'],
+        'font_pack' => $settings['font_pack'],
         'emergency' => (static function () {
             require_once __DIR__ . '/emergency_lib.php';
 
@@ -1980,6 +2001,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
         'hang_ms' => $settings['hang_ms'],
         'hero_strip' => $settings['hero_strip'],
         'theme' => $settings['theme'],
+        'font_pack' => $settings['font_pack'],
         'revision' => rotation_config_revision($screen),
     ];
     require_once __DIR__ . '/emergency_lib.php';

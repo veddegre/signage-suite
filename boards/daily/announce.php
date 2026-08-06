@@ -55,7 +55,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .hero .body { font-size:<?= $isCountdown ? 32 : 38 ?>px; line-height:1.55; color:var(--mist); max-width:92%; white-space:pre-wrap; }
 
   .countdown { display:flex; align-items:baseline; gap:24px; flex-wrap:wrap; margin-top:8px; }
-  .countdown .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:148px; line-height:1;
+  .countdown .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_bignum_px(148) ?>px; line-height:1;
                     color:var(--seafoam); font-variant-numeric:tabular-nums; }
   .countdown .unit { font-size:42px; color:var(--mist); margin-right:28px; }
   .countdown.past .num { color:var(--beacon); font-size:72px; }

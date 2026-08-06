@@ -53,7 +53,7 @@ while (count($tiles) < $slots) {
 }
 
 $compact = $boardH < 1080;
-$headH = $compact ? 68 : 80;
+$headH = signage_font_scaled_px($compact ? 68 : 80);
 $gap = $compact ? 6 : 8;
 $pad = $compact ? 12 : 16;
 $heightPx = $boardH . 'px';

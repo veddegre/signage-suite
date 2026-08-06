@@ -283,7 +283,7 @@ $payload = array_map(fn($i) => [
   .meta { font-size:24px; letter-spacing:2px; text-transform:uppercase;
           margin-bottom:18px; font-weight:600; }
   .meta span { font-weight:400; letter-spacing:1px; text-transform:none; }
-  h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:84px; line-height:1.02;
+  h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= signage_font_scaled_px(84) ?>px; line-height:1.02;
        text-wrap:balance; text-shadow:0 2px 24px rgba(0,0,0,.55); }
   .syn { font-size:32px; line-height:1.5; margin-top:24px;
          max-width:1000px; text-shadow:0 1px 14px rgba(0,0,0,.6); }
