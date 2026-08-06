@@ -32,7 +32,11 @@ function splunkdash_normalize_page(array $page, string $key): ?array
     $reloadRaw = trim((string)($page['reload'] ?? ''));
     $reload = $reloadRaw === '' ? null : max(0, (int)$reloadRaw);
     $cropRaw = trim((string)($page['crop_top'] ?? ''));
-    $cropTop = $cropRaw === '' ? null : max(0, min(400, (int)$cropRaw));
+    if ($cropRaw !== '') {
+        $cropTop = max(0, min(400, (int)$cropRaw));
+    } else {
+        $cropTop = null;
+    }
 
     $out = [];
     if ($url !== '') {
@@ -184,16 +188,32 @@ function splunkdash_embed_url(string $url, array $dash = []): string
     return splunkdash_merge_query_params($url, [
         'hideChrome' => 'true',
         'hideTitle' => 'true',
+        'hideSplunkBar' => 'true',
+        'hideAppBar' => 'true',
+        'hideFooter' => 'true',
     ]);
+}
+
+/** Default pixels to crop when hiding Splunk chrome (published Dashboard Studio ignores URL params). */
+function splunkdash_default_crop_top_px(): int
+{
+    $configured = max(0, min(400, (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0)));
+    if ($configured > 0) {
+        return $configured;
+    }
+    if ((bool)cfg('splunkdash.HIDE_CHROME', true)) {
+        return 64;
+    }
+
+    return 0;
 }
 
 /** @param array<string,mixed> $dash */
 function splunkdash_crop_top_px(array $dash): int
 {
-    $raw = trim((string)($dash['crop_top'] ?? ''));
-    if ($raw === '') {
-        return max(0, min(400, (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0)));
+    if (array_key_exists('crop_top', $dash)) {
+        return max(0, min(400, (int)$dash['crop_top']));
     }
 
-    return max(0, min(400, (int)$raw));
+    return splunkdash_default_crop_top_px();
 }

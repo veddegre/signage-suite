@@ -912,7 +912,7 @@ function admin_schema(): array
             ['key' => 'HIDE_CHROME', 'label' => 'Hide Splunk title bar', 'type' => 'bool',
              'help' => 'Append hideChrome=true&hideTitle=true to published URLs (on by default)'],
             ['key' => 'DEFAULT_CROP_TOP', 'label' => 'Default crop top (px)', 'type' => 'number',
-             'help' => 'Optional extra pixels to crop when a dashboard has no per-row crop (0 = none)'],
+             'help' => 'When blank per dashboard: 0 here = auto 64px crop while hide-chrome is on; set 0 on a dashboard row to disable crop'],
             ['key' => 'DEFAULT_RELOAD', 'label' => 'Default iframe reload (s)', 'type' => 'number', 'help' => '0 disables'],
             $tz,
         ]],

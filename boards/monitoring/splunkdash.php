@@ -79,6 +79,7 @@ $reload     = max(0, (int)($dash['reload'] ?? DEFAULT_RELOAD));
 $configured = !str_contains($dash['url'], 'REPLACE');
 $embedUrl   = splunkdash_embed_url((string)$dash['url'], $dash);
 $cropTop    = splunkdash_crop_top_px($dash);
+$boardH     = signage_frame_height();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -92,20 +93,8 @@ $cropTop    = splunkdash_crop_top_px($dash);
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
               font-family:system-ui,sans-serif; }
-  .dash-wrap { width:1920px; height:100%; overflow:hidden; }
-  .dash-wrap iframe { width:1920px; border:0; display:block; background:var(--lake-night);
-                       pointer-events:none; }
-  iframe { width:1920px; height:100%; border:0; display:block; background:var(--lake-night);
-           pointer-events:none; }
-  <?php if ($cropTop > 0): ?>
-  .dash-wrap iframe {
-    height: calc(100% + <?= (int)$cropTop ?>px);
-    margin-top: -<?= (int)$cropTop ?>px;
-  }
-  <?php else: ?>
-  .dash-wrap iframe { height:100%; }
-  <?php endif; ?>
-  .empty { width:1920px; height:100%; display:flex; flex-direction:column; gap:18px;
+  <?= signage_iframe_crop_css($boardH, $cropTop) ?>
+  .empty { width:1920px; height:<?= (int)$boardH ?>px; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
   .empty p { font-size:27px; max-width:1150px; text-align:center; line-height:1.65; }

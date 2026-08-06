@@ -430,6 +430,36 @@ function signage_theme_map_board_css(): string
 CSS;
 }
 
+/** CSS for clipping the top of a cross-origin iframe embed (Splunk publish, etc.). */
+function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap'): string
+{
+    $boardH = max(720, $boardH);
+    $cropTop = max(0, min(400, $cropTop));
+    $frameH = $boardH + $cropTop;
+    $wrap = preg_replace('/[^a-z0-9_-]/', '', $wrapClass) ?: 'dash-wrap';
+
+    return <<<CSS
+  .{$wrap} {
+    position: relative;
+    width: 1920px;
+    height: {$boardH}px;
+    overflow: hidden;
+    background: var(--lake-night);
+  }
+  .{$wrap} iframe {
+    position: absolute;
+    left: 0;
+    top: -{$cropTop}px;
+    width: 1920px;
+    height: {$frameH}px;
+    border: 0;
+    display: block;
+    pointer-events: none;
+    background: var(--lake-night);
+  }
+CSS;
+}
+
 /** Themed border wrapper for full-page iframe embeds (Grafana, Splunk publish, Power BI, web). */
 function signage_embed_frame_css(): string
 {
