@@ -85,8 +85,8 @@ $embedH = max(720, signage_frame_height() - 16);
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px; color:var(--mist);
            font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
   <?= signage_embed_frame_css() ?>
-  .signage-embed-frame { flex:1 1 auto; min-height:0; width:100%; height:auto; box-sizing:border-box; }
-  .signage-embed-frame .dash-wrap { width:100%; height:100%; }
+  .signage-embed-frame { flex:1 1 auto; min-height:0; width:100%; height:auto; box-sizing:border-box; overflow:hidden; }
+  .signage-embed-frame .dash-wrap { width:100%; height:100%; overflow:hidden; }
   <?= signage_iframe_crop_css($embedH, $cropTop, 'dash-wrap', $hideScrollbars, true, $embedShiftDown, $cropBottom, $scrollbarGutter) ?>
   .empty { width:1920px; max-width:100%; height:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }

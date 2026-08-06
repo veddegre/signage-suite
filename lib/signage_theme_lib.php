@@ -811,22 +811,17 @@ function signage_iframe_crop_css(
         $scrollbarGutter = max(0, min(120, $scrollbarGutter));
     }
     $iframeTop = $shiftDown > 0 ? "calc(-{$cropTop}px + {$shiftDown}px)" : "-{$cropTop}px";
-    $clipPath = ($scrollbarGutter > 0 || $cropBottom > 0)
-        ? "clip-path:inset(0 {$scrollbarGutter}px {$cropBottom}px 0);"
-        : '';
+    $iframeWExpr = $scrollbarGutter > 0 ? "calc(100% + {$scrollbarGutter}px)" : '100%';
+    $iframeHExpr = "calc(100% + {$cropTop}px - {$shiftDown}px + {$cropBottom}px)";
 
     if ($fluid) {
-        $iframeHExpr = "calc(100% + {$cropTop}px - {$shiftDown}px)";
-        $iframeWExpr = $scrollbarGutter > 0 ? "calc(100% + {$scrollbarGutter}px)" : '100%';
-
         return <<<CSS
-  .{$wrap} {
+  .signage-embed-frame .{$wrap} {
     position: relative;
     overflow: hidden;
     background: var(--lake-night);
-    {$clipPath}
   }
-  .{$wrap} iframe {
+  .signage-embed-frame .{$wrap} iframe {
     position: absolute;
     left: 0;
     top: {$iframeTop};
@@ -843,18 +838,17 @@ CSS;
 
     $frameH = $boardH + $cropTop;
     $iframeW = 1920 + $scrollbarGutter;
-    $iframeH = $frameH - $shiftDown;
+    $iframeH = $frameH - $shiftDown + $cropBottom;
 
     return <<<CSS
-  .{$wrap} {
+  .signage-embed-frame .{$wrap} {
     position: relative;
     width: 1920px;
     height: {$boardH}px;
     overflow: hidden;
     background: var(--lake-night);
-    {$clipPath}
   }
-  .{$wrap} iframe {
+  .signage-embed-frame .{$wrap} iframe {
     position: absolute;
     left: 0;
     top: {$iframeTop};
@@ -879,7 +873,7 @@ function signage_embed_frame_css(): string
     background:var(--harbor);
     box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--hairline) 65%, transparent),
                0 8px 28px color-mix(in srgb,var(--lake-night) 55%, transparent);}
-  .signage-embed-frame iframe{
+  .signage-embed-frame > iframe{
     width:100%; height:100%; border:0; display:block; pointer-events:none;
     background:var(--lake-night);}
 CSS;
