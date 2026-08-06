@@ -209,29 +209,31 @@ function splunkdash_default_crop_top_px(): int
         return $configured;
     }
     if ((bool)cfg('splunkdash.HIDE_CHROME', true)) {
-        return 72;
+        return 96;
     }
 
     return 0;
 }
 
-/** Viewport overlay height — hides Splunk Dashboard Studio title row (often position:fixed in embed). */
+/** Viewport overlay height — hides Splunk Dashboard Studio title row inside the embed frame. */
 function splunkdash_title_mask_px(array $dash = []): int
 {
     if (!empty($dash['show_chrome'])) {
         return 0;
     }
-    if (!(bool)cfg('splunkdash.HIDE_CHROME', true)) {
-        return 0;
+
+    $configured = max(0, min(200, (int)cfg('splunkdash.TITLE_MASK', 0)));
+    if ($configured > 0) {
+        return $configured;
     }
 
-    return max(0, min(160, (int)cfg('splunkdash.TITLE_MASK', 92)));
+    return 140;
 }
 
 /** Nudge iframe down so Dashboard Studio panel titles are not clipped after crop. */
 function splunkdash_embed_shift_down_px(): int
 {
-    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 16)));
+    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 10)));
 }
 
 /** Clip Splunk footer / bottom chrome and hide iframe scrollbars. */

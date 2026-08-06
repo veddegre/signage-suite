@@ -6272,7 +6272,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <label class="mini">Crop top (px)</label>
                 <input type="number" min="0" max="400"<?= admin_form_name_attr('PAGES[' . $pk . '][crop_top]', $pageRo) ?>
                        value="<?= h((string)($pg['crop_top'] ?? '')) ?>" placeholder="<?= (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0) ?>"<?= admin_form_ro_attr($pageRo) ?>>
-                <div class="help">Splunk&rsquo;s dashboard title is covered automatically (default 92px mask). Optional <strong>crop top</strong> shifts the iframe up for extra chrome (default 72px when hide-chrome is on). Scrollbars are hidden via a right-edge cover.</div>
+                <div class="help">Splunk&rsquo;s dashboard title is covered by a 140px overlay on the embed frame. Tune <strong>Title mask height</strong> if needed.</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>

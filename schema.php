@@ -885,7 +885,7 @@ function admin_schema(): array
             ['key' => 'DEFAULT_CROP_TOP', 'label' => 'Default crop top (px)', 'type' => 'number',
              'help' => 'When blank per dashboard: 0 here = auto 72px iframe crop while hide-chrome is on; set 0 on a dashboard row to disable crop'],
             ['key' => 'TITLE_MASK', 'label' => 'Title mask height (px)', 'type' => 'number',
-             'help' => 'Covers the Splunk dashboard title row inside the frame (default 92px while hide-chrome is on)'],
+             'help' => 'Covers the Splunk dashboard title row inside the frame (default 140px)'],
             ['key' => 'HIDE_SCROLLBARS', 'label' => 'Hide iframe scrollbars', 'type' => 'bool',
              'help' => 'Clip Splunk scrollbars on the wall (on by default; dashboard canvas should fit 1920×1080)'],
             ['key' => 'DEFAULT_RELOAD', 'label' => 'Default iframe reload (s)', 'type' => 'number', 'help' => '0 disables'],

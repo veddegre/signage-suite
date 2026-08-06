@@ -86,19 +86,26 @@ $embedH = max(720, signage_frame_height() - 16);
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px; color:var(--mist);
            font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
   <?= signage_embed_frame_css() ?>
-  .signage-embed-frame { flex:1 1 auto; min-height:0; width:100%; height:auto; box-sizing:border-box; overflow:hidden; }
-  .signage-embed-frame .dash-wrap { width:100%; height:100%; overflow:hidden; isolation:isolate; }
+  .signage-embed-frame {
+    flex:1 1 auto; min-height:0; width:100%; height:auto; box-sizing:border-box;
+    overflow:hidden; position:relative; isolation:isolate;
+  }
+  .signage-embed-frame .dash-wrap {
+    position:absolute; inset:0; overflow:hidden; z-index:1;
+  }
   <?= signage_iframe_crop_css($embedH, $cropTop, 'dash-wrap', $hideScrollbars, true, $embedShiftDown, $cropBottom, $scrollbarGutter) ?>
   <?php if ($titleMask > 0): ?>
-  .signage-embed-frame .dash-wrap::before {
-    content:''; position:absolute; top:0; left:0; right:0; height:<?= (int)$titleMask ?>px;
-    background:var(--lake-night); z-index:2; pointer-events:none;
+  .splunk-title-mask {
+    position:absolute; top:0; left:0; right:0; height:<?= (int)$titleMask ?>px;
+    background:var(--lake-night); z-index:20; pointer-events:none;
+    border-radius:11px 11px 0 0;
   }
   <?php endif; ?>
   <?php if ($scrollbarGutter > 0): ?>
-  .signage-embed-frame .dash-wrap::after {
-    content:''; position:absolute; top:0; right:0; bottom:0; width:<?= (int)$scrollbarGutter ?>px;
-    background:var(--lake-night); z-index:2; pointer-events:none;
+  .splunk-scroll-mask {
+    position:absolute; top:0; right:0; bottom:0; width:<?= (int)$scrollbarGutter ?>px;
+    background:var(--lake-night); z-index:20; pointer-events:none;
+    border-radius:0 11px 11px 0;
   }
   <?php endif; ?>
   .empty { width:1920px; max-width:100%; height:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;
@@ -129,6 +136,8 @@ $embedH = max(720, signage_frame_height() - 16);
         <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen" scrolling="no"
                 tabindex="-1" aria-hidden="true"></iframe>
       </div>
+      <?php if ($titleMask > 0): ?><div class="splunk-title-mask" aria-hidden="true"></div><?php endif; ?>
+      <?php if ($scrollbarGutter > 0): ?><div class="splunk-scroll-mask" aria-hidden="true"></div><?php endif; ?>
     </div>
   </div>
   <script>
