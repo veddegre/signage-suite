@@ -813,6 +813,9 @@ function signage_iframe_crop_css(
     $iframeTop = $shiftDown > 0 ? "calc(-{$cropTop}px + {$shiftDown}px)" : "-{$cropTop}px";
     $iframeWExpr = $scrollbarGutter > 0 ? "calc(100% + {$scrollbarGutter}px)" : '100%';
     $iframeHExpr = "calc(100% + {$cropTop}px - {$shiftDown}px + {$cropBottom}px)";
+    $wrapClip = ($scrollbarGutter > 0 || $cropBottom > 0)
+        ? "clip-path:inset(0 {$scrollbarGutter}px {$cropBottom}px 0);"
+        : '';
 
     if ($fluid) {
         return <<<CSS
@@ -820,6 +823,7 @@ function signage_iframe_crop_css(
     position: relative;
     overflow: hidden;
     background: var(--lake-night);
+    {$wrapClip}
   }
   .signage-embed-frame .{$wrap} iframe {
     position: absolute;
@@ -827,11 +831,14 @@ function signage_iframe_crop_css(
     top: {$iframeTop};
     width: {$iframeWExpr};
     height: {$iframeHExpr};
+    max-width: none;
+    max-height: none;
     border: 0;
     display: block;
     pointer-events: none;
     background: var(--lake-night);
     overflow: hidden;
+    scrollbar-width: none;
   }
 CSS;
     }
@@ -847,6 +854,7 @@ CSS;
     height: {$boardH}px;
     overflow: hidden;
     background: var(--lake-night);
+    {$wrapClip}
   }
   .signage-embed-frame .{$wrap} iframe {
     position: absolute;
@@ -854,11 +862,14 @@ CSS;
     top: {$iframeTop};
     width: {$iframeW}px;
     height: {$iframeH}px;
+    max-width: none;
+    max-height: none;
     border: 0;
     display: block;
     pointer-events: none;
     background: var(--lake-night);
     overflow: hidden;
+    scrollbar-width: none;
   }
 CSS;
 }
