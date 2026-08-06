@@ -721,11 +721,31 @@ function tdx_pick_person_uid(array $people, string $search): ?string
 }
 
 /** @return list<string> */
-function tdx_lookup_person_uid(string $search, ?string &$error = null): array
+function tdx_person_display_names(array $person): array
+{
+    $names = [];
+    foreach (['FullName', 'fullName', 'DisplayName', 'displayName'] as $field) {
+        $val = trim((string)($person[$field] ?? ''));
+        if ($val !== '') {
+            $names[strtolower($val)] = $val;
+        }
+    }
+    $first = trim((string)($person['FirstName'] ?? $person['firstName'] ?? ''));
+    $last = trim((string)($person['LastName'] ?? $person['lastName'] ?? ''));
+    if ($first !== '' && $last !== '') {
+        $names[strtolower($first . ' ' . $last)] = $first . ' ' . $last;
+        $names[strtolower($last . ', ' . $first)] = $last . ', ' . $first;
+    }
+
+    return array_values($names);
+}
+
+/** @return array{uid:string,names:list<string>}|null */
+function tdx_lookup_person(string $search, ?string &$error = null): ?array
 {
     $search = trim($search);
     if ($search === '') {
-        return [];
+        return null;
     }
 
     $cacheDir = SIGNAGE_ROOT . '/cache';
@@ -736,54 +756,127 @@ function tdx_lookup_person_uid(string $search, ?string &$error = null): array
     $ttl = tdx_metadata_cache_ttl();
     if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
-        if (is_array($cached) && isset($cached['uids']) && is_array($cached['uids'])) {
-            return array_values(array_filter(array_map('strval', $cached['uids'])));
+        if (is_array($cached) && !empty($cached['uid']) && is_array($cached['names'] ?? null)) {
+            return [
+                'uid' => strtolower((string)$cached['uid']),
+                'names' => array_values(array_filter(array_map('strval', $cached['names']))),
+            ];
         }
     }
 
     $path = '/people/lookup?searchText=' . rawurlencode($search) . '&maxResults=5';
     $resp = tdx_api('GET', $path, null, 20, $error);
     if ($resp['code'] !== 200 || !is_array($resp['body'])) {
-        return [];
+        return null;
     }
 
     $people = array_values(array_filter($resp['body'], 'is_array'));
-    $picked = tdx_pick_person_uid($people, $search);
-    if ($picked === null) {
+    $pickedUid = tdx_pick_person_uid($people, $search);
+    if ($pickedUid === null) {
         if ($people !== []) {
             $error = 'Ambiguous person lookup for "' . $search . '" — use Responsible user UIDs or a full email';
         }
 
-        return [];
+        return null;
     }
-    $uids = [$picked];
-    @file_put_contents($cacheFile, json_encode(['uids' => $uids], JSON_UNESCAPED_SLASHES), LOCK_EX);
 
-    return $uids;
+    $names = [];
+    foreach ($people as $person) {
+        if (!is_array($person)) {
+            continue;
+        }
+        $uid = strtolower(trim((string)($person['UID'] ?? $person['Uid'] ?? '')));
+        if ($uid !== $pickedUid) {
+            continue;
+        }
+        $names = tdx_person_display_names($person);
+        break;
+    }
+    if ($names === [] && !str_contains($search, '@')) {
+        $names = [ $search ];
+    }
+
+    @file_put_contents($cacheFile, json_encode([
+        'uid' => $pickedUid,
+        'names' => $names,
+    ], JSON_UNESCAPED_SLASHES), LOCK_EX);
+
+    return ['uid' => $pickedUid, 'names' => $names];
 }
 
 /** @return list<string> */
-function tdx_responsible_uids_for_page(array $page, ?string &$error = null): array
+function tdx_lookup_person_uid(string $search, ?string &$error = null): array
+{
+    $person = tdx_lookup_person($search, $error);
+    if ($person === null) {
+        return [];
+    }
+
+    return [ $person['uid'] ];
+}
+
+/**
+ * Resolved responsible-person filters for a page.
+ *
+ * @return array{uids:list<string>,names:list<string>}
+ */
+function tdx_responsible_filters_for_page(array $page, ?string &$error = null): array
 {
     $uids = tdx_parse_uid_list($page['responsible_uids'] ?? '');
+    $nameMap = [];
     $userSearches = tdx_parse_csv_strings($page['responsible_users'] ?? '');
     foreach ($userSearches as $search) {
-        $found = tdx_lookup_person_uid($search, $error);
-        if ($found === []) {
+        $person = tdx_lookup_person($search, $error);
+        if ($person === null) {
             if ($error === null || $error === '') {
                 $error = 'Person not found: ' . $search;
             }
 
             continue;
         }
-        $uids[] = $found[0];
+        $uids[] = $person['uid'];
+        foreach ($person['names'] as $name) {
+            $nameMap[strtolower($name)] = $name;
+        }
     }
     $uids = array_values(array_unique($uids));
     if ($userSearches !== [] && $uids === []) {
         $error = $error ?? ('Could not resolve responsible user(s): ' . implode(', ', $userSearches));
     }
 
-    return $uids;
+    return [
+        'uids' => $uids,
+        'names' => array_values($nameMap),
+    ];
+}
+
+/** @param array<string,mixed> $row */
+function tdx_ticket_matches_responsible_filter(array $row, array $allowedUids, array $allowedNames): bool
+{
+    $uid = strtolower(trim((string)($row['responsible_uid'] ?? '')));
+    if ($uid !== '' && in_array($uid, $allowedUids, true)) {
+        return true;
+    }
+
+    $responsible = strtolower(trim((string)($row['responsible'] ?? '')));
+    if ($responsible === '' || $allowedNames === []) {
+        return false;
+    }
+    foreach ($allowedNames as $name) {
+        if (strtolower($name) === $responsible) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** @return list<string> */
+function tdx_responsible_uids_for_page(array $page, ?string &$error = null): array
+{
+    $filters = tdx_responsible_filters_for_page($page, $error);
+
+    return $filters['uids'];
 }
 
 /** @return array<string,mixed> */
@@ -896,7 +989,8 @@ function tdx_search_tickets(array $page, ?string &$error = null): array
     $body = tdx_build_search_body($page, $error);
     $wantsResponsible = tdx_parse_csv_strings($page['responsible_users'] ?? '') !== []
         || tdx_parse_uid_list($page['responsible_uids'] ?? '') !== [];
-    $responsibleUids = tdx_responsible_uids_for_page($page, $error);
+    $responsibleFilters = tdx_responsible_filters_for_page($page, $error);
+    $responsibleUids = $responsibleFilters['uids'];
     if ($wantsResponsible && $responsibleUids === []) {
         $error = $error ?? 'Responsible user filter could not be applied';
 
@@ -921,16 +1015,15 @@ function tdx_search_tickets(array $page, ?string &$error = null): array
         $rows[] = tdx_ticket_row($ticket);
     }
 
-    if ($responsibleUids !== []) {
-        $allow = array_flip($responsibleUids);
-        $rows = array_values(array_filter($rows, static function (array $row) use ($allow): bool {
-            $uid = (string)($row['responsible_uid'] ?? '');
-            if ($uid !== '' && isset($allow[$uid])) {
-                return true;
-            }
-            // Keep rows when TDX omits ResponsibleUid (search already filtered by ResponsibilityUids).
-            return $uid === '';
-        }));
+    if ($wantsResponsible) {
+        $rows = array_values(array_filter(
+            $rows,
+            static fn(array $row): bool => tdx_ticket_matches_responsible_filter(
+                $row,
+                $responsibleUids,
+                $responsibleFilters['names']
+            )
+        ));
     }
 
     usort($rows, static function (array $a, array $b): int {

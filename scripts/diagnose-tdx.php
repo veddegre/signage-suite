@@ -56,10 +56,14 @@ echo 'Group IDs: ' . (tdx_ids_string($page['group_ids'] ?? '') ?: '(any)') . "\n
 echo 'Responsible users: ' . (tdx_users_string($page['responsible_users'] ?? '') ?: '(any)') . "\n";
 echo 'Responsible UIDs: ' . (tdx_uids_string($page['responsible_uids'] ?? '') ?: '(any)') . "\n";
 $resolveErr = null;
-$resolvedUids = tdx_responsible_uids_for_page($page, $resolveErr);
-if ($resolvedUids !== []) {
-    echo 'Resolved responsibility UIDs: ' . implode(', ', $resolvedUids) . "\n";
-} elseif ($resolveErr !== null && $resolveErr !== '') {
+$resolvedFilters = tdx_responsible_filters_for_page($page, $resolveErr);
+if ($resolvedFilters['uids'] !== []) {
+    echo 'Resolved responsibility UIDs: ' . implode(', ', $resolvedFilters['uids']) . "\n";
+}
+if ($resolvedFilters['names'] !== []) {
+    echo 'Resolved responsible names: ' . implode(', ', $resolvedFilters['names']) . "\n";
+}
+if ($resolveErr !== null && $resolveErr !== '' && $resolvedFilters['uids'] === []) {
     echo 'Resolve error: ' . $resolveErr . "\n";
 }
 echo 'Priority IDs: ' . (tdx_ids_string($page['priority_ids'] ?? '') ?: '(any)') . "\n\n";
