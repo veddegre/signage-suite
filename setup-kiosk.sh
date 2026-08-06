@@ -552,6 +552,13 @@ signage_kiosk_blackout_tty() {
 
 signage_kiosk_blackout_tty
 
+if command -v signage-kiosk-wait-for-runtime >/dev/null; then
+  signage-kiosk-wait-for-runtime 120
+fi
+if command -v signage-kiosk-wait-for-server >/dev/null; then
+  signage-kiosk-wait-for-server 240
+fi
+
 # Cage always draws a compositor cursor when a pointer device is present.
 # Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
 if command -v signage-hide-cursor >/dev/null; then
@@ -577,6 +584,9 @@ while true; do
     --allow-insecure-localhost \\
     --start-fullscreen || true
   signage_kiosk_blackout_tty
+  if command -v signage-kiosk-wait-for-server >/dev/null; then
+    signage-kiosk-wait-for-server 60
+  fi
   sleep 1
 done
 EOF
@@ -595,6 +605,13 @@ signage_kiosk_blackout_tty() {
 }
 
 signage_kiosk_blackout_tty
+
+if command -v signage-kiosk-wait-for-runtime >/dev/null; then
+  signage-kiosk-wait-for-runtime 120
+fi
+if command -v signage-kiosk-wait-for-server >/dev/null; then
+  signage-kiosk-wait-for-server 240
+fi
 
 # Cage always draws a compositor cursor when a pointer device is present.
 # Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
@@ -619,6 +636,9 @@ while true; do
     --ozone-platform=wayland \\
     --start-fullscreen || true
   signage_kiosk_blackout_tty
+  if command -v signage-kiosk-wait-for-server >/dev/null; then
+    signage-kiosk-wait-for-server 60
+  fi
   sleep 1
 done
 EOF
@@ -661,8 +681,8 @@ echo "==> Writing systemd service"
 cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
 Description=Signage kiosk (cage + Chromium)
-After=network-online.target systemd-user-sessions.service
-Wants=network-online.target
+After=network-online.target systemd-user-sessions.service seatd.service
+Wants=network-online.target seatd.service
 
 [Service]
 User=$KIOSK_USER
@@ -673,6 +693,7 @@ StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
+ExecStartPre=/usr/local/bin/signage-kiosk-wait-for-runtime 120
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
 Restart=always
 RestartSec=2
@@ -754,7 +775,7 @@ EOF
 fi
 
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-watchdog.sh" ]]; then
-  echo "==> Installing kiosk health watchdog (every 5 min)"
+  echo "==> Installing kiosk health watchdog (every 5 min, first check 2 min after boot)"
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-watchdog.sh" /usr/local/bin/signage-kiosk-watchdog
   cat > /etc/systemd/system/signage-watchdog.service <<'EOF'
 [Unit]
@@ -769,13 +790,21 @@ EOF
 Description=Poll signage kiosk health every 5 minutes
 
 [Timer]
-OnBootSec=5min
+OnBootSec=2min
 OnUnitActiveSec=5min
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 EOF
+fi
+
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" ]]; then
+  echo "==> Installing kiosk server wait helper"
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" /usr/local/bin/signage-kiosk-wait-for-server
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-runtime.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-runtime.sh" /usr/local/bin/signage-kiosk-wait-for-runtime
 fi
 
 echo "==> Disabling console getty on tty1 (kiosk owns the display)"

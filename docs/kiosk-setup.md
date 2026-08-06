@@ -245,7 +245,7 @@ Recovery is layered (board shell + systemd):
 | **board.php** | Automatic shell reload every 8 hours |
 | **signage-maint.timer** | Daily reboot-if-needed else browser restart |
 | **signage-restart.timer** | Only when `--no-auto-update` (04:00 browser restart) |
-| **signage-watchdog.timer** | Every 5 min — restarts if `board.php` HTML no longer contains `const PAGES` (3 failures) |
+| **signage-watchdog.timer** | Every 5 min (first check 2 min after boot) — restarts if the server is down **or** the browser is hung with no heartbeat |
 
 **Quick checks**
 
@@ -258,6 +258,41 @@ Recovery is layered (board shell + systemd):
 systemctl status signage-watchdog.timer
 journalctl -u signage-watchdog -f
 ```
+
+---
+
+## Blank screen until `systemctl restart signage`
+
+Rebooting may not help; only restarting the **signage** service fixes it. Common cause: Chromium launched before the network or signage server was ready, loaded a blank/error page, and stayed running — so systemd thinks everything is fine.
+
+**Diagnose on the kiosk**
+
+```bash
+# Server OK from the shell?
+curl -k "$(grep KIOSK_URL /etc/signage/kiosk.conf | cut -d= -f2- | tr -d '"')" | grep -q 'const PAGES' && echo server OK
+
+# Browser actually reporting in? (after board.php update)
+curl -k "…board.php?screen=YOURSCREEN&api=kiosk-health"
+
+journalctl -u signage --since "30 min ago" | grep -E 'waiting for server|restarting'
+journalctl -u signage-watchdog --since "30 min ago"
+```
+
+If **server OK** but the TV is blank, the browser is hung — exactly the case `signage-watchdog` now detects via missing heartbeats.
+
+**Fix (re-run on each new player)**
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash setup-kiosk.sh --skip-apt   # refreshes scripts + systemd units
+sudo systemctl restart signage
+```
+
+This installs:
+
+- **Wait for server** before launching Chromium (up to 4 min at boot)
+- **Wait for XDG runtime** before cage starts
+- **Watchdog heartbeat check** — restarts if the server responds but the screen has not checked in for ~10 min
 
 ---
 

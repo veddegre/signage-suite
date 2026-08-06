@@ -96,6 +96,22 @@ if (($_GET['api'] ?? '') === 'presence') {
     }
     exit;
 }
+
+if (($_GET['api'] ?? '') === 'kiosk-health') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    $all = signage_presence_read_all();
+    $entry = $all[$SCREEN] ?? null;
+    $pages = is_array($runtime['pages'] ?? null) ? $runtime['pages'] : [];
+    echo json_encode([
+        'ok' => true,
+        'screen' => $SCREEN,
+        'online' => signage_presence_online($entry),
+        'pages' => count($pages) > 0,
+        'blank' => $blankActive,
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
