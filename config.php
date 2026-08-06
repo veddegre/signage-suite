@@ -362,3 +362,6 @@ function signage_kiosk_hide_pointer_script(): void
 </script>
     <?php
 }
+
+require_once __DIR__ . '/lib/install_profile_lib.php';
+signage_board_profile_gate();

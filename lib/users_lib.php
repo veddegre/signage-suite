@@ -2134,6 +2134,9 @@ function admin_media_rotation_sync_screens(): array
 function admin_can_board(string $board): bool
 {
     $board = preg_replace('/[^a-z0-9_\-]/i', '', $board);
+    if ($board === 'site') {
+        return admin_is_authenticated() && admin_is_super();
+    }
     if ($board === 'account') {
         return admin_is_authenticated();
     }
@@ -2142,6 +2145,9 @@ function admin_can_board(string $board): bool
     }
     if ($board === 'tools' || $board === 'users') {
         return admin_is_super();
+    }
+    if (!signage_profile_board_enabled($board)) {
+        return false;
     }
     if (admin_is_super()) {
         return true;
@@ -2158,6 +2164,9 @@ function admin_can_hero_strip_source(string $source): bool
 {
     $source = strtolower(trim($source));
     if (!in_array($source, ['kuma', 'zabbix', 'announce', 'ntfy'], true)) {
+        return false;
+    }
+    if (!signage_profile_hero_strip_source_enabled($source)) {
         return false;
     }
     if (admin_is_super() || admin_is_infra()) {
@@ -2179,6 +2188,11 @@ function admin_hero_strip_source_options(): array
         'announce' => 'Announcement',
         'ntfy' => 'ntfy alerts',
     ];
+    foreach (array_keys($all) as $src) {
+        if (!signage_profile_hero_strip_source_enabled((string)$src)) {
+            unset($all[$src]);
+        }
+    }
     if (admin_is_super() || admin_is_infra()) {
         return $all;
     }

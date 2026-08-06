@@ -110,6 +110,10 @@ function hero_strip_key_options(): array
         $out['ntfy'][] = ['value' => $topic, 'label' => 'Poll topic: ' . $topic];
     }
 
+    if (signage_install_profile_is_work()) {
+        unset($out['kuma'], $out['ntfy']);
+    }
+
     return $out;
 }
 

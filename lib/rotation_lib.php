@@ -1862,6 +1862,9 @@ function rotation_screen_active_pages(string $screen = 'main', bool $applySeason
                 if ($applySeasonalSkip && rotation_page_seasonal_skip($url, $screen)) {
                     return false;
                 }
+                if (!signage_profile_rotation_url_allowed($url)) {
+                    return false;
+                }
 
                 return true;
             }
@@ -1969,7 +1972,7 @@ function rotation_screen_runtime(string $screen = 'main'): array
 /** Default playlist when nothing is configured yet (matches board.php fallback). */
 function rotation_starter_pages(): array
 {
-    return [
+    $pages = [
         ['url' => 'weather.php',   'dwell' => 180],
         ['url' => 'lake.php',    'dwell' => 60,  'from' => 7,  'to' => 22],
         ['url' => 'photo.php',   'dwell' => 60,  'from' => 14, 'to' => 23],
@@ -1983,6 +1986,11 @@ function rotation_starter_pages(): array
         ['url' => 'traffic.php', 'dwell' => 90,  'from' => 6,  'to' => 20],
         ['url' => 'camwall.php', 'dwell' => 90, 'from' => 6, 'to' => 20],
     ];
+
+    return array_values(array_filter(
+        $pages,
+        static fn(array $p): bool => signage_profile_rotation_url_allowed((string)($p['url'] ?? ''))
+    ));
 }
 
 /**
@@ -2748,6 +2756,9 @@ function rotation_quick_add_board_key(string $url): ?string
 /** Whether the current user may quick-add this rotation URL (infra-only boards excluded for operators). */
 function rotation_quick_add_url_allowed(string $url): bool
 {
+    if (!signage_profile_rotation_url_allowed($url)) {
+        return false;
+    }
     require_once __DIR__ . '/users_lib.php';
     if (!function_exists('admin_is_authenticated') || !admin_is_authenticated()) {
         return true;
@@ -3911,10 +3922,19 @@ function rotation_sync_rss(string $screen = 'main'): array
     return ['pages' => $pages, 'added' => $added, 'updated' => $updated, 'screen' => $screen];
 }
 
+/** @param list<array<string,mixed>> $pages */
+function rotation_playlist_filter_pages_for_profile(array $pages): array
+{
+    return array_values(array_filter(
+        $pages,
+        static fn($p): bool => is_array($p) && signage_profile_rotation_url_allowed((string)($p['url'] ?? ''))
+    ));
+}
+
 /** @return array<string,list<array<string,mixed>>> */
 function rotation_playlist_builtin_templates(): array
 {
-    return [
+    $raw = [
         'Kitchen weeknight' => [
             ['url' => 'meals.php', 'dwell' => 60, 'from' => 16, 'to' => 21],
             ['url' => 'weather.php', 'dwell' => 90, 'from' => 16, 'to' => 21],
@@ -3935,6 +3955,15 @@ function rotation_playlist_builtin_templates(): array
             ['url' => 'hibp.php', 'dwell' => 45],
         ],
     ];
+    $out = [];
+    foreach ($raw as $name => $pages) {
+        $filtered = rotation_playlist_filter_pages_for_profile($pages);
+        if ($filtered !== []) {
+            $out[$name] = $filtered;
+        }
+    }
+
+    return $out;
 }
 
 function rotation_playlist_template_is_builtin(string $name): bool
