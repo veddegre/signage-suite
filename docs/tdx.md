@@ -334,7 +334,7 @@ If a **Responsible users** entry cannot be resolved, the wall shows an error (it
 ## Wall layout
 
 - **Header** — page title, subtitle, optional clock
-- **Summary pills** — app name, open count, overdue count, SLA breach count, counts by priority
+- **Summary pills** — counts by ticket status, plus overdue and SLA breach when any match
 - **Ticket list** — `#ID`, priority (color-coded), title, type · group · responsible, status, age since last modified
 - **Flags** — Overdue, SLA on individual rows
 - **Footer** — cache refresh interval

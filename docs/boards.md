@@ -613,7 +613,7 @@ TeamDynamix Web in an iframe hits SSO. This board uses **`POST /api/{appId}/tick
 | Off wall | Skip on kiosk and rotation quick-add |
 | Access | Owner; share with Operators |
 
-**Wall layout:** summary pills (open, overdue, SLA, by priority), ticket list with ID, priority, status, group, age. Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
+**Wall layout:** summary pills (by status, overdue, SLA when present), ticket list with ID, priority, status, group, age. Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
 
 **Full guide** (TDAdmin setup, JSON examples, troubleshooting, API reference): **[docs/tdx.md](tdx.md)**.
 

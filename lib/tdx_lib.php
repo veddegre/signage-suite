@@ -974,7 +974,7 @@ function tdx_fetch_wall_data(array $page): array
     }
 
     $counts = ['total' => count($tickets), 'overdue' => 0, 'sla' => 0];
-    $byPriority = [];
+    $byStatus = [];
     foreach ($tickets as $row) {
         if (!empty($row['overdue'])) {
             $counts['overdue']++;
@@ -982,13 +982,22 @@ function tdx_fetch_wall_data(array $page): array
         if (!empty($row['sla_violation'])) {
             $counts['sla']++;
         }
-        $p = (string)($row['priority'] ?? 'Unknown');
-        if ($p === '') {
-            $p = 'Unknown';
+        $s = trim((string)($row['status'] ?? ''));
+        if ($s === '') {
+            $s = 'Unknown';
         }
-        $byPriority[$p] = (int)($byPriority[$p] ?? 0) + 1;
+        $byStatus[$s] = (int)($byStatus[$s] ?? 0) + 1;
     }
-    $counts['by_priority'] = $byPriority;
+    uksort($byStatus, static function (string $a, string $b) use ($byStatus): int {
+        $ca = $byStatus[$a];
+        $cb = $byStatus[$b];
+        if ($ca !== $cb) {
+            return $cb <=> $ca;
+        }
+
+        return strcasecmp($a, $b);
+    });
+    $counts['by_status'] = $byStatus;
 
     $meta = tdx_metadata_cached($appId);
     $appLabel = (string)($meta['app_name'] ?? '');

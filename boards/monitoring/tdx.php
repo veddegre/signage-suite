@@ -108,17 +108,16 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     </div>
   <?php else: ?>
     <div class="summary">
-      <div class="pill">Open <strong><?= (int)$ticketCount ?></strong></div>
+      <?php foreach ((array)($counts['by_status'] ?? []) as $sName => $n):
+          if ((int)$n === 0) continue; ?>
+      <div class="pill"><?= h((string)$sName) ?> <strong><?= (int)$n ?></strong></div>
+      <?php endforeach; ?>
       <?php if ((int)($counts['overdue'] ?? 0) > 0): ?>
       <div class="pill bad">Overdue <strong><?= (int)$counts['overdue'] ?></strong></div>
       <?php endif; ?>
       <?php if ((int)($counts['sla'] ?? 0) > 0): ?>
       <div class="pill warn">SLA breach <strong><?= (int)$counts['sla'] ?></strong></div>
       <?php endif; ?>
-      <?php foreach ((array)($counts['by_priority'] ?? []) as $pName => $n):
-          if ((int)$n === 0) continue; ?>
-      <div class="pill"><?= h((string)$pName) ?> <strong><?= (int)$n ?></strong></div>
-      <?php endforeach; ?>
     </div>
 
     <div class="main">
