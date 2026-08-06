@@ -209,40 +209,25 @@ function splunkdash_default_crop_top_px(): int
         return $configured;
     }
     if ((bool)cfg('splunkdash.HIDE_CHROME', true)) {
-        return 96;
+        return 64;
     }
 
     return 0;
 }
 
-/** Viewport overlay height — hides Splunk Dashboard Studio title row inside the embed frame. */
-function splunkdash_title_mask_px(array $dash = []): int
-{
-    if (!empty($dash['show_chrome'])) {
-        return 0;
-    }
-
-    $configured = max(0, min(200, (int)cfg('splunkdash.TITLE_MASK', 0)));
-    if ($configured > 0) {
-        return $configured;
-    }
-
-    return 140;
-}
-
 /** Nudge iframe down so Dashboard Studio panel titles are not clipped after crop. */
 function splunkdash_embed_shift_down_px(): int
 {
-    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 10)));
+    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 20)));
 }
 
 /** Clip Splunk footer / bottom chrome and hide iframe scrollbars. */
 function splunkdash_crop_bottom_px(): int
 {
-    return max(0, min(120, (int)cfg('splunkdash.CROP_BOTTOM', 40)));
+    return max(0, min(120, (int)cfg('splunkdash.CROP_BOTTOM', 36)));
 }
 
-/** Width of the right-edge cover that hides iframe scrollbars. */
+/** Extra width clip to push iframe scrollbars off-screen. */
 function splunkdash_scrollbar_gutter_px(): int
 {
     return max(0, min(120, (int)cfg('splunkdash.SCROLLBAR_GUTTER', 28)));

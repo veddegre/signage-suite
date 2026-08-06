@@ -56,9 +56,8 @@ $embedUrl = splunkdash_embed_url((string)($dash['url'] ?? ''), $dash);
 $cropTop = splunkdash_crop_top_px($dash);
 $embedShiftDown = splunkdash_embed_shift_down_px();
 $cropBottom = splunkdash_crop_bottom_px();
-$titleMask = splunkdash_title_mask_px($dash);
 $hideScrollbars = splunkdash_hide_scrollbars($dash);
-$scrollbarGutter = $hideScrollbars ? max(splunkdash_scrollbar_gutter_px(), 24) : 0;
+$scrollbarGutter = $hideScrollbars ? splunkdash_scrollbar_gutter_px() : 0;
 $boardTitle = trim((string)($dash['title'] ?? $key));
 $boardSub = trim((string)($dash['sub'] ?? ''));
 $showClock = signage_show_clock();
@@ -76,38 +75,20 @@ $embedH = max(720, signage_frame_height() - 16);
   <?= signage_kiosk_cursor_css() ?>
   html,body { width:100%; <?= signage_viewport_css() ?> overflow:hidden; background:var(--lake-night);
               color:var(--snow); font-family:'IBM Plex Sans',system-ui,sans-serif; }
-  .wall { width:1920px; max-width:100%; height:100%; margin:0 auto; display:flex; flex-direction:column;
+  .wall { width:1920px; max-width:100%; height:100%; margin:0 auto; position:relative;
           padding:0 16px 16px; box-sizing:border-box; }
-  .head { position:relative; flex:0 0 auto; z-index:10; display:flex; align-items:baseline;
-          justify-content:space-between; padding:12px 32px 10px; background:var(--lake-night); }
+  .head { position:absolute; top:0; left:16px; right:16px; z-index:10; display:flex; align-items:baseline;
+          justify-content:space-between; padding:14px 32px 32px; pointer-events:none;
+          background:linear-gradient(180deg, rgba(12,20,34,.99) 0%, rgba(12,20,34,.98) 45%,
+                      rgba(12,20,34,.94) 65%, rgba(12,20,34,.82) 82%, rgba(12,20,34,0) 100%); }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:48px; line-height:1.05;
              text-shadow:0 2px 18px rgba(0,0,0,.65); }
   .head h1 span { color:var(--beacon); }
   #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px; color:var(--mist);
            font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
   <?= signage_embed_frame_css() ?>
-  .signage-embed-frame {
-    flex:1 1 auto; min-height:0; width:100%; height:auto; box-sizing:border-box;
-    overflow:hidden; position:relative; isolation:isolate;
-  }
-  .signage-embed-frame .dash-wrap {
-    position:absolute; inset:0; overflow:hidden; z-index:1;
-  }
+  .signage-embed-frame .dash-wrap { width:100%; height:100%; position:relative; overflow:hidden; }
   <?= signage_iframe_crop_css($embedH, $cropTop, 'dash-wrap', $hideScrollbars, true, $embedShiftDown, $cropBottom, $scrollbarGutter) ?>
-  <?php if ($titleMask > 0): ?>
-  .splunk-title-mask {
-    position:absolute; top:0; left:0; right:0; height:<?= (int)$titleMask ?>px;
-    background:var(--lake-night); z-index:20; pointer-events:none;
-    border-radius:11px 11px 0 0;
-  }
-  <?php endif; ?>
-  <?php if ($scrollbarGutter > 0): ?>
-  .splunk-scroll-mask {
-    position:absolute; top:0; right:0; bottom:0; width:<?= (int)$scrollbarGutter ?>px;
-    background:var(--lake-night); z-index:20; pointer-events:none;
-    border-radius:0 11px 11px 0;
-  }
-  <?php endif; ?>
   .empty { width:1920px; max-width:100%; height:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }
@@ -133,11 +114,8 @@ $embedH = max(720, signage_frame_height() - 16);
     </div>
     <div class="signage-embed-frame">
       <div class="dash-wrap">
-        <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen" scrolling="no"
-                tabindex="-1" aria-hidden="true"></iframe>
+        <iframe id="dash" src="<?= h($embedUrl) ?>" allow="fullscreen" scrolling="no"></iframe>
       </div>
-      <?php if ($titleMask > 0): ?><div class="splunk-title-mask" aria-hidden="true"></div><?php endif; ?>
-      <?php if ($scrollbarGutter > 0): ?><div class="splunk-scroll-mask" aria-hidden="true"></div><?php endif; ?>
     </div>
   </div>
   <script>
