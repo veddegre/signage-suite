@@ -878,8 +878,18 @@ function zabbix_sort_problems(array $problems): array
  * Fetch problems severity-by-severity: all Disaster/High first, then fill display
  * budget with Average, Warning, etc. (not a single flat API limit).
  *
+ * Summary counts use the same visibility filters as the problem list (disabled
+ * triggers/hosts/items are excluded — problem.get countOutput alone does not).
+ *
  * @param list<string> $groupIds
- * @return array{problems:list<array<string,mixed>>,counts:array<int,int>}
+ * @return array{
+ *   problems:list<array<string,mixed>>,
+ *   counts:array<int,int>,
+ *   problems_total:int,
+ *   acknowledged_hidden:int,
+ *   displayed_by_severity:array<int,int>,
+ *   problem_host_names:list<string>
+ * }
  */
 function zabbix_fetch_wall_problems(
     array $groupIds,
@@ -890,11 +900,11 @@ function zabbix_fetch_wall_problems(
 ): array {
     $minSeverity = max(0, min(5, $minSeverity));
     $maxDisplay = max(1, min(500, $maxDisplay));
-    $display = [];
-    $seen = [];
     $counts = [];
+    $filteredBySev = [];
     foreach (zabbix_severity_options() as $sev) {
         $counts[$sev] = 0;
+        $filteredBySev[$sev] = [];
     }
 
     $criticalMin = 4;
@@ -916,20 +926,11 @@ function zabbix_fetch_wall_problems(
 
         $countRaw = zabbix_api_call('problem.get', $params + ['countOutput' => true], $error);
         $tierTotal = is_numeric($countRaw) ? (int)$countRaw : 0;
-        $counts[$sev] = $tierTotal;
-
-        if ($sev >= $criticalMin) {
-            $fetchLimit = min($tierTotal, 500);
-        } elseif (count($display) >= $maxDisplay) {
-            continue;
-        } else {
-            $fetchLimit = min($tierTotal, $maxDisplay - count($display));
-        }
-
-        if ($fetchLimit <= 0) {
+        if ($tierTotal <= 0) {
             continue;
         }
 
+        $fetchLimit = min($tierTotal, 500);
         $params['limit'] = $fetchLimit;
         $batch = zabbix_api_call('problem.get', $params, $error);
         if (!is_array($batch)) {
@@ -937,8 +938,41 @@ function zabbix_fetch_wall_problems(
         }
         $batch = zabbix_filter_unresolved_problems($batch);
         $batch = zabbix_filter_visible_problems($batch, $error);
+        $filteredBySev[$sev] = $batch;
+        $counts[$sev] = count($batch);
+    }
 
-        foreach ($batch as $problem) {
+    $allVisible = [];
+    $seenAll = [];
+    for ($sev = 5; $sev >= $minSeverity; $sev--) {
+        foreach ($filteredBySev[$sev] as $problem) {
+            if (!is_array($problem)) {
+                continue;
+            }
+            $eid = (string)($problem['eventid'] ?? '');
+            if ($eid === '' || isset($seenAll[$eid])) {
+                continue;
+            }
+            $seenAll[$eid] = true;
+            $allVisible[] = $problem;
+        }
+    }
+    $allVisible = zabbix_attach_problem_hosts($allVisible, $error);
+    $byEvent = [];
+    foreach ($allVisible as $problem) {
+        if (!is_array($problem)) {
+            continue;
+        }
+        $eid = (string)($problem['eventid'] ?? '');
+        if ($eid !== '') {
+            $byEvent[$eid] = $problem;
+        }
+    }
+
+    $display = [];
+    $seen = [];
+    for ($sev = 5; $sev >= $minSeverity; $sev--) {
+        foreach ($filteredBySev[$sev] as $problem) {
             if (!is_array($problem)) {
                 continue;
             }
@@ -950,12 +984,26 @@ function zabbix_fetch_wall_problems(
                 break;
             }
             $seen[$eid] = true;
-            $display[] = $problem;
+            $display[] = $byEvent[$eid] ?? $problem;
         }
     }
-
-    $display = zabbix_attach_problem_hosts($display, $error);
     $display = zabbix_sort_problems($display);
+
+    $problemHostNames = [];
+    foreach ($allVisible as $problem) {
+        if (!is_array($problem)) {
+            continue;
+        }
+        foreach ((array)($problem['hosts'] ?? []) as $hostRow) {
+            if (!is_array($hostRow)) {
+                continue;
+            }
+            $name = trim((string)($hostRow['name'] ?? ''));
+            if ($name !== '') {
+                $problemHostNames[$name] = true;
+            }
+        }
+    }
 
     $ackHidden = 0;
     if ($hideAck) {
@@ -998,6 +1046,7 @@ function zabbix_fetch_wall_problems(
         'problems_total' => $problemsTotal,
         'acknowledged_hidden' => $ackHidden,
         'displayed_by_severity' => $displayedBySev,
+        'problem_host_names' => array_keys($problemHostNames),
     ];
 }
 
@@ -1221,6 +1270,13 @@ function zabbix_fetch_wall_data(array $page): array
     $problemsTotal = (int)($fetched['problems_total'] ?? 0);
     $ackHidden = (int)($fetched['acknowledged_hidden'] ?? 0);
     $displayedBySev = $fetched['displayed_by_severity'] ?? [];
+    $problemHostNames = [];
+    foreach ($fetched['problem_host_names'] ?? [] as $hostName) {
+        $hostName = trim((string)$hostName);
+        if ($hostName !== '') {
+            $problemHostNames[$hostName] = true;
+        }
+    }
 
     if ($problems === [] && ($error ?? '') !== '') {
         $empty['error'] = $error ?: 'problem.get failed';
@@ -1249,21 +1305,6 @@ function zabbix_fetch_wall_data(array $page): array
         return zabbix_stale_wall_data($empty, $cacheFile, $empty['error']);
     }
 
-    $problemScope = $hostScope;
-    $problemScope['withProblems'] = true;
-    $problemScope['severities'] = zabbix_severities_from_min($minSeverity);
-    $problemHostsRaw = zabbix_fetch_hosts_for_scope($problemScope, null, $error);
-    $problemHosts = [];
-    foreach ($problemHostsRaw as $host) {
-        if (!is_array($host)) {
-            continue;
-        }
-        $pName = (string)($host['name'] ?? '');
-        if ($pName !== '') {
-            $problemHosts[$pName] = true;
-        }
-    }
-
     $hostRows = [];
     foreach ($hosts as $host) {
         if (!is_array($host)) {
@@ -1271,7 +1312,7 @@ function zabbix_fetch_wall_data(array $page): array
         }
         $name = (string)($host['name'] ?? '');
         $disabled = (string)($host['status'] ?? '0') === '1';
-        $hasProblem = !$disabled && $name !== '' && isset($problemHosts[$name]);
+        $hasProblem = !$disabled && $name !== '' && isset($problemHostNames[$name]);
         $hostRows[] = [
             'name' => $name,
             'disabled' => $disabled,
