@@ -78,9 +78,9 @@ $embedH = max(720, signage_frame_height() - 16);
   .wall { width:1920px; max-width:100%; height:100%; margin:0 auto; position:relative;
           padding:0 16px 16px; box-sizing:border-box; }
   .head { position:absolute; top:0; left:16px; right:16px; z-index:10; display:flex; align-items:baseline;
-          justify-content:space-between; padding:14px 32px 32px; pointer-events:none;
-          background:linear-gradient(180deg, rgba(12,20,34,.99) 0%, rgba(12,20,34,.98) 45%,
-                      rgba(12,20,34,.94) 65%, rgba(12,20,34,.82) 82%, rgba(12,20,34,0) 100%); }
+          justify-content:space-between; padding:14px 32px 28px; pointer-events:none;
+          background:linear-gradient(180deg, rgba(12,20,34,.98) 0%, rgba(12,20,34,.96) 55%,
+                      rgba(12,20,34,.88) 75%, rgba(12,20,34,0) 100%); }
   .head h1 { font-family:'Big Shoulders Display'; font-weight:700; font-size:48px; line-height:1.05;
              text-shadow:0 2px 18px rgba(0,0,0,.65); }
   .head h1 span { color:var(--beacon); }

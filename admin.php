@@ -6272,7 +6272,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <label class="mini">Crop top (px)</label>
                 <input type="number" min="0" max="400"<?= admin_form_name_attr('PAGES[' . $pk . '][crop_top]', $pageRo) ?>
                        value="<?= h((string)($pg['crop_top'] ?? '')) ?>" placeholder="<?= (int)cfg('splunkdash.DEFAULT_CROP_TOP', 0) ?>"<?= admin_form_ro_attr($pageRo) ?>>
-                <div class="help">Same layout as Grafana: signage title overlays the embed. The iframe shifts up so Splunk&rsquo;s dashboard title sits under that header (default 64px crop; set <strong>0</strong> on a row to disable).</div>
+                <div class="help">Same layout as Grafana: signage title overlays the embed. The iframe shifts up so Splunk&rsquo;s dashboard title sits under that header (default 50px crop; set <strong>0</strong> on a row to disable).</div>
               </div>
               <div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
