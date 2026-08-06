@@ -1934,13 +1934,20 @@ function admin_filter_scalar_map_for_display(array $map): array
 function admin_filter_registry_for_display(array $map, ?callable $normalize = null): array
 {
     if (!admin_preview_session_ready()) {
-        // Kiosk / player — rotation URLs are authoritative; do not hide entries owned by
-        // another admin user (e.g. infra Grafana pages on an operator display).
+        // Kiosk / player — rotation URLs pick the page key. Entries with an owner are
+        // scoped to that display's assigned user so one operator cannot load another's
+        // personal board (e.g. TeamDynamix). Ownerless entries stay global (infra Grafana).
+        $scopeUid = admin_display_scope_user_id();
         $out = [];
         foreach ($map as $k => $entry) {
-            if (is_array($entry) && empty($entry['off'])) {
-                $out[$k] = $entry;
+            if (!is_array($entry) || !empty($entry['off'])) {
+                continue;
             }
+            if ($scopeUid !== null && admin_entry_owner($entry) !== null
+                && !admin_entry_visible_for_user($entry, $scopeUid)) {
+                continue;
+            }
+            $out[$k] = $entry;
         }
 
         return $out;

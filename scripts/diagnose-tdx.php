@@ -55,6 +55,13 @@ echo 'Status IDs: ' . (tdx_ids_string($page['status_ids'] ?? '') ?: '(default op
 echo 'Group IDs: ' . (tdx_ids_string($page['group_ids'] ?? '') ?: '(any)') . "\n";
 echo 'Responsible users: ' . (tdx_users_string($page['responsible_users'] ?? '') ?: '(any)') . "\n";
 echo 'Responsible UIDs: ' . (tdx_uids_string($page['responsible_uids'] ?? '') ?: '(any)') . "\n";
+$resolveErr = null;
+$resolvedUids = tdx_responsible_uids_for_page($page, $resolveErr);
+if ($resolvedUids !== []) {
+    echo 'Resolved responsibility UIDs: ' . implode(', ', $resolvedUids) . "\n";
+} elseif ($resolveErr !== null && $resolveErr !== '') {
+    echo 'Resolve error: ' . $resolveErr . "\n";
+}
 echo 'Priority IDs: ' . (tdx_ids_string($page['priority_ids'] ?? '') ?: '(any)') . "\n\n";
 
 if (!tdx_configured()) {
@@ -104,7 +111,12 @@ foreach (array_slice($tickets, 0, 15) as $row) {
         continue;
     }
     echo '#' . (int)($row['id'] ?? 0) . ' [' . (string)($row['priority'] ?? '') . '] '
-        . (string)($row['status'] ?? '') . ' — ' . (string)($row['title'] ?? '') . "\n";
+        . (string)($row['status'] ?? '') . ' — ' . (string)($row['title'] ?? '');
+    $resp = trim((string)($row['responsible'] ?? ''));
+    if ($resp !== '') {
+        echo ' (' . $resp . ')';
+    }
+    echo "\n";
 }
 if (count($tickets) > 15) {
     echo '… ' . (count($tickets) - 15) . " more\n";
