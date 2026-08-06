@@ -218,7 +218,7 @@ function splunkdash_default_crop_top_px(): int
 /** Nudge iframe down so Dashboard Studio panel titles are not clipped after crop. */
 function splunkdash_embed_shift_down_px(): int
 {
-    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 24)));
+    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 26)));
 }
 
 /** Clip Splunk footer / bottom chrome and hide iframe scrollbars. */
