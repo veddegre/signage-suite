@@ -209,10 +209,16 @@ function splunkdash_default_crop_top_px(): int
         return $configured;
     }
     if ((bool)cfg('splunkdash.HIDE_CHROME', true)) {
-        return 64;
+        return 52;
     }
 
     return 0;
+}
+
+/** Nudge iframe down so Dashboard Studio panel titles are not clipped after crop. */
+function splunkdash_embed_shift_down_px(): int
+{
+    return max(0, min(80, (int)cfg('splunkdash.EMBED_SHIFT_DOWN', 16)));
 }
 
 /** @param array<string,mixed> $dash */

@@ -54,6 +54,7 @@ $reload = max(0, (int)($dash['reload'] ?? DEFAULT_RELOAD));
 $configured = !str_contains((string)($dash['url'] ?? ''), 'REPLACE');
 $embedUrl = splunkdash_embed_url((string)($dash['url'] ?? ''), $dash);
 $cropTop = splunkdash_crop_top_px($dash);
+$embedShiftDown = splunkdash_embed_shift_down_px();
 $hideScrollbars = splunkdash_hide_scrollbars($dash);
 $boardTitle = trim((string)($dash['title'] ?? $key));
 $boardSub = trim((string)($dash['sub'] ?? ''));
@@ -84,7 +85,7 @@ $embedH = max(720, signage_frame_height() - 16);
            font-variant-numeric:tabular-nums; text-shadow:0 2px 18px rgba(0,0,0,.65); }
   <?= signage_embed_frame_css() ?>
   .signage-embed-frame .dash-wrap { width:100%; height:100%; }
-  <?= signage_iframe_crop_css($embedH, $cropTop, 'dash-wrap', $hideScrollbars, true) ?>
+  <?= signage_iframe_crop_css($embedH, $cropTop, 'dash-wrap', $hideScrollbars, true, $embedShiftDown) ?>
   .empty { width:1920px; max-width:100%; height:100%; margin:0 auto; display:flex; flex-direction:column; gap:18px;
            align-items:center; justify-content:center; color:var(--mist); padding:0 80px; text-align:center; }
   .empty h2 { font-size:54px; color:var(--snow); font-weight:700; }

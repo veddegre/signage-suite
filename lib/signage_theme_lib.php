@@ -790,15 +790,17 @@ CSS;
 }
 
 /** CSS for clipping the top of a cross-origin iframe embed (Splunk publish, etc.). */
-function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap', bool $hideScrollbars = false, bool $fluid = false): string
+function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 'dash-wrap', bool $hideScrollbars = false, bool $fluid = false, int $shiftDown = 0): string
 {
     $boardH = max(720, $boardH);
     $cropTop = max(0, min(400, $cropTop));
+    $shiftDown = max(0, min(120, $shiftDown));
     $wrap = preg_replace('/[^a-z0-9_-]/', '', $wrapClass) ?: 'dash-wrap';
     $scrollbarGutter = $hideScrollbars ? 24 : 0;
+    $iframeTop = $shiftDown > 0 ? "calc(-{$cropTop}px + {$shiftDown}px)" : "-{$cropTop}px";
 
     if ($fluid) {
-        $iframeHExpr = "calc(100% + {$cropTop}px + {$scrollbarGutter}px)";
+        $iframeHExpr = "calc(100% + {$cropTop}px - {$shiftDown}px + {$scrollbarGutter}px)";
         $iframeWExpr = $scrollbarGutter > 0 ? "calc(100% + {$scrollbarGutter}px)" : '100%';
 
         return <<<CSS
@@ -810,7 +812,7 @@ function signage_iframe_crop_css(int $boardH, int $cropTop, string $wrapClass = 
   .{$wrap} iframe {
     position: absolute;
     left: 0;
-    top: -{$cropTop}px;
+    top: {$iframeTop};
     width: {$iframeWExpr};
     height: {$iframeHExpr};
     border: 0;
@@ -824,7 +826,7 @@ CSS;
 
     $frameH = $boardH + $cropTop;
     $iframeW = 1920 + $scrollbarGutter;
-    $iframeH = $frameH + $scrollbarGutter;
+    $iframeH = $frameH + $scrollbarGutter - $shiftDown;
 
     return <<<CSS
   .{$wrap} {
@@ -837,7 +839,7 @@ CSS;
   .{$wrap} iframe {
     position: absolute;
     left: 0;
-    top: -{$cropTop}px;
+    top: {$iframeTop};
     width: {$iframeW}px;
     height: {$iframeH}px;
     border: 0;
