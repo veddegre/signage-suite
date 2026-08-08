@@ -74,7 +74,7 @@ function admin_schema(): array
             ['key' => 'SSO_ALLOW_LOCAL_FALLBACK', 'label' => 'Allow local password login', 'type' => 'bool', 'default' => true,
              'help' => 'When SSO is enabled, still show username/password on the login page.'],
             ['key' => 'SSO_JIT_ENABLED', 'label' => 'SSO just-in-time provisioning', 'type' => 'bool', 'default' => false,
-             'help' => 'Create operator accounts automatically on first SSO sign-in (no pre-registration). Never creates super admins.'],
+             'help' => 'Create operator accounts on first SSO sign-in, register a display key from username, and assign it. Never creates super admins.'],
             ['key' => 'SSO_JIT_ALLOWED_DOMAINS', 'label' => 'JIT allowed email domains', 'type' => 'text',
              'help' => 'Comma-separated domains (e.g. contoso.com). Blank = any domain. Requires email claim in token.'],
             ['key' => 'SSO_JIT_REQUIRE_GROUPS', 'label' => 'JIT required groups/roles', 'type' => 'text',

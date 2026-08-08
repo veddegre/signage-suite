@@ -107,6 +107,11 @@ function users_list(): array
             $user['role'] = 'operator';
             $needsSave = true;
         }
+        if (users_normalize_role((string)($user['role'] ?? '')) === 'super'
+            && users_normalize_screens($user['screens'] ?? []) !== []) {
+            $user['screens'] = [];
+            $needsSave = true;
+        }
     }
     unset($user);
     if ($needsSave) {
@@ -138,6 +143,67 @@ function users_normalize_username(string $username): string
 function users_new_id(): string
 {
     return 'u_' . substr(bin2hex(random_bytes(6)), 0, 10);
+}
+
+/**
+ * Unique rotation display key for a new JIT operator (username-based, avoids main and taken keys).
+ */
+function users_jit_unique_screen_key(string $username): string
+{
+    require_once __DIR__ . '/rotation_lib.php';
+
+    $base = rotation_normalize_screen_key($username);
+    if ($base === '' || $base === 'main') {
+        $base = 'display';
+    }
+
+    $assigned = users_screen_assignments();
+    $key = $base;
+    for ($n = 2; $n < 100; $n++) {
+        if (!rotation_screen_is_registered($key) && !isset($assigned[$key])) {
+            return $key;
+        }
+        $key = $base . $n;
+    }
+
+    return $base . bin2hex(random_bytes(2));
+}
+
+/** Register a rotation display for a JIT operator and return its screen key. */
+function users_jit_create_operator_display(string $username): ?string
+{
+    require_once __DIR__ . '/rotation_lib.php';
+
+    $screenKey = users_jit_unique_screen_key($username);
+    $label = trim($username);
+    $displayName = $label !== ''
+        ? ucfirst($label) . ' Display'
+        : 'Operator Display';
+
+    $created = false;
+    if (!cfg_update(static function (array $conf) use ($screenKey, $displayName, &$created): array {
+        $screens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
+        if (isset($screens[$screenKey])) {
+            $created = true;
+
+            return $conf;
+        }
+        $screens[$screenKey] = ['name' => $displayName];
+        if (!isset($screens['main'])) {
+            $screens = ['main' => ['name' => 'Main Display']] + $screens;
+        }
+        $conf['rotation.SCREENS'] = $screens;
+        $created = true;
+
+        return $conf;
+    })) {
+        return null;
+    }
+    if (!$created) {
+        return null;
+    }
+
+    return $screenKey;
 }
 
 function users_normalize_role(string $role): string
@@ -198,6 +264,87 @@ function users_screen_assignments(): array
     return $map;
 }
 
+function users_count_supers(array $users): int
+{
+    $n = 0;
+    foreach ($users as $user) {
+        if (is_array($user) && users_normalize_role((string)($user['role'] ?? '')) === 'super') {
+            $n++;
+        }
+    }
+
+    return $n;
+}
+
+/** Primary owner / Users display pickers — operators plus super admins (assigning a super demotes them on save). */
+function users_admin_owner_options(): array
+{
+    $out = [];
+    foreach (users_by_id() as $ou) {
+        if (!is_array($ou) || !empty($ou['disabled'])) {
+            continue;
+        }
+        $uid = (string)($ou['id'] ?? '');
+        if ($uid === '') {
+            continue;
+        }
+        $role = users_normalize_role((string)($ou['role'] ?? ''));
+        if ($role !== 'operator' && $role !== 'super') {
+            continue;
+        }
+        $name = (string)($ou['username'] ?? $uid);
+        if ($role === 'super') {
+            $name .= ' (super admin)';
+        }
+        $out[] = ['id' => $uid, 'username' => $name, 'role' => $role];
+    }
+    usort($out, static fn(array $a, array $b): int => strcasecmp((string)$a['username'], (string)$b['username']));
+
+    return $out;
+}
+
+/** Remove a user from every display's shared-editor list (role changes, demotion). */
+function users_rotation_remove_shared_editor(string $userId): void
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $userId = trim($userId);
+    if ($userId === '') {
+        return;
+    }
+    cfg_update(static function (array $conf) use ($userId): array {
+        $screens = $conf['rotation.SCREENS'] ?? [];
+        if (!is_array($screens)) {
+            return $conf;
+        }
+        $changed = false;
+        foreach ($screens as $sk => &$meta) {
+            if (!is_array($meta)) {
+                continue;
+            }
+            $editors = rotation_screen_shared_editors((string)$sk);
+            if ($editors === [] || !in_array($userId, $editors, true)) {
+                continue;
+            }
+            $editors = array_values(array_filter(
+                $editors,
+                static fn(string $id): bool => $id !== $userId
+            ));
+            if ($editors === []) {
+                unset($meta['shared_editors']);
+            } else {
+                $meta['shared_editors'] = $editors;
+            }
+            $changed = true;
+        }
+        unset($meta);
+        if ($changed) {
+            $conf['rotation.SCREENS'] = $screens;
+        }
+
+        return $conf;
+    });
+}
+
 /** @return list<string> Displays assigned to an operator — cannot be deleted until unassigned. */
 function users_protected_screen_keys(): array
 {
@@ -231,6 +378,241 @@ function admin_screen_operator_map(): array
     }
 
     return $out;
+}
+
+/** Primary owner from rotation save POST (playlist dropdown or display-settings column). */
+function users_pending_screen_owner_from_post(array $post, string $screenKey): ?string
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $screenKey = rotation_normalize_screen_key($screenKey);
+    if ($screenKey === '') {
+        return null;
+    }
+    if (array_key_exists($screenKey, $post['SCREEN_OWNER'] ?? [])) {
+        $uid = trim((string)$post['SCREEN_OWNER'][$screenKey]);
+
+        return $uid !== '' ? $uid : null;
+    }
+    foreach ($post['SCREENS'] ?? [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        if (rotation_normalize_screen_key((string)($row['_key'] ?? '')) !== $screenKey) {
+            continue;
+        }
+        if (!array_key_exists('owner_user_id', $row)) {
+            break;
+        }
+        $uid = trim((string)$row['owner_user_id']);
+
+        return $uid !== '' ? $uid : null;
+    }
+
+    $uid = users_screen_assignments()[$screenKey] ?? null;
+
+    return $uid !== null && $uid !== '' ? (string)$uid : null;
+}
+
+/** @return array<string,string> display key => operator user id (empty string = unassigned) */
+function users_screen_owners_from_rotation_post(array $post): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $map = [];
+    foreach ($post['SCREEN_OWNER'] ?? [] as $sk => $uid) {
+        $sk = rotation_normalize_screen_key((string)$sk);
+        if ($sk === '') {
+            continue;
+        }
+        $map[$sk] = trim((string)$uid);
+    }
+    foreach ($post['SCREENS'] ?? [] as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $sk = rotation_normalize_screen_key((string)($row['_key'] ?? ''));
+        if ($sk === '' || !array_key_exists('owner_user_id', $row)) {
+            continue;
+        }
+        $map[$sk] = trim((string)$row['owner_user_id']);
+    }
+
+    return $map;
+}
+
+/**
+ * Apply primary display owners from rotation admin (Users tab remains equivalent).
+ *
+ * @param array<string,string> $desired display key => operator user id (empty unassigns)
+ * @return array{ok:bool,error?:string,changed?:int,demoted?:list<string>}
+ */
+function users_sync_screen_owners(array $desired): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    if ($desired === []) {
+        return ['ok' => true, 'changed' => 0, 'demoted' => []];
+    }
+
+    $knownScreens = [];
+    foreach (array_keys(rotation_screens()) as $sk) {
+        $knownScreens[rotation_normalize_screen_key((string)$sk)] = true;
+    }
+
+    $byId = users_by_id();
+    $current = users_screen_assignments();
+    $pending = [];
+    $autoDemote = [];
+    foreach ($desired as $sk => $newUid) {
+        $sk = rotation_normalize_screen_key((string)$sk);
+        if ($sk === '') {
+            continue;
+        }
+        if (!isset($knownScreens[$sk])) {
+            return ['ok' => false, 'error' => 'Display "' . $sk . '" is not defined in rotation.'];
+        }
+        $newUid = trim((string)$newUid);
+        $oldUid = (string)($current[$sk] ?? '');
+        if ($newUid === $oldUid) {
+            continue;
+        }
+        if ($newUid !== '') {
+            $user = $byId[$newUid] ?? null;
+            if (!is_array($user)) {
+                return ['ok' => false, 'error' => 'Unknown user selected as primary owner.'];
+            }
+            $userRole = users_normalize_role((string)($user['role'] ?? ''));
+            if ($userRole === 'super') {
+                $autoDemote[$newUid] = true;
+            } elseif ($userRole !== 'operator') {
+                $label = rotation_screen_display_name($sk, rotation_screens());
+
+                return ['ok' => false, 'error' => 'Choose an operator as primary owner for ' . $label . '.'];
+            }
+        }
+        $pending[$sk] = $newUid;
+    }
+    if ($pending === []) {
+        return ['ok' => true, 'changed' => 0, 'demoted' => []];
+    }
+
+    $users = users_list();
+    $indexById = [];
+    foreach ($users as $i => $user) {
+        if (is_array($user) && (string)($user['id'] ?? '') !== '') {
+            $indexById[(string)$user['id']] = $i;
+        }
+    }
+
+    $simUsers = $users;
+    foreach ($simUsers as &$user) {
+        if (!is_array($user)) {
+            continue;
+        }
+        if (users_normalize_role((string)($user['role'] ?? '')) === 'super') {
+            $user['screens'] = [];
+            continue;
+        }
+        $user['screens'] = users_normalize_screens($user['screens'] ?? []);
+    }
+    unset($user);
+
+    $demotedUsernames = [];
+    if ($autoDemote !== []) {
+        $superCount = users_count_supers($simUsers);
+        if (count($autoDemote) >= $superCount) {
+            return [
+                'ok' => false,
+                'error' => 'Cannot assign a display to the only super admin — add another super admin first, or demote them under Users.',
+            ];
+        }
+        foreach (array_keys($autoDemote) as $uid) {
+            if (!isset($indexById[$uid])) {
+                continue;
+            }
+            $idx = $indexById[$uid];
+            $simUsers[$idx]['role'] = 'operator';
+            $simUsers[$idx]['screens'] = [];
+            $demotedUsernames[] = (string)($simUsers[$idx]['username'] ?? $uid);
+        }
+        $demotedUsernames = array_values(array_unique($demotedUsernames));
+        sort($demotedUsernames);
+    }
+
+    foreach ($pending as $sk => $newUid) {
+        $oldUid = $current[$sk] ?? null;
+        if ($oldUid !== null && $oldUid !== '' && isset($indexById[$oldUid])) {
+            $idx = $indexById[$oldUid];
+            $screens = users_normalize_screens($simUsers[$idx]['screens'] ?? []);
+            $simUsers[$idx]['screens'] = array_values(array_filter(
+                $screens,
+                static fn(string $s): bool => $s !== $sk
+            ));
+        }
+        if ($newUid !== '' && isset($indexById[$newUid])) {
+            $idx = $indexById[$newUid];
+            $screens = users_normalize_screens($simUsers[$idx]['screens'] ?? []);
+            if (!in_array($sk, $screens, true)) {
+                $screens[] = $sk;
+            }
+            sort($screens);
+            $max = users_operator_screen_max();
+            if (count($screens) > $max) {
+                $uname = (string)($simUsers[$idx]['username'] ?? '');
+                $limitLabel = users_operator_multi_screen_enabled()
+                    ? 'too many displays (' . $max . ' max)'
+                    : 'only one display';
+
+                return ['ok' => false, 'error' => 'Operator ' . $uname . ' may have ' . $limitLabel . '.'];
+            }
+            $simUsers[$idx]['screens'] = $screens;
+        }
+    }
+
+    $screenOwners = [];
+    foreach ($simUsers as $user) {
+        if (!is_array($user) || users_normalize_role((string)($user['role'] ?? '')) !== 'operator') {
+            continue;
+        }
+        foreach (users_normalize_screens($user['screens'] ?? []) as $sk) {
+            if (isset($screenOwners[$sk])) {
+                return [
+                    'ok' => false,
+                    'error' => 'Display "' . $sk . '" would be assigned to multiple operators.',
+                ];
+            }
+            $screenOwners[$sk] = (string)($user['username'] ?? '');
+        }
+    }
+
+    if (!users_file_update(static function (array $data) use ($simUsers): array|false {
+        $data['users'] = $simUsers;
+
+        return $data;
+    })) {
+        if (signage_json_last_error() === 'lock_timeout') {
+            return ['ok' => false, 'error' => 'Another user save is in progress — wait a moment and try again.'];
+        }
+
+        return ['ok' => false, 'error' => 'Could not write users file.'];
+    }
+
+    foreach (array_keys($autoDemote) as $uid) {
+        users_rotation_remove_shared_editor($uid);
+    }
+
+    $currentUser = admin_current_user();
+    if (is_array($currentUser)) {
+        $updated = users_find_by_id((string)$currentUser['id']);
+        if ($updated !== null) {
+            admin_login_user(users_public_row($updated));
+        }
+    }
+
+    audit_log('users.screen_owner', 'Updated display owners from rotation', [
+        'changed' => count($pending),
+        'demoted' => $demotedUsernames,
+    ]);
+
+    return ['ok' => true, 'changed' => count($pending), 'demoted' => $demotedUsernames];
 }
 
 /** @param array<string,mixed> $row */
@@ -300,11 +682,15 @@ function users_public_row(?array $user): ?array
     if (!is_array($user) || empty($user['id'])) {
         return null;
     }
+    $role = users_normalize_role((string)($user['role'] ?? 'operator'));
+
     return [
         'id' => (string)$user['id'],
         'username' => (string)($user['username'] ?? ''),
-        'role' => users_normalize_role((string)($user['role'] ?? 'operator')),
-        'screens' => array_slice(users_normalize_screens($user['screens'] ?? []), 0, users_operator_screen_max()),
+        'role' => $role,
+        'screens' => $role === 'super'
+            ? []
+            : array_slice(users_normalize_screens($user['screens'] ?? []), 0, users_operator_screen_max()),
         'auth_provider' => (string)($user['auth_provider'] ?? 'local'),
         'disabled' => !empty($user['disabled']),
     ];
@@ -462,11 +848,22 @@ function users_provision_sso(array $claims): ?array
         return null;
     }
 
+    $screenKey = users_jit_create_operator_display($username);
+    if ($screenKey === null) {
+        require_once __DIR__ . '/audit_lib.php';
+        audit_log('sso.jit_failed', 'Could not register display for ' . $username, [
+            'actor' => $username,
+            'external_id' => $sub,
+        ]);
+
+        return null;
+    }
+
     $entry = [
         'id' => users_new_id(),
         'username' => $username,
         'role' => sso_jit_default_role(),
-        'screens' => [],
+        'screens' => [$screenKey],
         'auth_provider' => 'sso',
         'external_id' => $sub,
         'disabled' => false,
@@ -504,6 +901,7 @@ function users_provision_sso(array $claims): ?array
         'actor' => $username,
         'role' => 'operator',
         'external_id' => $sub,
+        'screen' => $screenKey,
     ]);
 
     return $entry;
@@ -2377,6 +2775,7 @@ function users_save_from_post(array $rows): array
     $usernames = [];
     $superCount = 0;
     $screenOwners = [];
+    $sharedEditorPurge = [];
 
     foreach ($rows as $row) {
         if (!is_array($row)) {
@@ -2401,6 +2800,7 @@ function users_save_from_post(array $rows): array
         }
 
         $prev = $existing[$id] ?? null;
+        $prevRole = is_array($prev) ? users_normalize_role((string)($prev['role'] ?? '')) : null;
         $authProvider = strtolower(trim((string)($row['auth_provider'] ?? '')));
         if ($authProvider !== 'sso' && $authProvider !== 'local') {
             $authProvider = is_array($prev) ? (string)($prev['auth_provider'] ?? 'local') : 'local';
@@ -2415,6 +2815,10 @@ function users_save_from_post(array $rows): array
             'external_id' => is_array($prev) ? ($prev['external_id'] ?? null) : null,
             'disabled' => !empty($row['disabled']),
         ];
+
+        if ($prevRole !== null && $prevRole !== $role) {
+            $sharedEditorPurge[$id] = true;
+        }
 
         if ($role === 'operator') {
             $screens = $entry['screens'];
@@ -2471,6 +2875,10 @@ function users_save_from_post(array $rows): array
         }
 
         return ['ok' => false, 'error' => 'Could not write users file.'];
+    }
+
+    foreach (array_keys($sharedEditorPurge) as $purgeId) {
+        users_rotation_remove_shared_editor((string)$purgeId);
     }
 
     $current = admin_current_user();

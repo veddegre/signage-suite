@@ -116,7 +116,7 @@ Define screens under **Rotation → Display settings** (e.g. `main` / Living Roo
 | `board.php` | main |
 | `board.php?screen=garage` | garage |
 
-Assign each display to **one operator** under **Users** (primary owner). With **Security → Operators may manage multiple displays** enabled (default), one operator may own several screens and manage all of their playlists and deploy targets.
+Assign each display to **one operator** under **Rotation** (Primary owner) or **Users**. Picking a **super admin** as primary owner demotes them to operator automatically (another super admin must remain). With **Security → Operators may manage multiple displays** enabled (default), one operator may own several screens and manage all of their playlists and deploy targets.
 
 **Shared editors** (super admin → **Rotation** → expand a display → check operators under **Shared editing**) may manage that display’s **full** configuration: playlist order, dwell/hours/skip, display options, hero strip, and deploy/sync — including slides and quick-add boards owned by the primary operator. Shared editors do not gain access to other displays or unrelated content boards unless they own or are shared on those rows separately.
 

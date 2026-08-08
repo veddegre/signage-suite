@@ -49,7 +49,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 
 ### Display assignment (operators)
 
-Each physical display (rotation screen) has **one primary owner** — enforced on save so the same screen cannot be assigned to two people.
+Each physical display (rotation screen) has **one primary owner** — enforced on save so the same screen cannot be assigned to two people. Set the owner under **Rotation** (Primary owner dropdown in each playlist panel, or **Owner** column in Display settings) or on **Users** — all paths write the same assignment.
 
 | Mode | Setting | Behavior |
 |------|---------|----------|
@@ -67,7 +67,7 @@ Operators with multiple displays can manage rotation, deploy targets, and per-sc
 
 ### Shared display editing
 
-Super admins assign **shared editors** per display under **Rotation** (checkboxes in each playlist panel). A shared editor is an operator who is **not** the primary owner but may manage that display’s **full** configuration:
+Super admins assign **shared editors** per display under **Rotation** (checkboxes in each playlist panel). Shared editors are **not** the primary owner — use the **Primary owner** dropdown on the same panel (or **Users**) so the operator can sign in and manage their own content. A shared editor may manage that display’s **full** configuration:
 
 - Playlist order, dwell, hour windows, skip, weights
 - Display options (ticker, **shuffle / weighted** rotation, crossfade timings, **hero status strip**, **location**, **sports teams**, **glance headline columns**)
@@ -199,7 +199,7 @@ Register a **Web** OAuth2/OIDC application. Note the **client ID**, **client sec
 
 **Entra:** App registration → **Authentication** → add redirect URI as **Web**. Create client secret under **Certificates & secrets**.
 
-**Authentik:** **Applications** → Provider (OAuth2/OpenID) + Application → add redirect URI to the provider.
+**Authentik:** **Applications** → Provider (OAuth2/OpenID) + Application → register the **redirect URI** from **Security → SSO setup** (`admin.php?sso=callback`). Set the Application **Launch URL** to `admin.php?sso=start` on the same host — **not** `index.php` (legacy weather redirect only). If the IdP was pointed at `index.php`, recent builds forward OAuth responses to `admin.php` automatically.
 
 ### 2. Enable SSO in Signage
 
@@ -232,7 +232,7 @@ Register a **Web** OAuth2/OIDC application. Note the **client ID**, **client sec
 
 On first successful SSO sign-in the account **links** (“Linked” status). Until then: “Pending first sign-in”. Linked accounts authenticate only via SSO.
 
-**JIT provisioning:** enable **Security → SSO just-in-time provisioning**. First sign-in creates an **operator** with no display — super admin assigns a screen under **Users**.
+**JIT provisioning:** enable **Security → SSO just-in-time provisioning**. First sign-in creates an **operator**, registers a **display key** from the username (e.g. `jane` → display `jane`), assigns it to the user, and adds the row under **Rotation → Displays**. The playlist starts empty — add boards under Rotation.
 
 1. Set **JIT allowed email domains** (e.g. `yourcompany.com`)
 2. Optionally set **JIT required groups/roles** — user must have any listed value in token `groups` or `roles` (Entra: enable groups/roles in token; Authentik: groups in userinfo)

@@ -869,6 +869,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         foreach ($screensOut as $sk => &$screenEntry) {
             if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
                 $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
+                $ownerUid = users_pending_screen_owner_from_post($_POST, $sk);
+                if ($ownerUid !== null) {
+                    $editors = array_values(array_filter(
+                        $editors,
+                        static fn(string $id): bool => $id !== $ownerUid
+                    ));
+                }
                 if ($editors !== []) {
                     $screenEntry['shared_editors'] = $editors;
                 } else {
@@ -944,6 +951,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 }
                 if (array_key_exists($sk, $_POST['SCREEN_EDITORS'] ?? []) && is_array($_POST['SCREEN_EDITORS'][$sk])) {
                     $editors = rotation_normalize_shared_editors($_POST['SCREEN_EDITORS'][$sk]);
+                    $ownerUid = users_pending_screen_owner_from_post($_POST, $sk);
+                    if ($ownerUid !== null) {
+                        $editors = array_values(array_filter(
+                            $editors,
+                            static fn(string $id): bool => $id !== $ownerUid
+                        ));
+                    }
                     if ($editors !== []) {
                         $screens[$sk]['shared_editors'] = $editors;
                     } else {
@@ -1149,6 +1163,22 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     if ($parts !== []) {
                         cfg_reload();
                         $extra = ' ' . implode('; ', $parts) . '.';
+                    }
+                }
+            }
+            if ($board === 'rotation' && admin_is_super() && !emergency_blocks_operator_rotation() && ($flashOk ?? true)) {
+                cfg_reload();
+                $ownerResult = users_sync_screen_owners(users_screen_owners_from_rotation_post($_POST));
+                if (!$ownerResult['ok']) {
+                    $flashOk = false;
+                    $flash = ($ownerResult['error'] ?? 'Could not update display owners.') . ' Rotation settings were saved.';
+                } elseif ((int)($ownerResult['changed'] ?? 0) > 0) {
+                    $n = (int)$ownerResult['changed'];
+                    $extra .= ($extra !== '' ? ' ' : '') . 'Updated primary owner for '
+                        . $n . ' display' . ($n === 1 ? '' : 's') . '.';
+                    $demoted = is_array($ownerResult['demoted'] ?? null) ? $ownerResult['demoted'] : [];
+                    if ($demoted !== []) {
+                        $extra .= ' Demoted ' . implode(', ', $demoted) . ' to operator.';
                     }
                 }
             }
@@ -4217,7 +4247,7 @@ function admin_field(array $f, $val, string $board): void
             <?php endforeach; ?>
         </div>
         <button type="button" class="addrow" style="margin-top:10px" onclick="addUserRow()">+ Add user</button>
-        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards are super-admin only.</div>
+        <div class="help" style="margin-top:10px">At least one <strong>super</strong> account is required. <strong>Local</strong> users need a password when created. <strong>SSO</strong> users sign in via Entra / Authentik — username must match the IdP. <strong>Operator</strong> users get <?= users_operator_multi_screen_enabled() ? 'one or more assigned displays' : 'exactly one display' ?>. To turn a super admin into an operator, change <strong>Role</strong> here (or pick them as <strong>Primary owner</strong> on Rotation — that demotes them automatically when another super admin exists) and assign at least one display. Homelab, UniFi, SignalTrace, Uptime Kuma, Tailscale, and ntfy admin boards are super-admin only.</div>
         <div class="actions" style="margin-top:16px">
           <button class="save" type="submit">Save users</button>
         </div>
@@ -4573,6 +4603,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           if (($emergencyCfg['pages'] ?? []) === []) {
               $emergencyCfg['pages'] = [['url' => 'emergency.php', 'dwell' => 60]];
           }
+          $rotationOperatorOptions = admin_is_super() ? users_admin_owner_options() : [];
         ?>
           <input type="hidden" name="rotation_focus_screen" id="rotationFocusScreen" value="<?= h($rotationDefaultScreenKey) ?>">
           <?php if (emergency_active() && !admin_is_super()): ?>
@@ -4690,12 +4721,13 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <div class="rows-scroll">
             <table class="rows" data-field="SCREENS">
               <thead><tr>
-                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Time</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</th><th title="Randomize play order once per full pass; every page appears once per cycle">Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th></th>
+                <th>Key</th><th>Display name</th><th>Wx ticker</th><th>Clock</th><th>Time</th><th>Debug</th><th title="Arrow keys advance/back playlist">Keys</th><th>Crossfade</th><th>Settle</th><th>Hang</th><th title="<?= h(rotation_weighted_mode_tooltip()) ?>">Weighted</th><th title="Randomize play order once per full pass; every page appears once per cycle">Shuffle</th><th>Blank</th><th>Off hr</th><th>On hr</th><th>Days</th><th>CEC</th><th>Owner</th><th></th>
               </tr></thead>
               <tbody>
                 <?php foreach ($scrRows as $sri => $srow):
                   $screenKey = (string)($srow['_key'] ?? '');
                   $assignedUser = $screenKey !== '' ? users_screen_assigned_username($screenKey) : null;
+                  $ownerUid = $screenKey !== '' ? (users_screen_assignments()[$screenKey] ?? '') : '';
                   $screenProtected = $assignedUser !== null;
                 ?>
                 <tr<?= $screenProtected ? ' data-screen-protected="1"' : '' ?>>
@@ -4728,8 +4760,14 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <td class="rotation-weekdays-cell"><?php rotation_admin_weekdays_html('SCREENS[' . (int)$sri . ']', $srow['weekdays'] ?? null); ?></td>
                   <td style="text-align:center;vertical-align:middle"><input type="checkbox" style="width:20px;height:20px;accent-color:var(--beacon);min-width:0"
                          name="SCREENS[<?= (int)$sri ?>][cec_enabled]" value="1" <?= !empty($srow['cec_enabled']) ? 'checked' : '' ?>></td>
+                  <td><select name="SCREENS[<?= (int)$sri ?>][owner_user_id]" style="min-width:120px" title="Primary owner — who manages this display in admin">
+                    <option value="">— Unassigned —</option>
+                    <?php foreach ($rotationOperatorOptions as $op): ?>
+                    <option value="<?= h((string)$op['id']) ?>" <?= $ownerUid === (string)$op['id'] ? 'selected' : '' ?>><?= h((string)$op['username']) ?></option>
+                    <?php endforeach; ?>
+                  </select></td>
                   <td><?php if ($screenProtected): ?>
-                    <span class="pill ok" title="Assigned to operator — unassign in Users to remove"><?= h($assignedUser) ?></span>
+                    <span class="pill ok" title="Assigned to operator — clear Owner to remove"><?= h($assignedUser) ?></span>
                   <?php else: ?>
                     <button type="button" class="rowdel" onclick="this.closest('tr').remove()">×</button>
                   <?php endif; ?></td>
@@ -5060,10 +5098,20 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
           <?php if (admin_is_super()):
             $sharedEditors = rotation_screen_shared_editors($screenKey);
-            $screenOwner = users_screen_assigned_username($screenKey);
+            $ownerUid = users_screen_assignments()[$screenKey] ?? '';
           ?>
           <div class="rotation-shared-editors" style="margin:12px 0;padding:14px 16px;border:1px solid var(--hairline);border-radius:10px;background:var(--harbor)">
-            <div class="help" style="margin-bottom:10px"><strong>Shared editing</strong> — primary owner is set under <a href="?board=users">Users</a><?php if ($screenOwner): ?> (<code><?= h($screenOwner) ?></code>)<?php else: ?> (unassigned)<?php endif; ?>. Shared editors manage the <strong>full display</strong>: playlist, display options, hero strip, and deploy targets (including the primary owner’s slides and quick-add boards).</div>
+            <div class="field" style="margin-bottom:12px;max-width:280px">
+              <label class="l">Primary owner</label>
+              <select name="SCREEN_OWNER[<?= h($screenKey) ?>]" title="Operator who owns this display (playlist, deploy, kiosk login)">
+                <option value="">— Unassigned —</option>
+                <?php foreach ($rotationOperatorOptions as $op): ?>
+                <option value="<?= h((string)$op['id']) ?>" <?= $ownerUid === (string)$op['id'] ? 'selected' : '' ?>><?= h((string)$op['username']) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <div class="help" style="margin-top:6px">Saved with rotation. Picking a <strong>super admin</strong> demotes them to operator (another super admin must remain). Same setting as <a href="?board=users">Users</a>.</div>
+            </div>
+            <div class="help" style="margin-bottom:10px"><strong>Shared editing</strong> — operators who may manage the <strong>full display</strong> (playlist, display options, hero strip, deploy targets) without being the primary owner.</div>
             <div class="field-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
               <?php foreach (users_by_id() as $ou):
                 if (!is_array($ou) || users_normalize_role((string)($ou['role'] ?? '')) !== 'operator') {
@@ -5072,13 +5120,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 $uid = (string)($ou['id'] ?? '');
                 if ($uid === '') {
                     continue;
-                }
-                $ownerUid = null;
-                foreach (users_screen_assignments() as $ask => $aUid) {
-                    if ($ask === $screenKey) {
-                        $ownerUid = $aUid;
-                        break;
-                    }
                 }
                 if ($ownerUid === $uid) {
                     continue;
@@ -9846,6 +9887,17 @@ function userScreenAssignedElsewhere(userId) {
   return taken;
 }
 
+function userAssignedScreens(userId) {
+  const out = [];
+  const map = window.USER_SCREEN_ASSIGNMENTS || {};
+  const selfId = String(userId || '');
+  Object.keys(map).forEach(function (sk) {
+    const entry = map[sk];
+    if (entry && String(entry.userId) === selfId) out.push(sk);
+  });
+  return out;
+}
+
 function userScreenPickerOptions(userId) {
   const opts = window.USER_SCREEN_OPTIONS || [];
   const assignedElsewhere = userScreenAssignedElsewhere(userId);
@@ -9958,9 +10010,12 @@ function bindUserRow(card) {
     card.dataset.role = sel.value;
     const cell = card.querySelector('.user-display-cell');
     if (!cell) return;
-    const checked = collectUserScreenChecked(cell);
     const idInput = card.querySelector('input[name*="[id]"]');
     const userId = idInput ? idInput.value : '';
+    let checked = collectUserScreenChecked(cell);
+    if (sel.value === 'operator' && checked.length === 0) {
+      checked = userAssignedScreens(userId);
+    }
     cell.innerHTML = userScreensCellHtml(idx, sel.value, checked, userId);
     if (window.OPERATOR_MULTI_SCREEN) {
       initScreenPickers(cell);

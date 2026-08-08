@@ -116,6 +116,7 @@ function audit_action_label(string $action): string
         'config.backup.store' => 'Config backup stored',
         'config.backup.export' => 'Config backup downloaded',
         'sso.jit_provision' => 'SSO user provisioned',
+        'sso.jit_failed' => 'SSO JIT failed',
         'media.slide_upload' => 'Slide uploaded',
         'media.slide_delete' => 'Slide deleted',
         'media.photo_upload' => 'Photo uploaded',

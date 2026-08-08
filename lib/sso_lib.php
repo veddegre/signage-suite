@@ -765,6 +765,8 @@ function sso_admin_setup_html(): string
             . '(App registration → Overview → Directory (tenant) ID). Register the redirect URI below as a Web platform.',
         'authentik' => 'Authentik: create an OAuth2/OpenID Provider + Application. Issuer URL is shown on the provider '
             . '(often <code>https://auth.example.com/application/o/&lt;slug&gt;/</code> — trailing slash must match exactly). '
+            . 'Register the <strong>redirect URI</strong> below on the provider. Set the Application <strong>Launch URL</strong> to '
+            . '<code>' . h(signage_admin_base_url() . '/admin.php?sso=start') . '</code> (not <code>index.php</code> — that URL is legacy weather only). '
             . 'Without a <strong>Signing key</strong> on the provider, Authentik signs ID tokens with <strong>HS256</strong> '
             . '(client secret). Select an RSA certificate under Protocol settings for <strong>RS256</strong> + JWKS verification.',
         default => 'Generic OIDC: paste the issuer URL from your provider; discovery is loaded automatically.',
@@ -773,11 +775,14 @@ function sso_admin_setup_html(): string
     return '<div class="upload-box sso-setup-box" id="security-sso-setup" style="margin-top:14px;margin-bottom:6px">'
         . '<h3>SSO setup (' . $provider . ')</h3>'
         . '<div class="help" style="margin-bottom:10px">' . $issuerHelp . '</div>'
-        . '<div class="help"><strong>Redirect URI</strong> (register this in Entra / Authentik):<br>'
+        . '<div class="help"><strong>Redirect URI</strong> (register this on the OAuth provider):<br>'
         . '<code style="word-break:break-all">' . $redirect . '</code></div>'
+        . '<div class="help" style="margin-top:8px"><strong>Authentik launch URL</strong> (Application → Launch URL — when opening the app from Authentik):<br>'
+        . '<code style="word-break:break-all">' . h(signage_admin_base_url() . '/admin.php?sso=start') . '</code></div>'
         . '<div class="help" style="margin-top:8px">Create users under <strong>Users</strong> first — SSO matches by linked account '
         . '(external ID) or username claim. Enable <strong>Auto-link by email</strong> to match existing local usernames to the email claim on first sign-in.</div>'
         . '<div class="help" style="margin-top:8px"><strong>JIT provisioning:</strong> enable under Security to auto-create <em>operator</em> accounts on first SSO sign-in. '
+        . 'A rotation display key is created from the username and assigned automatically (empty playlist until they add boards under Rotation). '
         . 'Restrict with allowed email domains and/or required groups (Entra app roles or <code>groups</code> claim; Authentik <code>groups</code> in userinfo).</div>'
         . '</div>';
 }
