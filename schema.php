@@ -61,6 +61,8 @@ function admin_schema(): array
             ['key' => 'SSO_PROVIDER', 'label' => 'SSO provider', 'type' => 'select',
              'options' => ['generic', 'entra', 'authentik'], 'default' => 'generic',
              'help' => 'Preset for setup hints — both Entra and Authentik use standard OIDC under the hood.'],
+            ['key' => 'SSO_LOGIN_NAME', 'label' => 'SSO login name', 'type' => 'text',
+             'help' => 'Name on the login button and account page (e.g. vedorama). Leave blank for the provider preset (Authentik, Microsoft Entra ID, …).'],
             ['key' => 'SSO_ISSUER_URL', 'label' => 'OIDC issuer URL', 'type' => 'text',
              'help' => 'Entra: https://login.microsoftonline.com/<tenant-id>/v2.0 · Authentik: provider issuer URL (match trailing slash exactly).'],
             ['key' => 'OIDC_CLIENT_ID', 'label' => 'OIDC client ID', 'type' => 'text'],

@@ -754,6 +754,11 @@ function sso_claim_email(array $claims): string
 
 function sso_provider_label(): string
 {
+    $custom = trim((string)cfg('security.SSO_LOGIN_NAME', ''));
+    if ($custom !== '') {
+        return $custom;
+    }
+
     return match (sso_provider()) {
         'entra' => 'Microsoft Entra ID',
         'authentik' => 'Authentik',

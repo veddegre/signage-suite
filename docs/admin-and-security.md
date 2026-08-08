@@ -206,14 +206,16 @@ Register a **Web** OAuth2/OIDC application. Note the **client ID**, **client sec
 1. Log in as super admin → **Security**
 2. Check **Enable SSO login**
 3. Set **SSO provider** to `entra` or `authentik` (preset hints only)
-4. Fill **OIDC issuer URL**, **OIDC client ID**, **OIDC client secret**
-5. Leave **OIDC scopes** at default `openid profile email` unless your IdP requires more
-6. **Save** — copy the **Redirect URI** shown into Entra/Authentik if not already registered
+4. Optionally set **SSO login name** (e.g. `vedorama`) — shown on the login button and account page instead of the provider preset
+5. Fill **OIDC issuer URL**, **OIDC client ID**, **OIDC client secret**
+6. Leave **OIDC scopes** at default `openid profile email` unless your IdP requires more
+7. **Save** — copy the **Redirect URI** shown into Entra/Authentik if not already registered
 
 **Useful options:**
 
 | Option | Purpose |
 |--------|---------|
+| **SSO login name** | Custom label on the login button (e.g. `vedorama` → “Sign in with vedorama”) and account page; blank uses the provider preset |
 | **Username claim** | JWT field matched to admin username (default `preferred_username`; falls back to `email` / Entra `upn`) |
 | **Auto-link by email** | On first SSO sign-in, match existing user when email local-part equals username |
 | **Allow local password login** | Keep username/password form when SSO is on (default: yes) |
