@@ -246,6 +246,8 @@ On first successful SSO sign-in the account **links** (“Linked” status). Unt
 | No matching admin account | Create user under **Users**, enable JIT, or check domain/group filters |
 | ID token issuer mismatch | Entra tenant URL or Authentik issuer trailing slash does not match exactly |
 | Token exchange failed | Wrong client secret or redirect URI not registered in IdP |
+| Unsupported JWT algorithm / Invalid ID token signature (HS256) | Authentik without a **Signing key** uses **HS256** — paste the exact **Client secret** into Signage. Or select an RSA **Signing key** on the Authentik provider (re-save if UI shows a cert but tokens stay HS256) |
+| Invalid ID token signature (RS256/ES256) | Wrong signing key, stale JWKS cache — wait 1h or delete `cache/sso_discovery_*.json` |
 
 ## Security hardening
 

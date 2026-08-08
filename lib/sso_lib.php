@@ -327,6 +327,20 @@ function sso_jwks(): ?array
 /** @return array{pem:string,key:OpenSSLAsymmetricKey}|null */
 function sso_jwk_to_pem(array $jwk): ?array
 {
+    $kty = (string)($jwk['kty'] ?? '');
+    if ($kty === 'RSA') {
+        return sso_jwk_rsa_to_pem($jwk);
+    }
+    if ($kty === 'EC') {
+        return sso_jwk_ec_to_pem($jwk);
+    }
+
+    return null;
+}
+
+/** @return array{pem:string,key:OpenSSLAsymmetricKey}|null */
+function sso_jwk_rsa_to_pem(array $jwk): ?array
+{
     if (($jwk['kty'] ?? '') !== 'RSA' || empty($jwk['n']) || empty($jwk['e'])) {
         return null;
     }
@@ -355,6 +369,104 @@ function sso_jwk_to_pem(array $jwk): ?array
         return null;
     }
     return ['pem' => $pem, 'key' => $key];
+}
+
+/** @return array{pem:string,key:OpenSSLAsymmetricKey}|null */
+function sso_jwk_ec_to_pem(array $jwk): ?array
+{
+    if (($jwk['kty'] ?? '') !== 'EC') {
+        return null;
+    }
+    $curves = [
+        'P-256' => '06082a8648ce3d030107',
+        'P-384' => '06052b81040022',
+        'P-521' => '06052b81040023',
+    ];
+    $crv = (string)($jwk['crv'] ?? '');
+    if (!isset($curves[$crv])) {
+        return null;
+    }
+    $x = sso_b64url_decode((string)($jwk['x'] ?? ''));
+    $y = sso_b64url_decode((string)($jwk['y'] ?? ''));
+    if ($x === '' || $y === '') {
+        return null;
+    }
+    $point = "\x04" . $x . $y;
+    $ecOid = hex2bin('06072a8648ce3d020106');
+    $curveOid = hex2bin($curves[$crv]);
+    if ($ecOid === false || $curveOid === false) {
+        return null;
+    }
+    $algoSeq = $ecOid . $curveOid;
+    $algoSeq = "\x30" . sso_encode_length(strlen($algoSeq)) . $algoSeq;
+    $bitString = "\x03" . sso_encode_length(strlen($point) + 1) . "\x00" . $point;
+    $seq = $algoSeq . $bitString;
+    $der = "\x30" . sso_encode_length(strlen($seq)) . $seq;
+    $pem = "-----BEGIN PUBLIC KEY-----\n"
+        . chunk_split(base64_encode($der), 64, "\n")
+        . "-----END PUBLIC KEY-----\n";
+    $key = openssl_pkey_get_public($pem);
+    if ($key === false) {
+        return null;
+    }
+
+    return ['pem' => $pem, 'key' => $key];
+}
+
+function sso_jwt_openssl_algo(string $alg): ?int
+{
+    return match (strtoupper(trim($alg))) {
+        'RS256', 'ES256' => OPENSSL_ALGO_SHA256,
+        'RS384', 'ES384' => OPENSSL_ALGO_SHA384,
+        'RS512', 'ES512' => OPENSSL_ALGO_SHA512,
+        default => null,
+    };
+}
+
+function sso_jwt_verify_hs256(string $signed, string $signature): bool
+{
+    $secret = sso_client_secret();
+    if ($secret === '') {
+        return false;
+    }
+    $expected = hash_hmac('sha256', $signed, $secret, true);
+
+    return hash_equals($expected, $signature);
+}
+
+/** @param list<array<string,mixed>> $keys */
+function sso_jwt_verify_asymmetric(string $signed, string $signature, string $alg, string $kid, array $keys): bool
+{
+    $opensslAlgo = sso_jwt_openssl_algo($alg);
+    if ($opensslAlgo === null) {
+        return false;
+    }
+
+    $candidates = [];
+    foreach ($keys as $jwk) {
+        if (!is_array($jwk)) {
+            continue;
+        }
+        if ($kid !== '' && (string)($jwk['kid'] ?? '') !== $kid) {
+            continue;
+        }
+        $candidates[] = $jwk;
+    }
+    if ($candidates === [] && $kid !== '') {
+        $candidates = array_values(array_filter($keys, 'is_array'));
+    }
+
+    foreach ($candidates as $jwk) {
+        $pub = sso_jwk_to_pem($jwk);
+        if ($pub === null) {
+            continue;
+        }
+        if (openssl_verify($signed, $signature, $pub['key'], $opensslAlgo) === 1) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function sso_encode_length(int $length): string
@@ -395,38 +507,36 @@ function sso_verify_id_token(string $jwt, string $nonce): array
     }
 
     $kid = (string)($header['kid'] ?? '');
-    $alg = (string)($header['alg'] ?? '');
-    if ($alg !== 'RS256') {
-        return ['ok' => false, 'claims' => null, 'error' => 'Unsupported JWT algorithm'];
-    }
-
-    $jwks = sso_jwks();
-    if ($jwks === null || !is_array($jwks['keys'] ?? null)) {
-        return ['ok' => false, 'claims' => null, 'error' => 'Could not load JWKS'];
-    }
-
-    $pub = null;
-    foreach ($jwks['keys'] as $jwk) {
-        if (!is_array($jwk)) {
-            continue;
-        }
-        if ($kid !== '' && (string)($jwk['kid'] ?? '') !== $kid) {
-            continue;
-        }
-        $pub = sso_jwk_to_pem($jwk);
-        if ($pub !== null) {
-            break;
-        }
-    }
-    if ($pub === null) {
-        return ['ok' => false, 'claims' => null, 'error' => 'Signing key not found'];
+    $alg = strtoupper(trim((string)($header['alg'] ?? '')));
+    if ($alg === '') {
+        return ['ok' => false, 'claims' => null, 'error' => 'Missing JWT algorithm in ID token header'];
     }
 
     $signed = $parts[0] . '.' . $parts[1];
     $sig = sso_b64url_decode($parts[2]);
-    $valid = openssl_verify($signed, $sig, $pub['key'], OPENSSL_ALGO_SHA256);
-    if ($valid !== 1) {
-        return ['ok' => false, 'claims' => null, 'error' => 'Invalid ID token signature'];
+    if ($sig === '') {
+        return ['ok' => false, 'claims' => null, 'error' => 'Invalid ID token signature encoding'];
+    }
+
+    $signatureOk = false;
+    if ($alg === 'HS256') {
+        $signatureOk = sso_jwt_verify_hs256($signed, $sig);
+    } else {
+        $jwks = sso_jwks();
+        if ($jwks === null || !is_array($jwks['keys'] ?? null)) {
+            return ['ok' => false, 'claims' => null, 'error' => 'Could not load JWKS for ' . $alg . ' ID token'];
+        }
+        if (sso_jwt_openssl_algo($alg) === null) {
+            return ['ok' => false, 'claims' => null, 'error' => 'Unsupported JWT algorithm: ' . $alg];
+        }
+        $signatureOk = sso_jwt_verify_asymmetric($signed, $sig, $alg, $kid, $jwks['keys']);
+    }
+
+    if (!$signatureOk) {
+        $hint = $alg === 'HS256'
+            ? ' (HS256 — confirm OIDC client secret matches Authentik exactly)'
+            : '';
+        return ['ok' => false, 'claims' => null, 'error' => 'Invalid ID token signature' . $hint];
     }
 
     $now = time();
@@ -654,7 +764,9 @@ function sso_admin_setup_html(): string
         'entra' => 'Entra issuer: <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code> '
             . '(App registration → Overview → Directory (tenant) ID). Register the redirect URI below as a Web platform.',
         'authentik' => 'Authentik: create an OAuth2/OpenID Provider + Application. Issuer URL is shown on the provider '
-            . '(often <code>https://auth.example.com/application/o/&lt;slug&gt;/</code> — trailing slash must match exactly).',
+            . '(often <code>https://auth.example.com/application/o/&lt;slug&gt;/</code> — trailing slash must match exactly). '
+            . 'Without a <strong>Signing key</strong> on the provider, Authentik signs ID tokens with <strong>HS256</strong> '
+            . '(client secret). Select an RSA certificate under Protocol settings for <strong>RS256</strong> + JWKS verification.',
         default => 'Generic OIDC: paste the issuer URL from your provider; discovery is loaded automatically.',
     };
 
