@@ -306,7 +306,8 @@ function signage_session_start(): void
         'path' => '/',
         'secure' => $secure,
         'httponly' => true,
-        'samesite' => 'Strict',
+        // Lax so OIDC return redirects from Authentik/Entra send the session cookie (Strict breaks that).
+        'samesite' => 'Lax',
     ]);
     session_start();
 }

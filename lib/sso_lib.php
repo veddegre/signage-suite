@@ -615,7 +615,7 @@ function sso_start_login(): void
 
 /**
  * Handle OIDC callback (?sso=callback).
- * @return array{ok:bool,error:?string,user:?array}
+ * @return array{ok:bool,error:?string,user:?array,restart?:bool}
  */
 function sso_handle_callback(): array
 {
@@ -629,14 +629,23 @@ function sso_handle_callback(): array
         return ['ok' => false, 'error' => 'SSO provider error: ' . $desc, 'user' => null];
     }
 
+    $code = (string)($_GET['code'] ?? '');
     $state = (string)($_GET['state'] ?? '');
     $expected = (string)($_SESSION['sso_state'] ?? '');
-    unset($_SESSION['sso_state']);
+
     if ($expected === '' || !hash_equals($expected, $state)) {
+        unset($_SESSION['sso_state'], $_SESSION['sso_nonce']);
+        // Authentik app launch (or index.php forward) often hits callback without sso=start — restart RP flow.
+        $restarts = (int)($_SESSION['sso_restart_count'] ?? 0);
+        if ($restarts < 1 && $code !== '') {
+            $_SESSION['sso_restart_count'] = $restarts + 1;
+            return ['ok' => false, 'error' => null, 'user' => null, 'restart' => true];
+        }
+        unset($_SESSION['sso_restart_count']);
         return ['ok' => false, 'error' => 'Invalid SSO state — try again.', 'user' => null];
     }
+    unset($_SESSION['sso_state']);
 
-    $code = (string)($_GET['code'] ?? '');
     if ($code === '') {
         return ['ok' => false, 'error' => 'Missing authorization code.', 'user' => null];
     }
@@ -696,6 +705,8 @@ function sso_handle_callback(): array
         }
         return ['ok' => false, 'error' => 'No matching admin account — ask a super admin to create one first.', 'user' => null];
     }
+
+    unset($_SESSION['sso_restart_count']);
 
     return ['ok' => true, 'error' => null, 'user' => $user];
 }

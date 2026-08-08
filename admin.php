@@ -85,6 +85,10 @@ if (!$needSetup && ($_GET['sso'] ?? '') === 'callback') {
         $flashOk = false;
     } else {
         $ssoResult = sso_handle_callback();
+        if (!empty($ssoResult['restart'])) {
+            header('Location: admin.php?sso=start');
+            exit;
+        }
         if ($ssoResult['ok'] && is_array($ssoResult['user'])) {
             admin_login_user($ssoResult['user']);
             signage_login_succeeded();

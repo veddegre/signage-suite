@@ -248,6 +248,7 @@ On first successful SSO sign-in the account **links** (“Linked” status). Unt
 | Token exchange failed | Wrong client secret or redirect URI not registered in IdP |
 | Unsupported JWT algorithm / Invalid ID token signature (HS256) | Authentik without a **Signing key** uses **HS256** — paste the exact **Client secret** into Signage. Or select an RSA **Signing key** on the Authentik provider (re-save if UI shows a cert but tokens stay HS256) |
 | Invalid ID token signature (RS256/ES256) | Wrong signing key, stale JWKS cache — wait 1h or delete `cache/sso_discovery_*.json` |
+| Invalid SSO state | Stale session cookie, wrong Launch URL, or IdP redirect without `sso=start` — set Authentik **Launch URL** to `admin.php?sso=start`; recent builds auto-restart once. Clear site cookies if it persists. Session cookie uses `SameSite=Lax` for OIDC returns. |
 
 ## Security hardening
 
