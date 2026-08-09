@@ -27,6 +27,8 @@ Use this for ongoing broadcasts (news, events, city cams on YouTube) where downl
 - Live embeds need outbound HTTPS from the kiosk to YouTube (unlike downloaded files).
 - Some streams block embedding — preview the entry before adding to rotation.
 - Leave **Mute all videos** checked unless the kiosk is set up for unmuted autoplay.
+- **Rotation sync:** the embed does not load until the slot is shown (avoids preload lag). Each time the slot returns, the iframe reloads to the live edge; while on screen it re-syncs about every **8 minutes** on long dwells.
+- YouTube’s player still runs **10–30 seconds behind true live** — normal for embeds, not a signage bug.
 
 ## When YouTube blocks the server
 

@@ -2,7 +2,8 @@
 /**
  * PHOTO CONDITIONS — 1920×1080 signage
  * "Should I grab a camera tonight?" — golden/blue hour windows, sunset cloud
- * structure, smoke/haze tint (Open-Meteo AQ + OWM weather), NWS photo-relevant
+ * structure, afternoon→sunset cloud trend, smoke/haze tint (Open-Meteo AQ + OWM
+ * weather), NWS photo-relevant
  * advisories, moon phase, and aurora Kp for West Michigan.
  *
  * Setup: set OWM_API_KEY (same key as the weather board). Open-Meteo AQ and
@@ -267,6 +268,122 @@ function photo_nearest_hourly(array $times, array $values, int $targetTs): ?floa
     return $bestGap <= 5400 ? $best : null;
 }
 
+function photo_slot_cloud(array $slot): int
+{
+    return (int)($slot['clouds']['all'] ?? 0);
+}
+
+/** @param list<array<string,mixed>> $forecastList */
+function photo_nearest_forecast_slot(array $forecastList, int $targetTs, int $maxGap = 5400): ?array
+{
+    $best = null;
+    $bestGap = PHP_INT_MAX;
+    foreach ($forecastList as $slot) {
+        if (!is_array($slot)) {
+            continue;
+        }
+        $dt = (int)($slot['dt'] ?? 0);
+        if ($dt <= 0) {
+            continue;
+        }
+        $gap = abs($dt - $targetTs);
+        if ($gap < $bestGap) {
+            $bestGap = $gap;
+            $best = $slot;
+        }
+    }
+
+    return ($best !== null && $bestGap <= $maxGap) ? $best : null;
+}
+
+function photo_slot_has_rain(array $slot): bool
+{
+    $pop = (float)($slot['pop'] ?? 0);
+    if ($pop >= 0.45) {
+        return true;
+    }
+    $wid = (int)($slot['weather'][0]['id'] ?? 0);
+
+    return $wid >= 200 && $wid < 600;
+}
+
+/**
+ * How cloud cover changes from now until tonight's sunset (OWM 3-hour slots).
+ *
+ * @param list<array<string,mixed>> $forecastList
+ * @return array{label:string,detail:string,tone:string,clouds_now:int,clouds_sunset:int}|null
+ */
+function photo_sunset_cloud_trend(array $forecastList, int $now, int $sunsetTs, int $cloudsAtSunset): ?array
+{
+    if ($sunsetTs <= $now - 1800 || $forecastList === []) {
+        return null;
+    }
+
+    $nowSlot = photo_nearest_forecast_slot($forecastList, $now);
+    if ($nowSlot === null) {
+        return null;
+    }
+    $cloudsNow = photo_slot_cloud($nowSlot);
+    $delta = $cloudsAtSunset - $cloudsNow;
+
+    $maxPop = 0.0;
+    $rainSlots = 0;
+    foreach ($forecastList as $slot) {
+        if (!is_array($slot)) {
+            continue;
+        }
+        $dt = (int)($slot['dt'] ?? 0);
+        if ($dt < $now - 900 || $dt > $sunsetTs + 900) {
+            continue;
+        }
+        $maxPop = max($maxPop, (float)($slot['pop'] ?? 0));
+        if (photo_slot_has_rain($slot)) {
+            $rainSlots++;
+        }
+    }
+
+    $detail = $cloudsNow . '% now → ' . $cloudsAtSunset . '% at sunset';
+    if ($delta >= 20) {
+        $tone = 'improving';
+        $label = $cloudsNow >= 70
+            ? 'Overcast now — breaks likely by sunset'
+            : 'Clearing toward sunset';
+    } elseif ($delta >= 10) {
+        $tone = 'improving';
+        $label = 'Partly clearing into golden hour';
+    } elseif ($delta <= -20) {
+        $tone = 'worsening';
+        $label = 'Clouding up toward sunset';
+    } elseif ($delta <= -10) {
+        $tone = 'worsening';
+        $label = 'Gradually cloudier this afternoon';
+    } else {
+        $tone = 'steady';
+        $label = 'Steady cloud deck into sunset';
+        $detail = '~' . $cloudsAtSunset . '% through the afternoon';
+    }
+
+    if ($rainSlots >= 2 || $maxPop >= 0.55) {
+        $detail .= ' · Showers likely before sunset';
+        $tone = $tone === 'improving' ? 'mixed' : 'rain';
+    } elseif ($rainSlots >= 1 || $maxPop >= 0.35) {
+        $detail .= ' · Rain possible before sunset';
+        if ($tone === 'steady') {
+            $tone = 'rain';
+        } elseif ($tone === 'improving') {
+            $tone = 'mixed';
+        }
+    }
+
+    return [
+        'label' => $label,
+        'detail' => $detail,
+        'tone' => $tone,
+        'clouds_now' => $cloudsNow,
+        'clouds_sunset' => $cloudsAtSunset,
+    ];
+}
+
 function tspan(array $w): string
 {
     return signage_format_time_range((int)$w[0], (int)$w[1]);
@@ -347,6 +464,8 @@ $aqAodSeries = is_array($aqJson['hourly']['aerosol_optical_depth'] ?? null)
 // ── Cloud cover at sunset tonight + next evenings (OWM 3-hourly forecast) ───
 $evenings = [];
 $tonightSlot = null;
+$sunsetTrend = null;
+$owmForecastList = [];
 $configured = OWM_API_KEY !== 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE' && OWM_API_KEY !== '';
 if ($configured) {
     $raw = photo_cached_get(sprintf(
@@ -357,6 +476,7 @@ if ($configured) {
     ), 'owm_forecast_photo_' . sprintf('%F_%F', LAT, LON));
     $fj = $raw ? json_decode($raw, true) : null;
     if ($fj && isset($fj['list']) && is_array($fj['list'])) {
+        $owmForecastList = $fj['list'];
         for ($d = 0; $d < 4; $d++) {
             $dayTs = strtotime("+$d day");
             $sunD = date_sun_info($dayTs, LAT, LON);
@@ -365,7 +485,7 @@ if ($configured) {
             // Prefer the slot nearest sunset; also blend nearby slots so a single
             // 3-hour bucket does not invent phantom cloud structure.
             $near = [];
-            foreach ($fj['list'] as $slot) {
+            foreach ($owmForecastList as $slot) {
                 if (!is_array($slot)) {
                     continue;
                 }
@@ -431,6 +551,12 @@ if ($configured) {
                 $tonightSlot = $best;
                 $aqPm25 = $pmAtSunset;
                 $aqAod = $aodAtSunset;
+                $sunsetTrend = photo_sunset_cloud_trend(
+                    $owmForecastList,
+                    time(),
+                    (int)$sunD['sunset'],
+                    $clouds
+                );
             }
         }
     }
@@ -570,6 +696,16 @@ $gap = $compact ? 12 : 16;
   .verdict .big { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 72 : 88 ?>px; line-height:1.02; flex:0 0 auto; }
   .verdict .why { font-size:<?= $compact ? 20 : 24 ?>px; color:var(--mist); margin-top:6px; line-height:1.25;
                   flex:0 1 auto; min-height:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .trend { margin-top:<?= $compact ? 10 : 12 ?>px; padding:<?= $compact ? '10px 12px' : '12px 14px' ?>;
+           border-radius:10px; border:1px solid var(--hairline); background:var(--tile-bg); flex:0 0 auto; }
+  .trend-k { display:block; font-size:15px; letter-spacing:2px; text-transform:uppercase; color:var(--mist); margin-bottom:4px; }
+  .trend-v { display:block; font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $compact ? 26 : 30 ?>px; line-height:1.1; }
+  .trend-d { display:block; font-size:<?= $compact ? 16 : 18 ?>px; color:var(--mist); margin-top:4px; line-height:1.25; }
+  .trend-improving .trend-v { color:#39c46d; }
+  .trend-worsening .trend-v { color:#ff5d5d; }
+  .trend-rain .trend-v { color:var(--beacon); }
+  .trend-mixed .trend-v { color:var(--beacon); }
+  .trend-steady .trend-v { color:var(--snow); }
   .cloudbar { margin-top:<?= $compact ? 10 : 14 ?>px; flex:0 0 auto; }
   .cloudbar .lab { display:flex; justify-content:space-between; font-size:18px; color:var(--mist); margin-bottom:6px; }
   .cloudbar .track { height:16px; background:var(--tile-bg); border:1px solid var(--hairline); border-radius:11px; overflow:hidden; position:relative; }
@@ -638,6 +774,13 @@ $gap = $compact ? 12 : 16;
     <div class="k">Tonight's Golden Hour</div>
     <div class="big" style="color:<?= $verdict[2] ?>"><?= h($verdict[0]) ?></div>
     <div class="why"><?= h($verdict[1]) ?></div>
+    <?php if ($sunsetTrend): ?>
+      <div class="trend trend-<?= h((string)$sunsetTrend['tone']) ?>">
+        <span class="trend-k">Afternoon → sunset</span>
+        <span class="trend-v"><?= h((string)$sunsetTrend['label']) ?></span>
+        <span class="trend-d"><?= h((string)$sunsetTrend['detail']) ?></span>
+      </div>
+    <?php endif; ?>
     <?php if ($evenings): ?>
       <div class="cloudbar">
         <div class="lab"><span>Cloud cover at sunset</span><span><?= (int)$evenings[0]['clouds'] ?>%</span></div>

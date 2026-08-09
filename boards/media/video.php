@@ -150,7 +150,7 @@ $loopAttr = $embedded ? '' : 'loop';
   </div>
 <?php elseif ($isLive && $embedSrc !== null): ?>
   <div class="yt-wrap">
-    <iframe id="yt-live" src="<?= h($embedSrc) ?>" allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
+    <iframe id="yt-live"<?= $embedded ? '' : ' src="' . h($embedSrc) . '"' ?> allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
   </div>
   <div class="chrome">
     <div class="title"><?= h($title) ?></div>
@@ -163,15 +163,23 @@ $loopAttr = $embedded ? '' : 'loop';
     <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
     const frame = document.getElementById('yt-live');
+    let armed = false;
+    let resyncTimer = null;
+    const RESYNC_MS = 8 * 60 * 1000;
 
     function notifyReady() {
       if (!EMBEDDED || window.parent === window) return;
       try { window.parent.postMessage({ type: 'signage-ready' }, '*'); } catch (e) {}
     }
 
+    /** Fresh embed URL — bust cache so YouTube jumps to the live edge. */
+    function embedUrl() {
+      return EMBED_SRC + (EMBED_SRC.indexOf('?') >= 0 ? '&' : '?') + '_rs=' + Date.now();
+    }
+
     function showEmbed() {
       if (!frame) return;
-      if (frame.src !== EMBED_SRC) frame.src = EMBED_SRC;
+      frame.src = embedUrl();
     }
 
     function hideEmbed() {
@@ -179,23 +187,49 @@ $loopAttr = $embedded ? '' : 'loop';
       frame.src = 'about:blank';
     }
 
+    function stopResync() {
+      if (resyncTimer) {
+        clearInterval(resyncTimer);
+        resyncTimer = null;
+      }
+    }
+
+    function startResync() {
+      stopResync();
+      if (!armed) return;
+      resyncTimer = setInterval(function () {
+        if (!armed || !frame || frame.src === 'about:blank') return;
+        frame.src = embedUrl();
+      }, RESYNC_MS);
+    }
+
     if (EMBEDDED) {
       window.addEventListener('message', function (ev) {
         if (!ev.data) return;
         if (ev.data.type === 'signage-stop') {
+          armed = false;
+          stopResync();
           hideEmbed();
           return;
         }
         if (ev.data.type === 'signage-show') {
+          armed = true;
           showEmbed();
+          startResync();
         }
       });
       notifyReady();
       if (document.readyState === 'complete') notifyReady();
       else window.addEventListener('load', notifyReady, { once: true });
-      if (window.parent === window) showEmbed();
+      if (window.parent === window) {
+        armed = true;
+        showEmbed();
+        startResync();
+      }
     } else {
+      armed = true;
       showEmbed();
+      startResync();
       setInterval(function () { location.reload(); }, 60 * 60 * 1000);
     }
   </script>

@@ -123,6 +123,7 @@ Full-screen live stills from the [Mackinac Bridge Authority bridge cams](https:/
 
 **Verdict inputs (not clouds alone):**
 - Cloud cover near sunset (OWM 3-hour slots blended within ±3h of sunset)
+- **Afternoon → sunset trend** — compares current cloud cover to sunset (clearing, steady, clouding up, rain possible)
 - Smoke / haze tint from OWM weather types (smoke, haze, dust), Open-Meteo PM2.5 + AOD, reduced visibility, and NWS Air Quality / Smoke advisories
 - Clear deck + smoke tint → **DRAMATIC SKY** (deep orange/red without needing broken clouds)
 - Otherwise: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY
