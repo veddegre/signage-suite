@@ -862,7 +862,7 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
         }
         $existingScreens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
         $protectedScreens = array_flip(users_protected_screen_keys());
-        if (admin_is_super() && !$rotationSaveLocked) {
+        if (admin_is_super() && !$rotationSaveLocked && array_key_exists('SCREENS', $_POST)) {
         $screensOut = [];
         foreach ($_POST['SCREENS'] ?? [] as $row) {
             if (!is_array($row)) {
@@ -906,7 +906,12 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
             }
         }
         if ($screensOut === []) {
-            unset($conf['rotation.SCREENS']);
+            if ($existingScreens !== []) {
+                $saveWarnFlash = trim(($saveWarnFlash ?? '') . ' Display settings were missing from the save request — existing screens were kept.');
+                $saveWarnFlashOk = false;
+            } else {
+                unset($conf['rotation.SCREENS']);
+            }
         } else {
             if (!isset($screensOut['main'])) {
                 $screensOut = ['main' => ['name' => 'Main Display']] + $screensOut;
@@ -4806,6 +4811,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <div class="flash bad" style="margin-bottom:16px">No displays assigned to your account — ask a super admin to assign screens under <strong>Users</strong>.</div>
           <?php endif; ?>
 
+          <?php if ($rotationScreens !== []): ?>
           <div class="section-title">Playlists</div>
           <p class="help" style="margin:-8px 0 14px">Pick a display, use the tabs to add boards and tune kiosk settings, then reorder pages in the playlist below. Opening a playlist syncs the display picker.</p>
           <div class="rotation-global-add" id="rotationGlobalAdd">
@@ -5468,6 +5474,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             </div>
           </details>
           <?php endforeach; ?>
+          <?php endif; ?>
 
           <?php if (admin_is_super()): ?>
           <details class="panel panel-muted" style="margin-top:22px">

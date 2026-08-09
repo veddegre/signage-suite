@@ -974,6 +974,7 @@ function admin_sync_session_user(): void
                 $public = users_public_row($fresh);
                 if ($public !== null) {
                     $_SESSION['admin_user'] = $public;
+                    users_repair_missing_rotation_displays();
 
                     return;
                 }
@@ -1005,6 +1006,7 @@ function admin_sync_session_user(): void
         return;
     }
     $_SESSION['admin_user'] = $public;
+    users_repair_missing_rotation_displays();
 }
 
 function admin_is_authenticated(): bool
@@ -1048,6 +1050,58 @@ function admin_username(): string
     return is_array($user) ? (string)($user['username'] ?? '') : '';
 }
 
+/**
+ * Re-register rotation displays that operators are still assigned to but missing from config
+ * (e.g. after a truncated save dropped the SCREENS table from POST).
+ *
+ * @return bool True when settings.json was updated.
+ */
+function users_repair_missing_rotation_displays(): bool
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $missing = [];
+    foreach (users_screen_assignments() as $sk => $_uid) {
+        if (!rotation_screen_is_registered((string)$sk)) {
+            $missing[(string)$sk] = true;
+        }
+    }
+    if ($missing === []) {
+        return false;
+    }
+    $changed = false;
+    if (!cfg_update(static function (array $conf) use ($missing, &$changed): array {
+        $screens = is_array($conf['rotation.SCREENS'] ?? null) ? $conf['rotation.SCREENS'] : [];
+        foreach (array_keys($missing) as $sk) {
+            if (isset($screens[$sk])) {
+                continue;
+            }
+            $owner = users_screen_assigned_username($sk);
+            $screens[$sk] = [
+                'name' => $owner !== null && $owner !== ''
+                    ? ucfirst($owner) . ' Display'
+                    : ucfirst($sk) . ' Display',
+            ];
+            $changed = true;
+        }
+        if (!$changed) {
+            return $conf;
+        }
+        if (!isset($screens['main'])) {
+            $screens = ['main' => ['name' => 'Main Display']] + $screens;
+        }
+        $conf['rotation.SCREENS'] = $screens;
+
+        return $conf;
+    })) {
+        return false;
+    }
+    if ($changed) {
+        cfg_reload();
+    }
+
+    return $changed;
+}
+
 /** @return list<string> Screen keys this session may manage. Super = all displays; operators = assigned + shared-editor displays. */
 function admin_allowed_screen_keys(): array
 {
@@ -1055,13 +1109,17 @@ function admin_allowed_screen_keys(): array
     if (admin_is_super()) {
         return array_keys(rotation_screens());
     }
-    $user = admin_current_user();
-    if (!is_array($user)) {
+    $uid = admin_user_id();
+    if ($uid === null || $uid === '') {
+        return [];
+    }
+    $fresh = users_find_by_id($uid);
+    if ($fresh === null || !empty($fresh['disabled'])) {
         return [];
     }
     $allowed = rotation_screens();
     $out = [];
-    foreach (users_normalize_screens($user['screens'] ?? []) as $key) {
+    foreach (users_normalize_screens($fresh['screens'] ?? []) as $key) {
         if (isset($allowed[$key])) {
             $out[$key] = true;
             if (!users_operator_multi_screen_enabled()) {
@@ -1069,12 +1127,9 @@ function admin_allowed_screen_keys(): array
             }
         }
     }
-    $uid = (string)($user['id'] ?? '');
-    if ($uid !== '') {
-        foreach (rotation_shared_editor_screen_keys($uid) as $key) {
-            if (isset($allowed[$key])) {
-                $out[$key] = true;
-            }
+    foreach (rotation_shared_editor_screen_keys($uid) as $key) {
+        if (isset($allowed[$key])) {
+            $out[$key] = true;
         }
     }
     $keys = array_keys($out);
