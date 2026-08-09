@@ -87,6 +87,13 @@ function tvguide_resolved_lineup_id(?string &$error = null): string
         }
     }
 
+    $ids = array_values(array_filter(array_map(
+        static fn(array $row): string => trim((string)($row['lineup'] ?? '')),
+        $lineups
+    )));
+    $error = 'Lineup ' . $want . ' is not on your account'
+        . ($ids !== [] ? ' — use ' . implode(' or ', $ids) . ' in admin' : '');
+
     return $want;
 }
 
@@ -1089,20 +1096,24 @@ function tvguide_test_connection(bool $refreshLineups = true): array
         $detail .= ' — add a lineup at schedulesdirect.org (Lineups → Add), then Save here';
     }
 
-    $lineup = tvguide_resolved_lineup_id($lineupErr);
+    $configured = tvguide_lineup_id();
+    $onAccountIds = array_values(array_filter(array_map(
+        static fn(array $row): string => trim((string)($row['lineup'] ?? '')),
+        $lineups
+    )));
+    $lineup = $configured;
     $channelCount = 0;
     $channelErr = null;
 
     if ($lineup !== '') {
-        $channels = tvguide_sd_lineup_channels($lineup, $channelErr, $refreshLineups);
-        $channelCount = count($channels['channels']);
-        $detail .= ' · ' . $channelCount . ' channel(s) in ' . $lineup;
-        if ($channelCount === 0 && $channelErr !== null) {
-            $detail .= ' (' . $channelErr . ')';
-        } elseif ($channelCount === 0 && $lineupCount > 0) {
-            $onAccount = array_column($lineups, 'lineup');
-            if (!in_array($lineup, $onAccount, true)) {
-                $detail .= ' — paste an exact Lineup ID from the list above into Board settings';
+        if ($lineupCount > 0 && !in_array($lineup, $onAccountIds, true)) {
+            $detail .= ' · Board settings use ' . $lineup . ', which is not on your account — change Lineup ID to one of the IDs above (e.g. USA-OTA-49401 for locals)';
+        } else {
+            $channels = tvguide_sd_lineup_channels($lineup, $channelErr, $refreshLineups);
+            $channelCount = count($channels['channels']);
+            $detail .= ' · ' . $channelCount . ' channel(s) in ' . $lineup;
+            if ($channelCount === 0 && $channelErr !== null) {
+                $detail .= ' (' . $channelErr . ')';
             }
         }
     } elseif ($lineupCount > 0) {
