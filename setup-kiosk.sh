@@ -456,14 +456,8 @@ CHROMIUM=""
 if [[ $SKIP_APT -eq 0 ]]; then
 echo "==> Installing packages"
 apt-get update -q
-apt-get install -y -q cage seatd curl python3 libinput-tools
-if [[ -f "$SCRIPT_DIR/scripts/install-ydotool.sh" ]]; then
-  bash "$SCRIPT_DIR/scripts/install-ydotool.sh" || echo "==> ydotool unavailable — off-screen pointer helper skipped"
-elif apt-get install -y -q ydotool 2>/dev/null; then
-  echo "==> ydotool installed (optional off-screen pointer helper)"
-else
-  echo "==> ydotool not in apt — skipping off-screen pointer helper (blank cursor theme still applies)"
-fi
+apt-get install -y -q cage seatd curl python3
+# ydotool / hide-cursor break Pi kiosks — blank Xcursor theme only (pointer may show).
 # Chromium packaging differs by distro: Pi OS has a real deb named
 # chromium-browser; Ubuntu's chromium-browser/chromium packages are snap
 # shims. Try them in order, then fall back to installing the snap directly.
@@ -514,20 +508,13 @@ echo "==> Using browser: $CHROMIUM"
 fi
 
 if [[ -f "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh" ]]; then
-  echo "==> Installing transparent cursor theme (hide mouse on kiosk)"
+  echo "==> Installing transparent cursor theme (may reduce pointer visibility)"
   bash "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh"
 else
   echo "==> Warning: scripts/install-signage-blank-cursor.sh not found — cursor may remain visible." >&2
 fi
 
-if command -v ydotool >/dev/null 2>&1 && [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
-  echo "==> Installing pointer off-screen helper (cage compositor cursor)"
-  install -m 755 "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" /usr/local/bin/signage-hide-cursor
-elif [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
-  echo "==> Skipping pointer off-screen helper — install ydotool manually if the cursor stays visible"
-else
-  echo "==> Warning: scripts/signage-hide-cursor.sh not found — compositor cursor may remain visible." >&2
-fi
+rm -f /usr/local/bin/signage-hide-cursor /usr/local/bin/signage-hide-cursor.disabled 2>/dev/null || true
 
 echo "==> Writing /etc/signage/kiosk.conf"
 mkdir -p /etc/signage
@@ -549,12 +536,100 @@ EOF
 chmod 644 /etc/signage/kiosk.conf
 
 echo "==> Writing /usr/local/bin/signage-kiosk"
-if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-launcher.sh" ]]; then
-  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-launcher.sh" /usr/local/bin/signage-kiosk
-else
-  echo "Missing scripts/signage-kiosk-launcher.sh — run setup from the signage-suite repo." >&2
-  exit 1
+if [[ $IGNORE_SSL -eq 1 ]]; then
+  cat > /usr/local/bin/signage-kiosk <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export XCURSOR_THEME=signage-blank
+export XCURSOR_SIZE=24
+
+signage_kiosk_blackout_tty() {
+  if command -v setterm >/dev/null 2>&1; then
+    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
+  fi
+  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
+}
+
+signage_kiosk_blackout_tty
+
+if command -v signage-kiosk-wait-for-runtime >/dev/null; then
+  signage-kiosk-wait-for-runtime 30
 fi
+if command -v signage-kiosk-wait-for-server >/dev/null; then
+  signage-kiosk-wait-for-server 240
+fi
+
+KIOSK_URL="\$1"
+while true; do
+  cage -- "$CHROMIUM" \\
+    --kiosk "\$KIOSK_URL" \\
+    --force-device-scale-factor=$SCALE \\
+    --noerrdialogs \\
+    --disable-infobars \\
+    --disable-session-crashed-bubble \\
+    --disable-features=TranslateUI \\
+    --disable-dev-shm-usage \\
+    --autoplay-policy=no-user-gesture-required \\
+    --check-for-update-interval=31536000 \\
+    --enable-features=VaapiVideoDecoder \\
+    --ozone-platform=wayland \\
+    --ignore-certificate-errors \\
+    --allow-insecure-localhost \\
+    --start-fullscreen || true
+  signage_kiosk_blackout_tty
+  if command -v signage-kiosk-wait-for-server >/dev/null; then
+    signage-kiosk-wait-for-server 60
+  fi
+  sleep 1
+done
+EOF
+else
+  cat > /usr/local/bin/signage-kiosk <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export XCURSOR_THEME=signage-blank
+export XCURSOR_SIZE=24
+
+signage_kiosk_blackout_tty() {
+  if command -v setterm >/dev/null 2>&1; then
+    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
+  fi
+  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
+}
+
+signage_kiosk_blackout_tty
+
+if command -v signage-kiosk-wait-for-runtime >/dev/null; then
+  signage-kiosk-wait-for-runtime 30
+fi
+if command -v signage-kiosk-wait-for-server >/dev/null; then
+  signage-kiosk-wait-for-server 240
+fi
+
+KIOSK_URL="\$1"
+while true; do
+  cage -- "$CHROMIUM" \\
+    --kiosk "\$KIOSK_URL" \\
+    --force-device-scale-factor=$SCALE \\
+    --noerrdialogs \\
+    --disable-infobars \\
+    --disable-session-crashed-bubble \\
+    --disable-features=TranslateUI \\
+    --disable-dev-shm-usage \\
+    --autoplay-policy=no-user-gesture-required \\
+    --check-for-update-interval=31536000 \\
+    --enable-features=VaapiVideoDecoder \\
+    --ozone-platform=wayland \\
+    --start-fullscreen || true
+  signage_kiosk_blackout_tty
+  if command -v signage-kiosk-wait-for-server >/dev/null; then
+    signage-kiosk-wait-for-server 60
+  fi
+  sleep 1
+done
+EOF
+fi
+chmod +x /usr/local/bin/signage-kiosk
 
 if [[ $WITH_CEC -eq 1 ]]; then
   echo "==> Installing signage-cec-sync"
@@ -588,11 +663,6 @@ EOF
   fi
 fi
 
-if [[ -f "$SCRIPT_DIR/scripts/signage-apply-phantom-pointer-rules.sh" ]]; then
-  echo "==> Applying phantom pointer udev rules (Pi HDMI / CEC)"
-  bash "$SCRIPT_DIR/scripts/signage-apply-phantom-pointer-rules.sh"
-fi
-
 echo "==> Writing systemd service"
 SIGNAGE_AFTER="network-online.target systemd-user-sessions.service seatd.service"
 
@@ -609,7 +679,6 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/%U
-Environment=XCURSOR_PATH=/usr/share/icons
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
