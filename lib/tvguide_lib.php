@@ -790,6 +790,76 @@ function tvguide_program_subtitle(array $program): string
     return '';
 }
 
+/** @return list<string> */
+function tvguide_program_genres(array $program): array
+{
+    $out = [];
+    foreach ((array)($program['genres'] ?? []) as $genre) {
+        if (!is_array($genre)) {
+            continue;
+        }
+        $name = strtolower(trim((string)($genre['genre'] ?? '')));
+        if ($name !== '') {
+            $out[] = $name;
+        }
+    }
+
+    return $out;
+}
+
+/** CSS tone class for program blocks: news, sports, kids, movie, variety, series, default. */
+function tvguide_program_tone(array $program): string
+{
+    if (!empty($program['isNews'])) {
+        return 'news';
+    }
+    if (!empty($program['isSports'])) {
+        return 'sports';
+    }
+
+    $blob = implode(' ', tvguide_program_genres($program));
+    if ($blob !== '') {
+        if (preg_match('/\b(news|public affairs|politics|talk|documentary)\b/', $blob)) {
+            return 'news';
+        }
+        if (preg_match('/\b(sport|football|basketball|baseball|hockey|golf|soccer|athletic)\b/', $blob)) {
+            return 'sports';
+        }
+        if (preg_match('/\b(child|kid|family|animation|cartoon|educational)\b/', $blob)) {
+            return 'kids';
+        }
+        if (preg_match('/\b(movie|cinema|film)\b/', $blob)) {
+            return 'movie';
+        }
+        if (preg_match('/\b(reality|game show|variety|comedy|music)\b/', $blob)) {
+            return 'variety';
+        }
+    }
+
+    $showType = strtolower(trim((string)($program['showType'] ?? '')));
+    if (in_array($showType, ['series', 'episode'], true)) {
+        return 'series';
+    }
+
+    return 'default';
+}
+
+/** CSS tone class for channel column accent stripe. */
+function tvguide_affiliate_tone(string $affiliate): string
+{
+    $key = strtoupper(trim($affiliate));
+
+    return match ($key) {
+        'NBC' => 'nbc',
+        'CBS' => 'cbs',
+        'ABC' => 'abc',
+        'FOX' => 'fox',
+        'PBS' => 'pbs',
+        'CW' => 'cw',
+        default => 'neutral',
+    };
+}
+
 /**
  * @param list<string> $stationIds
  * @param list<string> $dateYmds
@@ -871,11 +941,13 @@ function tvguide_parse_schedule_slot(array $slot, DateTimeZone $tz, array $progr
 }
 
 /**
+ * Prime-time row as spanning blocks (one bar per show, not repeated per hour).
+ *
  * @param list<array<string,mixed>> $slots
  * @param list<int> $hours
- * @return array<string,array<string,mixed>|null>
+ * @return list<array<string,mixed>>
  */
-function tvguide_build_hour_cells(
+function tvguide_build_row_blocks(
     array $slots,
     array $hours,
     DateTimeImmutable $gridDate,
@@ -901,7 +973,8 @@ function tvguide_build_hour_cells(
 
     usort($parsed, static fn(array $a, array $b): int => $a['start'] <=> $b['start']);
 
-    $cells = [];
+    /** @var list<array{start:DateTimeImmutable,end:DateTimeImmutable,pid:string}|null> $hourPicks */
+    $hourPicks = [];
     foreach ($hours as $hour) {
         $slotStart = $gridDate->setTime((int)$hour, 0);
         $slotEnd = $slotStart->modify('+1 hour');
@@ -913,20 +986,54 @@ function tvguide_build_hour_cells(
             }
             if ($bestStart === null || $entry['start'] > $bestStart) {
                 $bestStart = $entry['start'];
-                $pgm = $programs[$entry['pid']] ?? [];
-                $best = [
-                    'title' => tvguide_program_title($pgm),
-                    'subtitle' => tvguide_program_subtitle($pgm),
-                    'start' => $entry['start']->format('g:i'),
-                    'end' => $entry['end']->format('g:i'),
-                    'duration_min' => (int)round(($entry['end']->getTimestamp() - $entry['start']->getTimestamp()) / 60),
-                ];
+                $best = $entry;
             }
         }
-        $cells[(string)$hour] = $best;
+        $hourPicks[] = $best;
     }
 
-    return $cells;
+    $now = new DateTimeImmutable('now', $tz);
+    $blocks = [];
+    $hourCount = count($hours);
+    $index = 0;
+    while ($index < $hourCount) {
+        $pick = $hourPicks[$index];
+        if ($pick === null) {
+            $blocks[] = ['empty' => true, 'col_start' => $index, 'col_span' => 1];
+            $index++;
+
+            continue;
+        }
+
+        $pid = $pick['pid'];
+        $colStart = $index;
+        while ($index < $hourCount && $hourPicks[$index] !== null && $hourPicks[$index]['pid'] === $pid) {
+            $index++;
+        }
+        $colSpan = $index - $colStart;
+
+        $full = $pick;
+        foreach ($parsed as $entry) {
+            if ($entry['pid'] === $pid) {
+                $full = $entry;
+                break;
+            }
+        }
+
+        $pgm = $programs[$pid] ?? [];
+        $blocks[] = [
+            'col_start' => $colStart,
+            'col_span' => $colSpan,
+            'title' => tvguide_program_title($pgm),
+            'subtitle' => tvguide_program_subtitle($pgm),
+            'start' => $full['start']->format('g:i'),
+            'end' => $full['end']->format('g:i A'),
+            'tone' => tvguide_program_tone($pgm),
+            'live' => $full['start'] <= $now && $full['end'] > $now,
+        ];
+    }
+
+    return $blocks;
 }
 
 /**
@@ -1010,7 +1117,7 @@ function tvguide_fetch_grid_data(array $page): array
     $window = tvguide_prime_window($tz);
     $dateYmd = $window['date']->format('Y-m-d');
     $scheduleDates = [$dateYmd, $window['date']->modify('+1 day')->format('Y-m-d')];
-    $cacheKey = 'tvguide_grid_v2_' . md5(json_encode([
+    $cacheKey = 'tvguide_grid_v3_' . md5(json_encode([
         $lineup,
         $page['key'] ?? '',
         $stationIds,
@@ -1066,7 +1173,7 @@ function tvguide_fetch_grid_data(array $page): array
             continue;
         }
         $ch = $channelMap[$sid];
-        $cells = tvguide_build_hour_cells(
+        $blocks = tvguide_build_row_blocks(
             (array)($schedules[$sid] ?? []),
             $hours,
             $gridDate,
@@ -1084,7 +1191,7 @@ function tvguide_fetch_grid_data(array $page): array
             'affiliate' => (string)($ch['affiliate'] ?? ''),
             'label' => (string)($ch['label'] ?? $sid),
             'logo' => (string)($ch['logo'] ?? ''),
-            'cells' => $cells,
+            'blocks' => $blocks,
         ];
     }
 

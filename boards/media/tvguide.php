@@ -76,34 +76,71 @@ function tvguide_hour_label(int $hour): string
            color:var(--mist); font-variant-numeric:tabular-nums; margin-left:24px; }
 
   .grid-wrap { min-height:0; overflow:hidden; background:var(--surface);
-               border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent); border-radius:14px; }
+               border:1px solid color-mix(in srgb, var(--hairline) 50%, transparent); border-radius:14px; }
   .grid { display:grid; width:100%; height:100%;
           grid-template-columns: minmax(220px, 260px) repeat(<?= $hourCount ?>, minmax(0, 1fr));
           grid-template-rows: auto repeat(<?= max(1, $rowCount) ?>, minmax(0, 1fr)); }
-  .grid .corner, .grid .hour, .grid .ch, .grid .cell {
-    border-right:1px solid color-mix(in srgb, var(--hairline) 45%, transparent);
-    border-bottom:1px solid color-mix(in srgb, var(--hairline) 45%, transparent);
+  .grid .corner, .grid .hour, .grid .ch, .grid .track {
+    border-right:1px solid color-mix(in srgb, var(--hairline) 35%, transparent);
+    border-bottom:1px solid color-mix(in srgb, var(--hairline) 35%, transparent);
     min-width:0; min-height:0; }
-  .grid .corner { background:color-mix(in srgb, var(--lake-night) 35%, var(--harbor));
-                   padding:12px 14px; font-size:18px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mist); }
-  .grid .hour { background:color-mix(in srgb, var(--lake-night) 28%, var(--harbor));
+  .grid .corner { background:color-mix(in srgb, var(--lake-night) 55%, var(--harbor));
+                   padding:12px 14px; font-size:17px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mist); }
+  .grid .hour { background:color-mix(in srgb, var(--lake-night) 45%, var(--harbor));
                 padding:12px 10px; text-align:center; font-family:'Big Shoulders Display'; font-weight:600;
                 font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; color:var(--snow); }
-  .grid .ch { display:flex; align-items:center; gap:12px; padding:10px 14px; min-height:0; }
+  .grid .ch { display:flex; align-items:center; gap:12px; padding:10px 14px; min-height:0;
+              background:color-mix(in srgb, var(--lake-night) 22%, transparent);
+              border-left:4px solid var(--net-accent, color-mix(in srgb, var(--mist) 35%, transparent)); }
+  .grid .ch.net-nbc { --net-accent:#c4a84a; }
+  .grid .ch.net-cbs { --net-accent:#6a9fd4; }
+  .grid .ch.net-abc { --net-accent:#7a8fd8; }
+  .grid .ch.net-fox { --net-accent:#b89090; }
+  .grid .ch.net-pbs  { --net-accent:#7ab0c8; }
+  .grid .ch.net-cw   { --net-accent:#8f9fd4; }
   .grid.grid-no-badge .ch .num { display:none; }
   .grid.grid-no-badge { grid-template-columns: minmax(180px, 220px) repeat(<?= $hourCount ?>, minmax(0, 1fr)); }
   .grid .ch .id { min-width:0; }
   .grid .ch .call { font-size:<?= $boardH < 1080 ? 24 : 28 ?>px; font-weight:600; line-height:1.1; }
   .grid .ch .net { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); white-space:nowrap;
                    overflow:hidden; text-overflow:ellipsis; }
-  .grid .cell { padding:10px 12px; display:flex; flex-direction:column; justify-content:center; gap:4px; min-height:0; }
-  .grid .cell .title { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.2; font-weight:600;
-                        display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .grid .cell .sub { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); line-height:1.25;
-                     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .grid .cell .time { font-size:15px; color:color-mix(in srgb, var(--mist) 80%, transparent); margin-top:2px; }
-  .grid .cell.empty { background:color-mix(in srgb, var(--lake-night) 18%, transparent); }
-  .grid .cell.live { box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--down) 55%, transparent); }
+
+  .grid .track { grid-column: 2 / -1; display:grid;
+                 grid-template-columns: repeat(<?= $hourCount ?>, minmax(0, 1fr));
+                 gap:8px; padding:8px 10px 8px 4px; align-items:stretch; }
+  .grid .slot.empty { border-radius:10px;
+                      background:color-mix(in srgb, var(--lake-night) 28%, transparent);
+                      border:1px dashed color-mix(in srgb, var(--hairline) 40%, transparent); min-height:0; }
+  .grid .block { --bar: color-mix(in srgb, var(--beacon) 72%, var(--snow));
+                 position:relative; min-width:0; min-height:0; border-radius:10px; padding:10px 14px;
+                 display:flex; flex-direction:column; justify-content:center; gap:4px;
+                 background:linear-gradient(90deg,
+                   color-mix(in srgb, var(--bar) 24%, var(--lake-night)) 0%,
+                   color-mix(in srgb, var(--bar) 12%, var(--lake-night)) 100%);
+                 border:1px solid color-mix(in srgb, var(--bar) 28%, transparent);
+                 box-shadow:inset 3px 0 0 var(--bar); }
+  .grid .block.tone-news    { --bar:#6ea8e8; }
+  .grid .block.tone-sports  { --bar:#5ecf8a; }
+  .grid .block.tone-kids    { --bar:#e8b86a; }
+  .grid .block.tone-movie   { --bar:#b08adf; }
+  .grid .block.tone-variety { --bar:#d892b0; }
+  .grid .block.tone-series  { --bar:#7aa8c8; }
+  .grid .block.tone-default { --bar: color-mix(in srgb, var(--beacon) 68%, var(--snow)); }
+  .grid .block.span-2::after,
+  .grid .block.span-3::after,
+  .grid .block.span-4::after {
+    content:''; position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    width:0; height:0; border-top:7px solid transparent; border-bottom:7px solid transparent;
+    border-left:8px solid color-mix(in srgb, var(--bar) 55%, transparent); opacity:.55; }
+  .grid .block .title { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.2; font-weight:600;
+                        display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+                        padding-right:<?= $hourCount > 2 ? '18px' : '0' ?>; }
+  .grid .block .sub { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:color-mix(in srgb, var(--snow) 72%, var(--mist));
+                     line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .grid .block .time { font-size:15px; color:color-mix(in srgb, var(--mist) 88%, transparent); margin-top:2px;
+                       font-variant-numeric:tabular-nums; }
+  .grid .block.live { box-shadow:inset 3px 0 0 var(--bar), 0 0 0 1px color-mix(in srgb, var(--up) 45%, transparent); }
+  .grid .block.live .time::before { content:'● '; color:var(--up); }
 
   .panel { background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent);
            border-radius:14px; padding:28px 32px; display:flex; align-items:center; justify-content:center;
@@ -154,8 +191,10 @@ function tvguide_hour_label(int $hour): string
             $badge = tvguide_row_channel_badge($row);
             $sub = tvguide_row_channel_subtitle($row);
             $callsign = tvguide_callsign_short((string)($row['callsign'] ?? ''));
+            $netTone = tvguide_affiliate_tone((string)($row['affiliate'] ?? ''));
+            $blocks = is_array($row['blocks'] ?? null) ? $row['blocks'] : [];
         ?>
-        <div class="ch">
+        <div class="ch net-<?= h($netTone) ?>">
           <?php if ($badge !== ''): ?>
           <div class="num"><?= h($badge) ?></div>
           <?php endif; ?>
@@ -170,18 +209,28 @@ function tvguide_hour_label(int $hour): string
             <?php endif; ?>
           </div>
         </div>
-        <?php foreach ($hours as $hour):
-            $cell = $row['cells'][(string)$hour] ?? null; ?>
-        <div class="cell<?= $cell === null ? ' empty' : '' ?>">
-          <?php if (is_array($cell)): ?>
-          <div class="title"><?= h((string)($cell['title'] ?? '')) ?></div>
-          <?php if (!empty($cell['subtitle'])): ?>
-          <div class="sub"><?= h((string)$cell['subtitle']) ?></div>
-          <?php endif; ?>
-          <div class="time"><?= h((string)($cell['start'] ?? '')) ?>–<?= h((string)($cell['end'] ?? '')) ?></div>
-          <?php endif; ?>
+        <div class="track">
+          <?php foreach ($blocks as $block):
+              $colStart = max(0, (int)($block['col_start'] ?? 0));
+              $colSpan = max(1, (int)($block['col_span'] ?? 1));
+              $gridCol = ($colStart + 1) . ' / span ' . $colSpan;
+              if (!empty($block['empty'])): ?>
+          <div class="slot empty" style="grid-column:<?= h($gridCol) ?>"></div>
+              <?php else:
+                  $tone = preg_replace('/[^a-z0-9_-]/', '', (string)($block['tone'] ?? 'default')) ?: 'default';
+                  $spanClass = $colSpan > 1 ? ' span-' . min(4, $colSpan) : '';
+                  $liveClass = !empty($block['live']) ? ' live' : '';
+              ?>
+          <div class="block tone-<?= h($tone) ?><?= h($spanClass) ?><?= h($liveClass) ?>" style="grid-column:<?= h($gridCol) ?>">
+            <div class="title"><?= h((string)($block['title'] ?? '')) ?></div>
+            <?php if (!empty($block['subtitle'])): ?>
+            <div class="sub"><?= h((string)$block['subtitle']) ?></div>
+            <?php endif; ?>
+            <div class="time"><?= h((string)($block['start'] ?? '')) ?>–<?= h((string)($block['end'] ?? '')) ?></div>
+          </div>
+              <?php endif;
+          endforeach; ?>
         </div>
-        <?php endforeach; ?>
         <?php endforeach; ?>
       </div>
     </div>
