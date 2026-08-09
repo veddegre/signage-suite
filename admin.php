@@ -595,7 +595,16 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 break;
             default:    // text, select, textarea
                 $raw = trim((string)($_POST[$name] ?? ''));
-                if ($raw === '') unset($conf[$cfgKey]); else $conf[$cfgKey] = $raw;
+                if ($raw === '') {
+                    unset($conf[$cfgKey]);
+                } elseif ($board === 'tvguide' && in_array($name, ['PRIME_START', 'PRIME_END'], true)) {
+                    $conf[$cfgKey] = tvguide_normalize_prime_time_field(
+                        $raw,
+                        $name === 'PRIME_START' ? 19 : 23
+                    );
+                } else {
+                    $conf[$cfgKey] = $raw;
+                }
         }
     }
     if ($board === 'calendar' && admin_is_super()) {

@@ -704,14 +704,55 @@ function tvguide_parse_time(string $raw, int $defaultHour, int $defaultMinute = 
     if ($raw === '') {
         return [$defaultHour, $defaultMinute];
     }
+
+    if (preg_match('/^midnight$/i', $raw) || preg_match('/^12\s*(am|a)\.?$/i', $raw)) {
+        return [0, 0];
+    }
+    if (preg_match('/^noon$/i', $raw) || preg_match('/^12\s*(pm|p)\.?$/i', $raw)) {
+        return [12, 0];
+    }
+
+    if (preg_match('/^(\d{1,2})(?::(\d{2}))?\s*(a|am|p|pm)\.?$/i', $raw, $m)) {
+        $h = (int)$m[1];
+        $min = ($m[2] ?? '') !== '' ? (int)$m[2] : 0;
+        $ampm = strtolower($m[3]);
+        if ($ampm[0] === 'p' && $h < 12) {
+            $h += 12;
+        } elseif ($ampm[0] === 'a' && $h === 12) {
+            $h = 0;
+        }
+
+        return [max(0, min(23, $h)), max(0, min(59, $min))];
+    }
+
     if (preg_match('/^(\d{1,2}):(\d{2})$/', $raw, $m)) {
         return [max(0, min(23, (int)$m[1])), max(0, min(59, (int)$m[2]))];
     }
+
+    // Bare 1–11 = PM (typical prime-time entry); 0 = midnight; 12–23 = 24-hour clock.
     if (preg_match('/^(\d{1,2})$/', $raw, $m)) {
-        return [max(0, min(23, (int)$m[1])), 0];
+        $h = (int)$m[1];
+        if ($h >= 1 && $h <= 11) {
+            $h += 12;
+        }
+
+        return [max(0, min(23, $h)), 0];
     }
 
     return [$defaultHour, $defaultMinute];
+}
+
+function tvguide_format_time_config(int $hour, int $minute = 0): string
+{
+    return sprintf('%02d:%02d', max(0, min(23, $hour)), max(0, min(59, $minute)));
+}
+
+/** Normalize admin input to HH:MM for storage. */
+function tvguide_normalize_prime_time_field(string $raw, int $defaultHour): string
+{
+    [$hour, $minute] = tvguide_parse_time($raw, $defaultHour, 0);
+
+    return tvguide_format_time_config($hour, $minute);
 }
 
 /** @return array{start:DateTimeImmutable,end:DateTimeImmutable,date:DateTimeImmutable,hours:list<int>,label:string} */
@@ -1022,6 +1063,31 @@ function tvguide_build_row_blocks(
     return $blocks;
 }
 
+/** @param array<string,mixed> $payload */
+function tvguide_finalize_grid_payload(array $payload, array $window): array
+{
+    $payload['date_label'] = $window['date']->format('l, M j');
+    $payload['prime_label'] = $window['label'];
+    $payload['hours'] = $window['hours'];
+    $payload['half_hours'] = (int)$window['half_hours'];
+    $payload['prime_start_ts'] = $window['start']->getTimestamp();
+    $payload['prime_end_ts'] = $window['end']->getTimestamp();
+    if (!empty($payload['rows']) && is_array($payload['rows'])) {
+        $payload['rows'] = tvguide_sort_grid_rows($payload['rows']);
+    }
+
+    return $payload;
+}
+
+function tvguide_grid_window_matches(array $payload, array $window): bool
+{
+    $startTs = (int)($payload['prime_start_ts'] ?? -1);
+    $endTs = (int)($payload['prime_end_ts'] ?? -1);
+
+    return $startTs === $window['start']->getTimestamp()
+        && $endTs === $window['end']->getTimestamp();
+}
+
 /**
  * @param list<string> $programIds
  * @return array<string,array<string,mixed>>
@@ -1103,13 +1169,13 @@ function tvguide_fetch_grid_data(array $page): array
     $window = tvguide_prime_window($tz);
     $dateYmd = $window['date']->format('Y-m-d');
     $scheduleDates = [$dateYmd, $window['date']->modify('+1 day')->format('Y-m-d')];
-    $cacheKey = 'tvguide_grid_v5_' . md5(json_encode([
+    $cacheKey = 'tvguide_grid_v6_' . md5(json_encode([
         $lineup,
         $page['key'] ?? '',
         $stationIds,
         $scheduleDates,
-        (string)cfg('tvguide.PRIME_START', '19:00'),
-        (string)cfg('tvguide.PRIME_END', '23:00'),
+        $window['start']->format('c'),
+        $window['end']->format('c'),
         tvguide_timezone(),
         tvguide_channel_number_map(),
     ]));
@@ -1117,13 +1183,10 @@ function tvguide_fetch_grid_data(array $page): array
     $ttl = tvguide_cache_ttl();
     if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
-        if (is_array($cached)) {
-            if (!empty($cached['rows']) && is_array($cached['rows'])) {
-                $cached['rows'] = tvguide_sort_grid_rows($cached['rows']);
-            }
+        if (is_array($cached) && tvguide_grid_window_matches($cached, $window)) {
             $cached['cache_age'] = time() - filemtime($cacheFile);
 
-            return $cached;
+            return tvguide_finalize_grid_payload($cached, $window);
         }
     }
 
@@ -1191,13 +1254,10 @@ function tvguide_fetch_grid_data(array $page): array
     $payload = [
         'ok' => $rows !== [],
         'error' => $rows !== [] ? null : 'No listings in prime time for selected channels',
-        'date_label' => $window['date']->format('l, M j'),
-        'prime_label' => $window['label'],
-        'hours' => $hours,
-        'half_hours' => (int)($window['half_hours'] ?? max(1, count($hours) * 2)),
-        'rows' => $rows,
         'cache_age' => 0,
+        'rows' => $rows,
     ];
+    $payload = tvguide_finalize_grid_payload($payload, $window);
     @file_put_contents($cacheFile, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), LOCK_EX);
 
     return $payload;
@@ -1209,7 +1269,10 @@ function tvguide_stale_grid_data(array $empty, string $cacheFile, ?string $error
     if (is_file($cacheFile)) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
         if (is_array($cached) && !empty($cached['rows'])) {
-            $cached['rows'] = tvguide_sort_grid_rows((array)$cached['rows']);
+            $window = tvguide_prime_window(new DateTimeZone(tvguide_timezone()));
+            if (tvguide_grid_window_matches($cached, $window)) {
+                $cached = tvguide_finalize_grid_payload($cached, $window);
+            }
             $cached['ok'] = true;
             $cached['error'] = ($error ?? 'upstream error') . ' — showing cached listings';
             $cached['cache_age'] = time() - filemtime($cacheFile);
