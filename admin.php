@@ -24,6 +24,7 @@ require_once __DIR__ . '/lib/traffic_lib.php';
 require_once __DIR__ . '/lib/zabbix_lib.php';
 require_once __DIR__ . '/lib/kuma_lib.php';
 require_once __DIR__ . '/lib/tdx_lib.php';
+require_once __DIR__ . '/lib/tvguide_lib.php';
 require_once __DIR__ . '/lib/announce_lib.php';
 require_once __DIR__ . '/lib/hero_strip_lib.php';
 require_once __DIR__ . '/lib/emergency_lib.php';
@@ -325,7 +326,7 @@ if ($authed && admin_is_super() && csrf_ok() && ($_POST['action'] ?? '') === 'sh
         $shareRole = 'operator';
     }
     $pagesKey = match ($shareBoard) {
-        'zabbix', 'kuma', 'tdx' => $shareBoard . '.PAGES',
+        'zabbix', 'kuma', 'tdx', 'tvguide' => $shareBoard . '.PAGES',
         'grafana', 'splunkdash' => $shareBoard . '.DASHBOARDS',
         default => '',
     };
@@ -861,6 +862,42 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 unset($conf['tdx.PAGES']);
             } else {
                 $conf['tdx.PAGES'] = $mergedPages;
+            }
+        }
+    }
+    if ($board === 'tvguide') {
+        if (!admin_is_super() && !empty($_POST['tvguide_use_json'])) {
+            $errors[] = 'Advanced JSON import is restricted to super admins.';
+        } elseif (!empty($_POST['tvguide_use_json'])) {
+            $parsed = tvguide_pages_from_json_string((string)($_POST['PAGES_JSON'] ?? ''));
+            if ($parsed === null) {
+                $errors[] = 'Pages JSON: invalid — not saved.';
+            } elseif ($parsed === []) {
+                unset($conf['tvguide.PAGES']);
+            } else {
+                $conf['tvguide.PAGES'] = $parsed;
+            }
+        } else {
+            $existingPages = is_array($conf['tvguide.PAGES'] ?? null) ? $conf['tvguide.PAGES'] : [];
+            $outV = tvguide_pages_from_post($_POST['PAGES'] ?? []);
+            $finalized = [];
+            foreach ($_POST['PAGES'] ?? [] as $prow) {
+                if (!is_array($prow)) {
+                    continue;
+                }
+                $prow = admin_normalize_form_row($prow);
+                $key = tvguide_normalize_page_key((string)($prow['_key'] ?? ''));
+                if ($key === '' || !isset($outV[$key])) {
+                    continue;
+                }
+                $prev = is_array($existingPages[$key] ?? null) ? $existingPages[$key] : null;
+                $finalized[$key] = admin_finalize_entry($outV[$key], $prev, $prow);
+            }
+            $mergedPages = admin_merge_owned_map($existingPages, $finalized);
+            if ($mergedPages === []) {
+                unset($conf['tvguide.PAGES']);
+            } else {
+                $conf['tvguide.PAGES'] = $mergedPages;
             }
         }
     }
@@ -1420,6 +1457,20 @@ if ($authed && $board === 'tdx' && admin_can_board('tdx') && csrf_ok() && ($_POS
         if (!empty($tdxTestResult['detail'])) {
             $flash .= ': ' . $tdxTestResult['detail'];
         }
+        $flashOk = false;
+    }
+}
+
+// ── TV Guide: Schedules Direct test ─────────────────────────────────────────
+if ($authed && $board === 'tvguide' && admin_can_board('tvguide') && csrf_ok() && ($_POST['action'] ?? '') === 'tvguide_test') {
+    $tvguideTestResult = tvguide_test_connection(true);
+    if ($tvguideTestResult['ok']) {
+        $flash = 'Schedules Direct test OK — ' . ($tvguideTestResult['detail'] ?? 'connected');
+        if (!empty($tvguideTestResult['ms'])) {
+            $flash .= ' (' . (int)$tvguideTestResult['ms'] . ' ms)';
+        }
+    } else {
+        $flash = 'Schedules Direct test failed — ' . ($tvguideTestResult['error'] ?? 'unknown error');
         $flashOk = false;
     }
 }
@@ -2166,13 +2217,14 @@ $navGroups = [
     'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'meals', 'traffic', 'camwall'],
     'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
     'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix', 'tdx'],
-    'Media'           => ['slides', 'rotator', 'video', 'rss'],
+    'Media'           => ['slides', 'rotator', 'video', 'rss', 'tvguide'],
     'Dashboards'      => ['grafana', 'splunkdash', 'powerbi', 'web'],
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
+$tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRIME_END', 'BOARD_TITLE', 'BOARD_SUB', 'RELOAD_SEC', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
 $splunkdashBoardKeys = ['HIDE_CHROME', 'HIDE_SCROLLBARS', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
@@ -2333,6 +2385,24 @@ if ($board === 'tdx') {
     if (tdx_configured()) {
         $metaAppId = (int)($tdxPages[$tdxActivePage]['app_id'] ?? 0);
         $tdxMetadata = tdx_metadata_cached($metaAppId);
+    }
+}
+$tvguidePages = [];
+$tvguideActivePage = 'main';
+$tvguideLineups = [];
+$tvguideLineupChannels = [];
+$tvguideLineupError = null;
+if ($board === 'tvguide') {
+    $tvguidePages = admin_filter_owned_map(tvguide_admin_pages($rawConf));
+    $tvguideActivePage = tvguide_normalize_page_key((string)($_GET['page'] ?? ''));
+    if (!isset($tvguidePages[$tvguideActivePage])) {
+        $tvguideActivePage = (string)(array_key_first($tvguidePages) ?: 'main');
+    }
+    if (tvguide_configured()) {
+        $tvguideLineups = tvguide_sd_lineups($tvguideLineupError);
+        if (tvguide_lineup_id() !== '') {
+            $tvguideLineupChannels = tvguide_lineup_channels_for_admin($tvguideLineupError);
+        }
     }
 }
 
@@ -4370,6 +4440,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each page is <code>zabbix.php?d=<em>key</em></code> in rotation — filter by Zabbix host group per tab below.
         <?php elseif ($board === 'tdx'): ?>
           Each page is <code>tdx.php?d=<em>key</em></code> in rotation — filter tickets by app, groups, types, and status per tab below.
+        <?php elseif ($board === 'tvguide'): ?>
+          Each page is <code>tvguide.php?d=<em>key</em></code> in rotation — prime-time grid for channels you check on each tab below.
         <?php elseif ($board === 'kuma'): ?>
           Each page is <code>kuma.php?d=<em>key</em></code> in rotation — one status page slug per tab below.
         <?php elseif ($board === 'grafana'): ?>
@@ -6049,6 +6121,148 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <?php endforeach; ?>
               </div>
               <?php endif; ?>
+              <?php endif; ?>
+            </div>
+          </details>
+
+        <?php elseif ($board === 'tvguide'): ?>
+          <?php admin_operator_board_preamble('tvguide'); ?>
+          <?php admin_super_registry_share_hint('TV Guide'); ?>
+          <div class="section-title">TV Guide pages</div>
+          <div class="help" style="margin-bottom:4px">Each page is its own prime-time grid —
+            <code>tvguide.php?d=<em>key</em></code> in rotation. Check the channels to show on each tab.
+            Set lineup and credentials under <strong>Board settings</strong> below.</div>
+          <?php if ($tvguidePages === [] && !admin_is_super()): ?>
+          <div class="help" style="margin:0 0 12px;padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+            No pages yet — click <strong>+ Add page</strong> below.
+          </div>
+          <?php endif; ?>
+
+          <div class="splunk-pages-bar" id="tvguidePagesBar">
+            <?php foreach ($tvguidePages as $pk => $pg): ?>
+            <button type="button" class="splunk-page-tab<?= $pk === $tvguideActivePage ? ' active' : '' ?>"
+                    data-tvguide-page-tab="<?= h($pk) ?>">
+              <?= h((string)($pg['title'] ?? $pk)) ?><code><?= h($pk) ?></code>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="addrow" onclick="addTvguidePage()">+ Add page</button>
+            <?php if (admin_is_super()): ?>
+            <button type="submit" name="action" value="share_board_with_operators" class="secondary" style="margin-left:8px;padding:4px 10px;font-size:12px"
+                    formaction="?board=tvguide" formmethod="post"
+                    onclick="this.form.share_board.value='tvguide'; return confirm('Share every TV Guide page with the Operators role?');">Share all with Operators</button>
+            <?php endif; ?>
+          </div>
+          <?php if (admin_is_super()): ?>
+          <input type="hidden" name="share_board" value="">
+          <input type="hidden" name="share_role" value="operator">
+          <?php endif; ?>
+
+          <?php foreach ($tvguidePages as $pk => $pg):
+            $pageRo = admin_page_entry_readonly($pg);
+            $selectedStations = tvguide_parse_station_ids($pg['stations'] ?? '');
+          ?>
+          <div class="splunk-page-editor" data-tvguide-page-editor="<?= h($pk) ?>"
+               style="<?= $pk === $tvguideActivePage ? '' : 'display:none' ?>"<?= $pageRo ? ' data-page-readonly="1"' : '' ?>>
+            <?php if (!$pageRo): ?>
+            <input type="hidden" name="PAGES[<?= h($pk) ?>][_key]" value="<?= h($pk) ?>" data-tvguide-page-key>
+            <?php else: ?>
+            <input type="hidden" value="<?= h($pk) ?>" data-tvguide-page-key>
+            <?php endif; ?>
+            <div class="splunk-page-head">
+              <div>
+                <label class="mini">Page title</label>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][title]', $pageRo) ?> value="<?= h((string)($pg['title'] ?? '')) ?>"
+                       placeholder="Prime time" data-tvguide-page-title<?= admin_form_ro_attr($pageRo) ?>>
+              </div>
+              <div>
+                <label class="mini">Subtitle</label>
+                <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][sub]', $pageRo) ?> value="<?= h((string)($pg['sub'] ?? '')) ?>"
+                       placeholder="Tonight" data-tvguide-page-sub<?= admin_form_ro_attr($pageRo) ?>>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">
+                <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap"
+                   href="<?= h(tvguide_preview_url($pk)) ?>" target="_blank" rel="noopener" data-tvguide-page-preview>Preview ↗</a>
+                <?php if (count($tvguidePages) > 1 && !$pageRo): ?>
+                <button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px"
+                        onclick="removeTvguidePage('<?= h($pk) ?>')" title="Remove page">Remove page</button>
+                <?php endif; ?>
+              </div>
+            </div>
+            <?php admin_entry_sharing_readonly_html($pg); ?>
+            <?php admin_entry_sharing_html('PAGES[' . $pk . ']', $pg); ?>
+            <div class="help" style="margin-bottom:10px">Rotation URL: <code><?= h(tvguide_page_url($pk)) ?></code></div>
+
+            <div class="field" style="margin-bottom:12px">
+              <label class="mini">Channels</label>
+              <?php if ($tvguideLineupChannels === []): ?>
+              <div class="help" style="margin-top:6px">
+                <?php if (!tvguide_configured()): ?>
+                  Set Schedules Direct credentials under <strong>Board settings</strong>, Save, then Test connection.
+                <?php elseif (tvguide_lineup_id() === ''): ?>
+                  Set a <strong>Lineup ID</strong> under Board settings, Save, then Test connection to load channels.
+                <?php else: ?>
+                  Could not load lineup channels<?= $tvguideLineupError ? ': ' . h($tvguideLineupError) : '' ?> — try Test connection below.
+                <?php endif; ?>
+              </div>
+              <?php else: ?>
+              <div class="help" style="margin:6px 0 10px">Lineup <code><?= h(tvguide_lineup_id()) ?></code> —
+                <?= count($tvguideLineupChannels) ?> channel(s). Pick up to ~12 for a readable grid.</div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px">
+                <?php foreach ($tvguideLineupChannels as $ch):
+                    $sid = (string)($ch['station_id'] ?? '');
+                    if ($sid === '') continue;
+                    $checked = in_array($sid, $selectedStations, true); ?>
+                <label class="check" style="margin:0;font-size:13px;align-items:flex-start">
+                  <input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][stations][]', $pageRo) ?>
+                         value="<?= h($sid) ?>"<?= $checked ? ' checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>>
+                  <span><?= h((string)($ch['label'] ?? $sid)) ?></span>
+                </label>
+                <?php endforeach; ?>
+              </div>
+              <?php endif; ?>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px">
+              <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
+                <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
+            </div>
+          </div>
+          <?php endforeach; ?>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_is_super() ? '' : ' hidden' ?>>
+            <summary>Advanced — paste JSON</summary>
+            <div class="panel-body">
+              <label class="check"><input type="checkbox" name="tvguide_use_json"> Replace all pages from JSON on save (ignores cards above)</label>
+              <div class="help" style="margin:10px 0">Keyed object: <code>{"main":{"title":"Networks","stations":"12345,67890"}}</code>.</div>
+              <textarea name="PAGES_JSON" spellcheck="false" style="width:100%;min-height:220px;font-family:'IBM Plex Mono',monospace;font-size:13px"><?=
+                h(json_encode($tvguidePages, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE))
+              ?></textarea>
+            </div>
+          </details>
+
+          <details class="panel panel-muted" style="margin-top:22px"<?= admin_can_board_settings('tvguide') ? '' : ' hidden' ?>>
+            <summary>Board settings</summary>
+            <div class="panel-body">
+              <div class="field-grid">
+                <?php foreach ($b['fields'] as $f):
+                  if (!in_array($f['key'], $tvguideBoardKeys, true)) continue;
+                  $val = current_val($rawConf, $board, $f['key']); ?>
+                  <div class="field"><?php admin_field($f, $val, $board); ?></div>
+                <?php endforeach; ?>
+              </div>
+              <?php if ($tvguideLineups !== []): ?>
+              <datalist id="tvguideLineups">
+                <?php foreach ($tvguideLineups as $lu): ?>
+                <option value="<?= h((string)($lu['lineup'] ?? '')) ?>"><?= h((string)($lu['name'] ?? '')) ?><?= !empty($lu['location']) ? ' — ' . h((string)$lu['location']) : '' ?></option>
+                <?php endforeach; ?>
+              </datalist>
+              <div class="help" style="margin-top:8px">Lineup IDs on your account (use Test connection to refresh).</div>
+              <?php endif; ?>
+              <?php if (admin_can_board_settings('tvguide') && tvguide_configured()): ?>
+              <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                <button type="submit" name="action" value="tvguide_test" class="secondary">Test connection</button>
+                <span class="help" style="margin:0">Lists lineups on your account and channel count for the configured lineup.
+                  <a href="https://github.com/SchedulesDirect/JSON-Service/wiki/API-20141201" target="_blank" rel="noopener">API docs</a></span>
+              </div>
               <?php endif; ?>
             </div>
           </details>
@@ -11828,6 +12042,132 @@ function removeTdxPage(pageKey) {
 document.querySelectorAll('[data-tdx-page-tab]').forEach(bindTdxPageTab);
 document.querySelectorAll('[data-tdx-page-title]').forEach(function (inp) {
   inp.addEventListener('input', function () { syncTdxPageTabLabel(inp); });
+});
+
+const TVGUIDE_CHANNELS = <?= json_encode(
+    $board === 'tvguide'
+        ? array_values(array_map(static fn(array $ch): array => [
+            'id' => (string)($ch['station_id'] ?? ''),
+            'label' => (string)($ch['label'] ?? ''),
+        ], $tvguideLineupChannels))
+        : [],
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+) ?>;
+
+function tvguideNormalizePageKey(raw) {
+  raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+  return raw || 'main';
+}
+
+function tvguidePreviewHref(pageKey) {
+  const base = pageKey === 'main' ? 'tvguide.php' : ('tvguide.php?d=' + encodeURIComponent(pageKey));
+  return base + '&' + RSS_PREVIEW_SUFFIX;
+}
+
+function tvguideChannelPickerHtml(pageKey) {
+  if (!TVGUIDE_CHANNELS.length) {
+    return '<div class="help" style="margin-top:6px">Set lineup under <strong>Board settings</strong>, Save, then Test connection to load channels.</div>';
+  }
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px">';
+  TVGUIDE_CHANNELS.forEach(function (ch) {
+    if (!ch.id) return;
+    html += '<label class="check" style="margin:0;font-size:13px;align-items:flex-start">' +
+      '<input type="checkbox" name="PAGES[' + pageKey + '][stations][]" value="' + ch.id.replace(/"/g, '&quot;') + '">' +
+      '<span>' + (ch.label || ch.id).replace(/</g, '&lt;') + '</span></label>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function showTvguidePage(pageKey) {
+  document.querySelectorAll('[data-tvguide-page-editor]').forEach(function (el) {
+    el.style.display = el.getAttribute('data-tvguide-page-editor') === pageKey ? '' : 'none';
+  });
+  document.querySelectorAll('[data-tvguide-page-tab]').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-tvguide-page-tab') === pageKey);
+  });
+}
+
+function syncTvguidePageTabLabel(titleInp) {
+  const editor = titleInp.closest('[data-tvguide-page-editor]');
+  if (!editor) return;
+  const pageKey = editor.getAttribute('data-tvguide-page-editor');
+  const tab = document.querySelector('[data-tvguide-page-tab="' + pageKey + '"]');
+  if (!tab) return;
+  const title = (titleInp.value || '').trim() || 'New page';
+  tab.childNodes[0].textContent = title + ' ';
+}
+
+function bindTvguidePageTab(btn) {
+  btn.addEventListener('click', function () {
+    showTvguidePage(btn.getAttribute('data-tvguide-page-tab'));
+  });
+}
+
+function addTvguidePage() {
+  const key = prompt('Page key (letters, numbers, underscore — used in tvguide.php?d=KEY):', 'networks');
+  if (key === null) return;
+  const pageKey = tvguideNormalizePageKey(key);
+  if (document.querySelector('[data-tvguide-page-editor="' + pageKey + '"]')) {
+    alert('A page with key "' + pageKey + '" already exists.');
+    showTvguidePage(pageKey);
+    return;
+  }
+  const bar = document.getElementById('tvguidePagesBar');
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'splunk-page-tab';
+  tab.setAttribute('data-tvguide-page-tab', pageKey);
+  tab.appendChild(document.createTextNode('New page '));
+  const tabCode = document.createElement('code');
+  tabCode.textContent = pageKey;
+  tab.appendChild(tabCode);
+  if (bar) {
+    const addBtn = bar.querySelector('.addrow');
+    if (addBtn) bar.insertBefore(tab, addBtn);
+    else bar.appendChild(tab);
+  }
+  bindTvguidePageTab(tab);
+
+  const editor = document.createElement('div');
+  editor.className = 'splunk-page-editor';
+  editor.setAttribute('data-tvguide-page-editor', pageKey);
+  editor.style.display = 'none';
+  editor.innerHTML =
+    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-tvguide-page-key>' +
+    '<div class="splunk-page-head">' +
+      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="Prime time" data-tvguide-page-title></div>' +
+      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Tonight" data-tvguide-page-sub></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
+        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + tvguidePreviewHref(pageKey) + '" target="_blank" rel="noopener" data-tvguide-page-preview>Preview ↗</a>' +
+        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeTvguidePage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>tvguide.php?d=' + pageKey + '</code></div>' +
+    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
+    '<div class="field" style="margin-bottom:12px"><label class="mini">Channels</label>' + tvguideChannelPickerHtml(pageKey) + '</div>' +
+    '<div class="field" style="display:flex;align-items:flex-end;padding-bottom:4px">' +
+      '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
+    '</div>';
+
+  mountPageEditor(editor);
+  editor.querySelector('[data-tvguide-page-title]').addEventListener('input', function () { syncTvguidePageTabLabel(this); });
+  showTvguidePage(pageKey);
+}
+
+function removeTvguidePage(pageKey) {
+  if (!confirm('Remove page "' + pageKey + '"?')) return;
+  const editor = document.querySelector('[data-tvguide-page-editor="' + pageKey + '"]');
+  const tab = document.querySelector('[data-tvguide-page-tab="' + pageKey + '"]');
+  if (editor) editor.remove();
+  if (tab) tab.remove();
+  const remaining = document.querySelector('[data-tvguide-page-tab]');
+  if (remaining) showTvguidePage(remaining.getAttribute('data-tvguide-page-tab'));
+}
+
+document.querySelectorAll('[data-tvguide-page-tab]').forEach(bindTvguidePageTab);
+document.querySelectorAll('[data-tvguide-page-title]').forEach(function (inp) {
+  inp.addEventListener('input', function () { syncTvguidePageTabLabel(inp); });
 });
 
 function kumaNormalizePageKey(raw) {

@@ -13,7 +13,7 @@ const LEGACY_ADMIN_FILE = SIGNAGE_ROOT . '/config/admin.json';
 
 /** Boards operators may open (content + rotation; not tools/users/security). */
 const ADMIN_OPERATOR_BOARDS = [
-    'rotation', 'slides', 'rotator', 'rss', 'web', 'video', 'webcam',
+    'rotation', 'slides', 'rotator', 'rss', 'tvguide', 'web', 'video', 'webcam',
     'grafana', 'splunkdash', 'powerbi', 'zabbix', 'tdx', 'announce', 'calendar', 'account',
 ];
 
@@ -3131,6 +3131,16 @@ function admin_operator_board_preamble(string $board): void
                     : 'TDX base URL and credentials are not configured — ask a super admin under Board settings.',
                 'Use <strong>+ Add page</strong> for ticket walls filtered by app, groups, types, and status. Quick-add under <strong>Monitoring</strong> in rotation.',
                 'Load metadata under Board settings to copy app/type/status/group IDs into each page tab.',
+            ];
+            break;
+        case 'tvguide':
+            require_once __DIR__ . '/tvguide_lib.php';
+            $lines = [
+                tvguide_configured()
+                    ? 'Schedules Direct credentials are configured.'
+                    : 'Set Schedules Direct username and password under <strong>Board settings</strong> (~$25/yr account).',
+                'Pick a <strong>lineup</strong> under Board settings, then check channels on each page tab. Quick-add under <strong>Media</strong> in rotation.',
+                'Each page is <code>tvguide.php?d=<em>key</em></code> — build separate prime-time grids (e.g. networks vs sports).',
             ];
             break;
         case 'kuma':

@@ -53,6 +53,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Custom slides | `slides.php` | `slides.php?slide=…` | — |
 | | Video | `video.php` | `video.php?v=<key>` | — |
 | | RSS | `rss.php` | `rss.php?feed=<key>` | — |
+| | TV Guide | `tvguide.php` | `tvguide.php?d=<key>` | Schedules Direct (~$25/yr) |
 | Dashboards | Grafana | `grafana.php` | `grafana.php?d=<key>` | JWT secret (SSO) or — |
 | | Splunk panels | `splunk.php` | `splunk.php?d=<key>` | Splunk token |
 | | Splunk published | `splunkdash.php` | `splunkdash.php?d=<key>` | — (iframe) |
@@ -694,6 +695,14 @@ On-demand videos are downloaded locally with **yt-dlp** (no ads, no embed blocks
 Muted by default; uncheck **Mute all videos** in admin if needed. Refresh downloads via admin UI or `php video.php fetch`. Live embed dwell defaults to **300 s** (`video.LIVE_DWELL`).
 
 See [video-youtube.md](video-youtube.md) for live streams, bot checks, cookies, and cron.
+
+### tvguide.php — TV Guide (Schedules Direct)
+
+Prime-time grid for user-selected channels — one row per channel, one column per hour in the configured window (default 7–11 PM local).
+
+**Setup:** Schedules Direct account → admin **TV Guide** → credentials + **Lineup ID** → check channels per page tab. See **[docs/tvguide.md](tvguide.md)**.
+
+**Rotation:** `tvguide.php` (main) or `tvguide.php?d=<key>`. Quick-add under **Media**. Per-page **Access** sharing like RSS/Zabbix.
 
 ---
 

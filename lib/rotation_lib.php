@@ -2445,6 +2445,13 @@ function rotation_page_label(string $url): string
         return 'TeamDynamix — ' . tdx_page_label($key);
     }
 
+    if (preg_match('/^tvguide\.php(?:\?d=([^&]+))?/', $url, $m)) {
+        require_once __DIR__ . '/tvguide_lib.php';
+        $key = isset($m[1]) ? urldecode($m[1]) : 'main';
+
+        return 'TV Guide — ' . tvguide_page_label($key);
+    }
+
     if (preg_match('/^kuma\.php(?:\?d=([^&]+))?/', $url, $m)) {
         require_once __DIR__ . '/kuma_lib.php';
         $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(kuma_pages_config()) ?: 'main');
@@ -2543,6 +2550,7 @@ function rotation_page_label(string $url): string
         'powerbi.php' => 'Power BI',
         'zabbix.php' => 'Zabbix monitoring',
         'tdx.php' => 'TeamDynamix tickets',
+        'tvguide.php' => 'TV Guide',
         'web.php' => 'Website',
     ];
 
@@ -2876,6 +2884,29 @@ function rotation_quick_add_items(): array
             'url' => tdx_page_url((string)$key),
             'dwell' => 60,
             'group' => 'Monitoring',
+        ];
+    }
+
+    require_once __DIR__ . '/tvguide_lib.php';
+    foreach (tvguide_pages_config() as $key => $page) {
+        if (!is_array($page)) {
+            continue;
+        }
+        if (!rotation_quick_add_entry_allowed($page)) {
+            continue;
+        }
+        if (!empty($page['off'])) {
+            continue;
+        }
+        if (tvguide_parse_station_ids($page['stations'] ?? '') === []) {
+            continue;
+        }
+        $title = trim((string)($page['title'] ?? $key));
+        $items[] = [
+            'label' => 'TV Guide — ' . $title,
+            'url' => tvguide_page_url((string)$key),
+            'dwell' => 60,
+            'group' => 'Media',
         ];
     }
 
