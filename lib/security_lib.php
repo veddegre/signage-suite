@@ -13,6 +13,23 @@ function signage_allow_private_fetch(): bool
     return (bool)cfg('security.ALLOW_PRIVATE_FETCH', false);
 }
 
+/** Whether outbound cURL fetches must validate HTTPS certificates (RSS, ICS, etc.). */
+function signage_verify_tls(): bool
+{
+    return (bool)cfg('security.VERIFY_TLS', false);
+}
+
+/** @return array<int,mixed> */
+function signage_curl_tls_options(): array
+{
+    $verify = signage_verify_tls();
+
+    return [
+        CURLOPT_SSL_VERIFYPEER => $verify,
+        CURLOPT_SSL_VERIFYHOST => $verify ? 2 : 0,
+    ];
+}
+
 function signage_admin_idle_seconds(): int
 {
     $mins = (int)cfg('security.ADMIN_IDLE_MINUTES', 480);

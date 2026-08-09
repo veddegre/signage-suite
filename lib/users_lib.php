@@ -1968,7 +1968,7 @@ function admin_merge_owned_list(array $existing, array $posted): array
 }
 
 /** @param array<string,array<string,mixed>> $existing @param array<string,array<string,mixed>> $posted */
-function admin_merge_owned_map(array $existing, array $posted): array
+function admin_merge_owned_map(array $existing, array $posted, ?array &$keyRenames = null): array
 {
     if (admin_is_super()) {
         return $posted;
@@ -1984,16 +1984,30 @@ function admin_merge_owned_map(array $existing, array $posted): array
         if (!is_array($row)) {
             continue;
         }
-        $key = (string)$k;
-        $postedKeys[$key] = true;
+        $requestedKey = (string)$k;
+        $key = $requestedKey;
         $prev = is_array($existing[$key] ?? null) ? $existing[$key] : null;
+        $rekey = false;
         if ($prev !== null && !admin_entry_visible($prev)) {
-            continue;
+            $rekey = true;
+        } elseif ($prev !== null && admin_entry_visible($prev) && !admin_entry_owned_by_current_user($prev)) {
+            $postedUrl = trim((string)($row['url'] ?? ''));
+            $prevUrl = trim((string)($prev['url'] ?? ''));
+            if ($postedUrl === '' || ($prevUrl !== '' && $postedUrl === $prevUrl)) {
+                $out[$key] = $prev;
+                $postedKeys[$key] = true;
+                continue;
+            }
+            $rekey = true;
         }
-        if ($prev !== null && admin_entry_visible($prev) && !admin_entry_owned_by_current_user($prev)) {
-            $out[$key] = $prev;
-            continue;
+        if ($rekey) {
+            $key = admin_allocate_registry_key(array_merge($existing, $out), $key);
+            if ($key !== $requestedKey && $keyRenames !== null) {
+                $keyRenames[$requestedKey] = $key;
+            }
+            $prev = null;
         }
+        $postedKeys[$key] = true;
         $out[$key] = admin_finalize_entry($row, $prev, $row);
     }
     foreach ($existing as $k => $row) {
@@ -2005,6 +2019,7 @@ function admin_merge_owned_map(array $existing, array $posted): array
             $out[$key] = $row;
         }
     }
+
     return $out;
 }
 
@@ -2201,6 +2216,49 @@ function admin_normalize_registry_key(string $key): ?string
     return $key !== '' ? $key : null;
 }
 
+/**
+ * Whether a registry map already uses a key (normalized match).
+ * @param array<string,mixed> $registry
+ */
+function admin_registry_key_taken(array $registry, string $key, ?callable $normalize = null): bool
+{
+    $normalize ??= static fn($k) => admin_normalize_registry_key((string)$k);
+
+    return admin_registry_resolve_key($registry, $key, $normalize) !== null;
+}
+
+/**
+ * Pick a registry key that does not collide with existing rows (including other users' hidden entries).
+ * @param array<string,mixed> $registry
+ */
+function admin_allocate_registry_key(array $registry, string $requested, ?callable $normalize = null): string
+{
+    $normalize ??= static fn($k) => admin_normalize_registry_key((string)$k);
+    $base = $normalize($requested) ?? $normalize('feed') ?? 'feed';
+    if (!admin_registry_key_taken($registry, $base, $normalize)) {
+        return $base;
+    }
+    $uid = admin_user_id();
+    if ($uid !== null && $uid !== '') {
+        $username = admin_username_for_id($uid);
+        $suffix = preg_replace('/[^a-z0-9_]/i', '', $username) ?? '';
+        if ($suffix !== '') {
+            $candidate = $base . '_' . $suffix;
+            if (!admin_registry_key_taken($registry, $candidate, $normalize)) {
+                return $candidate;
+            }
+        }
+    }
+    for ($i = 2; $i <= 99; $i++) {
+        $candidate = $base . '_' . $i;
+        if (!admin_registry_key_taken($registry, $candidate, $normalize)) {
+            return $candidate;
+        }
+    }
+
+    return $base . '_' . substr(bin2hex(random_bytes(3)), 0, 6);
+}
+
 function admin_preview_session_ready(): bool
 {
     static $ready = null;
@@ -2322,6 +2380,30 @@ function admin_filter_scalar_map_for_display(array $map): array
     foreach ($map as $k => $v) {
         if (is_array($v) && admin_entry_visible_for_user($v, $uid)) {
             $out[(string)$k] = $v;
+        }
+    }
+
+    return $out;
+}
+
+/** @param array<string,array<string,mixed>|mixed> $map */
+function admin_filter_registry_for_user(array $map, ?string $userId): array
+{
+    $out = [];
+    foreach ($map as $k => $entry) {
+        if (!is_array($entry) || !empty($entry['off'])) {
+            continue;
+        }
+        if ($userId === null || $userId === '') {
+            $owner = admin_entry_owner($entry);
+            if ($owner !== null) {
+                continue;
+            }
+            $out[$k] = $entry;
+            continue;
+        }
+        if (admin_entry_visible_for_user($entry, $userId)) {
+            $out[$k] = $entry;
         }
     }
 

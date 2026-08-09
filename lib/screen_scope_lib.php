@@ -240,8 +240,13 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
 
     require_once __DIR__ . '/rss_ticker_lib.php';
     require_once __DIR__ . '/users_lib.php';
+    $scopeUid = null;
+    if ($screenKey !== '') {
+        $scopeUid = users_screen_assignments()[rotation_normalize_screen_key($screenKey)] ?? null;
+        $scopeUid = is_string($scopeUid) && $scopeUid !== '' ? $scopeUid : null;
+    }
     $newsFeed = trim((string)($row['ticker_news_feed'] ?? ''));
-    if ($newsFeed !== '' && rss_ticker_resolve_feed($newsFeed) !== null) {
+    if ($newsFeed !== '' && rss_ticker_resolve_feed($newsFeed, $scopeUid) !== null) {
         $resolved = admin_normalize_registry_key($newsFeed);
         $entry['ticker_news_feed'] = $resolved ?? $newsFeed;
     } else {
@@ -268,7 +273,7 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
     $h1Rss = trim((string)($row['glance_h1_rss'] ?? ''));
     if ($h1Rss === '_off') {
         $entry['glance_h1_rss'] = '_off';
-    } elseif ($h1Rss !== '' && rss_ticker_resolve_feed($h1Rss) !== null) {
+    } elseif ($h1Rss !== '' && rss_ticker_resolve_feed($h1Rss, $scopeUid) !== null) {
         $entry['glance_h1_rss'] = admin_normalize_registry_key($h1Rss) ?? $h1Rss;
     } else {
         unset($entry['glance_h1_rss']);
@@ -288,7 +293,7 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
     $h2Rss = trim((string)($row['glance_h2_rss'] ?? ''));
     if ($h2Rss === '_off') {
         $entry['glance_h2_rss'] = '_off';
-    } elseif ($h2Rss !== '' && rss_ticker_resolve_feed($h2Rss) !== null) {
+    } elseif ($h2Rss !== '' && rss_ticker_resolve_feed($h2Rss, $scopeUid) !== null) {
         $entry['glance_h2_rss'] = admin_normalize_registry_key($h2Rss) ?? $h2Rss;
     } else {
         unset($entry['glance_h2_rss']);
@@ -392,19 +397,21 @@ function rotation_screen_ticker_news_feed(string $screen): string
         return '';
     }
     require_once __DIR__ . '/rss_ticker_lib.php';
-    $feed = rss_ticker_resolve_feed($key);
+    require_once __DIR__ . '/users_lib.php';
+    $scopeUid = users_screen_assignments()[rotation_normalize_screen_key($screen)] ?? null;
+    $feed = rss_ticker_resolve_feed($key, is_string($scopeUid) && $scopeUid !== '' ? $scopeUid : null);
 
     return $feed !== null ? (string)$feed['key'] : '';
 }
 
-function rotation_glance_resolve_rss_key(string $key): string
+function rotation_glance_resolve_rss_key(string $key, ?string $scopeUserId = null): string
 {
     $key = trim($key);
     if ($key === '' || $key === '_off') {
         return $key;
     }
     require_once __DIR__ . '/rss_ticker_lib.php';
-    $feed = rss_ticker_resolve_feed($key);
+    $feed = rss_ticker_resolve_feed($key, $scopeUserId);
 
     return $feed !== null ? (string)$feed['key'] : '';
 }
@@ -416,17 +423,20 @@ function rotation_glance_resolve_rss_key(string $key): string
  */
 function rotation_screen_glance_headlines(string $screen): array
 {
+    require_once __DIR__ . '/users_lib.php';
+    $scopeUid = users_screen_assignments()[rotation_normalize_screen_key($screen)] ?? null;
+    $scopeUid = is_string($scopeUid) && $scopeUid !== '' ? $scopeUid : null;
     $panel1 = [
         'active' => (bool)cfg('glance.SHOW_HEADLINES_1', true),
         'title' => trim((string)cfg('glance.HEADLINES_1_TITLE', 'GVNext')),
         'page_url' => trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/')),
-        'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_1_RSS', '')),
+        'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_1_RSS', ''), $scopeUid),
         'max' => max(3, min(8, (int)cfg('glance.HEADLINES_1_MAX', 5))),
     ];
     $panel2 = [
         'active' => (bool)cfg('glance.SHOW_HEADLINES_2', true),
         'title' => trim((string)cfg('glance.HEADLINES_2_TITLE', 'News')),
-        'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_2_RSS', '')),
+        'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_2_RSS', ''), $scopeUid),
         'max' => max(3, min(8, (int)cfg('glance.HEADLINES_2_MAX', 5))),
     ];
     if ($panel1['rss'] === '_off') {
@@ -450,7 +460,7 @@ function rotation_screen_glance_headlines(string $screen): array
             $panel1['page_url'] = $h1Page;
         }
         if (array_key_exists('glance_h1_rss', $scr)) {
-            $h1Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h1_rss']);
+            $h1Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h1_rss'], $scopeUid);
             if ($h1Rss === '_off') {
                 $panel1['rss'] = '';
             } elseif ($h1Rss !== '') {
@@ -466,7 +476,7 @@ function rotation_screen_glance_headlines(string $screen): array
             $panel2['title'] = $h2Title;
         }
         if (array_key_exists('glance_h2_rss', $scr)) {
-            $h2Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h2_rss']);
+            $h2Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h2_rss'], $scopeUid);
             if ($h2Rss === '_off') {
                 $panel2['rss'] = '';
                 $panel2['active'] = false;

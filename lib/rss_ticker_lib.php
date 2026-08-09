@@ -8,7 +8,7 @@ require_once __DIR__ . '/rotation_lib.php';
 require_once __DIR__ . '/security_lib.php';
 
 /** @return array{key:string,name:string,url:string}|null */
-function rss_ticker_resolve_feed(string $feedKey): ?array
+function rss_ticker_resolve_feed(string $feedKey, ?string $scopeUserId = null): ?array
 {
     require_once __DIR__ . '/users_lib.php';
     $key = admin_normalize_registry_key($feedKey);
@@ -16,6 +16,14 @@ function rss_ticker_resolve_feed(string $feedKey): ?array
         return null;
     }
     $registry = rss_feed_registry();
+    if ($scopeUserId === null && function_exists('admin_display_scope_user_id')) {
+        $scopeUserId = admin_display_scope_user_id();
+    }
+    if ($scopeUserId !== null && $scopeUserId !== '') {
+        $registry = admin_filter_registry_for_user($registry, $scopeUserId);
+    } else {
+        $registry = admin_filter_registry_for_user($registry, null);
+    }
     $resolved = admin_registry_resolve_key($registry, $key);
     if ($resolved === null || !isset($registry[$resolved]) || !is_array($registry[$resolved])) {
         return null;
@@ -110,7 +118,7 @@ function rss_ticker_headlines(string $feedKey, int $maxItems = 12): array
             return is_file($cacheFile) ? rss_ticker_parse_feed((string)file_get_contents($cacheFile), $maxItems) : [];
         }
         $ch = curl_init($feed['url']);
-        curl_setopt_array($ch, [
+        curl_setopt_array($ch, array_merge([
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 12,
@@ -118,7 +126,7 @@ function rss_ticker_headlines(string $feedKey, int $maxItems = 12): array
             CURLOPT_MAXREDIRS => 4,
             CURLOPT_USERAGENT => 'HomeSignage/1.0 (news ticker)',
             CURLOPT_ENCODING => '',
-        ]);
+        ], signage_curl_tls_options()));
         $body = curl_exec($ch);
         $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         if ($body !== false && $code === 200) {

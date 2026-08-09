@@ -94,9 +94,15 @@ function cached_get(string $url, string $key): ?string
     $f = CACHE_DIR . "/$key.dat";
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) return (string)file_get_contents($f);
     $ch = curl_init($url);
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>5,
-        CURLOPT_TIMEOUT=>12, CURLOPT_FOLLOWLOCATION=>true, CURLOPT_MAXREDIRS=>4,
-        CURLOPT_USERAGENT=>'HomeSignage/1.0 (RSS board)', CURLOPT_ENCODING=>'']);
+    curl_setopt_array($ch, array_merge([
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 4,
+        CURLOPT_USERAGENT => 'HomeSignage/1.0 (RSS board)',
+        CURLOPT_ENCODING => '',
+    ], signage_curl_tls_options()));
     $body = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch); curl_close($ch);
     if ($body !== false && $code === 200) { @file_put_contents($f, $body, LOCK_EX); return $body; }

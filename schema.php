@@ -54,6 +54,8 @@ function admin_schema(): array
         'security' => ['title' => 'Security', 'fields' => [
             ['key' => 'ALLOW_PRIVATE_FETCH', 'label' => 'Allow private URL fetches', 'type' => 'bool', 'default' => false,
              'help' => 'Lets RSS/ICS boards fetch http(s) URLs on private LAN IPs. Leave off on public servers.'],
+            ['key' => 'VERIFY_TLS', 'label' => 'Verify TLS on outbound fetches', 'type' => 'bool', 'default' => false,
+             'help' => 'Off accepts self-signed HTTPS certs for RSS, calendar ICS/CalDAV, and glance headline fetches. Turn on only with publicly trusted certs.'],
             ['key' => 'ADMIN_IDLE_MINUTES', 'label' => 'Admin idle timeout (minutes)', 'type' => 'number', 'default' => 480,
              'help' => 'Auto-logout after inactivity (minimum 15). Default 480 = 8 hours.'],
             ['key' => 'SSO_ENABLED', 'label' => 'Enable SSO login', 'type' => 'bool', 'default' => false,

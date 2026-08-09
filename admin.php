@@ -401,7 +401,8 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
     $saveWarnFlash = null;
     $saveWarnFlashOk = true;
     $rotationPageWrites = [];
-    $applyBoardSave = function (array $conf) use ($board, $schema, $rotationSuperFieldKeys, &$errors, &$saveWarnFlash, &$saveWarnFlashOk, &$rotationPageWrites) {
+    $registryKeyRenames = [];
+    $applyBoardSave = function (array $conf) use ($board, $schema, $rotationSuperFieldKeys, &$errors, &$saveWarnFlash, &$saveWarnFlashOk, &$rotationPageWrites, &$registryKeyRenames) {
     foreach ($schema[$board]['fields'] as $f) {
         if (!admin_can_board_settings($board) && $f['type'] !== 'rows') {
             continue;
@@ -570,7 +571,13 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                 if ($keyed && $scalar) {
                     $outV = admin_merge_owned_scalar_map($existingRows, $outV);
                 } elseif ($keyed) {
-                    $outV = admin_merge_owned_map($existingRows, $outV);
+                    $keyRenames = [];
+                    $outV = admin_merge_owned_map($existingRows, $outV, $keyRenames);
+                    if ($board === 'rss' && $name === 'FEEDS' && $keyRenames !== []) {
+                        foreach ($keyRenames as $from => $to) {
+                            $registryKeyRenames[(string)$from] = (string)$to;
+                        }
+                    }
                 } elseif (!admin_is_super() || $outV !== []) {
                     $outV = admin_merge_owned_list($existingRows, $outV);
                 }
@@ -1146,6 +1153,15 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                     }
                 }
             } elseif ($board === 'rss') {
+                if ($registryKeyRenames !== []) {
+                    $parts = [];
+                    foreach ($registryKeyRenames as $from => $to) {
+                        $parts[] = $from . ' → ' . $to;
+                    }
+                    $extra = ($extra !== '' ? $extra . ' ' : '')
+                        . 'Renamed duplicate feed keys: ' . implode(', ', $parts)
+                        . ' — use the new key in rotation (rss.php?feed=' . rawurlencode((string)end($registryKeyRenames)) . ').';
+                }
                 $screens = admin_filter_deploy_screens(admin_deploy_screens_from_post($_POST));
                 if ($screens !== []) {
                     $parts = [];
