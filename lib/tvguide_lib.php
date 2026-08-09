@@ -1343,6 +1343,48 @@ function tvguide_channel_number_for(array $row): string
     return '';
 }
 
+/**
+ * Admin table rows: every lineup station with saved number filled in.
+ *
+ * @param list<array<string,mixed>> $lineupChannels
+ * @return list<array{station_id:string,callsign:string,affiliate:string,logo:string,number:string}>
+ */
+function tvguide_admin_channel_number_rows(array $lineupChannels): array
+{
+    $map = tvguide_channel_number_map();
+    $rows = [];
+    foreach ($lineupChannels as $ch) {
+        $sid = trim((string)($ch['station_id'] ?? ''));
+        $call = tvguide_callsign_short((string)($ch['callsign'] ?? ''));
+        $callU = strtoupper($call);
+        $num = '';
+        if ($sid !== '' && isset($map['station'][$sid])) {
+            $num = $map['station'][$sid];
+        } elseif ($callU !== '' && isset($map['callsign'][$callU])) {
+            $num = $map['callsign'][$callU];
+        }
+        $rows[] = [
+            'station_id' => $sid,
+            'callsign' => $call,
+            'affiliate' => trim((string)($ch['affiliate'] ?? '')),
+            'logo' => trim((string)($ch['logo'] ?? '')),
+            'number' => $num,
+        ];
+    }
+
+    usort($rows, static function (array $a, array $b): int {
+        $na = ($a['number'] !== '' && ctype_digit($a['number'])) ? (int)$a['number'] : PHP_INT_MAX;
+        $nb = ($b['number'] !== '' && ctype_digit($b['number'])) ? (int)$b['number'] : PHP_INT_MAX;
+        if ($na !== $nb) {
+            return $na <=> $nb;
+        }
+
+        return strcasecmp($a['callsign'], $b['callsign']);
+    });
+
+    return $rows;
+}
+
 function tvguide_callsign_short(string $callsign): string
 {
     $callsign = strtoupper(trim($callsign));

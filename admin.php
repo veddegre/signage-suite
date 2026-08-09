@@ -2392,6 +2392,7 @@ $tvguideActivePage = 'main';
 $tvguideLineups = [];
 $tvguideLineupChannels = [];
 $tvguideLineupError = null;
+$tvguideChannelNumberRows = [];
 if ($board === 'tvguide') {
     $tvguidePages = admin_filter_owned_map(tvguide_admin_pages($rawConf));
     $tvguideActivePage = tvguide_normalize_page_key((string)($_GET['page'] ?? ''));
@@ -2402,6 +2403,7 @@ if ($board === 'tvguide') {
         $tvguideLineups = tvguide_sd_lineups($tvguideLineupError);
         if (tvguide_lineup_id() !== '') {
             $tvguideLineupChannels = tvguide_lineup_channels_for_admin($tvguideLineupError);
+            $tvguideChannelNumberRows = tvguide_admin_channel_number_rows($tvguideLineupChannels);
         }
     }
 }
@@ -6256,10 +6258,60 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <div class="field-grid">
                 <?php foreach ($b['fields'] as $f):
                   if (!in_array($f['key'], $tvguideBoardKeys, true)) continue;
+                  if ($f['key'] === 'CHANNEL_NUMBERS') continue;
                   $val = current_val($rawConf, $board, $f['key']); ?>
                   <div class="field"><?php admin_field($f, $val, $board); ?></div>
                 <?php endforeach; ?>
               </div>
+
+              <div class="field" style="margin-top:22px">
+                <label class="l">Your channel numbers</label>
+                <div class="help" style="margin:6px 0 12px">
+                  Enter the channel numbers from <strong>your cable/box guide</strong> (not the 3.1 / 8.1 broadcast dots).
+                  The wall shows <strong>your # · logo · callsign</strong> and sorts rows by these numbers.
+                  Leave blank for stations you do not use.
+                </div>
+                <?php if ($tvguideLineupChannels === []): ?>
+                <div class="help" style="padding:12px 14px;border:1px dashed var(--hairline);border-radius:10px">
+                  Load your lineup first — set <strong>Lineup ID</strong> above, Save, then click <strong>Test connection</strong>.
+                </div>
+                <?php else: ?>
+                <div class="rows-scroll">
+                  <table class="rows" data-field="CHANNEL_NUMBERS">
+                    <thead><tr>
+                      <th style="width:52px"></th>
+                      <th>Callsign</th>
+                      <th>Network</th>
+                      <th style="width:120px">Your #</th>
+                    </tr></thead>
+                    <tbody>
+                      <?php foreach ($tvguideChannelNumberRows as $ri => $cnRow): ?>
+                      <tr>
+                        <td style="text-align:center;vertical-align:middle">
+                          <?php if (($cnRow['logo'] ?? '') !== ''): ?>
+                          <img src="<?= h((string)$cnRow['logo']) ?>" alt="" style="width:36px;height:36px;object-fit:contain;border-radius:6px;background:var(--harbor)">
+                          <?php else: ?>
+                          <span style="display:inline-flex;width:36px;height:36px;align-items:center;justify-content:center;border-radius:6px;background:var(--harbor);color:var(--mist);font-size:11px;font-weight:700"><?= h(strtoupper(substr((string)($cnRow['affiliate'] ?: $cnRow['callsign']), 0, 3))) ?></span>
+                          <?php endif; ?>
+                        </td>
+                        <td style="vertical-align:middle;font-weight:600">
+                          <input type="hidden" name="CHANNEL_NUMBERS[<?= (int)$ri ?>][_key]" value="<?= h((string)$cnRow['callsign']) ?>">
+                          <input type="hidden" name="CHANNEL_NUMBERS[<?= (int)$ri ?>][station_id]" value="<?= h((string)$cnRow['station_id']) ?>">
+                          <?= h((string)$cnRow['callsign']) ?>
+                        </td>
+                        <td style="vertical-align:middle;color:var(--mist)"><?= h(strtoupper((string)($cnRow['affiliate'] ?: '—'))) ?></td>
+                        <td><input type="text" name="CHANNEL_NUMBERS[<?= (int)$ri ?>][number]"
+                                   value="<?= h((string)$cnRow['number']) ?>" inputmode="numeric"
+                                   placeholder="e.g. 35" style="width:100%;text-align:center"></td>
+                      </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="help" style="margin-top:8px">Example: WGVU → <code>35</code>, WOTV → <code>41</code>, WXMI → <code>17</code>. Save at the bottom of the page.</div>
+                <?php endif; ?>
+              </div>
+
               <?php if ($tvguideLineups !== []): ?>
               <datalist id="tvguideLineups">
                 <?php foreach ($tvguideLineups as $lu): ?>

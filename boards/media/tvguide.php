@@ -213,17 +213,24 @@ function tvguide_hour_label(int $hour): string
         <?php endforeach; ?>
 
         <?php foreach ($rows as $row):
-            $badge = tvguide_row_channel_badge($row);
-            $sub = tvguide_row_channel_subtitle($row);
             $callsign = tvguide_callsign_short((string)($row['callsign'] ?? ''));
             $customNum = tvguide_channel_number_for($row);
             $netTone = tvguide_affiliate_tone((string)($row['affiliate'] ?? ''));
             $blocks = is_array($row['blocks'] ?? null) ? $row['blocks'] : [];
-            $showBadge = $badge !== '' && ($channelLabelMode !== 'affiliate' || $customNum !== '');
             $logoUrl = tvguide_row_channel_logo_url($row);
+            if ($customNum !== ''):
+                $badge = $customNum;
+                $sub = '';
+            else:
+                $badge = tvguide_row_channel_badge($row);
+                $sub = tvguide_row_channel_subtitle($row);
+                $showBadge = $badge !== '' && ($channelLabelMode !== 'affiliate' || $customNum !== '');
+            endif;
         ?>
         <div class="ch net-<?= h($netTone) ?>">
-          <?php if ($showBadge): ?>
+          <?php if ($customNum !== ''): ?>
+          <div class="num"><?= h($customNum) ?></div>
+          <?php elseif (!empty($showBadge)): ?>
           <div class="num"><?= h($badge) ?></div>
           <?php endif; ?>
           <?php if ($logoUrl !== ''): ?>
@@ -232,16 +239,15 @@ function tvguide_hour_label(int $hour): string
           <div class="logo fallback" aria-hidden="true"><?= h(tvguide_row_channel_logo_fallback($row)) ?></div>
           <?php endif; ?>
           <div class="id">
-            <?php if ($channelLabelMode === 'custom'): ?>
+            <?php if ($customNum !== ''): ?>
+            <div class="call"><?= h($callsign !== '' ? $callsign : (string)($row['name'] ?? '')) ?></div>
+            <?php elseif ($channelLabelMode === 'custom'): ?>
             <div class="call"><?= h($callsign !== '' ? $callsign : ($sub !== '' ? $sub : (string)($row['name'] ?? ''))) ?></div>
             <?php $affiliate = trim((string)($row['affiliate'] ?? '')); if ($affiliate !== ''): ?>
             <div class="net"><?= h(strtoupper($affiliate)) ?></div>
             <?php endif; ?>
             <?php elseif ($channelLabelMode === 'affiliate' && $callsign !== ''): ?>
             <div class="call"><?= h($callsign) ?></div>
-            <?php if ($customNum !== '' && $sub !== ''): ?>
-            <div class="net"><?= h($sub) ?></div>
-            <?php endif; ?>
             <?php else: ?>
             <div class="call"><?= h($badge !== '' ? $badge : ($callsign !== '' ? $callsign : (string)($row['name'] ?? ''))) ?></div>
             <?php if ($sub !== ''): ?>
