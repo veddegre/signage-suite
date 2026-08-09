@@ -688,11 +688,40 @@ EOF
   fi
 fi
 
+if [[ -f "$SCRIPT_DIR/scripts/signage-apply-phantom-pointer-rules.sh" ]]; then
+  echo "==> Applying phantom pointer udev rules (Pi HDMI / CEC)"
+  bash "$SCRIPT_DIR/scripts/signage-apply-phantom-pointer-rules.sh"
+fi
+
 echo "==> Writing systemd service"
+SIGNAGE_AFTER="network-online.target systemd-user-sessions.service seatd.service"
+if command -v ydotoold >/dev/null 2>&1; then
+  echo "==> Writing ydotoold service"
+  cat > /etc/systemd/system/signage-ydotoold.service <<EOF
+[Unit]
+Description=ydotool daemon for signage kiosk
+DefaultDependencies=no
+Before=signage.service
+After=dev-uinput.device systemd-udev-settle.service
+
+[Service]
+User=$KIOSK_USER
+Group=$KIOSK_USER
+SupplementaryGroups=input video render
+ExecStart=$(command -v ydotoold)
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  SIGNAGE_AFTER="$SIGNAGE_AFTER signage-ydotoold.service"
+fi
+
 cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
 Description=Signage kiosk (cage + Chromium)
-After=network-online.target systemd-user-sessions.service seatd.service
+After=$SIGNAGE_AFTER
 Wants=network-online.target seatd.service
 
 [Service]
@@ -830,6 +859,10 @@ fi
 
 systemctl daemon-reload
 systemctl enable signage.service
+if [[ -f /etc/systemd/system/signage-ydotoold.service ]]; then
+  systemctl enable signage-ydotoold.service
+  systemctl restart signage-ydotoold.service 2>/dev/null || true
+fi
 if [[ $AUTO_UPDATE -eq 1 ]] && [[ -x /usr/local/bin/signage-kiosk-update ]] && [[ -x /usr/local/bin/signage-kiosk-maint ]]; then
   systemctl enable signage-update.timer signage-maint.timer
   systemctl start signage-update.timer signage-maint.timer

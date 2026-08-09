@@ -201,17 +201,16 @@ Setup installs a transparent cursor theme and tries to install `ydotool` (apt, B
 
 ```bash
 cd ~/signage-suite && git pull
-sudo bash scripts/install-ydotool.sh
-sudo bash scripts/install-signage-blank-cursor.sh
-sudo install -m 755 scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
-sudo bash setup-kiosk.sh --skip-apt --server=https://YOUR-SERVER --screen=YOURSCREEN
-sudo systemctl restart signage
+sudo bash scripts/signage-fix-pointer.sh
 ```
 
-Diagnose pointer devices:
+That installs `libinput-tools`, ignores phantom **Pi HDMI / CEC** pointer devices (the usual cause when no mouse is plugged in), starts **`ydotoold`**, and restarts the kiosk.
+
+Diagnose:
 
 ```bash
 sudo bash scripts/signage-diagnose-pointer.sh
+libinput list-devices
 ```
 
 ### Phantom pointer (no mouse plugged in)
@@ -226,7 +225,7 @@ If you see a non-mouse device with `pointer` (e.g. `vc4-hdmi-0`), ignore it with
 
 ```bash
 sudo tee /etc/udev/rules.d/99-signage-ignore-hdmi-pointer.rules <<'EOF'
-ACTION!="remove", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{NAME}=="vc4-hdmi-0"
+ACTION!="remove", SUBSYSTEM=="input", ATTRS{name}=="vc4-hdmi-0", ENV{LIBINPUT_IGNORE_DEVICE}="1"
 EOF
 sudo udevadm control --reload-rules
 sudo udevadm trigger

@@ -4,6 +4,7 @@ set -euo pipefail
 
 if command -v ydotool >/dev/null 2>&1; then
   echo "ydotool already installed: $(command -v ydotool)"
+  install_uinput_udev
   exit 0
 fi
 
