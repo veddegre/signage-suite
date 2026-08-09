@@ -6,7 +6,7 @@ Turn a dedicated Linux box into a fullscreen Chromium display pointed at your si
 |---|---|
 | **Script** | [`setup-kiosk.sh`](../setup-kiosk.sh) at the repo root |
 | **OS** | Raspberry Pi OS Lite (Bookworm+) or Ubuntu Server 24.04+ |
-| **Hardware** | Pi 4/5, or an x86 mini PC / NUC |
+| **Hardware** | **Recommended:** x86 mini PC / NUC (8 GB+). **Pi:** Raspberry Pi **5** (8 GB) for video & advanced boards; Pi 4 — basic playlists only |
 | **Display** | Boards are designed at **1920×1080** |
 
 ---
@@ -20,6 +20,35 @@ Turn a dedicated Linux box into a fullscreen Chromium display pointed at your si
 3. On the kiosk machine: a fresh OS install, network, and a user you can `sudo` with (script uses `$SUDO_USER`, often `pi` or your login).
 
 See also: [HTTPS and TLS](rotation-and-deployment.md#https-and-tls) — server certs, reverse proxies, and when to use `--strict-ssl`.
+
+---
+
+## Hardware requirements
+
+**Recommended overall:** an **x86 mini PC or NUC** (Intel N100 / i3 class or better, **8 GB RAM**, SSD) running **Ubuntu Server 24.04+**. More CPU, GPU, and memory headroom for iframe dashboards (Grafana, Splunk), live webcams, animated maps, and YouTube live embeds in one rotation.
+
+**Raspberry Pi:** supported, but tiered by model.
+
+| Tier | Hardware | Good for |
+|------|----------|----------|
+| **Recommended Pi** | **Raspberry Pi 5** (prefer **8 GB**), official **5 V / 5 A** PSU | Full rotation including **video**, **live webcams**, **animated map boards**, moderate iframe load |
+| **Basic Pi** | Raspberry Pi **4** (4 GB+) | Static boards — weather, slides, RSS, Zabbix API walls, simple rotation **without** heavy canvas, live video, or YouTube embeds |
+| **Not recommended** | Pi 3 / Zero | Kiosk use |
+
+### Advanced boards (Pi 5 or x86)
+
+These need **Pi 5 or better**, or **x86** — a Pi 4 will stutter, spin, or never finish loading:
+
+| Category | Examples |
+|----------|----------|
+| **Video** | `video.php` **YouTube live** embeds; long local 1080p files in heavy playlists |
+| **Live webcams** | WetMet / GRPM, EarthCam iframe, Muskegon HLS |
+| **Animated maps** | Cloudflare / SANS / IODA attack & heat maps (canvas + Leaflet) |
+| **Heavy iframes** | Grafana, Splunk published, Power BI, `web.php` embeds |
+
+**Best practice for on-demand YouTube:** download on the **server** with `php video.php fetch` and play the local MP4 — works on Pi 4 and Pi 5 ([video-youtube.md](video-youtube.md)).
+
+**Playlist design:** even on Pi 5 or x86, avoid stacking many heavy iframe boards back-to-back; use sensible dwell times and **`RELOAD_SEC`** on embed boards ([Freezes](#freezes-black-screen-or-console-text) below).
 
 ---
 
@@ -194,9 +223,7 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ## Map boards on Pi (attack / heat animations)
 
-Animated map boards (Cloudflare attack maps, SANS DShield heatmaps, IODA) use a full-screen canvas at 60 fps on desktop. A **Pi 4 kiosk** is much slower — stuttery arcs and heat pulses are normal without tuning.
-
-**Server-side fix (automatic):** boards load `vendor/signage-map-canvas.js`, which detects ARM/Linux kiosks and:
+Animated map boards (Cloudflare attack maps, SANS DShield heatmaps, IODA) use a full-screen canvas at 60 fps on desktop. A **Pi 4** kiosk is underpowered — use **Pi 5 or x86** (see [Hardware requirements](#hardware-requirements)). Boards auto-tune on ARM/Linux kiosks:
 
 - Caps canvas resolution (DPR 1)
 - Limits redraws to ~24 fps (adaptive if still slow)
@@ -216,11 +243,21 @@ If still choppy: lower **Max flows** on attack maps in admin, or use **scale 1**
 
 ### GRPM / WetMet webcam (`webcam.php?cam=grpm`)
 
-Uses a **nested iframe** to WetMet’s Video.js player on desktop (signed HLS — not proxied from the server). On **Pi kiosks**, the board auto-switches to a **single `<video>` + hls.js** path with a fresh signed playlist from the server (lighter than iframe-in-iframe). Falls back to the WetMet iframe if direct HLS fails.
+Uses a **nested iframe** to WetMet’s Video.js player on desktop (signed HLS — not proxied from the server). On **Pi kiosks**, the board auto-switches to a **single `<video>` + hls.js** path with a fresh signed playlist from the server (lighter than iframe-in-iframe). Falls back to the WetMet iframe if direct HLS fails. **Requires Pi 5 or x86** for reliable live playback ([Hardware requirements](#hardware-requirements)).
 
 WetMet’s embed also cycles its player about every **5 minutes** — a brief flash can happen even on desktop when using the iframe path.
 
 **Debug:** `?mapperf=low` on the webcam URL forces the direct-HLS path on any browser.
+
+### Video & YouTube on the kiosk
+
+| Source | Pi 4 | Pi 5 | x86 (recommended) |
+|--------|------|------|-------------------|
+| **Downloaded MP4** (`video.php fetch` on server) | OK | OK | OK |
+| **YouTube live embed** (`video.php` + Live stream) | Poor | Often OK | Best |
+| **Live webcam / EarthCam iframe** | Poor | Usually OK | Best |
+
+Use the **Video board**, not Webcam or Websites, for YouTube. Details: [video-youtube.md](video-youtube.md).
 
 ---
 

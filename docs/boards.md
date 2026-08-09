@@ -690,6 +690,8 @@ Useful for poster-style feeds (e.g. portrait artwork).
 
 On-demand videos are downloaded locally with **yt-dlp** (no ads, no embed blocks on headless servers). **YouTube live** streams can embed directly — check **Live stream** in admin or paste a `youtube.com/live/…` URL.
 
+**Kiosk hardware:** YouTube **live embeds** need a **Pi 5 or x86 mini PC** (8 GB+ recommended); Pi 4 is too weak. **Downloaded MP4s** play fine on any Pi. See [kiosk-setup.md → Hardware requirements](kiosk-setup.md#hardware-requirements).
+
 **Registry:** `youtube` URL or local `file` per entry → `video.php?v=<key>`. Per-entry **Access** (owner, users, roles).
 
 Muted by default; uncheck **Mute all videos** in admin if needed. Refresh downloads via admin UI or `php video.php fetch`. Live embed dwell defaults to **300 s** (`video.LIVE_DWELL`).

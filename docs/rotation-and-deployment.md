@@ -275,9 +275,11 @@ Runs in the user’s normal browser — **not** the kiosk launcher. It still req
 
 ## Dedicated kiosk machines
 
-Fullscreen Chromium on a Pi or mini PC is covered in a dedicated guide (install, CEC, cursor, freezes, re-running after updates):
+Fullscreen Chromium on a dedicated box is covered in a dedicated guide (hardware tiers, CEC, cursor, freezes, re-running after updates):
 
 → **[Kiosk machine setup](kiosk-setup.md)** (`setup-kiosk.sh`)
+
+**Hardware:** **x86 mini PC / NUC (8 GB+)** is recommended for full rotations (iframe dashboards, live webcams, animated maps, YouTube live). **Raspberry Pi 5 (8 GB)** is the minimum Pi for those advanced boards; **Pi 4** is OK for basic static playlists only. See [kiosk-setup.md → Hardware requirements](kiosk-setup.md#hardware-requirements).
 
 Short version:
 

@@ -38,8 +38,11 @@
 #   * HDMI-CEC sync (polls admin schedule every minute via board.php?api=cec)
 #   * Pi only: VT switch after boot to hide cage's phantom HDMI cursor
 #
-# Works on Pi 4/5 and on x86 mini PCs running Ubuntu Server — the script
-# handles both distros' Chromium packaging (Ubuntu's is a snap).
+# Hardware: x86 mini PC / NUC (8 GB+) recommended. Pi 5 (8 GB) for video &
+# advanced boards; Pi 4 adequate for basic static rotation only. See docs/kiosk-setup.md.
+#
+# Works on Pi 5 and x86 mini PCs running Ubuntu Server — also Pi 4 for light
+# playlists. The script handles both distros' Chromium packaging (Ubuntu's is a snap).
 
 set -euo pipefail
 
@@ -868,6 +871,11 @@ Useful afterwards:
   systemctl status signage          # is it running
   journalctl -u signage -f          # watch the browser logs
   sudo systemctl restart signage    # manual restart
+
+HARDWARE (see docs/kiosk-setup.md → Hardware requirements)
+  Recommended: x86 mini PC / NUC (8 GB+) for full rotations.
+  Pi 5 (8 GB) minimum for video, live webcams, animated maps, YouTube live.
+  Pi 4: basic static playlists only — not for heavy iframe or live video boards.
 
 AUTO UPDATES (default on)
   $UPDATE_TIME daily — apt upgrade + git pull in SIGNAGE_REPO (if set)

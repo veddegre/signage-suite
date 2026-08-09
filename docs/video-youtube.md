@@ -25,6 +25,7 @@ Use this for ongoing broadcasts (news, events, city cams on YouTube) where downl
 **Notes:**
 
 - Live embeds need outbound HTTPS from the kiosk to YouTube (unlike downloaded files).
+- **Kiosk hardware:** live embeds are heavy (YouTube iframe + player). Use **Pi 5 or x86 mini PC** (8 GB+ recommended); Pi 4 often never finishes loading. Downloaded MP4s (`php video.php fetch`) work on any Pi — see [kiosk-setup.md → Hardware requirements](kiosk-setup.md#hardware-requirements).
 - Some streams block embedding — preview the entry before adding to rotation.
 - Leave **Mute all videos** checked unless the kiosk is set up for unmuted autoplay.
 - **Rotation sync:** the embed does not load until the slot is shown (avoids preload lag). Each time the slot returns, the iframe reloads to the live edge; while on screen it re-syncs about every **8 minutes** on long dwells.

@@ -29,7 +29,7 @@ Manual for **super admins** and **operators** who configure wall displays throug
 |-------|------------|----------------|
 | **Boards** | Individual 1920×1080 pages (weather, Zabbix, slides, …) | Admin sidebar → each board |
 | **Rotation** | Playlist that crossfades boards on a physical display | **Setup → Rotation** (rows in `config/rotation/pages/<screen>.json`) |
-| **Kiosk** | Browser or Pi running `board.php?screen=<key>` fullscreen | [kiosk-setup.md](kiosk-setup.md) |
+| **Kiosk** | Browser, **x86 mini PC**, or **Pi 5** running `board.php?screen=<key>` fullscreen — Pi 4 for basic playlists only | [kiosk-setup.md](kiosk-setup.md) |
 
 Most settings save to **`config/settings.json`**. **Playlist rows** (URLs, dwell, hours, weights) save to **`config/rotation/pages/<screen>.json`** — one file per display. Board PHP files are never edited — only configuration changes.
 
@@ -99,7 +99,7 @@ Operators **own** content for their assigned display(s): slides, rotation playli
 5. **Rotation** — create display keys (`main`, `lobby`, …); build playlists.
 6. **Users** — create operator accounts; assign displays.
 7. **Integrations** — configure API credentials per board (Zabbix, TDX, Grafana, …).
-8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)). If kiosks connect through a reverse proxy, set **Security → Trusted reverse proxies** ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)).
+8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; prefer **x86 mini PC** or **Pi 5 (8 GB)** for video and iframe-heavy playlists ([kiosk-setup.md → Hardware](kiosk-setup.md#hardware-requirements)). Self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)). If kiosks connect through a reverse proxy, set **Security → Trusted reverse proxies** ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)).
 9. **SSO** (optional) — [admin-and-security.md → SSO](admin-and-security.md#sso-setup-entra-id--authentik).
 
 ### Day-to-day tasks

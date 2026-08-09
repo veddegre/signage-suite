@@ -58,7 +58,7 @@ Browse to **admin.php**, create your super admin (one-time key in `config/setup.
 
 ### 3. Point a display at rotation
 
-**Dedicated kiosk** (Pi / mini PC → fullscreen Chromium + optional HDMI-CEC):
+**Dedicated kiosk** (x86 mini PC or Pi 5 recommended → fullscreen Chromium + optional HDMI-CEC):
 
 ```bash
 # Use https:// — required for iframe embeds (EarthCam, WMTA, etc.)
@@ -70,7 +70,7 @@ sudo reboot
 
 Kiosks **ignore self-signed certificate warnings by default** so LAN HTTPS from `setup-server.sh` loads without a browser interstitial. See [HTTPS and TLS](docs/rotation-and-deployment.md#https-and-tls).
 
-→ **[Kiosk machine setup](docs/kiosk-setup.md)** — hardware, CEC, cursor, freezes, re-running after updates
+→ **[Kiosk machine setup](docs/kiosk-setup.md)** — hardware (x86 recommended; Pi 5 for video/advanced), CEC, cursor, freezes, updates
 
 **Or** open any browser / smart TV (HTTPS recommended when using embed boards):
 
@@ -324,7 +324,7 @@ Operators with **multiple displays** assigned (see [Admin & security](#admin--se
 | Doc | Contents |
 |-----|----------|
 | **[docs/user-guide.md](docs/user-guide.md)** | **Admin & operator manual** — roles, sidebar reference, rotation playbook, sharing, integration index, troubleshooting |
-| [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — `setup-kiosk.sh`, HTTPS/self-signed, CEC, cursor, freezes, updates |
+| [docs/kiosk-setup.md](docs/kiosk-setup.md) | **Dedicated display machines** — hardware tiers, `setup-kiosk.sh`, HTTPS/self-signed, CEC, cursor, freezes, updates |
 | [docs/admin-and-security.md](docs/admin-and-security.md) | Roles, display assignment, shared editors, emergency override, ownership & sharing, SSO, hardening |
 | [docs/boards.md](docs/boards.md) | Every board — data sources, setup, rotation URLs |
 | [docs/tdx.md](docs/tdx.md) | **TeamDynamix** — TDAdmin BEID/key, multi-page filters, responsible users/groups, API reference |

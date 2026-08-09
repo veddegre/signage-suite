@@ -989,9 +989,9 @@ ${setup_step}
   4. Optional mobile / test player:
        $player
 
-Kiosk displays (Pi / mini PC):
+Kiosk displays (x86 mini PC or Pi 5 recommended; Pi 4 for basic playlists only):
   sudo bash setup-kiosk.sh "$board"
-  Full guide: docs/kiosk-setup.md (CEC, cursor, freezes, re-run after updates)
+  Full guide: docs/kiosk-setup.md (hardware, CEC, cursor, freezes, re-run after updates)
 
 Security checklist:
   • config/settings.json holds API tokens — keep admin on HTTPS if exposed beyond LAN
