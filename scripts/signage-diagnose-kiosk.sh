@@ -10,6 +10,15 @@ echo
 echo "-- service --"
 systemctl is-active signage.service 2>/dev/null || echo "signage.service not active"
 systemctl show signage.service -p ExecStart,MainPID,ActiveState,SubState --value 2>/dev/null | paste - - - - || true
+if [[ -n "$KIOSK_USER" ]]; then
+  uid="$(id -u "$KIOSK_USER" 2>/dev/null || true)"
+  if [[ -n "$uid" ]]; then
+    echo "user@${uid}.service: $(systemctl is-active "user@${uid}.service" 2>/dev/null || echo inactive)"
+    echo "XDG runtime: $([[ -d /run/user/$uid ]] && echo present || echo MISSING)"
+  fi
+fi
+echo "seatd.sock: $([[ -S /run/seatd.sock || -S /var/run/seatd.sock ]] && echo present || echo missing)"
+echo "DRM: $(ls /dev/dri/card* 2>/dev/null | tr '\n' ' ' || echo none)"
 echo
 
 echo "-- processes --"

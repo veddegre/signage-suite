@@ -43,22 +43,23 @@ signage_kiosk_chromium() {
 CHROMIUM="$(signage_kiosk_chromium || true)"
 if [[ -z "$CHROMIUM" ]]; then
   logger -t signage-kiosk "FATAL: Chromium not found — apt install chromium-browser"
-  signage_kiosk_blackout_tty
   sleep 30
   exit 1
 fi
 
 if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 30
+  signage-kiosk-wait-for-runtime 90
 fi
 if command -v signage-kiosk-wait-for-server >/dev/null; then
   signage-kiosk-wait-for-server 240
 fi
 
-# Phantom HDMI udev rules are the Pi cursor fix — skip ydotool hide-cursor.
-if [[ ! -f /etc/signage/phantom-pointer-fixed ]] \
-   && [[ ! -f /etc/udev/rules.d/99-signage-phantom-pointer.rules ]] \
-   && [[ -x /usr/local/bin/signage-hide-cursor ]]; then
+signage_kiosk_blackout_tty
+
+# Pi: VT switch service (signage-cursor-vt). x86: ydotool parks pointer off-screen.
+if [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null; then
+  :
+elif [[ -x /usr/local/bin/signage-hide-cursor ]]; then
   pkill -u "$(id -u)" -f '^/usr/local/bin/signage-hide-cursor' 2>/dev/null || true
   /usr/local/bin/signage-hide-cursor &
 fi
@@ -70,10 +71,30 @@ fi
 
 logger -t signage-kiosk "starting cage browser=$CHROMIUM url=$KIOSK_URL scale=$SCALE"
 
+launch_url="$KIOSK_URL"
+if command -v signage-kiosk-primary-ip >/dev/null; then
+  KIOSK_LOCAL_IP="$(signage-kiosk-primary-ip 2>/dev/null || true)"
+  if [[ -n "$KIOSK_LOCAL_IP" ]]; then
+    launch_url="$(python3 - "$KIOSK_URL" "$KIOSK_LOCAL_IP" <<'PY'
+import sys
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+url, ip = sys.argv[1], sys.argv[2]
+p = urlparse(url)
+q = parse_qs(p.query, keep_blank_values=True)
+q["kiosk_local_ip"] = [ip]
+print(urlunparse((p.scheme, p.netloc, p.path, p.params, urlencode(q, doseq=True), p.fragment)))
+PY
+)"
+    if command -v signage-kiosk-report-local-ip >/dev/null; then
+      signage-kiosk-report-local-ip 2>/dev/null || true
+    fi
+  fi
+fi
+
 while true; do
   set +e
   cage -- "$CHROMIUM" \
-    --kiosk "$KIOSK_URL" \
+    --kiosk "$launch_url" \
     --force-device-scale-factor="$SCALE" \
     --noerrdialogs \
     --disable-infobars \
@@ -82,6 +103,7 @@ while true; do
     --disable-dev-shm-usage \
     --autoplay-policy=no-user-gesture-required \
     --check-for-update-interval=31536000 \
+    --enable-features=VaapiVideoDecoder \
     --ozone-platform=wayland \
     "${SSL_ARGS[@]}" \
     --start-fullscreen

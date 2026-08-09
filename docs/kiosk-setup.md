@@ -98,7 +98,8 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **signage-cursor-vt.service** | **Pi only** — after boot, waits for the wall to load, then VT switch to hide cage’s phantom HDMI cursor |
-| **Blank cursor theme** | Transparent Xcursor theme (does not remove cage’s compositor pointer on Pi — use VT service above) |
+| **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors; not cage’s compositor pointer) |
+| **signage-hide-cursor** | **x86 only** — ydotool parks pointer off-screen (not installed on Pi) |
 
 On first run, setup **prompts for the signage server** (hostname only — no `/boards` path), **screen name**, **timezone**, and **4K scale**, then **tests** `board.php` before installing. Pass **`--server`**, **`--screen`**, and **`--timezone`** to skip prompts (used by unattended git refresh).
 
@@ -261,6 +262,31 @@ Use the **Video board**, not Webcam or Websites, for YouTube. Details: [video-yo
 
 ---
 
+## Cursor on x86 (mini PC / NUC)
+
+**cage** draws a compositor pointer even with no mouse plugged in. The blank **signage-blank** Xcursor theme hides client-side cursors in Chromium but not cage’s own pointer.
+
+**`setup-kiosk.sh` installs the x86 fix automatically:** **ydotool** + **`signage-hide-cursor`** — a background helper that parks the pointer off-screen every second. This is **not installed on Raspberry Pi** (ydotool can black-screen Pis).
+
+**Check on the box:**
+
+```bash
+command -v ydotool signage-hide-cursor
+pgrep -af 'signage-hide-cursor|ydotoold'
+```
+
+**If the cursor returned after re-running setup:** refresh the x86 player (installs ydotool + hide-cursor again):
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash setup-kiosk.sh --skip-apt
+sudo systemctl restart signage
+```
+
+**Do not use** phantom HDMI udev rules on x86 unless you know you need them — that path is for Pi experiments only.
+
+---
+
 ## Cursor on Raspberry Pi (phantom HDMI pointer)
 
 On many **Pi kiosks**, **cage** draws a compositor pointer from the HDMI/CEC input node (`vc4-hdmi-0`) — **no mouse plugged in**. CSS and blank Xcursor themes cannot remove it.
@@ -414,7 +440,27 @@ Also confirm the new screen key has **pages in its playlist** in admin → Rotat
 
 ## Blank screen until `systemctl restart signage`
 
-Rebooting may not help; only restarting the **signage** service fixes it. Common cause: Chromium launched before the network or signage server was ready, loaded a blank/error page, and stayed running — so systemd thinks everything is fine.
+Rebooting may not help; only restarting the **signage** service fixes it. On **x86 mini PCs / NUCs**, the usual cause is a **VT/DRM race at boot**: cage starts before the kernel attaches scanout to HDMI, so the TV stays black even though `signage.service` is running. Opening another console (tty2) and switching back often “wakes” the display — same effect as `chvt 1`.
+
+**Fix (re-run on each player — installs display prep + boot retry):**
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash setup-kiosk.sh --skip-apt   # VT/DRM prep, user@ linger, boot retry timer
+sudo reboot
+```
+
+What changed:
+
+| Fix | Purpose |
+|-----|---------|
+| **`signage-kiosk-wait-for-display`** (root, before cage) | `chvt 1` + wait for `/dev/dri/card*` |
+| **`user@<uid>.service` + linger** | `/run/user/<uid>` exists before cage (PAM session) |
+| **Removed wrong `XDG_RUNTIME_DIR=/run/user/%U`** | Let PAM set numeric UID path |
+| **`signage-boot-retry.timer`** | At 90s after boot, restart if cage never started |
+| **Snap Chromium** | Waits for `snapd.seeded.service` on Ubuntu |
+
+**Other cause:** Chromium launched before the network or signage server was ready, loaded a blank/error page, and stayed running — systemd thinks everything is fine. The server wait + watchdog heartbeat cover that case.
 
 **Diagnose on the kiosk**
 
@@ -442,7 +488,9 @@ sudo systemctl restart signage
 This installs:
 
 - **Wait for server** before launching Chromium (up to 4 min at boot)
-- **Wait for XDG runtime** before cage starts
+- **Wait for XDG runtime + seatd** before cage starts
+- **Display prep** (`chvt 1`, DRM ready) on x86 before cage
+- **Boot retry** at 90s if cage never started
 - **Watchdog heartbeat check** — restarts if the server responds but the screen has not checked in for ~10 min
 
 ---

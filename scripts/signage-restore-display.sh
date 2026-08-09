@@ -15,7 +15,7 @@ rm -f /etc/signage/phantom-pointer-fixed
 udevadm control --reload-rules 2>/dev/null || true
 udevadm trigger --subsystem-match=input --action=change 2>/dev/null || true
 
-echo "==> Stopping ydotool / hide-cursor"
+echo "==> Stopping pointer helpers"
 systemctl stop signage-ydotoold.service 2>/dev/null || true
 systemctl disable signage-ydotoold.service 2>/dev/null || true
 rm -f /etc/systemd/system/signage-ydotoold.service
@@ -24,7 +24,11 @@ if [[ -n "$uid" ]]; then
   pkill -u "$uid" -f 'signage-hide-cursor' 2>/dev/null || true
   pkill -u "$uid" -x ydotoold 2>/dev/null || true
 fi
-rm -f /usr/local/bin/signage-hide-cursor /usr/local/bin/signage-hide-cursor.disabled
+IS_PI=0
+if [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null; then
+  IS_PI=1
+  rm -f /usr/local/bin/signage-hide-cursor /usr/local/bin/signage-hide-cursor.disabled
+fi
 
 if [[ ! -f /etc/signage/kiosk.conf ]]; then
   echo "Missing /etc/signage/kiosk.conf" >&2
@@ -44,106 +48,31 @@ fi
 SCALE="${KIOSK_SCALE:-1}"
 IGNORE_SSL="${KIOSK_IGNORE_SSL:-1}"
 URL="${KIOSK_URL:-}"
-
-echo "==> Installing original-style signage-kiosk (Vaapi, no ydotool)"
-if [[ "$IGNORE_SSL" == "1" ]]; then
-  cat > /usr/local/bin/signage-kiosk <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-export XCURSOR_THEME=signage-blank
-export XCURSOR_SIZE=24
-
-signage_kiosk_blackout_tty() {
-  if command -v setterm >/dev/null 2>&1; then
-    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
-  fi
-  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
-}
-
-signage_kiosk_blackout_tty
-
-if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 30
-fi
-if command -v signage-kiosk-wait-for-server >/dev/null; then
-  signage-kiosk-wait-for-server 240
-fi
-
-KIOSK_URL="\$1"
-while true; do
-  cage -- "$CHROMIUM" \\
-    --kiosk "\$KIOSK_URL" \\
-    --force-device-scale-factor=$SCALE \\
-    --noerrdialogs \\
-    --disable-infobars \\
-    --disable-session-crashed-bubble \\
-    --disable-features=TranslateUI \\
-    --disable-dev-shm-usage \\
-    --autoplay-policy=no-user-gesture-required \\
-    --check-for-update-interval=31536000 \\
-    --enable-features=VaapiVideoDecoder \\
-    --ozone-platform=wayland \\
-    --ignore-certificate-errors \\
-    --allow-insecure-localhost \\
-    --start-fullscreen || true
-  signage_kiosk_blackout_tty
-  if command -v signage-kiosk-wait-for-server >/dev/null; then
-    signage-kiosk-wait-for-server 60
-  fi
-  sleep 1
-done
-EOF
-else
-  cat > /usr/local/bin/signage-kiosk <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-export XCURSOR_THEME=signage-blank
-export XCURSOR_SIZE=24
-
-signage_kiosk_blackout_tty() {
-  if command -v setterm >/dev/null 2>&1; then
-    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
-  fi
-  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
-}
-
-signage_kiosk_blackout_tty
-
-if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 30
-fi
-if command -v signage-kiosk-wait-for-server >/dev/null; then
-  signage-kiosk-wait-for-server 240
-fi
-
-KIOSK_URL="\$1"
-while true; do
-  cage -- "$CHROMIUM" \\
-    --kiosk "\$KIOSK_URL" \\
-    --force-device-scale-factor=$SCALE \\
-    --noerrdialogs \\
-    --disable-infobars \\
-    --disable-session-crashed-bubble \\
-    --disable-features=TranslateUI \\
-    --disable-dev-shm-usage \\
-    --autoplay-policy=no-user-gesture-required \\
-    --check-for-update-interval=31536000 \\
-    --enable-features=VaapiVideoDecoder \\
-    --ozone-platform=wayland \\
-    --start-fullscreen || true
-  signage_kiosk_blackout_tty
-  if command -v signage-kiosk-wait-for-server >/dev/null; then
-    signage-kiosk-wait-for-server 60
-  fi
-  sleep 1
-done
-EOF
-fi
-chmod +x /usr/local/bin/signage-kiosk
+KIOSK_UID="$(id -u "$KIOSK_USER")"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "==> Installing signage-kiosk launcher"
+if [[ -f "$SCRIPT_DIR/signage-kiosk-launcher.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/signage-kiosk-launcher.sh" /usr/local/bin/signage-kiosk
+else
+  echo "signage-kiosk-launcher.sh not found — re-run setup-kiosk.sh instead." >&2
+  exit 1
+fi
+
+for helper in signage-kiosk-wait-for-server.sh signage-kiosk-wait-for-runtime.sh signage-kiosk-wait-for-display.sh signage-kiosk-boot-retry.sh; do
+  if [[ -f "$SCRIPT_DIR/$helper" ]]; then
+    install -m 755 "$SCRIPT_DIR/$helper" "/usr/local/bin/${helper%.sh}"
+  fi
+done
+
+if [[ "$IS_PI" -eq 0 ]] && [[ -f "$SCRIPT_DIR/signage-hide-cursor.sh" ]]; then
+  echo "==> Restoring x86 cursor hide (signage-hide-cursor)"
+  install -m 755 "$SCRIPT_DIR/signage-hide-cursor.sh" /usr/local/bin/signage-hide-cursor
+fi
+
 SIGNAGE_EXEC_START_POST=""
-if [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null; then
+if [[ "$IS_PI" -eq 1 ]]; then
   if [[ -f "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh" ]]; then
     echo "==> Installing Pi phantom cursor suppress (VT switch)"
     SIGNAGE_QUIET=1 bash "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh"
@@ -152,21 +81,41 @@ if [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree
   fi
 fi
 
+SIGNAGE_AFTER="network-online.target systemd-logind.service systemd-user-sessions.service seatd.service user@${KIOSK_UID}.service"
+SIGNAGE_WANTS="network-online.target seatd.service user@${KIOSK_UID}.service"
+SIGNAGE_REQUIRES="seatd.service"
+SIGNAGE_EXEC_START_PRE=""
+if [[ -x /usr/local/bin/signage-kiosk-wait-for-display ]]; then
+  SIGNAGE_EXEC_START_PRE="ExecStartPre=+/usr/local/bin/signage-kiosk-wait-for-display 45"
+fi
+if [[ "$CHROMIUM" == *"/snap/"* ]] || [[ -x /snap/bin/chromium ]]; then
+  SIGNAGE_AFTER="$SIGNAGE_AFTER snapd.service snapd.seeded.service"
+  SIGNAGE_WANTS="$SIGNAGE_WANTS snapd.seeded.service"
+fi
+
+if command -v loginctl >/dev/null 2>&1; then
+  loginctl enable-linger "$KIOSK_USER" 2>/dev/null || true
+  systemctl start "user@${KIOSK_UID}.service" 2>/dev/null || true
+fi
+
 cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
 Description=Signage kiosk (cage + Chromium)
-After=network-online.target systemd-user-sessions.service seatd.service
-Wants=network-online.target seatd.service
+After=$SIGNAGE_AFTER
+Wants=$SIGNAGE_WANTS
+Requires=$SIGNAGE_REQUIRES
 
 [Service]
 User=$KIOSK_USER
 PAMName=login
 TTYPath=/dev/tty1
+TTYReset=yes
+TTYVTDisallocate=yes
 StandardInput=tty
 StandardOutput=journal
-Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
+${SIGNAGE_EXEC_START_PRE}
 ExecStart=/usr/local/bin/signage-kiosk "$URL"
 ${SIGNAGE_EXEC_START_POST}
 Restart=always

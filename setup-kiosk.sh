@@ -447,6 +447,28 @@ remove_pi_cursor_vt_fix() {
   rm -f /etc/systemd/system/signage-cursor-vt.service /usr/local/bin/signage-suppress-cursor-vt 2>/dev/null || true
 }
 
+install_x86_cursor_hide() {
+  if is_raspberry_pi; then
+    rm -f /usr/local/bin/signage-hide-cursor /usr/local/bin/signage-hide-cursor.disabled 2>/dev/null || true
+    return 0
+  fi
+  echo "==> x86 cursor hide (ydotool — parks pointer off-screen; not safe on Pi)"
+  if [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
+    install -m 755 "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" /usr/local/bin/signage-hide-cursor
+  else
+    echo "==> Warning: scripts/signage-hide-cursor.sh not found." >&2
+  fi
+  if command -v ydotool >/dev/null 2>&1; then
+    echo "==> ydotool already installed: $(command -v ydotool)"
+    return 0
+  fi
+  if [[ $SKIP_APT -eq 0 ]] && [[ -f "$SCRIPT_DIR/scripts/install-ydotool.sh" ]]; then
+    bash "$SCRIPT_DIR/scripts/install-ydotool.sh" || echo "==> Warning: ydotool install failed — cursor may show on x86." >&2
+  else
+    echo "==> Warning: ydotool not installed — re-run setup without --skip-apt to hide the cursor." >&2
+  fi
+}
+
 UPDATE_CAL="$(calendar_time "$UPDATE_TIME")"
 MAINT_CAL="$(calendar_time "$MAINT_TIME")"
 
@@ -535,7 +557,7 @@ else
   echo "==> Warning: scripts/install-signage-blank-cursor.sh not found — cursor may remain visible." >&2
 fi
 
-rm -f /usr/local/bin/signage-hide-cursor /usr/local/bin/signage-hide-cursor.disabled 2>/dev/null || true
+install_x86_cursor_hide
 
 echo "==> Writing /etc/signage/kiosk.conf"
 mkdir -p /etc/signage
@@ -556,101 +578,23 @@ KIOSK_IGNORE_SSL="$IGNORE_SSL"
 EOF
 chmod 644 /etc/signage/kiosk.conf
 
+KIOSK_UID="$(id -u "$KIOSK_USER")"
+
 echo "==> Writing /usr/local/bin/signage-kiosk"
-if [[ $IGNORE_SSL -eq 1 ]]; then
-  cat > /usr/local/bin/signage-kiosk <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-export XCURSOR_THEME=signage-blank
-export XCURSOR_SIZE=24
-
-signage_kiosk_blackout_tty() {
-  if command -v setterm >/dev/null 2>&1; then
-    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
-  fi
-  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
-}
-
-signage_kiosk_blackout_tty
-
-if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 30
-fi
-if command -v signage-kiosk-wait-for-server >/dev/null; then
-  signage-kiosk-wait-for-server 240
-fi
-
-KIOSK_URL="\$1"
-while true; do
-  cage -- "$CHROMIUM" \\
-    --kiosk "\$KIOSK_URL" \\
-    --force-device-scale-factor=$SCALE \\
-    --noerrdialogs \\
-    --disable-infobars \\
-    --disable-session-crashed-bubble \\
-    --disable-features=TranslateUI \\
-    --disable-dev-shm-usage \\
-    --autoplay-policy=no-user-gesture-required \\
-    --check-for-update-interval=31536000 \\
-    --enable-features=VaapiVideoDecoder \\
-    --ozone-platform=wayland \\
-    --ignore-certificate-errors \\
-    --allow-insecure-localhost \\
-    --start-fullscreen || true
-  signage_kiosk_blackout_tty
-  if command -v signage-kiosk-wait-for-server >/dev/null; then
-    signage-kiosk-wait-for-server 60
-  fi
-  sleep 1
-done
-EOF
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-launcher.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-launcher.sh" /usr/local/bin/signage-kiosk
 else
+  echo "==> Warning: scripts/signage-kiosk-launcher.sh not found — using minimal fallback." >&2
   cat > /usr/local/bin/signage-kiosk <<EOF
 #!/usr/bin/env bash
-set -euo pipefail
-export XCURSOR_THEME=signage-blank
-export XCURSOR_SIZE=24
-
-signage_kiosk_blackout_tty() {
-  if command -v setterm >/dev/null 2>&1; then
-    setterm -background black -foreground black -clear all >/dev/tty1 2>/dev/null || true
-  fi
-  printf '\033[40m\033[2J\033[H\033[?25l' >/dev/tty1 2>/dev/null || true
-}
-
-signage_kiosk_blackout_tty
-
-if command -v signage-kiosk-wait-for-runtime >/dev/null; then
-  signage-kiosk-wait-for-runtime 30
-fi
-if command -v signage-kiosk-wait-for-server >/dev/null; then
-  signage-kiosk-wait-for-server 240
-fi
-
-KIOSK_URL="\$1"
-while true; do
-  cage -- "$CHROMIUM" \\
-    --kiosk "\$KIOSK_URL" \\
-    --force-device-scale-factor=$SCALE \\
-    --noerrdialogs \\
-    --disable-infobars \\
-    --disable-session-crashed-bubble \\
-    --disable-features=TranslateUI \\
-    --disable-dev-shm-usage \\
-    --autoplay-policy=no-user-gesture-required \\
-    --check-for-update-interval=31536000 \\
-    --enable-features=VaapiVideoDecoder \\
-    --ozone-platform=wayland \\
-    --start-fullscreen || true
-  signage_kiosk_blackout_tty
-  if command -v signage-kiosk-wait-for-server >/dev/null; then
-    signage-kiosk-wait-for-server 60
-  fi
-  sleep 1
-done
+exec cage -- "$CHROMIUM" --kiosk "\$1" --ozone-platform=wayland --start-fullscreen
 EOF
+  chmod +x /usr/local/bin/signage-kiosk
 fi
-chmod +x /usr/local/bin/signage-kiosk
+
+if [[ $IGNORE_SSL -eq 0 ]]; then
+  echo "==> Note: strict SSL mode — edit /usr/local/bin/signage-kiosk or re-run without --strict-ssl if needed."
+fi
 
 if [[ $WITH_CEC -eq 1 ]]; then
   echo "==> Installing signage-cec-sync"
@@ -691,8 +635,38 @@ else
   remove_pi_cursor_vt_fix
 fi
 
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" /usr/local/bin/signage-kiosk-wait-for-server
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-runtime.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-runtime.sh" /usr/local/bin/signage-kiosk-wait-for-runtime
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-display.sh" ]]; then
+  echo "==> Installing kiosk display prep (VT + DRM)"
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-display.sh" /usr/local/bin/signage-kiosk-wait-for-display
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-boot-retry.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-boot-retry.sh" /usr/local/bin/signage-kiosk-boot-retry
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-primary-ip.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-primary-ip.sh" /usr/local/bin/signage-kiosk-primary-ip
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-report-local-ip.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-report-local-ip.sh" /usr/local/bin/signage-kiosk-report-local-ip
+fi
+
 echo "==> Writing systemd service"
-SIGNAGE_AFTER="network-online.target systemd-user-sessions.service seatd.service"
+SIGNAGE_AFTER="network-online.target systemd-logind.service systemd-user-sessions.service seatd.service user@${KIOSK_UID}.service"
+SIGNAGE_WANTS="network-online.target seatd.service user@${KIOSK_UID}.service"
+SIGNAGE_REQUIRES="seatd.service"
+SIGNAGE_EXEC_START_PRE=""
+if [[ -x /usr/local/bin/signage-kiosk-wait-for-display ]]; then
+  SIGNAGE_EXEC_START_PRE="ExecStartPre=+/usr/local/bin/signage-kiosk-wait-for-display 45"
+fi
+if [[ "$CHROMIUM" == *"/snap/"* ]] || [[ -x /snap/bin/chromium ]]; then
+  SIGNAGE_AFTER="$SIGNAGE_AFTER snapd.service snapd.seeded.service"
+  SIGNAGE_WANTS="$SIGNAGE_WANTS snapd.seeded.service"
+fi
 SIGNAGE_EXEC_START_POST=""
 if is_raspberry_pi && [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
   SIGNAGE_EXEC_START_POST="ExecStartPost=-/bin/systemctl start signage-cursor-vt.service"
@@ -702,17 +676,20 @@ cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
 Description=Signage kiosk (cage + Chromium)
 After=$SIGNAGE_AFTER
-Wants=network-online.target seatd.service
+Wants=$SIGNAGE_WANTS
+Requires=$SIGNAGE_REQUIRES
 
 [Service]
 User=$KIOSK_USER
 PAMName=login
 TTYPath=/dev/tty1
+TTYReset=yes
+TTYVTDisallocate=yes
 StandardInput=tty
 StandardOutput=journal
-Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
+${SIGNAGE_EXEC_START_PRE}
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
 ${SIGNAGE_EXEC_START_POST}
 Restart=always
@@ -819,12 +796,50 @@ WantedBy=timers.target
 EOF
 fi
 
-if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" ]]; then
-  echo "==> Installing kiosk server wait helper"
-  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" /usr/local/bin/signage-kiosk-wait-for-server
+if [[ -x /usr/local/bin/signage-kiosk-boot-retry ]]; then
+  cat > /etc/systemd/system/signage-boot-retry.service <<'EOF'
+[Unit]
+Description=Retry signage kiosk if cage did not start at boot
+After=signage.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/signage-kiosk-boot-retry
+EOF
+  cat > /etc/systemd/system/signage-boot-retry.timer <<'EOF'
+[Unit]
+Description=One-shot signage boot retry (x86 VT/DRM race)
+
+[Timer]
+OnBootSec=120
+Persistent=false
+
+[Install]
+WantedBy=timers.target
+EOF
 fi
-if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-runtime.sh" ]]; then
-  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-runtime.sh" /usr/local/bin/signage-kiosk-wait-for-runtime
+
+if [[ -x /usr/local/bin/signage-kiosk-report-local-ip ]]; then
+  cat > /etc/systemd/system/signage-local-ip.service <<'EOF'
+[Unit]
+Description=Report signage kiosk LAN IP to server
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/signage-kiosk-report-local-ip
+EOF
+  cat > /etc/systemd/system/signage-local-ip.timer <<'EOF'
+[Unit]
+Description=Refresh signage kiosk LAN IP on server (NAT/WAN mismatch)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=3min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
 fi
 
 echo "==> Disabling console getty on tty1 (kiosk owns the display)"
@@ -835,6 +850,7 @@ systemctl enable seatd.service 2>/dev/null || true
 systemctl start seatd.service 2>/dev/null || true
 if command -v loginctl >/dev/null 2>&1; then
   loginctl enable-linger "$KIOSK_USER" 2>/dev/null || true
+  systemctl start "user@${KIOSK_UID}.service" 2>/dev/null || true
 fi
 
 systemctl daemon-reload
@@ -852,6 +868,14 @@ fi
 if [[ -x /usr/local/bin/signage-kiosk-watchdog ]]; then
   systemctl enable signage-watchdog.timer
   systemctl start signage-watchdog.timer
+fi
+if [[ -x /usr/local/bin/signage-kiosk-boot-retry ]]; then
+  systemctl enable signage-boot-retry.timer
+  systemctl start signage-boot-retry.timer
+fi
+if [[ -x /usr/local/bin/signage-kiosk-report-local-ip ]]; then
+  systemctl enable signage-local-ip.timer
+  systemctl start signage-local-ip.timer
 fi
 if [[ $WITH_CEC -eq 1 ]] && [[ -x /usr/local/bin/signage-cec-sync ]]; then
   systemctl enable signage-cec.timer
@@ -906,11 +930,12 @@ HTTPS / SELF-SIGNED CERTS
   Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
-CURSOR (Raspberry Pi — installed automatically on Pi):
-  VT switch runs after boot (~2 min after wall is up). Logs: journalctl -u signage-cursor-vt -f
-  Manual re-run: sudo systemctl start signage-cursor-vt.service
-  Do NOT use ydotool or libinput udev ignore — black screen on many Pis.
-  Cleanup old attempts: sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh --cleanup
+CURSOR
+  Pi: VT switch (signage-cursor-vt.service) ~2 min after wall is up.
+      Logs: journalctl -u signage-cursor-vt -f
+      Do NOT use ydotool or libinput udev ignore on Pi.
+  x86: ydotool + signage-hide-cursor (pointer parked off-screen).
+      Check: pgrep -af 'signage-hide-cursor|ydotoold'
 
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer

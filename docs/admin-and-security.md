@@ -304,4 +304,17 @@ Caddy and Traefik set these by default. For HTTPS termination at the proxy, `X-F
 
 **Security note:** Only list proxies you control. Anyone who can connect **directly** to Apache/nginx on port 80/443 and spoof `X-Forwarded-For` is not affected — headers are ignored unless `REMOTE_ADDR` matches your trusted list.
 
+### Kiosk LAN IP (NAT / hairpin)
+
+When a kiosk loads **`board.php` through your public hostname** (hairpin NAT or off-LAN URL), **Status** still shows the **WAN/NAT address** in `client_ip` — that is the TCP source the server sees.
+
+**LAN IP** is reported separately:
+
+| Source | How |
+|--------|-----|
+| **Browser heartbeat** | `setup-kiosk.sh` adds `kiosk_local_ip=` to the cage URL (from `ip route get` toward your server) |
+| **Kiosk timer** | `signage-local-ip.timer` POSTs to `board.php?api=presence-local` every 3 min if the address changes |
+
+Admin **Status** shows **`192.168.x.x` LAN** with **seen as** WAN underneath when they differ. Re-run `setup-kiosk.sh --skip-apt` on each player after pulling this update.
+
 Full TLS and proxy topology: [rotation-and-deployment.md → HTTPS and TLS](rotation-and-deployment.md#https-and-tls).

@@ -211,6 +211,46 @@ function signage_presence_play_log_merged(array $all, int $limit = 50): array
     return array_slice($events, 0, max(1, $limit));
 }
 
+function signage_presence_sanitize_local_ip(mixed $raw): string
+{
+    $ip = trim((string)$raw);
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
+        return '';
+    }
+
+    return $ip;
+}
+
+/** Update LAN IP only — used by kiosk-side report script (NAT hides REMOTE_ADDR). */
+function signage_presence_touch_local_ip(string $screen, string $localIp): bool
+{
+    $screen = rotation_normalize_screen_key($screen);
+    $localIp = signage_presence_sanitize_local_ip($localIp);
+    if ($localIp === '') {
+        return false;
+    }
+    $now = time();
+
+    signage_json_file_update(signage_presence_path(), function (array $all) use ($screen, $localIp, $now): array {
+        $prev = is_array($all[$screen] ?? null) ? $all[$screen] : [];
+        $prev['screen'] = $screen;
+        $prev['local_ip'] = $localIp;
+        $prev['local_ip_seen'] = $now;
+        if (empty($prev['first_seen'])) {
+            $prev['first_seen'] = $now;
+        }
+        $all[$screen] = $prev;
+
+        return $all;
+    }, [
+        'default' => [],
+        'ensure_dir' => true,
+        'lock_wait_sec' => 3.0,
+    ]);
+
+    return true;
+}
+
 function signage_presence_touch(string $screen, array $payload): void
 {
     $screen = rotation_normalize_screen_key($screen);
@@ -225,6 +265,7 @@ function signage_presence_touch(string $screen, array $payload): void
     if ($pageLabel === '' && $pageUrl !== '') {
         $pageLabel = rotation_page_label($pageUrl);
     }
+    $localIp = signage_presence_sanitize_local_ip($payload['local_ip'] ?? '');
 
     signage_json_file_update(signage_presence_path(), function (array $all) use (
         $screen,
@@ -235,9 +276,17 @@ function signage_presence_touch(string $screen, array $payload): void
         $pageUrl,
         $pageLabel,
         $payload,
-        $ipDetail
+        $ipDetail,
+        $localIp
     ): array {
         $prev = is_array($all[$screen] ?? null) ? $all[$screen] : [];
+        if ($localIp === '') {
+            $localIp = (string)($prev['local_ip'] ?? '');
+        }
+        $localIpSeen = (int)($prev['local_ip_seen'] ?? 0);
+        if ($localIp !== '' && signage_presence_sanitize_local_ip($payload['local_ip'] ?? '') !== '') {
+            $localIpSeen = $now;
+        }
 
         $playsToday = (int)($prev['plays_today'] ?? 0);
         $playsTotal = (int)($prev['plays_total'] ?? 0);
@@ -296,6 +345,8 @@ function signage_presence_touch(string $screen, array $payload): void
             'forwarded_for' => (string)($ipDetail['forwarded_for'] ?? ''),
             'ip_via_proxy' => !empty($ipDetail['via_proxy']),
             'ip_source' => (string)($ipDetail['source'] ?? 'remote_addr'),
+            'local_ip' => $localIp,
+            'local_ip_seen' => $localIpSeen > 0 ? $localIpSeen : null,
         ];
 
         return $all;
@@ -366,6 +417,11 @@ function signage_presence_dashboard(): array
             'remote_addr' => (string)($entry['remote_addr'] ?? ''),
             'forwarded_for' => (string)($entry['forwarded_for'] ?? ''),
             'ip_via_proxy' => !empty($entry['ip_via_proxy']),
+            'local_ip' => (string)($entry['local_ip'] ?? ''),
+            'local_ip_seen' => $entry['local_ip_seen'] ?? null,
+            'local_ip_ago' => signage_presence_format_ago(
+                isset($entry['local_ip_seen']) ? (int)$entry['local_ip_seen'] : null
+            ),
             'now' => [
                 'label' => $nowLabel,
                 'url' => $nowUrl,

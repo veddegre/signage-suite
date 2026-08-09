@@ -97,6 +97,24 @@ if (($_GET['api'] ?? '') === 'presence') {
     exit;
 }
 
+if (($_GET['api'] ?? '') === 'presence-local') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+        $raw = (string)file_get_contents('php://input');
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) {
+            $payload = [];
+        }
+        $ok = signage_presence_touch_local_ip($SCREEN, (string)($payload['local_ip'] ?? ''));
+        echo json_encode(['ok' => $ok]);
+    } else {
+        http_response_code(405);
+        echo json_encode(['ok' => false, 'error' => 'POST required']);
+    }
+    exit;
+}
+
 if (($_GET['api'] ?? '') === 'kiosk-health') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -212,6 +230,10 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   const SHOW_DEBUG = <?= json_encode($showDebug) ?>;
   const KEYBOARD_NAV = <?= json_encode(!empty($runtime['keyboard_nav'])) ?>;
   const SCREEN  = <?= json_encode($runtime['screen']) ?>;
+  const KIOSK_LOCAL_IP = (function () {
+    try { return new URLSearchParams(window.location.search).get('kiosk_local_ip') || ''; }
+    catch (e) { return ''; }
+  })();
   const THEME   = <?= json_encode($signageThemeKey) ?>;
   const FONT    = <?= json_encode($signageFontPackKey) ?>;
   const FRAME_H = <?= (int)$rotationFrameH ?>;
@@ -248,6 +270,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       page_total: PAGES.length,
       status: presenceStatus,
     };
+    if (KIOSK_LOCAL_IP) body.local_ip = KIOSK_LOCAL_IP;
     fetch(presenceQuery(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
