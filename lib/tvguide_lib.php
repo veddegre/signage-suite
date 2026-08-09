@@ -461,6 +461,37 @@ function tvguide_sd_api(string $method, string $path, ?array $body = null, int $
     return $resp;
 }
 
+/** @return list<mixed> */
+function tvguide_sd_rows(mixed $body, string $listKey = 'lineups'): array
+{
+    if (!is_array($body)) {
+        return [];
+    }
+    if (isset($body[$listKey]) && is_array($body[$listKey])) {
+        return array_values($body[$listKey]);
+    }
+    if (array_is_list($body)) {
+        return $body;
+    }
+
+    return [];
+}
+
+function tvguide_map_row_channel(array $mapRow): string
+{
+    $channel = trim((string)($mapRow['channel'] ?? $mapRow['virtualChannel'] ?? ''));
+    if ($channel !== '') {
+        return $channel;
+    }
+    $major = (int)($mapRow['atscMajor'] ?? $mapRow['channelMajor'] ?? 0);
+    $minor = (int)($mapRow['atscMinor'] ?? $mapRow['channelMinor'] ?? 0);
+    if ($major > 0) {
+        return $minor > 0 ? ($major . '.' . $minor) : (string)$major;
+    }
+
+    return '';
+}
+
 /** @return list<array<string,mixed>> */
 function tvguide_sd_lineups(?string &$error = null, bool $forceRefresh = false): array
 {
@@ -486,7 +517,7 @@ function tvguide_sd_lineups(?string &$error = null, bool $forceRefresh = false):
     }
 
     $out = [];
-    foreach ($resp['body'] as $row) {
+    foreach (tvguide_sd_rows($resp['body'], 'lineups') as $row) {
         if (!is_array($row)) {
             continue;
         }
@@ -530,8 +561,11 @@ function tvguide_sd_lineup_channels(string $lineup, ?string &$error = null, bool
     }
 
     $resp = tvguide_sd_api('GET', '/lineups/' . rawurlencode($lineup), null, 45, $error);
+    if ($resp['code'] === 404) {
+        $error = 'Lineup not on your account — add it at schedulesdirect.org first, then paste the Lineup ID here';
+    }
     if ($resp['code'] !== 200 || !is_array($resp['body'])) {
-        $error = tvguide_sd_error_text($resp, 'Could not load lineup channels');
+        $error = $error ?? tvguide_sd_error_text($resp, 'Could not load lineup channels');
         if (is_file($cacheFile)) {
             $cached = json_decode((string)file_get_contents($cacheFile), true);
             if (is_array($cached) && isset($cached['channels'])) {
@@ -566,7 +600,7 @@ function tvguide_sd_lineup_channels(string $lineup, ?string &$error = null, bool
             continue;
         }
         $st = $stations[$sid];
-        $channelNum = trim((string)($mapRow['channel'] ?? ''));
+        $channelNum = tvguide_map_row_channel($mapRow);
         $callsign = trim((string)($st['callsign'] ?? ''));
         $name = trim((string)($st['name'] ?? $callsign));
         $label = $channelNum !== '' ? ($channelNum . ' ' . ($callsign !== '' ? $callsign : $name)) : ($callsign !== '' ? $callsign : $name);
@@ -986,19 +1020,39 @@ function tvguide_test_connection(bool $refreshLineups = true): array
         return ['ok' => false, 'error' => $error ?? 'Authentication failed'];
     }
 
-    $lineups = tvguide_sd_lineups($error, $refreshLineups);
-    $detail = count($lineups) . ' lineup(s) on account';
+    $lineups = tvguide_sd_lineups($lineupErr, $refreshLineups);
+    $lineupCount = count($lineups);
+    $detail = $lineupCount . ' lineup(s) on account';
     $lineup = tvguide_lineup_id();
+    $channelCount = 0;
+    $channelErr = null;
+
+    if ($lineupCount === 0) {
+        $detail .= ' — add a lineup at schedulesdirect.org (Lineups → Add), then Save here';
+    }
+
     if ($lineup !== '') {
-        $channels = tvguide_sd_lineup_channels($lineup, $error, $refreshLineups);
-        $detail .= ' · ' . count($channels['channels']) . ' channel(s) in ' . $lineup;
+        $channels = tvguide_sd_lineup_channels($lineup, $channelErr, $refreshLineups);
+        $channelCount = count($channels['channels']);
+        $detail .= ' · ' . $channelCount . ' channel(s) in ' . $lineup;
+        if ($channelCount === 0 && $channelErr !== null) {
+            $detail .= ' (' . $channelErr . ')';
+        } elseif ($channelCount === 0 && $lineupCount > 0) {
+            $onAccount = array_column($lineups, 'lineup');
+            if (!in_array($lineup, $onAccount, true)) {
+                $detail .= ' — lineup ID not on your account; pick one from the list after Test connection';
+            }
+        }
+    } elseif ($lineupCount > 0) {
+        $detail .= ' · set Lineup ID under Board settings (e.g. ' . ($lineups[0]['lineup'] ?? '') . ')';
     }
 
     return [
         'ok' => true,
         'detail' => $detail,
         'ms' => (int)round((microtime(true) - $t0) * 1000),
-        'lineups' => count($lineups),
+        'lineups' => $lineupCount,
+        'channels' => $channelCount,
     ];
 }
 
