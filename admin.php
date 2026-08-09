@@ -239,8 +239,13 @@ if ($authed && $board === 'video' && isset($_GET['deleted'])) {
 if ($authed && $board === 'video' && isset($_GET['uploaded'])) {
     $uploaded = video_normalize_key((string)$_GET['uploaded']);
     if ($uploaded !== null) {
-        $flash = 'Uploaded video "' . $uploaded . '". '
-            . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+        if (isset($_GET['live'])) {
+            $flash = 'Added live stream "' . $uploaded . '". '
+                . 'Preview it, then add video.php?v=' . $uploaded . ' to rotation (or check deploy on Save).';
+        } else {
+            $flash = 'Uploaded video "' . $uploaded . '". '
+                . (admin_is_super() ? 'Rotation updated on all displays.' : 'Your display rotation was updated.');
+        }
         $flashOk = true;
     }
 }
@@ -510,6 +515,10 @@ if ($authed && ($_POST['action'] ?? '') === 'save' && csrf_ok()) {
                                 $v = $row[$col['key']] ?? '';
                                 if ($v === '') continue;
                                 $obj[$col['key']] = ($col['cast'] ?? '') === 'int' ? (int)$v : $v;
+                            }
+                            if ($board === 'video' && $name === 'VIDEOS' && $obj !== []) {
+                                require_once __DIR__ . '/lib/video_lib.php';
+                                $obj = video_normalize_entry($obj);
                             }
                             if ($obj !== []) {
                                 $prev = is_array($existingRows[$k] ?? null) ? $existingRows[$k] : null;
@@ -1804,6 +1813,46 @@ if ($authed && $board === 'video' && admin_can_board('video')) {
                             header('Location: ?board=video&uploaded=' . rawurlencode((string)$registered['key']));
                             exit;
                         }
+                    }
+                }
+            }
+        }
+    } elseif (($_POST['action'] ?? '') === 'add_video_live') {
+        if (!csrf_ok()) {
+            $flash = 'Session expired — refresh the page and try again.';
+            $flashOk = false;
+        } else {
+            $rawKey = trim((string)($_POST['video_key'] ?? ''));
+            $youtube = trim((string)($_POST['youtube_url'] ?? ''));
+            $title = trim((string)($_POST['video_title'] ?? ''));
+            if ($rawKey === '' && $youtube !== '') {
+                $rawKey = 'live_' . substr(md5($youtube), 0, 8);
+            }
+            $key = video_normalize_key($rawKey);
+            if ($key === null) {
+                $flash = 'Enter a valid key (letters, numbers, hyphen, underscore).';
+                $flashOk = false;
+            } else {
+                $registry = is_array($rawConf['video.VIDEOS'] ?? null) ? $rawConf['video.VIDEOS'] : [];
+                if (admin_registry_find_entry($registry, $key) !== null
+                    && !admin_can_delete_registry_entry($registry, $key)) {
+                    $flash = 'You do not have permission to update that video.';
+                    $flashOk = false;
+                } else {
+                    $extra = $title !== '' ? ['title' => $title] : [];
+                    $registered = video_register_live($key, $youtube, $extra);
+                    if (empty($registered['ok'])) {
+                        $flash = (string)($registered['error'] ?? 'Could not add live stream.');
+                        $flashOk = false;
+                    } else {
+                        $screens = admin_filter_deploy_screens(admin_default_deploy_screens());
+                        foreach ($screens as $screen) {
+                            $sync = video_sync_rotation($screen);
+                            rotation_pages_write($sync['screen'], $sync['pages']);
+                        }
+                        cfg_reload();
+                        header('Location: ?board=video&uploaded=' . rawurlencode((string)$registered['key']) . '&live=1');
+                        exit;
                     }
                 }
             }
@@ -5509,7 +5558,23 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <?php endif; ?>
 
           <div class="upload-box" style="margin-bottom:18px">
-            <h3 style="margin:0 0 10px">Upload video</h3>
+            <h3 style="margin:0 0 10px">Add YouTube live stream</h3>
+            <form method="post" class="upload-row" action="?board=video">
+              <input type="hidden" name="action" value="add_video_live">
+              <input type="hidden" name="board" value="video">
+              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+              <input type="text" name="video_key" placeholder="Key (e.g. news-live)" style="min-width:140px" aria-label="Live stream key">
+              <input type="text" name="video_title" placeholder="Title (optional)" style="min-width:160px" aria-label="Live stream title">
+              <input type="text" name="youtube_url" placeholder="https://youtube.com/live/…" style="min-width:320px" required aria-label="YouTube live URL">
+              <button class="save" type="submit">Add live stream</button>
+            </form>
+            <div class="help" style="margin-top:10px;margin-bottom:0">No file upload — embeds the stream in the browser.
+              Paste a <code>youtube.com/live/…</code> link (or any YouTube URL with <strong>Live stream</strong> checked in the playlist below).
+              Set rotation dwell under <strong>Board settings → Live stream dwell</strong>.</div>
+          </div>
+
+          <div class="upload-box" style="margin-bottom:18px">
+            <h3 style="margin:0 0 10px">Upload local video file</h3>
             <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=video">
               <input type="hidden" name="action" value="upload_video">
               <input type="hidden" name="board" value="video">
@@ -5524,18 +5589,12 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           </div>
 
           <div class="section-title">Video playlist</div>
-          <?php if (admin_is_super()): ?>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
-            and either a YouTube URL or a local filename in <code>videos/</code>. Check <strong>Live stream</strong> (or paste a
-            <code>youtube.com/live/…</code> URL) to embed ongoing broadcasts without downloading. After saving, videos appear on the wall only when
-            listed in <strong>Admin → Rotation</strong> as <code>video.php?v=KEY</code> — or check the box below to add them automatically.</div>
-          <?php else: ?>
-          <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
-            and a <strong>local file</strong> in <code>videos/</code> — upload above or type the filename. YouTube downloads are managed by a super admin.
-            After saving, add videos to your display via the deploy checkbox below or <strong>Admin → Rotation</strong>.</div>
-          <?php endif; ?>
+            and either a <strong>YouTube URL</strong> (live or download) or a local filename in <code>videos/</code>.
+            <?php if (admin_is_super()): ?>Check <strong>Live stream</strong> for ongoing broadcasts, or leave unchecked and use <strong>Fetch</strong> to download.<?php else: ?>Check <strong>Live stream</strong> for YouTube broadcasts — no file needed. Downloading YouTube to disk is super-admin only.<?php endif; ?>
+            After saving, add <code>video.php?v=KEY</code> to rotation or use the deploy checkbox below.</div>
 
-          <div class="video-playlist" id="videoPlaylist" data-field="VIDEOS" data-show-youtube="<?= admin_is_super() ? '1' : '0' ?>">
+          <div class="video-playlist" id="videoPlaylist" data-field="VIDEOS" data-show-youtube="1">
             <?php $vri = 0; foreach ($videoRows as $vk => $row):
               if (!is_array($row)) $row = [];
               $st = $videoStatusByKey[$vk] ?? null;
@@ -5561,21 +5620,17 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <label class="mini">Title (optional)</label>
                   <input type="text" name="VIDEOS[<?= (int)$vri ?>][title]" value="<?= h((string)($row['title'] ?? '')) ?>" placeholder="On-screen title" data-video-title>
                 </div>
-                <?php if (admin_is_super()): ?>
                 <div>
                   <label class="mini">YouTube URL</label>
-                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/watch?v=… or /live/…">
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/live/…" data-video-youtube>
                 </div>
                 <div>
-                  <label class="check" style="margin-top:22px"><input type="checkbox" name="VIDEOS[<?= (int)$vri ?>][live]" value="1"
+                  <label class="check" style="margin-top:22px"><input type="checkbox" name="VIDEOS[<?= (int)$vri ?>][live]" value="1" data-video-live
                     <?= !empty($row['live']) || (trim((string)($row['youtube'] ?? '')) !== '' && str_contains((string)($row['youtube'] ?? ''), '/live/')) ? 'checked' : '' ?>>
                     Live stream (embed, no download)</label>
                 </div>
-                <?php elseif (trim((string)($row['youtube'] ?? '')) !== ''): ?>
-                <input type="hidden" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)$row['youtube']) ?>">
-                <?php endif; ?>
-                <div style="grid-column:<?= admin_is_super() ? '2 / -1' : '1 / -1' ?>">
-                  <label class="mini"><?= admin_is_super() ? 'or local file' : 'Local file' ?></label>
+                <div style="grid-column:2 / -1">
+                  <label class="mini"><?= admin_is_super() ? 'or local file' : 'or local file (optional for live)' ?></label>
                   <input type="text" name="VIDEOS[<?= (int)$vri ?>][file]" value="<?= h((string)($row['file'] ?? '')) ?>" placeholder="lantern.mp4 in videos/">
                 </div>
               </div>
@@ -11145,8 +11200,14 @@ function reindexVideoPlaylist() {
 function bindVideoCard(card) {
   const keyInp = card.querySelector('[data-video-key]');
   const titleInp = card.querySelector('[data-video-title]');
+  const ytInp = card.querySelector('[data-video-youtube]');
+  const liveInp = card.querySelector('[data-video-live]');
   const headStrong = card.querySelector('.video-card-title strong');
   const headCode = card.querySelector('.video-card-title code');
+  function syncLiveFromUrl() {
+    if (!ytInp || !liveInp) return;
+    if (/\/live\//i.test(ytInp.value || '')) liveInp.checked = true;
+  }
   function syncHead() {
     const k = keyInp ? keyInp.value.trim() : '';
     if (headStrong) headStrong.textContent = (titleInp && titleInp.value.trim()) || k || 'New video';
@@ -11160,6 +11221,11 @@ function bindVideoCard(card) {
     titleInp.dataset.bound = '1';
     titleInp.addEventListener('input', syncHead);
   }
+  if (ytInp && !ytInp.dataset.bound) {
+    ytInp.dataset.bound = '1';
+    ytInp.addEventListener('input', function () { syncLiveFromUrl(); syncHead(); });
+  }
+  syncLiveFromUrl();
   syncHead();
 }
 
@@ -11181,7 +11247,6 @@ function addVideoCard() {
   if (!deck) return;
   reindexVideoPlaylist();
   const idx = deck.querySelectorAll('[data-video-card]').length;
-  const showYoutube = deck.dataset.showYoutube === '1';
   const card = document.createElement('div');
   card.className = 'video-card';
   card.setAttribute('data-video-card', '');
@@ -11194,18 +11259,13 @@ function addVideoCard() {
     '<div class="video-card-grid">' +
       '<div><label class="mini">Key</label><input type="text" name="VIDEOS[' + idx + '][_key]" placeholder="lantern" required data-video-key></div>' +
       '<div><label class="mini">Title (optional)</label><input type="text" name="VIDEOS[' + idx + '][title]" placeholder="On-screen title" data-video-title></div>' +
-      (showYoutube
-        ? '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=… or /live/…"></div>' +
-          '<div><label class="check" style="margin-top:22px"><input type="checkbox" name="VIDEOS[' + idx + '][live]" value="1"> Live stream (embed, no download)</label></div>'
-        : '') +
-      '<div style="grid-column:' + (showYoutube ? '2 / -1' : '1 / -1') + '"><label class="mini">' +
-        (showYoutube ? 'or local file' : 'Local file') +
-      '</label><input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
+      '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/live/…" data-video-youtube></div>' +
+      '<div><label class="check" style="margin-top:22px"><input type="checkbox" name="VIDEOS[' + idx + '][live]" value="1" data-video-live> Live stream (embed, no download)</label></div>' +
+      '<div style="grid-column:2 / -1"><label class="mini">or local file</label>' +
+      '<input type="text" name="VIDEOS[' + idx + '][file]" placeholder="lantern.mp4 in videos/"></div>' +
     '</div>' +
     entrySharingHtml('VIDEOS[' + idx + ']', '', [], []) +
-    '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>' +
-      (showYoutube ? 'Save, then fetch or upload file' : 'Save after adding a file in videos/') +
-    '</span></div>';
+    '<div class="video-card-meta"><span class="pill warn">Not on rotation</span><span>Save — live streams need no file</span></div>';
   deck.appendChild(card);
   bindVideoCard(card);
   bindVideoCardDrag(card, deck);

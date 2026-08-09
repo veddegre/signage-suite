@@ -20,10 +20,31 @@ function video_dir(): string
 
 function video_registry(): array
 {
-    return cfg('video.VIDEOS', [
+    $registry = cfg('video.VIDEOS', [
         'drone'   => ['title' => 'Grand Haven Drone Reel', 'youtube' => 'https://www.youtube.com/watch?v=REPLACE_ME'],
         'ambient' => ['title' => '', 'youtube' => 'https://www.youtube.com/watch?v=REPLACE_ME_TOO'],
     ]);
+    if (!is_array($registry)) {
+        return [];
+    }
+    foreach ($registry as $k => $v) {
+        if (is_array($v)) {
+            $registry[$k] = video_normalize_entry($v);
+        }
+    }
+
+    return $registry;
+}
+
+/** Normalize playlist row flags after load or save. */
+function video_normalize_entry(array $v): array
+{
+    $yt = trim((string)($v['youtube'] ?? ''));
+    if ($yt !== '' && preg_match('#/live/#i', $yt)) {
+        $v['live'] = true;
+    }
+
+    return $v;
 }
 
 function video_registry_for_display(): array
@@ -327,6 +348,67 @@ function video_register_upload(string $key, string $filename, array $extra = [])
             }
         }
     }
+
+    return ['ok' => true, 'key' => $safeKey];
+}
+
+/**
+ * Register or update a playlist row for a YouTube live embed (no file upload).
+ * @return array{ok:bool,key?:string,error?:string}
+ */
+function video_register_live(string $key, string $youtubeUrl, array $extra = []): array
+{
+    require_once __DIR__ . '/users_lib.php';
+
+    $safeKey = video_normalize_key($key);
+    $youtubeUrl = trim($youtubeUrl);
+    if ($safeKey === null || $youtubeUrl === '') {
+        return ['ok' => false, 'error' => 'Enter a valid key and YouTube URL.'];
+    }
+
+    $ytCheck = signage_youtube_url_allowed($youtubeUrl);
+    if (!$ytCheck['ok']) {
+        return ['ok' => false, 'error' => $ytCheck['error'] ?? 'Invalid YouTube URL.'];
+    }
+    if (video_youtube_video_id($youtubeUrl) === null) {
+        return ['ok' => false, 'error' => 'Could not parse a YouTube video id from that URL.'];
+    }
+
+    $registry = video_registry();
+    $prev = is_array($registry[$safeKey] ?? null) ? $registry[$safeKey] : null;
+    if ($prev !== null && !admin_is_super() && !admin_entry_visible($prev)) {
+        return ['ok' => false, 'error' => 'You do not have permission to update that video.'];
+    }
+
+    $row = video_normalize_entry([
+        'youtube' => $youtubeUrl,
+        'live' => true,
+    ]);
+    $title = trim((string)($extra['title'] ?? ''));
+    if ($title !== '') {
+        $row['title'] = $title;
+    }
+    if ($prev !== null && isset($prev['file']) && trim((string)$prev['file']) !== '') {
+        $row['file'] = (string)$prev['file'];
+    }
+
+    if (!cfg_update(function (array $conf) use ($safeKey, $row, $prev): array|false {
+        $registry = $conf['video.VIDEOS'] ?? [];
+        if (!is_array($registry)) {
+            $registry = [];
+        }
+        $existing = is_array($registry[$safeKey] ?? null) ? $registry[$safeKey] : null;
+        if ($existing !== null && !admin_is_super() && !admin_entry_visible($existing)) {
+            return false;
+        }
+        $registry[$safeKey] = admin_stamp_owner($row, $existing ?? $prev);
+        $conf['video.VIDEOS'] = $registry;
+
+        return $conf;
+    })) {
+        return ['ok' => false, 'error' => 'Could not update settings.json.'];
+    }
+    cfg_reload();
 
     return ['ok' => true, 'key' => $safeKey];
 }

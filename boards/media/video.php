@@ -200,11 +200,22 @@ $loopAttr = $embedded ? '' : 'loop';
     }
   </script>
 <?php elseif ($src === null): ?>
+  <?php
+  $pendingYt = trim((string)($video['youtube'] ?? ''));
+  $pendingLive = $pendingYt !== '' && !video_entry_is_live($video);
+  ?>
   <div class="empty">
+    <?php if ($pendingLive): ?>
+    <h2>YouTube URL saved — enable live or download</h2>
+    <p>This entry has a YouTube link but is not set up yet. In admin, check <strong>Live stream</strong>
+       (or use <strong>Add YouTube live stream</strong> at the top), then <strong>Save</strong>.
+       For on-demand videos, use <strong>Fetch</strong> instead.</p>
+    <?php else: ?>
     <h2>No video downloaded for &ldquo;<?= h($key) ?>&rdquo;</h2>
-    <p>Use <strong>Download YouTube videos</strong> in admin, run
-       <code>php video.php fetch</code> on the server, or drop a file at
-       <code>videos/<?= h($key) ?>.mp4</code>.</p>
+    <p>For <strong>YouTube live</strong>, use <strong>Add YouTube live stream</strong> in admin (no file needed).
+       For downloads, use <strong>Download YouTube videos</strong>, run
+       <code>php video.php fetch</code>, or drop a file at <code>videos/<?= h($key) ?>.mp4</code>.</p>
+    <?php endif; ?>
   </div>
 <?php else: ?>
   <video id="player" src="<?= h($src) ?>" <?= $autoplayAttr ?> <?= $autoplayMuted ? 'muted' : '' ?> <?= $loopAttr ?> playsinline></video>
