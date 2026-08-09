@@ -193,18 +193,47 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ## Cursor still visible
 
-Cage draws a compositor cursor whenever a pointer-capable device exists (USB mouse, some IR/CEC receivers). Setup installs a **transparent cursor theme** by default. On distros where **`ydotool`** is packaged (most Bookworm installs), it also parks the pointer off-screen.
+Cage draws a **compositor cursor** whenever a pointer-capable input exists (USB mouse, HDMI-CEC, some Pi HDMI stacks). CSS and transparent Xcursor themes alone usually **cannot** hide that layer — the fix is to **park the pointer off-screen** with `ydotool`.
 
-**ydotool** is not available on every release (e.g. some Raspberry Pi OS **Trixie** images). Kiosk setup continues without it — if you still see a pointer, try unplugging unused USB mice first.
+Setup installs a transparent cursor theme and tries to install `ydotool` (apt, Bookworm `.deb`, or source build on Pi OS **Trixie** where the package is missing).
 
-When `ydotool` is available:
+### Fix on the Pi
 
 ```bash
-sudo apt install -y ydotool
+cd ~/signage-suite && git pull
+sudo bash scripts/install-ydotool.sh
 sudo bash scripts/install-signage-blank-cursor.sh
 sudo install -m 755 scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
+sudo bash setup-kiosk.sh --skip-apt --server=https://YOUR-SERVER --screen=YOURSCREEN
 sudo systemctl restart signage
 ```
+
+Diagnose pointer devices:
+
+```bash
+sudo bash scripts/signage-diagnose-pointer.sh
+```
+
+### Phantom pointer (no mouse plugged in)
+
+Some Pis and TVs expose an HDMI or CEC device with pointer capability — cage shows a cursor **stuck in the center**. List devices:
+
+```bash
+libinput list-devices
+```
+
+If you see a non-mouse device with `pointer` (e.g. `vc4-hdmi-0`), ignore it with udev (adjust the name to match your output):
+
+```bash
+sudo tee /etc/udev/rules.d/99-signage-ignore-hdmi-pointer.rules <<'EOF'
+ACTION!="remove", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{NAME}=="vc4-hdmi-0"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+sudo systemctl restart signage
+```
+
+Unplug unused USB mice if the pointer keeps reappearing.
 
 ---
 

@@ -450,8 +450,10 @@ CHROMIUM=""
 if [[ $SKIP_APT -eq 0 ]]; then
 echo "==> Installing packages"
 apt-get update -q
-apt-get install -y -q cage seatd curl python3
-if apt-get install -y -q ydotool 2>/dev/null; then
+apt-get install -y -q cage seatd curl python3 libinput-tools
+if [[ -f "$SCRIPT_DIR/scripts/install-ydotool.sh" ]]; then
+  bash "$SCRIPT_DIR/scripts/install-ydotool.sh" || echo "==> ydotool unavailable — off-screen pointer helper skipped"
+elif apt-get install -y -q ydotool 2>/dev/null; then
   echo "==> ydotool installed (optional off-screen pointer helper)"
 else
   echo "==> ydotool not in apt — skipping off-screen pointer helper (blank cursor theme still applies)"
@@ -547,6 +549,7 @@ if [[ $IGNORE_SSL -eq 1 ]]; then
 # Launched by signage.service — cage runs Chromium as the sole fullscreen app.
 # If cage exits (crash/OOM), blackout tty1 and restart immediately so the Linux
 # console does not flash through during systemd's restart window.
+export XCURSOR_PATH=/usr/share/icons
 export XCURSOR_THEME=signage-blank
 export XCURSOR_SIZE=24
 
@@ -601,6 +604,7 @@ else
   cat > /usr/local/bin/signage-kiosk <<EOF
 #!/usr/bin/env bash
 # Launched by signage.service — cage runs Chromium as the sole fullscreen app.
+export XCURSOR_PATH=/usr/share/icons
 export XCURSOR_THEME=signage-blank
 export XCURSOR_SIZE=24
 
@@ -698,6 +702,7 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
 Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=XCURSOR_PATH=/usr/share/icons
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
