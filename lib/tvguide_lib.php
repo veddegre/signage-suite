@@ -828,27 +828,6 @@ function tvguide_block_layout_classes(float $widthPct, float $hourPct): string
     return $classes !== [] ? ' ' . implode(' ', $classes) : '';
 }
 
-/** @return list<array{label:string,is_hour:bool}> */
-function tvguide_timeline_markers(?array $window = null): array
-{
-    if ($window === null) {
-        $window = tvguide_prime_window(new DateTimeZone(tvguide_timezone()));
-    }
-
-    $out = [];
-    $cursor = $window['start'];
-    while ($cursor < $window['end']) {
-        $minute = (int)$cursor->format('i');
-        $out[] = [
-            'label' => $minute === 0 ? $cursor->format('g A') : $cursor->format('g:i'),
-            'is_hour' => $minute === 0,
-        ];
-        $cursor = $cursor->modify('+30 minutes');
-    }
-
-    return $out;
-}
-
 function tvguide_block_show_subtitle(array $block, float $widthPct): bool
 {
     $subtitle = trim((string)($block['subtitle'] ?? ''));
