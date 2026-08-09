@@ -248,7 +248,9 @@ Uses a **nested iframe** to WetMet’s Video.js player on desktop (signed HLS �
 
 WetMet’s embed also cycles its player about every **5 minutes** — a brief flash can happen even on desktop when using the iframe path.
 
-**Debug:** `?mapperf=low` on the webcam URL forces the direct-HLS path on any browser.
+When WetMet’s HLS feed is offline, **`webcam.php?cam=grpm` is auto-skipped in rotation** (and shows “Webcam not available” if opened directly). The server re-probes on a timer (default **30 minutes**; shorten in admin → **Webcam** → **Offline re-probe interval** for testing) and adds it back when the stream is live again.
+
+**Debug:** `?mapperf=low` on the webcam URL forces the direct-HLS path on any browser. Server-side: `php scripts/diagnose-webcam.php grpm --refresh`.
 
 ### Video & YouTube on the kiosk
 

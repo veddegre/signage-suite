@@ -12,6 +12,7 @@ $filter = isset($argv[1]) && !str_starts_with((string)$argv[1], '--')
     ? webcam_normalize_key((string)$argv[1])
     : '';
 $refresh = in_array('--refresh', $argv, true);
+echo 'Probe TTL: ' . webcam_probe_ttl_sec() . "s\n";
 $registry = webcam_registry();
 if ($filter !== '') {
     $registry = array_intersect_key($registry, [$filter => true]);
@@ -50,22 +51,19 @@ foreach ($registry as $key => $entry) {
     echo '  skip rotation: ' . ($status['skip_rotation'] ? 'yes' : 'no') . "\n";
 
     if (webcam_is_stream_frame_url($url) || webcam_is_ant_media_play_url($url) || $kind === 'stream') {
-        $hlsNote = ($kind === 'iframe' || webcam_is_stream_frame_url($url))
-            ? ' (informational — board uses iframe embed; CDN may reject server fetches)'
-            : '';
         $master = webcam_stream_playlist_url($url);
-        echo '  hls master' . $hlsNote . ': ' . ($master ?? '(none)') . "\n";
+        echo '  hls master: ' . ($master ?? '(none)') . "\n";
         if ($master !== null) {
             $masterBody = webcam_http_get($master);
             if ($masterBody === null) {
-                echo '  hls fetch' . $hlsNote . ': failed (expected for WetMet from server IP)' . "\n";
+                echo "  hls fetch: failed\n";
             }
             $mediaUrl = $masterBody !== null ? webcam_hls_pick_media_playlist($master, $masterBody) : null;
             $mediaBody = $mediaUrl !== null ? webcam_http_get($mediaUrl) : $masterBody;
             if (is_string($mediaBody) && preg_match('#EXT-X-PROGRAM-DATE-TIME:([^\n]+)#', $mediaBody, $m)) {
                 echo '  last segment: ' . trim($m[1]) . "\n";
             }
-            echo '  hls live' . $hlsNote . ': ' . (is_string($mediaBody) && webcam_hls_playlist_is_live($mediaBody) ? 'yes' : 'no') . "\n";
+            echo '  hls live: ' . (is_string($mediaBody) && webcam_hls_playlist_is_live($mediaBody) ? 'yes' : 'no') . "\n";
             if ($kind === 'stream' && !webcam_is_stream_frame_url($url)) {
                 echo '  board playlist: ' . (webcam_hls_proxied_playlist(['key' => $key, 'url' => $url, 'kind' => 'stream']) !== null ? 'ok' : 'unavailable') . "\n";
             }

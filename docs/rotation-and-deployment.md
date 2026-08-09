@@ -34,7 +34,7 @@ The **Playlists** section uses a **Which display** picker at the top. Three tabs
 
 Opening a playlist panel below syncs the **Which display** picker and highlights that panel. Playlist headers show **On wall: …** from live kiosk heartbeats when online. Each expanded playlist includes a **Plays now** panel — which saved rows are eligible right now (Skip / Later / Hidden), with approximate **weighted pick %** when weighted mode is on.
 
-Some boards auto-skip from rotation when off-season or unreachable for 24h+: **lake.php** (NDBC buoy), **sports.php** (all teams off-season), **webcam.php** (per-camera embed/image probe — `?cam=` aware). They stay on the saved playlist and return when data is back.
+Some boards auto-skip from rotation when off-season or unreachable: **lake.php** (NDBC buoy), **sports.php** (all teams off-season), **webcam.php** (per-camera probe — WetMet HLS, stream playlists, iframe reachability; `?cam=` aware; re-probe interval configurable in admin, default 30 minutes). They stay on the saved playlist and return when data is back.
 
 Two stacked iframes preload each board before crossfade. Hang timeout skips pages that fail to load. Weather ticker lives in the shell (persistent across transitions). NWS alerts use each display’s **Weather / kiosk location** (not a separate ticker lat/lon). The shell polls `board.php?api=1` every **~30 seconds** and reloads when the playlist or display options change.
 

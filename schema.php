@@ -176,6 +176,8 @@ function admin_schema(): array
              'help' => 'HLS stream cameras — re-fetch signed playlist URL before expiry — default 1500 (25 min)'],
             ['key' => 'RELOAD_SEC', 'label' => 'Iframe reload (seconds)', 'type' => 'number',
              'help' => 'Backstop for iframe streams in long kiosk sessions — 0 disables (default 3600)'],
+            ['key' => 'PROBE_TTL_SEC', 'label' => 'Offline re-probe interval (seconds)', 'type' => 'number',
+             'help' => 'How often to re-check skipped cameras before returning them to rotation — default 1800 (30 min). Use 60–120 while testing WetMet recovery.'],
             $tz,
         ]],
         'bridgecam' => ['title' => 'Mackinac Bridge Cam', 'file' => 'bridgecam.php', 'fields' => [

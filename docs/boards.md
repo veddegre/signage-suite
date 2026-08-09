@@ -106,7 +106,7 @@ Custom cameras: `webcam.php?cam=yourkey`. Set **Off** on a row to hide it from q
 
 Still-image cameras refresh every `IMAGE_REFRESH_SEC` (default 15s). Iframe streams use an hourly reload backstop (`RELOAD_SEC`).
 
-If a camera URL fails probe checks for **24 hours**, that rotation entry is auto-skipped until the stream responds again.
+If a camera fails its probe (WetMet HLS, stream playlist, or iframe reachability), that rotation entry is **skipped immediately** and re-checked on a timer (default **30 minutes** — admin → **Webcam** → **Offline re-probe interval**). It returns to rotation after a successful probe — no manual playlist edit needed. For testing, set that field to **60–120** seconds, or export `SIGNAGE_WEBCAM_PROBE_TTL_SEC=60` on the server.
 
 ### bridgecam.php — Mackinac Bridge Cam
 

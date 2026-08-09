@@ -5,9 +5,29 @@
 
 require_once __DIR__ . '/../config.php';
 
-const WEBCAM_PROBE_TTL_SEC = 1800;
+const WEBCAM_PROBE_TTL_DEFAULT_SEC = 1800;
+const WEBCAM_PROBE_TTL_MIN_SEC = 60;
+const WEBCAM_PROBE_TTL_MAX_SEC = 86400;
 const WEBCAM_ONLINE_MAX_AGE_MIN = 60;
-const WEBCAM_SKIP_MIN_AGE_MIN = 1440;
+
+function webcam_probe_ttl_sec(): int
+{
+    static $ttl = null;
+    if ($ttl !== null) {
+        return $ttl;
+    }
+    $raw = getenv('SIGNAGE_WEBCAM_PROBE_TTL_SEC');
+    if ($raw !== false && $raw !== '') {
+        $v = (int)$raw;
+    } else {
+        $v = (int)cfg('webcam.PROBE_TTL_SEC', WEBCAM_PROBE_TTL_DEFAULT_SEC);
+    }
+    if ($v <= 0) {
+        $v = WEBCAM_PROBE_TTL_DEFAULT_SEC;
+    }
+
+    return $ttl = max(WEBCAM_PROBE_TTL_MIN_SEC, min(WEBCAM_PROBE_TTL_MAX_SEC, $v));
+}
 
 /** Camera keys removed from the registry, rotation quick-add, and playlists. */
 function webcam_retired_keys(): array
@@ -333,15 +353,16 @@ function webcam_board_is_available(array $cam): bool
     if (!empty($cam['off']) || trim((string)($cam['url'] ?? '')) === '') {
         return false;
     }
-    if (!webcam_uses_stream_tag($cam)) {
-        return true;
-    }
     $url = (string)($cam['url'] ?? '');
-    if (webcam_wetmet_stream_frame_url($url)) {
-        return webcam_probe_url($url, 'iframe');
+    $kind = (string)($cam['kind'] ?? 'iframe');
+    if (webcam_wetmet_stream_frame_url($url) || webcam_uses_stream_tag($cam)) {
+        return webcam_url_status($url, $kind)['online'];
+    }
+    if ($kind === 'widget' || webcam_is_widget_frame_url($url) || $kind === 'image') {
+        return webcam_url_status($url, $kind)['online'];
     }
 
-    return webcam_hls_proxied_playlist($cam) !== null;
+    return true;
 }
 
 /** @param array<string,mixed> $cam */
@@ -1117,7 +1138,7 @@ function webcam_cam_label(string $key): string
 }
 
 /** Bump when probe logic changes — invalidates stale cache entries on deploy. */
-const WEBCAM_PROBE_CACHE_VER = 2;
+const WEBCAM_PROBE_CACHE_VER = 3;
 
 function webcam_status_cache_path(string $url): string
 {
@@ -1160,9 +1181,8 @@ function webcam_status_write_cache(string $url, array $data): void
 
 function webcam_probe_uses_hls(string $url, string $kind): bool
 {
-    // WetMet frame pages embed Video.js; signed CDN playlists reject server-side fetches.
     if (webcam_is_stream_frame_url($url)) {
-        return false;
+        return true;
     }
     if (webcam_is_earthcam_dotcom_page_url($url)) {
         return true;
@@ -1172,6 +1192,25 @@ function webcam_probe_uses_hls(string $url, string $kind): bool
     }
 
     return false;
+}
+
+function webcam_probe_hls_playlist_live(string $pageOrPlaylistUrl): bool
+{
+    $master = webcam_stream_playlist_url($pageOrPlaylistUrl);
+    if ($master === null) {
+        return false;
+    }
+    $masterBody = webcam_http_get($master);
+    if ($masterBody === null) {
+        return false;
+    }
+    $mediaUrl = webcam_hls_pick_media_playlist($master, $masterBody);
+    $mediaBody = $mediaUrl !== null ? webcam_http_get($mediaUrl) : $masterBody;
+    if ($mediaBody === null) {
+        return false;
+    }
+
+    return webcam_hls_playlist_is_live($mediaBody);
 }
 
 function webcam_probe_url(string $url, string $kind = 'iframe'): bool
@@ -1186,21 +1225,7 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
         return $img !== null && webcam_probe_url($img, 'image');
     }
     if (webcam_probe_uses_hls($url, $kind)) {
-        $master = webcam_stream_playlist_url($url);
-        if ($master === null) {
-            return false;
-        }
-        $masterBody = webcam_http_get($master);
-        if ($masterBody === null) {
-            return false;
-        }
-        $mediaUrl = webcam_hls_pick_media_playlist($master, $masterBody);
-        $mediaBody = $mediaUrl !== null ? webcam_http_get($mediaUrl) : $masterBody;
-        if ($mediaBody === null) {
-            return false;
-        }
-
-        return webcam_hls_playlist_is_live($mediaBody);
+        return webcam_probe_hls_playlist_live($url);
     }
     $ctx = webcam_http_context($url);
     $probeHeaders = [];
@@ -1248,7 +1273,7 @@ function webcam_url_status(string $url, string $kind = 'iframe'): array
     $cache = webcam_status_read_cache($url);
     $now = time();
     $needsProbe = ($cache['last_probe'] ?? null) === null
-        || ($now - (int)$cache['last_probe']) >= WEBCAM_PROBE_TTL_SEC;
+        || ($now - (int)$cache['last_probe']) >= webcam_probe_ttl_sec();
     // Don't hold skip/offline for the full TTL when last success is already stale.
     if (!$needsProbe && ($cache['last_ok'] ?? null) !== null) {
         $okAgeMin = (int)round(($now - (int)$cache['last_ok']) / 60);
@@ -1271,12 +1296,11 @@ function webcam_url_status(string $url, string $kind = 'iframe'): array
 
     $lastOk = $cache['last_ok'];
     $lastFail = $cache['last_fail'];
-    $okAgeMin = $lastOk ? (int)round(($now - $lastOk) / 60) : null;
-    $online = $okAgeMin !== null && $okAgeMin < WEBCAM_ONLINE_MAX_AGE_MIN;
-    $skipRotation = !$online && (
-        ($lastOk === null && $lastFail !== null && ($now - $lastFail) / 60 >= WEBCAM_SKIP_MIN_AGE_MIN)
-        || ($okAgeMin !== null && $okAgeMin >= WEBCAM_SKIP_MIN_AGE_MIN)
-    );
+    $lastProbe = $cache['last_probe'];
+    $probeAgeSec = $lastProbe !== null ? $now - (int)$lastProbe : PHP_INT_MAX;
+    $lastProbeOk = $lastOk !== null && ($lastFail === null || $lastOk > $lastFail);
+    $online = $probeAgeSec < webcam_probe_ttl_sec() && $lastProbeOk;
+    $skipRotation = !$online;
 
     return [
         'online' => $online,
