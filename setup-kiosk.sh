@@ -865,12 +865,10 @@ HTTPS / SELF-SIGNED CERTS
   Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
-CURSOR (if the mouse pointer is still visible after a server update):
-  sudo apt install -y ydotool   # optional; not packaged on all Pi OS / Debian releases
-  sudo bash $SCRIPT_DIR/scripts/install-signage-blank-cursor.sh
-  sudo install -m 755 $SCRIPT_DIR/scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
-  sudo systemctl restart signage
-  If ydotool is unavailable, unplug unused USB mice or rely on the blank cursor theme.
+CURSOR (Raspberry Pi — compositor pointer, no ydotool):
+  sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh
+  Undo: sudo bash $SCRIPT_DIR/scripts/signage-undo-cursor-pi.sh
+  Do not use ydotool on Pi — it can black-screen the kiosk. See docs/kiosk-setup.md.
 
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer

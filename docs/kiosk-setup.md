@@ -191,81 +191,44 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ---
 
-## Cursor still visible
+## Cursor still visible (Raspberry Pi)
 
-Cage draws a **compositor cursor** whenever a pointer-capable input exists (USB mouse, HDMI-CEC, some Pi HDMI stacks). CSS and transparent Xcursor themes alone usually **cannot** hide that layer — the fix is to **park the pointer off-screen** with `ydotool`.
+On a **Pi kiosk**, cage draws a compositor cursor when the HDMI stack reports a phantom pointer (`vc4-hdmi-0`) — even with no mouse plugged in. CSS and blank Xcursor themes alone usually cannot hide it.
 
-Setup installs a transparent cursor theme and tries to install `ydotool` (apt, Bookworm `.deb`, or source build on Pi OS **Trixie** where the package is missing).
+**Do not use ydotool** on Pi kiosks — it adds a virtual pointer, spams the journal when `ydotoold` is down, and has caused **black screens** on Pi OS Trixie.
 
-### Fix on the Pi
+### Safe fix (after the wall is working)
 
 ```bash
 cd ~/signage-suite && git pull
-sudo bash scripts/signage-fix-pointer.sh
+sudo bash scripts/signage-fix-cursor-pi.sh
 ```
 
-This applies **phantom HDMI udev rules only** (the correct fix on Raspberry Pi). It does **not** use ydotool — ydotool adds a virtual pointer that can crash cage and leave a **black screen**.
+This only:
 
-### Black screen after pointer fix
+1. Ignores `vc4-hdmi-*` via libinput udev rules
+2. Refreshes the blank cursor theme
+3. Restarts `signage` — **does not re-run setup-kiosk or change the launcher**
 
-Recover immediately:
+**Undo** (cursor may return; display stays up):
 
 ```bash
-cd ~/signage-suite && git pull
-sudo bash scripts/signage-recover-kiosk.sh
+sudo bash scripts/signage-undo-cursor-pi.sh
+```
+
+**Full rollback** (if the wall goes black or breaks):
+
+```bash
+sudo bash scripts/signage-restore-display.sh
 sudo reboot
 ```
 
-Or manually:
+### Verify
 
 ```bash
-sudo systemctl stop signage-ydotoold
-sudo systemctl disable signage-ydotoold
-sudo pkill -u "$USER" -f signage-hide-cursor
-sudo pkill -u "$USER" -x ydotoold
-sudo systemctl restart signage
-```
-
-If still black, verify the kiosk URL:
-
-```bash
-grep KIOSK_URL /etc/signage/kiosk.conf
-systemctl cat signage.service | grep ExecStart
-journalctl -u signage -n 40 --no-pager
-curl -k "$(grep KIOSK_URL= /etc/signage/kiosk.conf | cut -d= -f2- | tr -d '"')" | head
-```
-
-Reinstall the launcher if the URL is wrong:
-
-```bash
-sudo bash setup-kiosk.sh --skip-apt --server=https://s.vdrs.fyi --screen=veddegre
-sudo systemctl restart signage
-```
-
-Diagnose:
-
-```bash
-sudo bash scripts/signage-diagnose-pointer.sh
+cat /etc/udev/rules.d/99-signage-phantom-pointer.rules
 libinput list-devices
-```
-
-### Phantom pointer (no mouse plugged in)
-
-Some Pis and TVs expose an HDMI or CEC device with pointer capability — cage shows a cursor **stuck in the center**. List devices:
-
-```bash
-libinput list-devices
-```
-
-If you see a non-mouse device with `pointer` (e.g. `vc4-hdmi-0`), ignore it with udev (adjust the name to match your output):
-
-```bash
-sudo tee /etc/udev/rules.d/99-signage-ignore-hdmi-pointer.rules <<'EOF'
-ACTION!="remove", SUBSYSTEM=="input", ATTRS{name}=="vc4-hdmi-0", ENV{LIBINPUT_IGNORE_DEVICE}="1"
-EOF
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-sudo systemctl restart signage
+pgrep -af 'ydotool|hide-cursor'   # should print nothing
 ```
 
 Unplug unused USB mice if the pointer keeps reappearing.
