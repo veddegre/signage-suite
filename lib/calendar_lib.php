@@ -496,10 +496,13 @@ function ics_wall_time_on_day(int $dayMidnight, int $referenceTs): int
     return $day->getTimestamp();
 }
 
-function ics_format_local_time(int $ts, ?string $format = null): string
+function ics_format_local_time(int $ts, ?string $format = null, ?string $screen = null): string
 {
     if ($format === null) {
-        $format = signage_time_format_php();
+        if ($screen === null && function_exists('signage_request_screen')) {
+            $screen = signage_request_screen();
+        }
+        $format = signage_time_format_php_for($screen);
     }
 
     return (new DateTime('@' . $ts))->setTimezone(calendar_display_timezone())->format($format);

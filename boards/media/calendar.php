@@ -34,6 +34,7 @@ const CACHE_DIR = SIGNAGE_ROOT . '/cache';
 define('CACHE_TTL', cfg('calendar.CACHE_TTL', 600));
 
 date_default_timezone_set(calendar_display_timezone_name());
+$SCREEN = signage_request_screen();
 $frameH = signage_frame_height();
 $showClock = signage_show_clock();
 $GLOBALS['diag'] = [];
@@ -1147,7 +1148,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
     <?php elseif ($days[$todayKey]): foreach (array_slice($days[$todayKey], 0, 7) as $e): ?>
       <div class="tev">
         <span class="who" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
+        <span class="t" style="color:<?= h($e['hex'] ?? calendar_color_hex((string)($e['color'] ?? ''))) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'], null, $SCREEN)) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
     <?php endforeach; else: ?>
@@ -1168,7 +1169,7 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
           <div class="ev" style="border-color:<?= h($hex) ?>">
             <span class="ewho" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
             <?= h($e['summary']) ?>
-            <span class="et"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
+            <span class="et"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'], null, $SCREEN)) ?></span>
           </div>
         <?php endforeach; ?>
         <?php if (count($list) > 4): ?><div class="more">+<?= count($list) - 4 ?> more</div><?php endif; ?>
@@ -1202,13 +1203,13 @@ $calLegend = calendar_legend(is_array(ICS_FEEDS) ? ICS_FEEDS : []);
 <script>
   function tick(){
     const n = new Date();
-    <?php if ($showClock): ?>
-    { const el = document.getElementById('clock'); if (el) el.textContent = <?= signage_js_format_time_expr('n') ?>; }
-    <?php endif; ?>
     document.getElementById('dateline').textContent =
       n.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   }
   tick(); setInterval(tick, 1000);
+  <?php if ($showClock): ?>
+  <?= signage_clock_tick_script('clock', calendar_display_timezone_name(), $SCREEN) ?>
+  <?php endif; ?>
   setTimeout(() => location.reload(), 10 * 60 * 1000);
 </script>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>

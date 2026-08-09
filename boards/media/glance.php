@@ -225,7 +225,7 @@ $compact = $boardH < 1080;
       ?>
       <div class="tev">
         <span class="who" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
+        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'], null, $SCREEN)) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
       <?php endforeach; ?>
@@ -244,7 +244,7 @@ $compact = $boardH < 1080;
       ?>
       <div class="tev">
         <span class="who" style="color:<?= h($hex) ?>"><?= h($e['cal']) ?></span>
-        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'])) ?></span>
+        <span class="t" style="color:<?= h($hex) ?>"><?= $e['all_day'] ? 'All day' : h(ics_format_local_time($e['ts'], null, $SCREEN)) ?></span>
         <span class="s"><?= h($e['summary']) ?></span>
       </div>
       <?php endforeach; ?>
@@ -370,7 +370,7 @@ $compact = $boardH < 1080;
   const dl = document.getElementById('dateline');
   if (dl) dl.textContent = fmtDate();
   <?php if ($showClock): ?>
-  <?= signage_clock_tick_script('clock', TIMEZONE) ?>
+  <?= signage_clock_tick_script('clock', TIMEZONE, $SCREEN) ?>
   <?php endif; ?>
   setTimeout(function () { location.reload(); }, <?= (int)RELOAD_SEC ?> * 1000);
 </script>
