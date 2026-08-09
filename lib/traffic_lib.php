@@ -73,6 +73,50 @@ function traffic_normalize_flow_style(string $style): string
     return in_array($style, traffic_flow_styles(), true) ? $style : 'relative0-dark';
 }
 
+function traffic_cfg_float(string $key): ?float
+{
+    $raw = cfg('traffic.' . $key, null);
+    if ($raw === null || $raw === '') {
+        return null;
+    }
+
+    return (float)$raw;
+}
+
+/**
+ * Leaflet viewport — Allendale on the left, Grand Rapids corridor to the right.
+ *
+ * @return array{lat:float,lon:float,zoom:int,show_labels:bool,show_scale:bool}
+ */
+function traffic_map_view(): array
+{
+    $lat = traffic_cfg_float('LAT');
+    $lon = traffic_cfg_float('LON');
+    if ($lat === null || $lon === null) {
+        $lat = 42.968;
+        $lon = -85.765;
+    }
+    $zoom = (int)cfg('traffic.ZOOM', 12);
+    $zoom = max(8, min(16, $zoom));
+
+    return [
+        'lat' => $lat,
+        'lon' => $lon,
+        'zoom' => $zoom,
+        'show_labels' => (bool)cfg('traffic.SHOW_LABELS', true),
+        'show_scale' => (bool)cfg('traffic.SHOW_SCALE', true),
+    ];
+}
+
+/** @return list<array{name:string,lat:float,lon:float}> */
+function traffic_map_markers(): array
+{
+    return [
+        ['name' => 'Allendale', 'lat' => 42.9720, 'lon' => -85.9536],
+        ['name' => 'Grand Rapids', 'lat' => 42.9634, 'lon' => -85.6681],
+    ];
+}
+
 function traffic_orbis_style(string $flowStyle): string
 {
     $flowStyle = traffic_normalize_flow_style($flowStyle);

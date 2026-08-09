@@ -11,17 +11,18 @@
  */
 
 require_once dirname(__DIR__, 2) . '/config.php';
-require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/traffic_lib.php';
 
-$SCREEN = signage_request_screen();
-$LOC = rotation_screen_location($SCREEN);
+$mapView = traffic_map_view();
 
 define('TOMTOM_API_KEY', cfg('traffic.TOMTOM_API_KEY', 'PUT-YOUR-TOMTOM-KEY-HERE'));
 define('TITLE', cfg('traffic.TITLE', 'Commute Traffic'));
 define('SUBTITLE', cfg('traffic.SUBTITLE', 'I-96 · Allendale ↔ Grand Rapids'));
-define('LAT', $LOC['lat']);
-define('LON', $LOC['lon']);
-define('ZOOM', cfg('traffic.ZOOM', 11));
+define('LAT', $mapView['lat']);
+define('LON', $mapView['lon']);
+define('ZOOM', $mapView['zoom']);
+define('SHOW_LABELS', $mapView['show_labels']);
+define('SHOW_SCALE', $mapView['show_scale']);
 define('FLOW_STYLE', cfg('traffic.FLOW_STYLE', 'relative0-dark'));
 define('TIMEZONE', cfg('traffic.TIMEZONE', 'America/Detroit'));
 define('RELOAD_SEC', cfg('traffic.RELOAD_SEC', 300));
@@ -42,10 +43,7 @@ $headClockPx = signage_font_scaled_px(52);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-$markers = [
-    ['name' => 'Allendale', 'lat' => 42.9720, 'lon' => -85.9536],
-    ['name' => 'Grand Rapids', 'lat' => 42.9634, 'lon' => -85.6681],
-];
+$markers = traffic_map_markers();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -78,6 +76,14 @@ $markers = [
   #trafficMap { width:100%; height:100%; background:#0a1018; }
   #trafficMap .leaflet-control-attribution { font-size:11px; background:rgba(12,20,34,.85); color:var(--mist); }
   #trafficMap .leaflet-control-attribution a { color:var(--mist); }
+  #trafficMap .leaflet-control-scale-line {
+    background:rgba(12,20,34,.88); border:1px solid var(--hairline); border-top:none;
+    color:var(--snow); font-size:14px; font-weight:600; padding:2px 8px 4px;
+    font-family:'IBM Plex Sans',sans-serif;
+  }
+  #trafficMap .leaflet-control-scale-line:not(:first-child) {
+    border-top:1px solid var(--hairline); border-bottom:none; margin-top:-2px;
+  }
   .map-tag { position:absolute; left:20px; bottom:16px; z-index:500; pointer-events:none;
              font-size:18px; letter-spacing:2px; text-transform:uppercase; color:var(--mist);
              background:rgba(12,20,34,.78); padding:8px 16px; border-radius:8px;
@@ -155,6 +161,8 @@ $markers = [
   (function () {
     const CENTER = [<?= LAT ?>, <?= LON ?>];
     const ZOOM = <?= (int)ZOOM ?>;
+    const SHOW_LABELS = <?= SHOW_LABELS ? 'true' : 'false' ?>;
+    const SHOW_SCALE = <?= SHOW_SCALE ? 'true' : 'false' ?>;
     const TILE_BASE = <?= json_encode($tileBase) ?>;
     const MARKERS = <?= json_encode($markers) ?>;
     const RELOAD = <?= max(60, (int)RELOAD_SEC) ?> * 1000;
@@ -165,7 +173,7 @@ $markers = [
       attributionControl: true
     }).setView(CENTER, ZOOM);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 19,
       attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(map);
@@ -183,6 +191,19 @@ $markers = [
       }
     });
     trafficLayer.addTo(map);
+
+    if (SHOW_LABELS) {
+      map.createPane('trafficLabels');
+      map.getPane('trafficLabels').style.zIndex = 650;
+      map.getPane('trafficLabels').style.pointerEvents = 'none';
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd', maxZoom: 19, pane: 'trafficLabels', opacity: 0.95
+      }).addTo(map);
+    }
+
+    if (SHOW_SCALE) {
+      L.control.scale({ imperial: true, metric: false, position: 'bottomright' }).addTo(map);
+    }
 
     MARKERS.forEach(function (m) {
       L.circleMarker([m.lat, m.lon], {
