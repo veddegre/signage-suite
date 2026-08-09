@@ -97,9 +97,9 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **unattended-upgrades** | Security patches between nightly runs |
 | **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
-| **signage-cursor-vt.service** | **Pi only** — after boot, waits for the wall to load, then VT switch to hide cage’s phantom HDMI cursor |
-| **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors; not cage’s compositor pointer) |
-| **signage-hide-cursor** | **x86 only** — ydotool parks pointer off-screen (not installed on Pi) |
+| **signage-cursor-vt.service** | After boot, VT switch to hide cage’s compositor pointer (**Pi + x86**) |
+| **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors only) |
+| **signage-hide-cursor** | **x86 optional** — ydotool; does not hide cage compositor pointer |
 
 On first run, setup **prompts for the signage server** (hostname only — no `/boards` path), **screen name**, **timezone**, and **4K scale**, then **tests** `board.php` before installing. Pass **`--server`**, **`--screen`**, and **`--timezone`** to skip prompts (used by unattended git refresh).
 
@@ -264,26 +264,22 @@ Use the **Video board**, not Webcam or Websites, for YouTube. Details: [video-yo
 
 ## Cursor on x86 (mini PC / NUC)
 
-**cage** draws a compositor pointer even with no mouse plugged in. The blank **signage-blank** Xcursor theme hides client-side cursors in Chromium but not cage’s own pointer.
+**cage** draws its **own compositor pointer** (center of screen, even with no mouse). CSS `cursor:none` and ydotool do **not** remove it — same as on Pi.
 
-**`setup-kiosk.sh` installs the x86 fix automatically:** **ydotool** + **`signage-hide-cursor`** — a background helper that parks the pointer off-screen every second. This is **not installed on Raspberry Pi** (ydotool can black-screen Pis).
+**`setup-kiosk.sh` installs the real fix on every cage kiosk:** **`signage-cursor-vt.service`** — after the wall loads, a one-time **`chvt 2` / `chvt 1`** while cage keeps running (~2 min after boot). This is the same VT switch used on Pi; it is **not Pi-only**.
+
+Optional **ydotool** + **`signage-hide-cursor`** may also be installed on x86 but only moves the libinput pointer; rely on **VT switch** for the visible cursor.
 
 **Check on the box:**
 
 ```bash
-command -v ydotool signage-hide-cursor
-pgrep -af 'signage-hide-cursor|ydotoold'
+systemctl status signage-cursor-vt
+journalctl -u signage-cursor-vt -n 20
+sudo systemctl start signage-cursor-vt.service   # manual re-run
+bash scripts/signage-diagnose-kiosk.sh
 ```
 
-**If the cursor returned after re-running setup:** refresh the x86 player (installs ydotool + hide-cursor again):
-
-```bash
-cd ~/signage-suite && git pull
-sudo bash setup-kiosk.sh --skip-apt
-sudo systemctl restart signage
-```
-
-**Do not use** phantom HDMI udev rules on x86 unless you know you need them — that path is for Pi experiments only.
+**After re-running setup**, wait ~2 minutes after reboot for the VT switch (or run `signage-cursor-vt.service` manually once).
 
 ---
 

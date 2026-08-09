@@ -434,12 +434,16 @@ is_raspberry_pi() {
   [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null
 }
 
-install_pi_cursor_vt_fix() {
+install_cursor_vt_fix() {
   if [[ -f "$SCRIPT_DIR/scripts/signage-install-cursor-vt-fix.sh" ]]; then
     SIGNAGE_QUIET=1 bash "$SCRIPT_DIR/scripts/signage-install-cursor-vt-fix.sh"
   else
-    echo "==> Warning: scripts/signage-install-cursor-vt-fix.sh not found — phantom cursor may show on Pi." >&2
+    echo "==> Warning: scripts/signage-install-cursor-vt-fix.sh not found — cage cursor may show." >&2
   fi
+}
+
+install_pi_cursor_vt_fix() {
+  install_cursor_vt_fix
 }
 
 remove_pi_cursor_vt_fix() {
@@ -629,11 +633,11 @@ EOF
 fi
 
 if is_raspberry_pi; then
-  echo "==> Pi phantom cursor suppress (VT switch after signage is up)"
-  install_pi_cursor_vt_fix
+  echo "==> Phantom cursor suppress (VT switch after signage is up)"
 else
-  remove_pi_cursor_vt_fix
+  echo "==> Phantom cursor suppress (VT switch — cage compositor pointer)"
 fi
+install_cursor_vt_fix
 
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" ]]; then
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" /usr/local/bin/signage-kiosk-wait-for-server
@@ -654,6 +658,9 @@ fi
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-report-local-ip.sh" ]]; then
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-report-local-ip.sh" /usr/local/bin/signage-kiosk-report-local-ip
 fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-url-local-ip.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-url-local-ip.sh" /usr/local/bin/signage-kiosk-url-local-ip
+fi
 
 echo "==> Writing systemd service"
 SIGNAGE_AFTER="network-online.target systemd-logind.service systemd-user-sessions.service seatd.service user@${KIOSK_UID}.service"
@@ -668,7 +675,7 @@ if [[ "$CHROMIUM" == *"/snap/"* ]] || [[ -x /snap/bin/chromium ]]; then
   SIGNAGE_WANTS="$SIGNAGE_WANTS snapd.seeded.service"
 fi
 SIGNAGE_EXEC_START_POST=""
-if is_raspberry_pi && [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
+if [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
   SIGNAGE_EXEC_START_POST="ExecStartPost=-/bin/systemctl start signage-cursor-vt.service"
 fi
 
@@ -881,7 +888,7 @@ if [[ $WITH_CEC -eq 1 ]] && [[ -x /usr/local/bin/signage-cec-sync ]]; then
   systemctl enable signage-cec.timer
   systemctl start signage-cec.timer
 fi
-if is_raspberry_pi && [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
+if [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
   systemctl enable signage-cursor-vt.service
 fi
 
@@ -930,12 +937,11 @@ HTTPS / SELF-SIGNED CERTS
   Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
-CURSOR
-  Pi: VT switch (signage-cursor-vt.service) ~2 min after wall is up.
-      Logs: journalctl -u signage-cursor-vt -f
-      Do NOT use ydotool or libinput udev ignore on Pi.
-  x86: ydotool + signage-hide-cursor (pointer parked off-screen).
-      Check: pgrep -af 'signage-hide-cursor|ydotoold'
+CURSOR (cage compositor pointer — VT switch on Pi and x86)
+  signage-cursor-vt.service runs ~2 min after boot (or: sudo systemctl start signage-cursor-vt.service)
+  Logs: journalctl -u signage-cursor-vt -f
+  Do NOT use ydotool or libinput udev ignore on Pi (black screen).
+  x86: ydotool is optional only — VT switch is the fix.
 
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer

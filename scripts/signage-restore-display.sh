@@ -72,13 +72,11 @@ if [[ "$IS_PI" -eq 0 ]] && [[ -f "$SCRIPT_DIR/signage-hide-cursor.sh" ]]; then
 fi
 
 SIGNAGE_EXEC_START_POST=""
-if [[ "$IS_PI" -eq 1 ]]; then
-  if [[ -f "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh" ]]; then
-    echo "==> Installing Pi phantom cursor suppress (VT switch)"
-    SIGNAGE_QUIET=1 bash "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh"
-    SIGNAGE_EXEC_START_POST="ExecStartPost=-/bin/systemctl start signage-cursor-vt.service"
-    systemctl enable signage-cursor-vt.service 2>/dev/null || true
-  fi
+if [[ -f "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh" ]]; then
+  echo "==> Installing cage cursor suppress (VT switch)"
+  SIGNAGE_QUIET=1 bash "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh"
+  SIGNAGE_EXEC_START_POST="ExecStartPost=-/bin/systemctl start signage-cursor-vt.service"
+  systemctl enable signage-cursor-vt.service 2>/dev/null || true
 fi
 
 SIGNAGE_AFTER="network-online.target systemd-logind.service systemd-user-sessions.service seatd.service user@${KIOSK_UID}.service"

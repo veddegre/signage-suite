@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install one-shot VT cursor suppress (Pi + cage phantom pointer). Safe — does not use udev/ydotool.
+# Install VT cursor suppress for cage kiosks (Pi + x86). Safe — does not use udev/ydotool.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ install -m 755 "$SCRIPT_DIR/signage-suppress-cursor-vt.sh" /usr/local/bin/signag
 
 cat > /etc/systemd/system/signage-cursor-vt.service <<'EOF'
 [Unit]
-Description=Suppress cage phantom cursor (Pi VT switch)
+Description=Suppress cage phantom cursor (VT switch)
 After=signage.service network-online.target
 Wants=signage.service
 

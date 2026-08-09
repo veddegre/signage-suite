@@ -72,9 +72,14 @@ fi
 logger -t signage-kiosk "starting cage browser=$CHROMIUM url=$KIOSK_URL scale=$SCALE"
 
 launch_url="$KIOSK_URL"
+KIOSK_LOCAL_IP=""
 if command -v signage-kiosk-primary-ip >/dev/null; then
   KIOSK_LOCAL_IP="$(signage-kiosk-primary-ip 2>/dev/null || true)"
-  if [[ -n "$KIOSK_LOCAL_IP" ]]; then
+fi
+if [[ -n "$KIOSK_LOCAL_IP" ]]; then
+  if command -v signage-kiosk-url-local-ip >/dev/null; then
+    launch_url="$(signage-kiosk-url-local-ip "$KIOSK_URL" "$KIOSK_LOCAL_IP")"
+  elif command -v python3 >/dev/null; then
     launch_url="$(python3 - "$KIOSK_URL" "$KIOSK_LOCAL_IP" <<'PY'
 import sys
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -85,9 +90,10 @@ q["kiosk_local_ip"] = [ip]
 print(urlunparse((p.scheme, p.netloc, p.path, p.params, urlencode(q, doseq=True), p.fragment)))
 PY
 )"
-    if command -v signage-kiosk-report-local-ip >/dev/null; then
-      signage-kiosk-report-local-ip 2>/dev/null || true
-    fi
+  fi
+  logger -t signage-kiosk "LAN IP $KIOSK_LOCAL_IP launch=${launch_url%%kiosk_local_ip=*}kiosk_local_ip=…"
+  if command -v signage-kiosk-report-local-ip >/dev/null; then
+    signage-kiosk-report-local-ip || logger -t signage-kiosk "local-ip report failed at startup (server may need git pull)"
   fi
 fi
 

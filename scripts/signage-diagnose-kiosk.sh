@@ -66,6 +66,25 @@ if [[ -f /etc/signage/kiosk.conf ]]; then
 fi
 echo
 
+echo "-- cursor --"
+systemctl is-enabled signage-cursor-vt.service 2>/dev/null || echo "signage-cursor-vt.service not installed"
+systemctl is-active signage-cursor-vt.service 2>/dev/null || echo "signage-cursor-vt not run yet (normal until ~2 min after boot)"
+command -v signage-hide-cursor 2>/dev/null || echo "signage-hide-cursor: not installed"
+command -v ydotool 2>/dev/null || echo "ydotool: not installed (optional; VT switch is the real fix)"
+echo
+
+echo "-- LAN IP reporting --"
+command -v signage-kiosk-primary-ip 2>/dev/null || echo "signage-kiosk-primary-ip: MISSING"
+if [[ -x /usr/local/bin/signage-kiosk-primary-ip ]]; then
+  echo "detected: $(signage-kiosk-primary-ip 2>/dev/null || echo '(none)')"
+fi
+systemctl is-enabled signage-local-ip.timer 2>/dev/null || echo "signage-local-ip.timer not installed"
+if [[ -x /usr/local/bin/signage-kiosk-report-local-ip ]]; then
+  echo "manual report test:"
+  /usr/local/bin/signage-kiosk-report-local-ip && echo "  OK" || echo "  FAILED — check journalctl -t signage-kiosk; server needs git pull for presence-local API"
+fi
+echo
+
 echo "-- recent logs --"
 journalctl -u signage -n 25 --no-pager 2>/dev/null || true
 echo

@@ -3,13 +3,14 @@
 set -euo pipefail
 
 host_from_url() {
-  local url="$1"
-  python3 - "$url" <<'PY'
-import sys
-from urllib.parse import urlparse
-u = urlparse(sys.argv[1])
-print(u.hostname or '')
-PY
+  local url="$1" host
+  [[ -n "$url" ]] || return 1
+  host="${url#*://}"
+  host="${host%%/*}"
+  host="${host%%:*}"
+  host="${host%%\?*}"
+  [[ -n "$host" ]] || return 1
+  printf '%s' "$host"
 }
 
 pick_route_src() {

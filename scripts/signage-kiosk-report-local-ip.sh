@@ -4,6 +4,7 @@ set -euo pipefail
 
 CONF=/etc/signage/kiosk.conf
 if [[ ! -f "$CONF" ]]; then
+  logger -t signage-kiosk "local-ip report skipped — no kiosk.conf"
   exit 0
 fi
 # shellcheck disable=SC1091
@@ -12,6 +13,12 @@ source "$CONF"
 URL="${KIOSK_URL:-}"
 SCREEN="${SCREEN:-main}"
 if [[ -z "$URL" ]]; then
+  logger -t signage-kiosk "local-ip report skipped — KIOSK_URL empty"
+  exit 0
+fi
+
+if [[ ! -x /usr/local/bin/signage-kiosk-primary-ip ]]; then
+  logger -t signage-kiosk "local-ip report skipped — signage-kiosk-primary-ip missing"
   exit 0
 fi
 
@@ -28,22 +35,36 @@ if [[ -f "$STATE" ]] && [[ "$(cat "$STATE" 2>/dev/null)" == "$LOCAL_IP" ]]; then
 fi
 
 presence_url="$URL"
+if [[ "$presence_url" != *'screen='* && "$SCREEN" != "main" ]]; then
+  if [[ "$presence_url" == *'?'* ]]; then
+    presence_url="${presence_url}&screen=${SCREEN}"
+  else
+    presence_url="${presence_url}?screen=${SCREEN}"
+  fi
+fi
 if [[ "$presence_url" == *'?'* ]]; then
   presence_url="${presence_url}&api=presence-local"
 else
   presence_url="${presence_url}?api=presence-local"
 fi
 
-curl_args=(-fsS --max-time 20 -X POST -H 'Content-Type: application/json')
+curl_args=(--max-time 20 -X POST -H 'Content-Type: application/json')
 if [[ "${KIOSK_IGNORE_SSL:-1}" == "1" ]]; then
   curl_args+=(-k)
 fi
 
 payload="$(printf '{"local_ip":"%s"}' "$LOCAL_IP")"
-if curl "${curl_args[@]}" -d "$payload" "$presence_url"; then
+response="$(mktemp)"
+http_code=0
+http_code="$(curl "${curl_args[@]}" -d "$payload" -o "$response" -w '%{http_code}' "$presence_url" 2>/dev/null || printf '000')"
+body="$(tr -d '\n' <"$response" | head -c 200)"
+rm -f "$response"
+
+if [[ "$http_code" == "200" ]] && [[ "$body" == *'"ok":true'* || "$body" == *'"ok": true'* ]]; then
   printf '%s' "$LOCAL_IP" >"$STATE"
-  logger -t signage-kiosk "reported local IP $LOCAL_IP"
-else
-  logger -t signage-kiosk "local-ip report failed ($presence_url)"
-  exit 1
+  logger -t signage-kiosk "reported local IP $LOCAL_IP (HTTP $http_code)"
+  exit 0
 fi
+
+logger -t signage-kiosk "local-ip report failed HTTP $http_code url=$presence_url body=$body"
+exit 1
