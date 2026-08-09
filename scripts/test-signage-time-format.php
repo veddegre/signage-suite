@@ -17,6 +17,7 @@ $ts = strtotime('2026-08-06 15:30:00');
 assert(signage_format_time($ts) === date('g:i A', $ts), 'default 12h format time');
 
 $expr = signage_js_format_time_expr('now', 'tz');
+assert(str_contains($expr, 'new Date().toLocaleTimeString'), 'now maps to new Date()');
 assert(str_contains($expr, '{timeZone: tz}'), 'timezone js object');
 assert(!str_contains($expr, '{{'), 'no double-brace js syntax error');
 

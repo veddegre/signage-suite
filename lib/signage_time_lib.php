@@ -140,6 +140,9 @@ JS;
 /** JS expression returning formatted time (for inline assignment). */
 function signage_js_format_time_expr(string $dateVar = 'new Date()', ?string $timezoneVar = null, ?string $screen = null): string
 {
+    if ($dateVar === 'now' || $dateVar === 'n') {
+        $dateVar = 'new Date()';
+    }
     $opts = signage_js_clock_options_json(null, $screen);
     if ($timezoneVar !== null && $timezoneVar !== '') {
         return $dateVar . '.toLocaleTimeString(undefined, Object.assign(' . $opts . ', {timeZone: ' . $timezoneVar . '}))';

@@ -415,18 +415,10 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     if (document.visibilityState === 'visible') refresh();
   });
 })();
-<?php if ($showClock): ?>
-(function(){
-  const tz = <?= json_encode(TIMEZONE) ?>;
-  function tick(){
-    const el = document.getElementById('clock');
-    if (!el) return;
-    el.textContent = <?= signage_js_format_time_expr('now', 'tz', $SCREEN) ?>;
-  }
-  tick(); setInterval(tick, 1000);
-})();
-<?php endif; ?>
 </script>
+<?php if ($showClock): ?>
+<script><?= signage_clock_tick_script('clock', TIMEZONE, $SCREEN) ?></script>
+<?php endif; ?>
 <?php if (!$embedded): include dirname(__DIR__, 2) . '/ticker.php'; endif; ?>
 </body>
 </html>
