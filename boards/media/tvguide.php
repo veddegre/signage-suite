@@ -40,18 +40,11 @@ $reloadSec = tvguide_reload_sec();
 $embedded = isset($_GET['noticker']);
 $channelLabelMode = tvguide_channel_label_mode();
 $channelColClass = $channelLabelMode === 'none' ? ' grid-no-badge' : '';
+$timelineMarkers = tvguide_timeline_markers(
+    tvguide_prime_window(new DateTimeZone(TIMEZONE))
+);
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-function tvguide_hour_label(int $hour): string
-{
-    $dt = DateTimeImmutable::createFromFormat('G', (string)$hour, new DateTimeZone(TIMEZONE));
-    if ($dt === false) {
-        return (string)$hour;
-    }
-
-    return $dt->format('g A');
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -81,22 +74,29 @@ function tvguide_hour_label(int $hour): string
   .grid-wrap { min-height:0; overflow:hidden; background:var(--surface);
                border:1px solid color-mix(in srgb, var(--hairline) 50%, transparent); border-radius:14px; }
   .grid { display:grid; width:100%; height:100%;
-          grid-template-columns: minmax(260px, 320px) repeat(<?= $hourCount ?>, minmax(0, 1fr));
+          grid-template-columns: minmax(260px, 320px) 1fr;
           grid-template-rows: auto repeat(<?= max(1, $rowCount) ?>, minmax(0, 1fr)); }
-  .grid .corner, .grid .hour, .grid .ch, .grid .track {
+  .grid .corner, .grid .time-ruler, .grid .ch, .grid .track {
     border-right:1px solid color-mix(in srgb, var(--hairline) 35%, transparent);
     border-bottom:1px solid color-mix(in srgb, var(--hairline) 35%, transparent);
     min-width:0; min-height:0; }
   .grid .corner { background:color-mix(in srgb, var(--lake-night) 55%, var(--harbor));
-                   padding:12px 14px; font-size:17px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mist); }
-  .grid .hour { position:relative; background:color-mix(in srgb, var(--lake-night) 45%, var(--harbor));
-                padding:12px 10px 18px; text-align:center; font-family:'Big Shoulders Display'; font-weight:600;
-                font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; color:var(--snow); }
-  .grid .hour::before { content:''; position:absolute; left:50%; top:10px; bottom:22px; width:1px;
-                        background:color-mix(in srgb, var(--hairline) 70%, transparent); pointer-events:none; }
-  .grid .hour .tick { display:block; margin-top:6px; font-family:'IBM Plex Sans',sans-serif; font-weight:500;
-                      font-size:<?= $boardH < 1080 ? 13 : 15 ?>px; letter-spacing:.5px; color:var(--mist);
-                      opacity:.75; }
+                   padding:12px 14px; font-size:17px; letter-spacing:1.5px; text-transform:uppercase; color:var(--mist);
+                   display:flex; align-items:flex-end; }
+  .grid .time-ruler { grid-column:2; display:grid; grid-template-columns:repeat(<?= $halfHours ?>, minmax(0, 1fr));
+                      padding:0 10px 0 4px; background:color-mix(in srgb, var(--lake-night) 45%, var(--harbor)); }
+  .grid .time-slot { position:relative; display:flex; align-items:center; justify-content:center; min-height:<?= $boardH < 1080 ? 52 : 58 ?>px;
+                     padding:6px 4px; text-align:center; color:var(--mist);
+                     border-left:1px dashed color-mix(in srgb, var(--hairline) 55%, transparent); }
+  .grid .time-slot:first-child { border-left:none; }
+  .grid .time-slot.hour-mark { font-family:'Big Shoulders Display'; font-weight:600;
+                               font-size:<?= $boardH < 1080 ? 26 : 30 ?>px; color:var(--snow);
+                               border-left-style:solid;
+                               border-left-color:color-mix(in srgb, var(--hairline) 90%, transparent);
+                               border-left-width:2px; background:color-mix(in srgb, var(--lake-night) 20%, transparent); }
+  .grid .time-slot.half-mark { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; font-variant-numeric:tabular-nums; opacity:.82; }
+  .grid .time-slot.hour-mark + .time-slot.half-mark { border-left-style:dotted;
+                                                      border-left-color:color-mix(in srgb, var(--hairline) 65%, transparent); }
   .grid .ch { display:flex; align-items:center; gap:12px; padding:10px 14px; min-height:0;
               background:color-mix(in srgb, var(--lake-night) 22%, transparent);
               border-left:4px solid var(--net-accent, color-mix(in srgb, var(--mist) 35%, transparent)); }
@@ -117,7 +117,7 @@ function tvguide_hour_label(int $hour): string
   .grid .ch .logo.fallback { font-family:'Big Shoulders Display'; font-weight:700;
                              font-size:<?= $boardH < 1080 ? 13 : 15 ?>px; letter-spacing:.4px; color:var(--mist); }
   .grid.grid-no-badge .ch .num { display:none; }
-  .grid.grid-no-badge { grid-template-columns: minmax(220px, 280px) repeat(<?= $hourCount ?>, minmax(0, 1fr)); }
+  .grid.grid-no-badge { grid-template-columns: minmax(220px, 280px) 1fr; }
   .grid .ch .id { min-width:0; }
   .grid .ch .call { font-size:<?= $boardH < 1080 ? 24 : 28 ?>px; font-weight:600; line-height:1.1; }
   .grid .ch .net { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); white-space:nowrap;
@@ -129,14 +129,14 @@ function tvguide_hour_label(int $hour): string
                        background-image:repeating-linear-gradient(to right,
                          transparent 0,
                          transparent calc(<?= round($halfPct, 6) ?>% - 1px),
-                         color-mix(in srgb, var(--hairline) 50%, transparent) calc(<?= round($halfPct, 6) ?>% - 1px),
-                         color-mix(in srgb, var(--hairline) 50%, transparent) <?= round($halfPct, 6) ?>%); }
+                         color-mix(in srgb, var(--hairline) 62%, transparent) calc(<?= round($halfPct, 6) ?>% - 1px),
+                         color-mix(in srgb, var(--hairline) 62%, transparent) <?= round($halfPct, 6) ?>%); }
   .grid .track-lines::after { content:''; position:absolute; inset:0;
                        background-image:repeating-linear-gradient(to right,
                          transparent 0,
                          transparent calc(<?= round($hourPct, 6) ?>% - 1px),
-                         color-mix(in srgb, var(--hairline) 82%, transparent) calc(<?= round($hourPct, 6) ?>% - 1px),
-                         color-mix(in srgb, var(--hairline) 82%, transparent) <?= round($hourPct, 6) ?>%); }
+                         color-mix(in srgb, var(--hairline) 95%, transparent) calc(<?= round($hourPct, 6) ?>% - 1px),
+                         color-mix(in srgb, var(--hairline) 95%, transparent) <?= round($hourPct, 6) ?>%); }
   .grid .track-pane { position:relative; height:100%; min-height:0; }
   .grid .block { --bar: color-mix(in srgb, var(--beacon) 72%, var(--snow));
                  position:absolute; top:0; bottom:0; min-width:0; border-radius:10px; padding:8px 10px;
@@ -148,11 +148,11 @@ function tvguide_hour_label(int $hour): string
                  box-shadow:inset 3px 0 0 var(--bar); overflow:hidden; }
   .grid .block .block-body { flex:1 1 auto; min-height:0; overflow:hidden;
                               display:flex; flex-direction:column; gap:2px; }
-  .grid .block .title { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; line-height:1.18; font-weight:600;
+  .grid .block .title { font-size:<?= $boardH < 1080 ? 19 : 22 ?>px; line-height:1.16; font-weight:600;
                         overflow:hidden; overflow-wrap:break-word;
                         display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-  .grid .block .sub { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; color:color-mix(in srgb, var(--snow) 72%, var(--mist));
-                     line-height:1.2; overflow:hidden; overflow-wrap:break-word;
+  .grid .block .sub { font-size:<?= $boardH < 1080 ? 13 : 15 ?>px; color:color-mix(in srgb, var(--snow) 72%, var(--mist));
+                     line-height:1.18; overflow:hidden; overflow-wrap:break-word;
                      display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
   .grid .block .time { flex:0 0 auto; margin-top:auto; padding-top:4px;
                        font-size:<?= $boardH < 1080 ? 13 : 15 ?>px; color:color-mix(in srgb, var(--mist) 88%, transparent);
@@ -167,7 +167,8 @@ function tvguide_hour_label(int $hour): string
   .grid .block.fit-narrow .sub { display:none; }
   .grid .block.fit-medium .title { -webkit-line-clamp:2; }
   .grid .block.fit-medium .sub { -webkit-line-clamp:1; }
-  .grid .block.fit-full .title { -webkit-line-clamp:2; }
+  .grid .block.fit-full .title { -webkit-line-clamp:3; }
+  .grid .block.fit-full.has-sub .title { -webkit-line-clamp:2; }
   .grid .block.fit-full .sub { -webkit-line-clamp:2; }
   .grid .block.continues .block-body { padding-right:12px; }
   .grid .block.tone-news    { --bar:#6ea8e8; }
@@ -225,9 +226,11 @@ function tvguide_hour_label(int $hour): string
     <div class="grid-wrap">
       <div class="grid<?= h($channelColClass) ?>">
         <div class="corner">Channel</div>
-        <?php foreach ($hours as $hour): ?>
-        <div class="hour"><?= h(tvguide_hour_label((int)$hour)) ?><span class="tick">:30</span></div>
-        <?php endforeach; ?>
+        <div class="time-ruler" aria-hidden="false">
+          <?php foreach ($timelineMarkers as $marker): ?>
+          <div class="time-slot<?= !empty($marker['is_hour']) ? ' hour-mark' : ' half-mark' ?>"><?= h((string)$marker['label']) ?></div>
+          <?php endforeach; ?>
+        </div>
 
         <?php foreach ($rows as $row):
             $callsign = tvguide_callsign_short((string)($row['callsign'] ?? ''));
@@ -281,6 +284,10 @@ function tvguide_hour_label(int $hour): string
               $width = max(1.0, min(100.0 - $left, (float)($block['width'] ?? 1)));
               $tone = preg_replace('/[^a-z0-9_-]/', '', (string)($block['tone'] ?? 'default')) ?: 'default';
               $layoutClass = tvguide_block_layout_classes($width, $hourPct);
+              $showSub = tvguide_block_show_subtitle($block, $width);
+              if ($showSub) {
+                  $layoutClass .= ' has-sub';
+              }
               $liveClass = !empty($block['live']) ? ' live' : '';
               $style = sprintf(
                   'left:calc(%s%% + 2px);width:calc(%s%% - 4px);',
@@ -291,7 +298,7 @@ function tvguide_hour_label(int $hour): string
           <div class="block tone-<?= h($tone) ?><?= h($layoutClass) ?><?= h($liveClass) ?>" style="<?= h($style) ?>">
             <div class="block-body">
             <div class="title"><?= h((string)($block['title'] ?? '')) ?></div>
-            <?php if (!empty($block['subtitle'])): ?>
+            <?php if ($showSub): ?>
             <div class="sub"><?= h((string)$block['subtitle']) ?></div>
             <?php endif; ?>
             </div>
