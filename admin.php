@@ -5526,7 +5526,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <div class="section-title">Video playlist</div>
           <?php if (admin_is_super()): ?>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
-            and either a YouTube URL or a local filename in <code>videos/</code>. After saving, videos appear on the wall only when
+            and either a YouTube URL or a local filename in <code>videos/</code>. Check <strong>Live stream</strong> (or paste a
+            <code>youtube.com/live/…</code> URL) to embed ongoing broadcasts without downloading. After saving, videos appear on the wall only when
             listed in <strong>Admin → Rotation</strong> as <code>video.php?v=KEY</code> — or check the box below to add them automatically.</div>
           <?php else: ?>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>
@@ -5563,7 +5564,12 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <?php if (admin_is_super()): ?>
                 <div>
                   <label class="mini">YouTube URL</label>
-                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/watch?v=…">
+                  <input type="text" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)($row['youtube'] ?? '')) ?>" placeholder="https://youtube.com/watch?v=… or /live/…">
+                </div>
+                <div>
+                  <label class="check" style="margin-top:22px"><input type="checkbox" name="VIDEOS[<?= (int)$vri ?>][live]" value="1"
+                    <?= !empty($row['live']) || (trim((string)($row['youtube'] ?? '')) !== '' && str_contains((string)($row['youtube'] ?? ''), '/live/')) ? 'checked' : '' ?>>
+                    Live stream (embed, no download)</label>
                 </div>
                 <?php elseif (trim((string)($row['youtube'] ?? '')) !== ''): ?>
                 <input type="hidden" name="VIDEOS[<?= (int)$vri ?>][youtube]" value="<?= h((string)$row['youtube']) ?>">
@@ -5576,14 +5582,19 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               <?php admin_entry_sharing_html('VIDEOS[' . (int)$vri . ']', $row); ?>
               <div class="video-card-meta">
                 <?php if ($st): ?>
-                  <?php if ($st['file']): ?>
+                  <?php if (!empty($st['embed_ready'])): ?>
+                    <span class="pill ok">Live embed</span>
+                    <span>Dwell: <?= h((string)$st['rotation_dwell']) ?> s</span>
+                  <?php elseif ($st['file']): ?>
                     <span>File: <code><?= h($st['file']) ?></code></span>
                   <?php else: ?>
                     <span><?= admin_is_super() ? 'Not downloaded yet' : 'No file yet' ?></span>
                   <?php endif; ?>
                   <?php if ($st['duration_label']): ?>
                     <span>Length: <?= h($st['duration_label']) ?></span>
+                    <?php if (empty($st['embed_ready'])): ?>
                     <span>Dwell: <?= h((string)$st['rotation_dwell']) ?> s</span>
+                    <?php endif; ?>
                   <?php endif; ?>
                   <?php if ($st['in_rotation']): ?>
                     <span class="pill ok">On main rotation</span>
@@ -5593,7 +5604,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <?php endif; ?>
                 <div class="video-card-actions">
                   <a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px" href="<?= h(video_rotation_url($vk)) ?>" target="_blank" rel="noopener">Preview</a>
-                  <?php if (admin_is_super() && $st && $st['fetchable']): ?>
+                  <?php if (admin_is_super() && $st && $st['fetchable'] && empty($st['embed_ready'])): ?>
                     <button type="submit" class="secondary" form="video-fetch-<?= h(preg_replace('/[^a-z0-9_\-]/i', '', $vk)) ?>">Fetch</button>
                   <?php endif; ?>
                   <?php if ($canDeleteVideo): ?>
@@ -11184,7 +11195,8 @@ function addVideoCard() {
       '<div><label class="mini">Key</label><input type="text" name="VIDEOS[' + idx + '][_key]" placeholder="lantern" required data-video-key></div>' +
       '<div><label class="mini">Title (optional)</label><input type="text" name="VIDEOS[' + idx + '][title]" placeholder="On-screen title" data-video-title></div>' +
       (showYoutube
-        ? '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=…"></div>'
+        ? '<div><label class="mini">YouTube URL</label><input type="text" name="VIDEOS[' + idx + '][youtube]" placeholder="https://youtube.com/watch?v=… or /live/…"></div>' +
+          '<div><label class="check" style="margin-top:22px"><input type="checkbox" name="VIDEOS[' + idx + '][live]" value="1"> Live stream (embed, no download)</label></div>'
         : '') +
       '<div style="grid-column:' + (showYoutube ? '2 / -1' : '1 / -1') + '"><label class="mini">' +
         (showYoutube ? 'or local file' : 'Local file') +

@@ -684,13 +684,13 @@ Useful for poster-style feeds (e.g. portrait artwork).
 
 ### video.php — Video Board
 
-Videos downloaded locally with **yt-dlp** — no live YouTube embed (no ads, no embed blocks on headless servers).
+On-demand videos are downloaded locally with **yt-dlp** (no ads, no embed blocks on headless servers). **YouTube live** streams can embed directly — check **Live stream** in admin or paste a `youtube.com/live/…` URL.
 
 **Registry:** `youtube` URL or local `file` per entry → `video.php?v=<key>`. Per-entry **Access** (owner, users, roles).
 
-Muted by default; uncheck **Mute all videos** in admin if needed. Refresh via admin UI or `php video.php fetch`.
+Muted by default; uncheck **Mute all videos** in admin if needed. Refresh downloads via admin UI or `php video.php fetch`. Live embed dwell defaults to **300 s** (`video.LIVE_DWELL`).
 
-See [video-youtube.md](video-youtube.md) for bot checks, cookies, and cron.
+See [video-youtube.md](video-youtube.md) for live streams, bot checks, cookies, and cron.
 
 ---
 

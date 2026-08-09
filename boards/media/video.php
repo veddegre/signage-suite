@@ -4,6 +4,10 @@
  * Plays locally stored videos fullscreen — downloaded with yt-dlp and served
  * from disk so the kiosk never hits a live YouTube embed (no ads, no bot checks).
  *
+ * YouTube **live** streams can embed directly (no download): set Live stream in admin
+ * or paste a youtube.com/live/… URL. Ongoing broadcasts use rotation dwell from
+ * video.LIVE_DWELL (default 300s) instead of file duration.
+ *
  * One file is both the player and the downloader:
  *
  *   PLAYER   video.php?v=<key>      → plays that video (no ?v= = first entry)
@@ -101,6 +105,9 @@ $title = $video['title'] ?? '';
 $embedded = isset($_GET['noticker']);
 $settleMs = max(0, (int)($_GET['settle'] ?? 0));
 $autoplayMuted = $embedded || MUTED;
+$isLive = video_entry_is_live($video);
+$ytId = $isLive ? video_youtube_video_id(trim((string)($video['youtube'] ?? ''))) : null;
+$embedSrc = ($ytId !== null) ? video_youtube_embed_url($ytId, $autoplayMuted) : null;
 $autoplayAttr = ($settleMs <= 0 && !$embedded) ? 'autoplay' : '';
 $loopAttr = $embedded ? '' : 'loop';
 ?>
@@ -130,10 +137,69 @@ $loopAttr = $embedded ? '' : 'loop';
   .empty h2 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--snow); }
   .empty p { font-size:27px; max-width:1100px; text-align:center; line-height:1.6; }
   .empty code { color:var(--beacon); background:#141f33; padding:2px 12px; border-radius:6px; }
+  .yt-wrap { position:absolute; inset:0; background:#000; overflow:hidden; }
+  .yt-wrap iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; }
 </style>
 </head>
 <body>
-<?php if ($src === null): ?>
+<?php if ($isLive && $embedSrc === null): ?>
+  <div class="empty">
+    <h2>Invalid YouTube live URL for &ldquo;<?= h($key) ?>&rdquo;</h2>
+    <p>Set a valid YouTube URL in admin (watch, youtu.be, or <code>youtube.com/live/…</code>)
+       and check <strong>Live stream</strong>, or use a <code>/live/</code> URL (auto-detected).</p>
+  </div>
+<?php elseif ($isLive && $embedSrc !== null): ?>
+  <div class="yt-wrap">
+    <iframe id="yt-live" src="<?= h($embedSrc) ?>" allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
+  </div>
+  <div class="chrome">
+    <div class="title"><?= h($title) ?></div>
+    <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
+  </div>
+  <script>
+    const EMBEDDED = <?= json_encode($embedded) ?>;
+    const EMBED_SRC = <?= json_encode($embedSrc) ?>;
+    <?php if (SHOW_CLOCK): ?>
+    <?= signage_clock_tick_script('clock', TIMEZONE) ?>
+    <?php endif; ?>
+    const frame = document.getElementById('yt-live');
+
+    function notifyReady() {
+      if (!EMBEDDED || window.parent === window) return;
+      try { window.parent.postMessage({ type: 'signage-ready' }, '*'); } catch (e) {}
+    }
+
+    function showEmbed() {
+      if (!frame) return;
+      if (frame.src !== EMBED_SRC) frame.src = EMBED_SRC;
+    }
+
+    function hideEmbed() {
+      if (!frame) return;
+      frame.src = 'about:blank';
+    }
+
+    if (EMBEDDED) {
+      window.addEventListener('message', function (ev) {
+        if (!ev.data) return;
+        if (ev.data.type === 'signage-stop') {
+          hideEmbed();
+          return;
+        }
+        if (ev.data.type === 'signage-show') {
+          showEmbed();
+        }
+      });
+      notifyReady();
+      if (document.readyState === 'complete') notifyReady();
+      else window.addEventListener('load', notifyReady, { once: true });
+      if (window.parent === window) showEmbed();
+    } else {
+      showEmbed();
+      setInterval(function () { location.reload(); }, 60 * 60 * 1000);
+    }
+  </script>
+<?php elseif ($src === null): ?>
   <div class="empty">
     <h2>No video downloaded for &ldquo;<?= h($key) ?>&rdquo;</h2>
     <p>Use <strong>Download YouTube videos</strong> in admin, run

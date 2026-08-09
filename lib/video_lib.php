@@ -39,6 +39,76 @@ function video_max_height(): int
     return $h > 0 ? $h : 1080;
 }
 
+/** Rotation dwell for YouTube live embeds (no fixed file length). */
+function video_live_dwell(): int
+{
+    $d = (int)cfg('video.LIVE_DWELL', 300);
+
+    return $d >= 15 ? $d : 300;
+}
+
+/** True when the entry should embed YouTube live instead of downloading. */
+function video_entry_is_live(array $v): bool
+{
+    if (!empty($v['live'])) {
+        return true;
+    }
+    $yt = trim((string)($v['youtube'] ?? ''));
+
+    return $yt !== '' && preg_match('#/live/#i', $yt) === 1;
+}
+
+/** Extract a YouTube video id from watch, youtu.be, /live/, embed, or shorts URLs. */
+function video_youtube_video_id(string $url): ?string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return null;
+    }
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return null;
+    }
+    $host = strtolower((string)($parts['host'] ?? ''));
+    if (str_contains($host, 'youtu.be')) {
+        $path = trim((string)($parts['path'] ?? ''), '/');
+        if (preg_match('/^[a-zA-Z0-9_-]{6,}$/', $path)) {
+            return $path;
+        }
+
+        return null;
+    }
+    $path = (string)($parts['path'] ?? '');
+    if (preg_match('#/(?:live|embed|shorts)/([a-zA-Z0-9_-]{6,})#', $path, $m)) {
+        return $m[1];
+    }
+    parse_str((string)($parts['query'] ?? ''), $q);
+    $id = trim((string)($q['v'] ?? ''));
+    if (preg_match('/^[a-zA-Z0-9_-]{6,}$/', $id)) {
+        return $id;
+    }
+
+    return null;
+}
+
+function video_youtube_embed_url(string $id, bool $muted = true): string
+{
+    $params = [
+        'autoplay' => '1',
+        'controls' => '0',
+        'rel' => '0',
+        'modestbranding' => '1',
+        'playsinline' => '1',
+        'fs' => '0',
+        'iv_load_policy' => '3',
+    ];
+    if ($muted) {
+        $params['mute'] = '1';
+    }
+
+    return 'https://www.youtube.com/embed/' . rawurlencode($id) . '?' . http_build_query($params);
+}
+
 function video_path(string $key, array $v, ?string $dir = null): ?string
 {
     $dir = $dir ?? video_dir();
@@ -1289,15 +1359,21 @@ function video_entry_status(string $key, array $v, ?string $dir = null): array
     $path = video_path($key, $v, $dir);
     $dur = $path ? video_duration($path) : null;
     $youtube = isset($v['youtube']) ? trim((string)$v['youtube']) : '';
+    $live = video_entry_is_live($v);
+    $ytId = $youtube !== '' ? video_youtube_video_id($youtube) : null;
+    $embedReady = $live && $ytId !== null;
     return [
         'key' => $key,
         'title' => $v['title'] ?? '',
         'file' => $path ? basename($path) : null,
         'duration_sec' => $dur,
         'duration_label' => $dur ? gmdate('i:s', (int)$dur) : null,
-        'rotation_dwell' => $dur ? (int)ceil($dur) : null,
+        'rotation_dwell' => $embedReady ? video_live_dwell() : ($dur ? (int)ceil($dur) : null),
         'youtube' => $youtube !== '' ? $youtube : null,
-        'fetchable' => $youtube !== '' && !str_contains($youtube, 'REPLACE_ME'),
+        'live' => $live,
+        'youtube_id' => $ytId,
+        'embed_ready' => $embedReady,
+        'fetchable' => !$live && $youtube !== '' && !str_contains($youtube, 'REPLACE_ME'),
         'local_only' => !isset($v['youtube']) || $youtube === '' || str_contains($youtube, 'REPLACE_ME'),
     ];
 }
@@ -1372,6 +1448,17 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
             continue;
         }
 
+        if (video_entry_is_live($v)) {
+            $st = video_entry_status($key, $v, $dir);
+            $entries[] = $st;
+            if ($st['embed_ready']) {
+                $emit("[{$key}] live embed — skipped download (rotation dwell {$st['rotation_dwell']} s)");
+            } else {
+                $emit("[{$key}] live embed — set a valid YouTube URL");
+            }
+            continue;
+        }
+
         $ytCheck = signage_youtube_url_allowed((string)$v['youtube']);
         if (!$ytCheck['ok']) {
             $emit("[{$key}] blocked — " . ($ytCheck['error'] ?? 'invalid YouTube URL'));
@@ -1425,6 +1512,9 @@ function video_fetch_entries(?callable $onLine = null, ?array $onlyKeys = null):
 
     $ok = true;
     foreach ($entries as $st) {
+        if (!empty($st['embed_ready'])) {
+            continue;
+        }
         if ($st['fetchable'] && !$st['file']) {
             $ok = false;
         }

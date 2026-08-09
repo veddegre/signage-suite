@@ -1,14 +1,32 @@
 # Video board — YouTube on headless servers
 
-The video board downloads with **yt-dlp** and plays from `./videos/` — no live embed. Headless servers often hit YouTube bot checks; this guide covers the fix.
+The video board downloads on-demand videos with **yt-dlp** and plays from `./videos/` — no live embed for regular uploads. **YouTube live** streams can embed directly in the browser (see [Live streams](#live-streams)). Headless servers often hit YouTube bot checks on downloads; this guide covers the fix.
 
 ## Basics
 
 - **Registry:** `youtube` URL or local `file` → `video.php?v=<key>`
+- **Live streams:** check **Live stream** in admin (or paste `youtube.com/live/…`) — embeds without download
 - **Refresh:** admin → **Video Board → Download / refresh**, or `php video.php fetch`
 - **Sound:** muted by default; kiosks from `setup-kiosk.sh` allow unmuted autoplay
 - **Cron (optional):** `0 4 * * 1 cd /var/www/boards && php video.php fetch >> /var/log/video-fetch.log 2>&1`
 - **yt-dlp updates:** admin shows installed vs latest GitHub release
+
+## Live streams
+
+Use this for ongoing broadcasts (news, events, city cams on YouTube) where downloading makes no sense.
+
+1. **Admin → Video Board** — add a playlist entry with a unique key.
+2. Paste the YouTube URL, e.g. `https://www.youtube.com/live/awQzjn72bI0` or any watch/youtu.be link.
+3. Check **Live stream (embed, no download)** — auto-checked when the URL contains `/live/`.
+4. Save, then add `video.php?v=KEY` to rotation (or use the deploy checkbox).
+
+**Rotation dwell** comes from **Live stream dwell** in board settings (default **300 s**), not file length. Tune it for how long each live slot should stay on the wall.
+
+**Notes:**
+
+- Live embeds need outbound HTTPS from the kiosk to YouTube (unlike downloaded files).
+- Some streams block embedding — preview the entry before adding to rotation.
+- Leave **Mute all videos** checked unless the kiosk is set up for unmuted autoplay.
 
 ## When YouTube blocks the server
 
