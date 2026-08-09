@@ -331,6 +331,24 @@ function signage_cam_cap_gradient_css(): string
          . 'transparent 100%);';
 }
 
+/** Cached URL for map canvas perf helpers (Leaflet attack/heat boards). */
+function signage_map_canvas_js_url(): string
+{
+    static $url = null;
+    if ($url === null) {
+        $path = __DIR__ . '/vendor/signage-map-canvas.js';
+        $v = is_file($path) ? (string)filemtime($path) : '1';
+        $url = 'vendor/signage-map-canvas.js?v=' . $v;
+    }
+
+    return $url;
+}
+
+function signage_map_canvas_script_tag(): string
+{
+    return '<script src="' . htmlspecialchars(signage_map_canvas_js_url(), ENT_QUOTES) . '"></script>';
+}
+
 /** Hide the mouse pointer on kiosk displays (shell + signage boards). */
 function signage_kiosk_cursor_css(): string
 {

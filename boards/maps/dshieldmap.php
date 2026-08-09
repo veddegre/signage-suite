@@ -40,6 +40,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 <?php if ($enabled): ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="<?= h(signage_map_canvas_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
   <?= signage_theme_css() ?>
@@ -218,32 +219,30 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       m.getContainer().appendChild(this._canvas);
       m.on('move resize viewreset zoomend', this._resize, this);
       this._resize();
-      this._tick = this._tick.bind(this);
-      requestAnimationFrame(this._tick);
+      this._drawBound = (now) => this._draw(now || performance.now());
+      SignageMapCanvas.bindAnimLoop(this, this._drawBound);
     },
     onRemove(m) {
-      cancelAnimationFrame(this._raf);
+      SignageMapCanvas.unbindAnimLoop(this);
       m.off('move resize viewreset zoomend', this._resize, this);
       L.DomUtil.remove(this._canvas);
     },
     _resize() {
       const size = this._map.getSize();
-      const dpr = window.devicePixelRatio || 1;
-      this._canvas.width = Math.round(size.x * dpr);
-      this._canvas.height = Math.round(size.y * dpr);
-      this._canvas.style.width = size.x + 'px';
-      this._canvas.style.height = size.y + 'px';
-      this._dpr = dpr;
+      this._dpr = SignageMapCanvas.resizeCanvas(this._canvas, size.x, size.y);
+      this._rebuildHeatPoints();
+    },
+    _rebuildHeatPoints() {
+      this._heatPts = COUNTRIES.map((c) => ({
+        c,
+        pt: heatMapPoint(this._map, c.lat, c.lng),
+      }));
     },
     _heatRgb(t, alpha) {
       const r = Math.round(35 + t * 220);
       const g = Math.round(18 + t * 100);
       const b = Math.round(55 + (1 - t) * 30);
       return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
-    },
-    _tick(now) {
-      this._draw(now || performance.now());
-      this._raf = requestAnimationFrame(this._tick);
     },
     _draw(now) {
       const ctx = this._canvas.getContext('2d');
@@ -254,8 +253,9 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       ctx.clearRect(0, 0, w / dpr, h / dpr);
 
       const pulse = 0.92 + 0.08 * Math.sin(now / 900);
-      for (const c of COUNTRIES) {
-        const pt = heatMapPoint(this._map, c.lat, c.lng);
+      for (const row of this._heatPts || []) {
+        const c = row.c;
+        const pt = row.pt;
         const t = c.intensity;
         const radius = (10 + t * 46) * (c.rank === 1 ? pulse : 1);
         const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, radius);
@@ -267,7 +267,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        if (c.rank <= 8 || t > 0.45) {
+        if (SignageMapCanvas.shouldDrawHeatLabel(c.rank, t)) {
           ctx.beginPath();
           ctx.arc(pt.x, pt.y, 3.5 + t * 2.5, 0, Math.PI * 2);
           ctx.fillStyle = this._heatRgb(t, 0.88);

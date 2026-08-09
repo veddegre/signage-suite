@@ -49,6 +49,7 @@ function iodamap_format_score(float $score): string
 <?php if ($enabled): ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="<?= h(signage_map_canvas_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
   <?= signage_theme_css() ?>
@@ -188,22 +189,24 @@ function iodamap_format_score(float $score): string
       m.getContainer().appendChild(this._canvas);
       m.on('move resize viewreset zoomend', this._resize, this);
       this._resize();
-      this._tick = this._tick.bind(this);
-      requestAnimationFrame(this._tick);
+      this._drawBound = (now) => this._draw(now || performance.now());
+      SignageMapCanvas.bindAnimLoop(this, this._drawBound);
     },
     onRemove(m) {
-      cancelAnimationFrame(this._raf);
+      SignageMapCanvas.unbindAnimLoop(this);
       m.off('move resize viewreset zoomend', this._resize, this);
       L.DomUtil.remove(this._canvas);
     },
     _resize() {
       const sz = this._map.getSize();
-      const dpr = window.devicePixelRatio || 1;
-      this._canvas.width = Math.round(sz.x * dpr);
-      this._canvas.height = Math.round(sz.y * dpr);
-      this._canvas.style.width = sz.x + 'px';
-      this._canvas.style.height = sz.y + 'px';
-      this._dpr = dpr;
+      this._dpr = SignageMapCanvas.resizeCanvas(this._canvas, sz.x, sz.y);
+      this._rebuildHeatPoints();
+    },
+    _rebuildHeatPoints() {
+      this._heatPts = COUNTRIES.map((c) => ({
+        c,
+        pt: heatMapPoint(this._map, c.lat, c.lng),
+      }));
     },
     _heatRgb(t, alpha, ongoing) {
       const r = Math.round(45 + t * 200 + (ongoing ? 25 : 0));
@@ -211,12 +214,12 @@ function iodamap_format_score(float $score): string
       const b = Math.round(100 + (1 - t) * 35);
       return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
     },
-    _tick(now) { this._draw(now||performance.now()); this._raf=requestAnimationFrame(this._tick); },
     _draw(now) {
       const ctx=this._canvas.getContext('2d'), dpr=this._dpr||1;
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,this._canvas.width/dpr,this._canvas.height/dpr);
-      for (const c of COUNTRIES) {
-        const pt = heatMapPoint(this._map, c.lat, c.lng);
+      for (const row of this._heatPts || []) {
+        const c = row.c;
+        const pt = row.pt;
         const t=c.intensity;
         const pulse = c.ongoing ? (0.92 + 0.08 * Math.sin(now / 520)) : 1;
         const radius = (10 + t * 44) * (c.rank === 1 ? pulse : (c.ongoing ? pulse : 1));
@@ -229,7 +232,9 @@ function iodamap_format_score(float $score): string
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5 + t * 2, 0, Math.PI * 2);
           ctx.fillStyle = this._heatRgb(t, 0.85, c.ongoing);
           ctx.fill();
-          heatDrawCode(ctx, c.code, pt.x, pt.y);
+          if (!SignageMapCanvas.profile().low || c.rank <= 3 || c.ongoing) {
+            heatDrawCode(ctx, c.code, pt.x, pt.y);
+          }
         }
         if (c.ongoing) {
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 + t * 2, 0, Math.PI * 2);

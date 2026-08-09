@@ -192,6 +192,30 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ---
 
+## Map boards on Pi (attack / heat animations)
+
+Animated map boards (Cloudflare attack maps, SANS DShield heatmaps, IODA) use a full-screen canvas at 60 fps on desktop. A **Pi 4 kiosk** is much slower — stuttery arcs and heat pulses are normal without tuning.
+
+**Server-side fix (automatic):** boards load `vendor/signage-map-canvas.js`, which detects ARM/Linux kiosks and:
+
+- Caps canvas resolution (DPR 1)
+- Limits redraws to ~24 fps (adaptive if still slow)
+- Caches arc/point geometry instead of recomputing every frame
+- Drops expensive glow (`shadowBlur`) and extra labels on low-end profile
+
+Deploy updated signage-suite on the **server** (boards are rendered there, not on the Pi). Kiosks pick it up on the next rotation reload (~30s) or when the board page reloads.
+
+**Debug overrides** (append to board URL in admin preview):
+
+| Query | Effect |
+|-------|--------|
+| `?mapperf=low` | Force Pi-style tuning (test on desktop) |
+| `?mapperf=high` | Force full-quality 60 fps |
+
+If still choppy: lower **Max flows** on attack maps in admin, or use **scale 1** on 1080p TVs (`KIOSK_SCALE=1` in `/etc/signage/kiosk.conf`).
+
+---
+
 ## Cursor on Raspberry Pi (phantom HDMI pointer)
 
 On many **Pi kiosks**, **cage** draws a compositor pointer from the HDMI/CEC input node (`vc4-hdmi-0`) — **no mouse plugged in**. CSS and blank Xcursor themes cannot remove it.

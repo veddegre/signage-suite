@@ -38,6 +38,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
 <?php if ($configured): ?>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="<?= h(signage_map_canvas_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
   <?= signage_theme_css() ?>
@@ -203,22 +204,22 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       m.getContainer().appendChild(this._canvas);
       m.on('move resize viewreset zoomend', this._resize, this);
       this._resize();
-      this._tick = this._tick.bind(this);
-      requestAnimationFrame(this._tick);
+      this._drawBound = (now) => this._draw(now || performance.now());
+      SignageMapCanvas.bindAnimLoop(this, this._drawBound);
     },
     onRemove(m) {
-      cancelAnimationFrame(this._raf);
+      SignageMapCanvas.unbindAnimLoop(this);
       m.off('move resize viewreset zoomend', this._resize, this);
       L.DomUtil.remove(this._canvas);
     },
     _resize() {
       const size = this._map.getSize();
-      const dpr = window.devicePixelRatio || 1;
-      this._canvas.width = Math.round(size.x * dpr);
-      this._canvas.height = Math.round(size.y * dpr);
-      this._canvas.style.width = size.x + 'px';
-      this._canvas.style.height = size.y + 'px';
-      this._dpr = dpr;
+      this._dpr = SignageMapCanvas.resizeCanvas(this._canvas, size.x, size.y);
+      this._rebuildArcCache();
+    },
+    _rebuildArcCache() {
+      const steps = SignageMapCanvas.arcSteps();
+      this._arcs = FLOWS.map((f) => this._arcPoints(f.origin, f.target, steps));
     },
     _layerPoint(lat, lng) {
       const p = this._map.latLngToContainerPoint([lat, lng]);
@@ -250,10 +251,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       }
       return { pts, p0, p1 };
     },
-    _tick(now) {
-      this._draw(now || performance.now());
-      this._raf = requestAnimationFrame(this._tick);
-    },
     _draw(now) {
       const ctx = this._canvas.getContext('2d');
       const dpr = this._dpr || 1;
@@ -262,8 +259,11 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w / dpr, h / dpr);
 
-      for (const flow of FLOWS) {
-        const arc = this._arcPoints(flow.origin, flow.target, 56);
+      const glow = SignageMapCanvas.glowBlur(6);
+      const low = SignageMapCanvas.profile().low;
+      FLOWS.forEach((flow, fi) => {
+        const arc = this._arcs[fi];
+        if (!arc) return;
         const weight = Math.max(1.2, Math.min(4.5, flow.percent / 2.5));
 
         ctx.beginPath();
@@ -292,7 +292,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
         ctx.strokeStyle = grad;
         ctx.lineWidth = weight + 0.8;
         ctx.shadowColor = 'rgba(179,136,255,0.45)';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = glow;
         ctx.stroke();
         ctx.shadowBlur = 0;
 
@@ -316,14 +316,14 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
           ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
           ctx.fillStyle = 'rgb(' + color + ')';
           ctx.fill();
-          if (code) {
+          if (code && !low) {
             ctx.font = '600 10px "IBM Plex Mono", monospace';
             ctx.fillStyle = 'rgba(237,242,251,0.9)';
             ctx.textAlign = 'center';
             ctx.fillText(code, pt.x, pt.y - 10 - pulse);
           }
         }
-      }
+      });
     },
   });
 
