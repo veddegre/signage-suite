@@ -153,7 +153,7 @@ function glance_headlines_fetch_raw(string $url, string $cacheKey, int $ttl): ?s
     }
 
     $ch = curl_init($url);
-    curl_setopt_array($ch, array_merge([
+    curl_setopt_array($ch, signage_curl_merge_options([
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
@@ -161,7 +161,7 @@ function glance_headlines_fetch_raw(string $url, string $cacheKey, int $ttl): ?s
         CURLOPT_MAXREDIRS => 4,
         CURLOPT_USERAGENT => 'HomeSignage/Glance/1.0',
         CURLOPT_ENCODING => '',
-    ], signage_curl_tls_options()));
+    ]));
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     curl_close($ch);

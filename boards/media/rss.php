@@ -94,7 +94,7 @@ function cached_get(string $url, string $key): ?string
     $f = CACHE_DIR . "/$key.dat";
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) return (string)file_get_contents($f);
     $ch = curl_init($url);
-    curl_setopt_array($ch, array_merge([
+    curl_setopt_array($ch, signage_curl_merge_options([
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
@@ -102,7 +102,7 @@ function cached_get(string $url, string $key): ?string
         CURLOPT_MAXREDIRS => 4,
         CURLOPT_USERAGENT => 'HomeSignage/1.0 (RSS board)',
         CURLOPT_ENCODING => '',
-    ], signage_curl_tls_options()));
+    ]));
     $body = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch); curl_close($ch);
     if ($body !== false && $code === 200) { @file_put_contents($f, $body, LOCK_EX); return $body; }

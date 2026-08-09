@@ -487,14 +487,14 @@ function webcam_http_get(string $url, int $timeout = 12, bool $noCache = false, 
     }
     $ch = curl_init($url);
     require_once __DIR__ . '/security_lib.php';
-    curl_setopt_array($ch, array_merge([
+    curl_setopt_array($ch, signage_curl_merge_options([
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => $timeout,
         CURLOPT_USERAGENT => $ctx['ua'],
         CURLOPT_HTTPHEADER => $headers,
-    ], signage_curl_tls_options()));
+    ]));
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);
@@ -1170,6 +1170,7 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
     if ($ctx['referer'] !== null && $ctx['referer'] !== '') {
         $probeHeaders[] = 'Referer: ' . $ctx['referer'];
     }
+    require_once __DIR__ . '/security_lib.php';
     $ch = curl_init($url);
     $opts = [
         CURLOPT_RETURNTRANSFER => $kind === 'image',
@@ -1182,7 +1183,7 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
     if ($probeHeaders !== []) {
         $opts[CURLOPT_HTTPHEADER] = $probeHeaders;
     }
-    curl_setopt_array($ch, $opts);
+    curl_setopt_array($ch, signage_curl_merge_options($opts));
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);

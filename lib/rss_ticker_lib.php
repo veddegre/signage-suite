@@ -118,7 +118,7 @@ function rss_ticker_headlines(string $feedKey, int $maxItems = 12): array
             return is_file($cacheFile) ? rss_ticker_parse_feed((string)file_get_contents($cacheFile), $maxItems) : [];
         }
         $ch = curl_init($feed['url']);
-        curl_setopt_array($ch, array_merge([
+        curl_setopt_array($ch, signage_curl_merge_options([
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_TIMEOUT => 12,
@@ -126,7 +126,7 @@ function rss_ticker_headlines(string $feedKey, int $maxItems = 12): array
             CURLOPT_MAXREDIRS => 4,
             CURLOPT_USERAGENT => 'HomeSignage/1.0 (news ticker)',
             CURLOPT_ENCODING => '',
-        ], signage_curl_tls_options()));
+        ]));
         $body = curl_exec($ch);
         $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         if ($body !== false && $code === 200) {

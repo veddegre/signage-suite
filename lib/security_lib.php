@@ -30,6 +30,17 @@ function signage_curl_tls_options(): array
     ];
 }
 
+/**
+ * Merge cURL options without reindexing integer CURLOPT keys (array_merge breaks curl_setopt_array).
+ *
+ * @param array<int,mixed> $base
+ * @return array<int,mixed>
+ */
+function signage_curl_merge_options(array $base): array
+{
+    return array_replace($base, signage_curl_tls_options());
+}
+
 function signage_admin_idle_seconds(): int
 {
     $mins = (int)cfg('security.ADMIN_IDLE_MINUTES', 480);

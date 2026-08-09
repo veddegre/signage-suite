@@ -50,13 +50,13 @@ function cached_get(string $url, string $key, ?array $auth = null): ?string
     $f = CACHE_DIR . "/$key.dat";
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) return (string)file_get_contents($f);
     $ch = curl_init($url);
-    $opts = array_merge([
+    $opts = signage_curl_merge_options([
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => 12,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_USERAGENT => 'HomeSignage/1.0',
-    ], signage_curl_tls_options());
+    ]);
     if ($auth !== null && ($auth[0] ?? '') !== '') {
         $opts[CURLOPT_USERPWD] = $auth[0] . ':' . ($auth[1] ?? '');
     }
@@ -160,7 +160,7 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
         . '</C:calendar-query>';
 
     $ch = curl_init($url);
-    $opts = array_merge([
+    $opts = signage_curl_merge_options([
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CUSTOMREQUEST => 'REPORT',
         CURLOPT_POSTFIELDS => $xmlBody,
@@ -175,7 +175,7 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
         CURLOPT_TIMEOUT => 20,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_USERAGENT => 'HomeSignage/1.0',
-    ], signage_curl_tls_options());
+    ]);
     curl_setopt_array($ch, $opts);
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
