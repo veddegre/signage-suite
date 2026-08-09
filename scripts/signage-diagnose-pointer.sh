@@ -88,4 +88,5 @@ fi
 echo
 
 echo "Fix:"
+echo "  sudo bash scripts/signage-stop-hide-cursor.sh"
 echo "  sudo bash scripts/signage-fix-pointer.sh"

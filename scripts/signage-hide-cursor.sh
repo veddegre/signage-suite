@@ -1,53 +1,55 @@
 #!/usr/bin/env bash
-# Park the hardware pointer off-screen. Cage draws a compositor cursor whenever
-# a pointer-capable input exists (USB mouse, HDMI-CEC, some IR receivers) and
-# CSS / Xcursor themes cannot suppress that layer.
+# Park the hardware pointer off-screen when ydotoold is available.
+# Prefer phantom HDMI udev rules on Pi (scripts/signage-apply-phantom-pointer-rules.sh).
 set -euo pipefail
 
+if [[ -f /etc/signage/phantom-pointer-fixed ]] \
+   || [[ -f /etc/udev/rules.d/99-signage-phantom-pointer.rules ]]; then
+  exit 0
+fi
+
 INTERVAL="${SIGNAGE_HIDE_CURSOR_INTERVAL:-1}"
-# ydotool absolute coords use a 0..65535 virtual desktop.
 OFF_X="${SIGNAGE_HIDE_CURSOR_X:-65534}"
 OFF_Y="${SIGNAGE_HIDE_CURSOR_Y:-65534}"
+UID_NUM="$(id -u)"
+SOCKET="/run/user/${UID_NUM}/.ydotool_socket"
 
 if ! command -v ydotool >/dev/null 2>&1; then
-  echo "ydotool not installed — run scripts/install-ydotool.sh" >&2
-  exit 1
+  exit 0
 fi
 
 start_ydotoold() {
-  if pgrep -u "$(id -u)" -x ydotoold >/dev/null 2>&1; then
+  if pgrep -u "$UID_NUM" -x ydotoold >/dev/null 2>&1 || [[ -S "$SOCKET" ]]; then
     return 0
   fi
-  if command -v ydotoold >/dev/null 2>&1; then
-    ydotoold >/dev/null 2>&1 &
-  else
-    return 1
-  fi
+  command -v ydotoold >/dev/null 2>&1 || return 1
+  ydotoold >/dev/null 2>&1 &
   local i=0
-  while [[ $i -lt 20 ]]; do
-    ydotool mousemove -a 0 0 2>/dev/null && return 0
+  while [[ $i -lt 25 ]]; do
+    [[ -S "$SOCKET" ]] && return 0
     sleep 0.2
     i=$((i + 1))
   done
-  return 0
+  return 1
 }
 
 move_offscreen() {
   ydotool mousemove -a "$OFF_X" "$OFF_Y" 2>/dev/null \
     || ydotool mousemove --absolute "$OFF_X" "$OFF_Y" 2>/dev/null \
     || ydotool mousemove "$OFF_X" "$OFF_Y" 2>/dev/null \
-    || true
+    || return 1
 }
 
-start_ydotoold || true
+if ! start_ydotoold; then
+  exit 0
+fi
 
-# Burst moves at startup — cage often shows a centered pointer until the first move.
-for _ in $(seq 1 15); do
-  move_offscreen
+for _ in $(seq 1 5); do
+  move_offscreen || true
   sleep 0.2
 done
 
 while true; do
-  move_offscreen
+  move_offscreen || exit 0
   sleep "$INTERVAL"
 done
