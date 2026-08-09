@@ -683,7 +683,7 @@ function sports_pick_event(array $events, array $teamCfg, ?array $scoreboardEven
     return null;
 }
 
-function sports_format_game_time(string $iso, DateTimeZone $tz): string
+function sports_format_game_time(string $iso, DateTimeZone $tz, ?string $screen = null): string
 {
     if ($iso === '') {
         return '—';
@@ -696,7 +696,7 @@ function sports_format_game_time(string $iso, DateTimeZone $tz): string
         $gameDay = $local->setTime(0, 0);
         $daysAway = (int)$today->diff($gameDay)->format('%r%a');
 
-        $timeFmt = signage_time_format_php();
+        $timeFmt = signage_time_format_php_for($screen);
 
         if ($daysAway === 0) {
             return 'Today · ' . $local->format($timeFmt);
@@ -848,13 +848,13 @@ function sports_sport_icon_svg(string $icon): string
 }
 
 /** @param list<array<string,mixed>> $cards @return list<array{team:string,league:string,logo:?string,icon:string,text:string,when:string}> */
-function sports_next_game_strip(array $cards, DateTimeZone $tz): array
+function sports_next_game_strip(array $cards, DateTimeZone $tz, ?string $screen = null): array
 {
     $out = [];
     foreach ($cards as $card) {
         $next = is_array($card['next_game'] ?? null) ? $card['next_game'] : null;
         if ($next !== null) {
-            $when = sports_format_game_time((string)$next['date'], $tz);
+            $when = sports_format_game_time((string)$next['date'], $tz, $screen);
             $text = (string)$next['matchup'];
             if (empty($card['active_season'])) {
                 $text = sports_future_game_label($next) . ' · ' . $text;
@@ -880,7 +880,7 @@ function sports_next_game_strip(array $cards, DateTimeZone $tz): array
 }
 
 /** @param array<string,mixed> $teamCfg @param array<string,array> $scoreboardsByLeague */
-function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int $ttl, DateTimeZone $tz): array
+function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int $ttl, DateTimeZone $tz, ?string $screen = null): array
 {
     $league = (string)$teamCfg['league'];
     $teamId = (string)$teamCfg['team_id'];
@@ -993,7 +993,7 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
             $daysAway = $gameTs > 0 ? (int)round(($gameTs - $now->getTimestamp()) / 86400) : 999;
             if (!$activeSeason && $daysAway > 21) {
                 $mode = 'off';
-                $when = sports_format_game_time($game['date'], $tz);
+                $when = sports_format_game_time($game['date'], $tz, $screen);
                 $label = sports_future_game_label($game);
                 $headline = $label . ' · ' . $game['matchup'];
                 $detail = sports_append_game_broadcast($when, $game);
@@ -1005,7 +1005,7 @@ function sports_build_team_card(array $teamCfg, array $scoreboardsByLeague, int 
             } else {
                 $mode = 'next';
                 $headline = $game['matchup'];
-                $detail = sports_append_game_broadcast(sports_format_game_time($game['date'], $tz), $game);
+                $detail = sports_append_game_broadcast(sports_format_game_time($game['date'], $tz, $screen), $game);
             }
         }
     } elseif ($record !== '') {
@@ -1249,7 +1249,7 @@ function sports_board_data(string $screen): array
     $cards = [];
     $anyLive = false;
     foreach ($teams as $teamCfg) {
-        $card = sports_build_team_card($teamCfg, $scoreboardsByLeague, $baseTtl, $tz);
+        $card = sports_build_team_card($teamCfg, $scoreboardsByLeague, $baseTtl, $tz, $screen);
         if (($card['mode'] ?? '') === 'live') {
             $anyLive = true;
         }
@@ -1258,7 +1258,7 @@ function sports_board_data(string $screen): array
     $cards = sports_sort_cards($cards, $tz);
     $teamCount = count($cards);
     $focusLive = sports_board_focus_live($cards);
-    $nextStrip = sports_next_game_strip($cards, $tz);
+    $nextStrip = sports_next_game_strip($cards, $tz, $screen);
     $showNextStrip = sports_show_next_strip($cards);
     $recentStrip = sports_recent_results_strip($cards);
     $cacheAge = sports_cache_max_age();

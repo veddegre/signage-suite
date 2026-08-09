@@ -142,8 +142,8 @@ function signage_js_format_time_expr(string $dateVar = 'new Date()', ?string $ti
 {
     $opts = signage_js_clock_options_json(null, $screen);
     if ($timezoneVar !== null && $timezoneVar !== '') {
-        return "{$dateVar}.toLocaleTimeString(undefined, Object.assign({$opts}, {{timeZone: {$timezoneVar}}}))";
+        return $dateVar . '.toLocaleTimeString(undefined, Object.assign(' . $opts . ', {timeZone: ' . $timezoneVar . '}))';
     }
 
-    return "{$dateVar}.toLocaleTimeString(undefined, {$opts})";
+    return $dateVar . '.toLocaleTimeString(undefined, ' . $opts . ')';
 }
