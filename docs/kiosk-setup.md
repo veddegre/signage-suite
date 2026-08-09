@@ -204,7 +204,43 @@ cd ~/signage-suite && git pull
 sudo bash scripts/signage-fix-pointer.sh
 ```
 
-That installs `libinput-tools`, ignores phantom **Pi HDMI / CEC** pointer devices (the usual cause when no mouse is plugged in), starts **`ydotoold`**, and restarts the kiosk.
+This applies **phantom HDMI udev rules only** (the correct fix on Raspberry Pi). It does **not** use ydotool — ydotool adds a virtual pointer that can crash cage and leave a **black screen**.
+
+### Black screen after pointer fix
+
+Recover immediately:
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash scripts/signage-recover-kiosk.sh
+sudo reboot
+```
+
+Or manually:
+
+```bash
+sudo systemctl stop signage-ydotoold
+sudo systemctl disable signage-ydotoold
+sudo pkill -u "$USER" -f signage-hide-cursor
+sudo pkill -u "$USER" -x ydotoold
+sudo systemctl restart signage
+```
+
+If still black, verify the kiosk URL:
+
+```bash
+grep KIOSK_URL /etc/signage/kiosk.conf
+systemctl cat signage.service | grep ExecStart
+journalctl -u signage -n 40 --no-pager
+curl -k "$(grep KIOSK_URL= /etc/signage/kiosk.conf | cut -d= -f2- | tr -d '"')" | head
+```
+
+Reinstall the launcher if the URL is wrong:
+
+```bash
+sudo bash setup-kiosk.sh --skip-apt --server=https://s.vdrs.fyi --screen=veddegre
+sudo systemctl restart signage
+```
 
 Diagnose:
 

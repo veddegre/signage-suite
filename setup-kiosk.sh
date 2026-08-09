@@ -103,6 +103,7 @@ load_kiosk_conf() {
   KIOSK_URL="${KIOSK_URL:-}"
   SCALE="${KIOSK_SCALE:-$SCALE}"
   TIMEZONE="${TIMEZONE:-${SIGNAGE_TIMEZONE:-}}"
+  IGNORE_SSL="${KIOSK_IGNORE_SSL:-$IGNORE_SSL}"
 }
 
 kiosk_conf_exists() {
@@ -317,7 +318,12 @@ resolve_kiosk_target() {
 
   if [[ -n "$cli_server" || -n "$cli_screen" ]]; then
     [[ -z "$SCREEN" ]] && SCREEN=main
-    build_kiosk_url
+    if [[ -z "$SIGNAGE_SERVER" && -n "$KIOSK_URL" ]]; then
+      parse_legacy_kiosk_url "$KIOSK_URL"
+    fi
+    if [[ -n "$SIGNAGE_SERVER" ]]; then
+      build_kiosk_url
+    fi
   elif [[ -n "$cli_url" || -n "$KIOSK_URL" ]]; then
     [[ -n "$cli_url" ]] && KIOSK_URL="$cli_url"
     parse_legacy_kiosk_url "$KIOSK_URL"
@@ -569,9 +575,10 @@ if command -v signage-kiosk-wait-for-server >/dev/null; then
   signage-kiosk-wait-for-server 240
 fi
 
-# Cage always draws a compositor cursor when a pointer device is present.
-# Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
-if command -v signage-hide-cursor >/dev/null; then
+# Prefer phantom HDMI udev rules. ydotool adds a virtual pointer and can break cage.
+if [[ ! -f /etc/signage/phantom-pointer-fixed ]] \
+   && [[ ! -f /etc/udev/rules.d/99-signage-phantom-pointer.rules ]] \
+   && command -v signage-hide-cursor >/dev/null; then
   pkill -u "\$(id -u)" -f '^/usr/local/bin/signage-hide-cursor' 2>/dev/null || true
   signage-hide-cursor &
 fi
@@ -624,9 +631,10 @@ if command -v signage-kiosk-wait-for-server >/dev/null; then
   signage-kiosk-wait-for-server 240
 fi
 
-# Cage always draws a compositor cursor when a pointer device is present.
-# Park it off-screen (ydotool) — CSS / blank Xcursor are not enough alone.
-if command -v signage-hide-cursor >/dev/null; then
+# Prefer phantom HDMI udev rules. ydotool adds a virtual pointer and can break cage.
+if [[ ! -f /etc/signage/phantom-pointer-fixed ]] \
+   && [[ ! -f /etc/udev/rules.d/99-signage-phantom-pointer.rules ]] \
+   && command -v signage-hide-cursor >/dev/null; then
   pkill -u "\$(id -u)" -f '^/usr/local/bin/signage-hide-cursor' 2>/dev/null || true
   signage-hide-cursor &
 fi
@@ -695,28 +703,6 @@ fi
 
 echo "==> Writing systemd service"
 SIGNAGE_AFTER="network-online.target systemd-user-sessions.service seatd.service"
-if command -v ydotoold >/dev/null 2>&1; then
-  echo "==> Writing ydotoold service"
-  cat > /etc/systemd/system/signage-ydotoold.service <<EOF
-[Unit]
-Description=ydotool daemon for signage kiosk
-DefaultDependencies=no
-Before=signage.service
-After=dev-uinput.device systemd-udev-settle.service
-
-[Service]
-User=$KIOSK_USER
-Group=$KIOSK_USER
-SupplementaryGroups=input video render
-ExecStart=$(command -v ydotoold)
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  SIGNAGE_AFTER="$SIGNAGE_AFTER signage-ydotoold.service"
-fi
 
 cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
@@ -859,10 +845,9 @@ fi
 
 systemctl daemon-reload
 systemctl enable signage.service
-if [[ -f /etc/systemd/system/signage-ydotoold.service ]]; then
-  systemctl enable signage-ydotoold.service
-  systemctl restart signage-ydotoold.service 2>/dev/null || true
-fi
+systemctl disable --now signage-ydotoold.service 2>/dev/null || true
+rm -f /etc/systemd/system/signage-ydotoold.service 2>/dev/null || true
+systemctl daemon-reload 2>/dev/null || true
 if [[ $AUTO_UPDATE -eq 1 ]] && [[ -x /usr/local/bin/signage-kiosk-update ]] && [[ -x /usr/local/bin/signage-kiosk-maint ]]; then
   systemctl enable signage-update.timer signage-maint.timer
   systemctl start signage-update.timer signage-maint.timer
