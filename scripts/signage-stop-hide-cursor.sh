@@ -30,8 +30,11 @@ if [[ -f "$SCRIPT_DIR/signage-apply-phantom-pointer-rules.sh" ]]; then
   bash "$SCRIPT_DIR/signage-apply-phantom-pointer-rules.sh"
 fi
 
-if [[ -f "$SCRIPT_DIR/../setup-kiosk.sh" && -f /etc/signage/kiosk.conf ]]; then
-  echo "==> Refreshing signage-kiosk launcher"
+if [[ -f "$SCRIPT_DIR/signage-kiosk-launcher.sh" ]]; then
+  echo "==> Installing refreshed signage-kiosk launcher"
+  install -m 755 "$SCRIPT_DIR/signage-kiosk-launcher.sh" /usr/local/bin/signage-kiosk
+elif [[ -f "$SCRIPT_DIR/../setup-kiosk.sh" && -f /etc/signage/kiosk.conf ]]; then
+  echo "==> Refreshing signage-kiosk via setup-kiosk.sh"
   # shellcheck disable=SC1091
   source /etc/signage/kiosk.conf
   bash "$SCRIPT_DIR/../setup-kiosk.sh" --skip-apt \
