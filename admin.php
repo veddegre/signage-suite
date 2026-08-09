@@ -2221,7 +2221,7 @@ if ($board === 'zabbix') {
 $kumaPages = [];
 $kumaActivePage = 'main';
 $rotationAdminFocusScreen = null;
-if ($authed && $board === 'rotation') {
+if ($authed) {
     $rotationAdminFocusScreen = admin_rotation_focus_screen_key(admin_filter_screens(rotation_screens()));
 }
 if ($board === 'kuma') {
@@ -3005,6 +3005,7 @@ function admin_rotation_kiosk_settings_panel(
             <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_subtitle]"
                    value="<?= h($sportsSubtitle) ?>" placeholder="Auto from team names when blank">
           </div>
+          <p style="margin:10px 0 0"><a class="secondary" style="padding:4px 10px;text-decoration:none;font-size:12px" href="<?= h(signage_rotation_page_preview_url('sports.php', $screenKey)) ?>" target="_blank" rel="noopener">Preview sports board ↗</a> <span class="help" style="margin:0">Uses this display's clock format and team picks (save rotation first).</span></p>
         </div>
         <div class="field span-2 rotation-section">
           <span class="mini">MDOT camera wall override</span>
@@ -4318,8 +4319,10 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           Each announcement is <code>announce.php?d=<em>key</em></code> in rotation — preview per row below.
         <?php elseif (in_array($board, ['rss', 'video', 'calendar', 'slides', 'rotator'], true)): ?>
           Preview per row or card below — pick a specific entry to preview.
-        <?php elseif (!empty($b['file'])): ?>
-          <a href="<?= h(signage_board_preview_url($b['file'])) ?>" target="_blank" rel="noopener">Preview board ↗</a>
+        <?php elseif (!empty($b['file'])):
+          $boardPreviewScreen = (string)($rotationAdminFocusScreen ?? signage_preview_screen_key()); ?>
+          <a href="<?= h(signage_rotation_page_preview_url($b['file'], $boardPreviewScreen)) ?>" target="_blank" rel="noopener">Preview board ↗</a>
+          <span class="help" style="margin:0 0 0 8px">Uses display <code><?= h($boardPreviewScreen) ?></code> (clock format, theme, teams).</span>
         <?php endif; ?></div>
 
       <?php if ($board === 'powerbi'):
@@ -7508,7 +7511,7 @@ function rotationPreviewUrl(url, screenKey) {
   if (q >= 0) {
     base = url.slice(0, q);
     const params = new URLSearchParams(url.slice(q + 1));
-    ['noticker', 'theme', 'screen', 'safebottom', 'frameh', 'clock', 'settle', 'r'].forEach(function (k) {
+    ['noticker', 'theme', 'screen', 'safebottom', 'frameh', 'clock', 'clockfmt', 'font', 'settle', 'r'].forEach(function (k) {
       params.delete(k);
     });
     const rest = params.toString();
@@ -7519,11 +7522,12 @@ function rotationPreviewUrl(url, screenKey) {
     syncRotationFocusScreenField();
     screenKey = (document.getElementById('rotationFocusScreen') || {}).value || '';
   }
+  const sp = new URLSearchParams(suffix);
   if (screenKey) {
-    const sp = new URLSearchParams(suffix);
     sp.set('screen', screenKey);
-    suffix = sp.toString();
   }
+  sp.delete('clockfmt');
+  suffix = sp.toString();
   const sep = url.includes('?') ? '&' : '?';
   return url + sep + suffix + frag;
 }
