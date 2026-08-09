@@ -4,7 +4,7 @@ Prime-time grid for channels you pick — `tvguide.php?d=<key>` in rotation.
 
 ## Requirements
 
-- **[Schedules Direct](https://schedulesdirect.org/)** account (~$25/year)
+- **[Schedules Direct](https://schedulesdirect.org/)** account (~$35/year)
 - PHP **curl** extension (outbound HTTPS)
 - Lineup configured in your SD account (up to 4 lineups)
 

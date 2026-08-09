@@ -3138,7 +3138,7 @@ function admin_operator_board_preamble(string $board): void
             $lines = [
                 tvguide_configured()
                     ? 'Schedules Direct credentials are configured.'
-                    : 'Set Schedules Direct username and password under <strong>Board settings</strong> (~$25/yr account).',
+                    : 'Set Schedules Direct username and password under <strong>Board settings</strong> (~$35/yr account).',
                 'Pick a <strong>lineup</strong> under Board settings, then check channels on each page tab. Quick-add under <strong>Media</strong> in rotation.',
                 'Each page is <code>tvguide.php?d=<em>key</em></code> — build separate prime-time grids (e.g. networks vs sports).',
             ];

@@ -2,7 +2,7 @@
 /**
  * TV GUIDE BOARD — 1920×1080 prime-time grid
  *
- * Data: Schedules Direct JSON API (~$25/yr). Server-side fetch + cache.
+ * Data: Schedules Direct JSON API (~$35/yr). Server-side fetch + cache.
  * Multiple pages: tvguide.php?d=<key> — pick channels per page in admin.
  */
 
@@ -129,7 +129,7 @@ function tvguide_hour_label(int $hour): string
   <?php if (!$configured): ?>
     <div class="panel">
       <div class="setupmsg">Set <code>SD_USERNAME</code> and <code>SD_PASSWORD</code> in
-      <strong>admin.php → TV Guide</strong>. Schedules Direct accounts are ~$25/year at
+      <strong>admin.php → TV Guide</strong>. Schedules Direct accounts are ~$35/year at
       <strong>schedulesdirect.org</strong>.</div>
     </div>
   <?php elseif (($data['error'] ?? '') !== '' && $rows === []): ?>

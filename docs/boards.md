@@ -53,7 +53,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Custom slides | `slides.php` | `slides.php?slide=…` | — |
 | | Video | `video.php` | `video.php?v=<key>` | — |
 | | RSS | `rss.php` | `rss.php?feed=<key>` | — |
-| | TV Guide | `tvguide.php` | `tvguide.php?d=<key>` | Schedules Direct (~$25/yr) |
+| | TV Guide | `tvguide.php` | `tvguide.php?d=<key>` | Schedules Direct (~$35/yr) |
 | Dashboards | Grafana | `grafana.php` | `grafana.php?d=<key>` | JWT secret (SSO) or — |
 | | Splunk panels | `splunk.php` | `splunk.php?d=<key>` | Splunk token |
 | | Splunk published | `splunkdash.php` | `splunkdash.php?d=<key>` | — (iframe) |

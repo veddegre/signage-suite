@@ -826,7 +826,7 @@ function admin_schema(): array
         'tvguide' => ['title' => 'TV Guide', 'file' => 'tvguide.php', 'fields' => [
             ['key' => 'SD_USERNAME', 'label' => 'Schedules Direct username', 'type' => 'text'],
             ['key' => 'SD_PASSWORD', 'label' => 'Schedules Direct password', 'type' => 'password',
-             'help' => 'Server-side only. Plain text or 40-char SHA-1 hash. Account ~$25/yr at schedulesdirect.org'],
+             'help' => 'Server-side only. Plain text or 40-char SHA-1 hash. Account ~$35/yr at schedulesdirect.org'],
             ['key' => 'LINEUP', 'label' => 'Lineup ID', 'type' => 'text',
              'help' => 'From your SD account — e.g. USA-MI49503-X. Use Test connection to list lineups.'],
             ['key' => 'PRIME_START', 'label' => 'Prime time start', 'type' => 'text', 'default' => '19:00',
