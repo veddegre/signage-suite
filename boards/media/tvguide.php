@@ -35,6 +35,8 @@ $boardH = signage_frame_height();
 $heightCss = signage_viewport_height();
 $reloadSec = tvguide_reload_sec();
 $embedded = isset($_GET['noticker']);
+$channelLabelMode = tvguide_channel_label_mode();
+$channelColClass = $channelLabelMode === 'none' ? ' grid-no-badge' : '';
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -88,8 +90,8 @@ function tvguide_hour_label(int $hour): string
                 padding:12px 10px; text-align:center; font-family:'Big Shoulders Display'; font-weight:600;
                 font-size:<?= $boardH < 1080 ? 28 : 32 ?>px; color:var(--snow); }
   .grid .ch { display:flex; align-items:center; gap:12px; padding:10px 14px; min-height:0; }
-  .grid .ch .num { font-family:'Big Shoulders Display'; font-weight:700; font-size:<?= $boardH < 1080 ? 34 : 38 ?>px;
-                   color:var(--beacon); min-width:52px; text-align:right; font-variant-numeric:tabular-nums; }
+  .grid.grid-no-badge .ch .num { display:none; }
+  .grid.grid-no-badge { grid-template-columns: minmax(180px, 220px) repeat(<?= $hourCount ?>, minmax(0, 1fr)); }
   .grid .ch .id { min-width:0; }
   .grid .ch .call { font-size:<?= $boardH < 1080 ? 24 : 28 ?>px; font-weight:600; line-height:1.1; }
   .grid .ch .net { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); white-space:nowrap;
@@ -142,19 +144,29 @@ function tvguide_hour_label(int $hour): string
     </div>
   <?php else: ?>
     <div class="grid-wrap">
-      <div class="grid">
+      <div class="grid<?= h($channelColClass) ?>">
         <div class="corner">Channel</div>
         <?php foreach ($hours as $hour): ?>
         <div class="hour"><?= h(tvguide_hour_label((int)$hour)) ?></div>
         <?php endforeach; ?>
 
-        <?php foreach ($rows as $row): ?>
+        <?php foreach ($rows as $row):
+            $badge = tvguide_row_channel_badge($row);
+            $sub = tvguide_row_channel_subtitle($row);
+            $callsign = tvguide_callsign_short((string)($row['callsign'] ?? ''));
+        ?>
         <div class="ch">
-          <div class="num"><?= h((string)($row['channel'] ?? '')) ?></div>
+          <?php if ($badge !== ''): ?>
+          <div class="num"><?= h($badge) ?></div>
+          <?php endif; ?>
           <div class="id">
-            <div class="call"><?= h((string)($row['callsign'] ?? $row['name'] ?? '')) ?></div>
-            <?php if (!empty($row['name']) && ($row['callsign'] ?? '') !== ($row['name'] ?? '')): ?>
-            <div class="net"><?= h((string)$row['name']) ?></div>
+            <?php if ($channelLabelMode === 'affiliate' && $callsign !== ''): ?>
+            <div class="call"><?= h($callsign) ?></div>
+            <?php else: ?>
+            <div class="call"><?= h($badge !== '' ? $badge : ($callsign !== '' ? $callsign : (string)($row['name'] ?? ''))) ?></div>
+            <?php if ($sub !== ''): ?>
+            <div class="net"><?= h($sub) ?></div>
+            <?php endif; ?>
             <?php endif; ?>
           </div>
         </div>

@@ -659,26 +659,20 @@ function tvguide_sd_lineup_channels(string $lineup, ?string &$error = null, bool
         $channelNum = tvguide_map_row_channel($mapRow);
         $callsign = trim((string)($st['callsign'] ?? ''));
         $name = trim((string)($st['name'] ?? $callsign));
-        $label = $channelNum !== '' ? ($channelNum . ' ' . ($callsign !== '' ? $callsign : $name)) : ($callsign !== '' ? $callsign : $name);
-        $channels[] = [
+        $affiliate = trim((string)($st['affiliate'] ?? ''));
+        $entry = [
             'station_id' => $sid,
             'channel' => $channelNum,
             'callsign' => $callsign,
             'name' => $name,
-            'label' => $label,
+            'affiliate' => $affiliate,
             'logo' => trim((string)($st['logo']['URL'] ?? '')),
         ];
+        $entry['label'] = tvguide_channel_admin_label($entry);
+        $channels[] = $entry;
     }
 
-    usort($channels, static function (array $a, array $b): int {
-        $ca = (float)($a['channel'] ?? 0);
-        $cb = (float)($b['channel'] ?? 0);
-        if ($ca !== $cb) {
-            return $ca <=> $cb;
-        }
-
-        return strcasecmp((string)($a['label'] ?? ''), (string)($b['label'] ?? ''));
-    });
+    $channels = tvguide_sort_channels($channels);
 
     $map = [];
     foreach ($channels as $ch) {
@@ -1024,11 +1018,14 @@ function tvguide_fetch_grid_data(array $page): array
             'channel' => (string)($ch['channel'] ?? ''),
             'callsign' => (string)($ch['callsign'] ?? ''),
             'name' => (string)($ch['name'] ?? ''),
+            'affiliate' => (string)($ch['affiliate'] ?? ''),
             'label' => (string)($ch['label'] ?? $sid),
             'logo' => (string)($ch['logo'] ?? ''),
             'cells' => $cells,
         ];
     }
+
+    $rows = tvguide_sort_grid_rows($rows);
 
     $payload = [
         'ok' => $rows !== [],
@@ -1132,4 +1129,126 @@ function tvguide_test_connection(bool $refreshLineups = true): array
 function tvguide_reload_sec(): int
 {
     return max(300, (int)cfg('tvguide.RELOAD_SEC', 3600));
+}
+
+/** affiliate | callsign | broadcast | none */
+function tvguide_channel_label_mode(): string
+{
+    $mode = strtolower(trim((string)cfg('tvguide.CHANNEL_LABEL', 'affiliate')));
+
+    return in_array($mode, ['affiliate', 'callsign', 'broadcast', 'none'], true) ? $mode : 'affiliate';
+}
+
+function tvguide_callsign_short(string $callsign): string
+{
+    $callsign = strtoupper(trim($callsign));
+    if ($callsign === '') {
+        return '';
+    }
+
+    return (string)preg_replace('/(-DT|DT)$/', '', $callsign);
+}
+
+function tvguide_affiliate_sort_rank(string $affiliate): int
+{
+    static $order = [
+        'NBC' => 1, 'CBS' => 2, 'ABC' => 3, 'FOX' => 4, 'PBS' => 5, 'CW' => 6, 'ION' => 7, 'MNT' => 8,
+    ];
+    $key = strtoupper(trim($affiliate));
+
+    return $order[$key] ?? 50;
+}
+
+function tvguide_channel_admin_label(array $ch): string
+{
+    $affiliate = trim((string)($ch['affiliate'] ?? ''));
+    $callsign = tvguide_callsign_short((string)($ch['callsign'] ?? ''));
+    $broadcast = trim((string)($ch['channel'] ?? ''));
+    $parts = [];
+    if ($affiliate !== '') {
+        $parts[] = strtoupper($affiliate);
+    }
+    if ($callsign !== '') {
+        $parts[] = $callsign;
+    }
+    if ($broadcast !== '') {
+        $parts[] = $broadcast;
+    }
+
+    return $parts !== [] ? implode(' · ', $parts) : (string)($ch['station_id'] ?? '');
+}
+
+/** Badge in the channel column on the wall (network name, not 8.1-style numbers). */
+function tvguide_row_channel_badge(array $row): string
+{
+    switch (tvguide_channel_label_mode()) {
+        case 'none':
+            return '';
+        case 'broadcast':
+            return trim((string)($row['channel'] ?? ''));
+        case 'callsign':
+            return tvguide_callsign_short((string)($row['callsign'] ?? ''));
+        case 'affiliate':
+        default:
+            $affiliate = trim((string)($row['affiliate'] ?? ''));
+            if ($affiliate !== '') {
+                return strtoupper($affiliate);
+            }
+
+            return tvguide_callsign_short((string)($row['callsign'] ?? ''));
+    }
+}
+
+function tvguide_row_channel_subtitle(array $row): string
+{
+    $mode = tvguide_channel_label_mode();
+    $callsign = tvguide_callsign_short((string)($row['callsign'] ?? ''));
+    $name = trim((string)($row['name'] ?? ''));
+
+    if ($mode === 'affiliate' && $callsign !== '') {
+        return $callsign;
+    }
+    if ($mode !== 'none' && $name !== '' && tvguide_callsign_short($name) !== $callsign) {
+        return $name;
+    }
+
+    return '';
+}
+
+/** @param list<array<string,mixed>> $channels */
+function tvguide_sort_channels(array $channels): array
+{
+    usort($channels, static function (array $a, array $b): int {
+        $ra = tvguide_affiliate_sort_rank((string)($a['affiliate'] ?? ''));
+        $rb = tvguide_affiliate_sort_rank((string)($b['affiliate'] ?? ''));
+        if ($ra !== $rb) {
+            return $ra <=> $rb;
+        }
+
+        return strcasecmp(
+            tvguide_callsign_short((string)($a['callsign'] ?? '')),
+            tvguide_callsign_short((string)($b['callsign'] ?? ''))
+        );
+    });
+
+    return $channels;
+}
+
+/** @param list<array<string,mixed>> $rows */
+function tvguide_sort_grid_rows(array $rows): array
+{
+    usort($rows, static function (array $a, array $b): int {
+        $ra = tvguide_affiliate_sort_rank((string)($a['affiliate'] ?? ''));
+        $rb = tvguide_affiliate_sort_rank((string)($b['affiliate'] ?? ''));
+        if ($ra !== $rb) {
+            return $ra <=> $rb;
+        }
+
+        return strcasecmp(
+            tvguide_callsign_short((string)($a['callsign'] ?? '')),
+            tvguide_callsign_short((string)($b['callsign'] ?? ''))
+        );
+    });
+
+    return $rows;
 }

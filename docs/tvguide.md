@@ -30,7 +30,7 @@ Each page supports **Access** (owner, users, roles) like RSS feeds and Zabbix pa
 
 ## Wall display
 
-- One row per channel (number + call sign)
+- One row per channel (network + call sign by default — not 8.1-style broadcast numbers)
 - Columns = each hour in the prime-time window
 - Shows program title, episode subtitle when available, and start–end time
 - After prime time ends, the board rolls forward to the **next** evening automatically

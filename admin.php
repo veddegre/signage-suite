@@ -2224,7 +2224,7 @@ $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK'
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
-$tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRIME_END', 'BOARD_TITLE', 'BOARD_SUB', 'RELOAD_SEC', 'TIMEZONE', 'CACHE_TTL'];
+$tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRIME_END', 'CHANNEL_LABEL', 'BOARD_TITLE', 'BOARD_SUB', 'RELOAD_SEC', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
 $splunkdashBoardKeys = ['HIDE_CHROME', 'HIDE_SCROLLBARS', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
@@ -6206,8 +6206,19 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
               <?php else: ?>
               <div class="help" style="margin:6px 0 10px">Lineup <code><?= h(tvguide_lineup_id()) ?></code> —
-                <?= count($tvguideLineupChannels) ?> channel(s). Pick up to ~12 for a readable grid.</div>
-              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px">
+                <?= count($tvguideLineupChannels) ?> channel(s). Labels show network · callsign · broadcast number.
+                <?php if (!$pageRo): ?>
+                <span style="display:inline-flex;gap:8px;margin-left:8px;flex-wrap:wrap">
+                  <button type="button" class="secondary" style="padding:2px 10px;font-size:12px"
+                          onclick="tvguidePickCallsigns('<?= h($pk) ?>', ['WOOD','WWMT','WZZM','WXMI'])">GR Big 4</button>
+                  <button type="button" class="secondary" style="padding:2px 10px;font-size:12px"
+                          onclick="tvguidePickCallsigns('<?= h($pk) ?>', ['WOOD','WWMT','WOTV','WXMI'])">Big 4 + WOTV</button>
+                  <button type="button" class="secondary" style="padding:2px 10px;font-size:12px"
+                          onclick="tvguidePickCallsigns('<?= h($pk) ?>', ['WOOD','WWMT','WZZM','WOTV','WXMI'])">All five</button>
+                </span>
+                <?php endif; ?>
+              </div>
+              <div class="tvguide-channel-grid" data-tvguide-channel-grid="<?= h($pk) ?>" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px">
                 <?php foreach ($tvguideLineupChannels as $ch):
                     $sid = (string)($ch['station_id'] ?? '');
                     if ($sid === '') continue;
@@ -12049,6 +12060,8 @@ const TVGUIDE_CHANNELS = <?= json_encode(
         ? array_values(array_map(static fn(array $ch): array => [
             'id' => (string)($ch['station_id'] ?? ''),
             'label' => (string)($ch['label'] ?? ''),
+            'affiliate' => (string)($ch['affiliate'] ?? ''),
+            'callsign' => (string)($ch['callsign'] ?? ''),
         ], $tvguideLineupChannels))
         : [],
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
@@ -12064,11 +12077,24 @@ function tvguidePreviewHref(pageKey) {
   return base + '&' + RSS_PREVIEW_SUFFIX;
 }
 
+function tvguidePickCallsigns(pageKey, callsigns) {
+  const grid = document.querySelector('[data-tvguide-channel-grid="' + pageKey + '"]');
+  if (!grid) return;
+  const want = callsigns.map(function (c) { return c.toUpperCase(); });
+  grid.querySelectorAll('label.check').forEach(function (label) {
+    const span = label.querySelector('span');
+    const text = (span ? span.textContent : '').toUpperCase();
+    const hit = want.some(function (c) { return text.indexOf(c) !== -1; });
+    const cb = label.querySelector('input[type="checkbox"]');
+    if (cb) cb.checked = hit;
+  });
+}
+
 function tvguideChannelPickerHtml(pageKey) {
   if (!TVGUIDE_CHANNELS.length) {
     return '<div class="help" style="margin-top:6px">Set lineup under <strong>Board settings</strong>, Save, then Test connection to load channels.</div>';
   }
-  let html = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px">';
+  let html = '<div class="tvguide-channel-grid" data-tvguide-channel-grid="' + pageKey + '" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;max-height:320px;overflow:auto;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px">';
   TVGUIDE_CHANNELS.forEach(function (ch) {
     if (!ch.id) return;
     html += '<label class="check" style="margin:0;font-size:13px;align-items:flex-start">' +
@@ -12076,6 +12102,10 @@ function tvguideChannelPickerHtml(pageKey) {
       '<span>' + (ch.label || ch.id).replace(/</g, '&lt;') + '</span></label>';
   });
   html += '</div>';
+  html += '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">' +
+    '<button type="button" class="secondary" style="padding:2px 10px;font-size:12px" onclick="tvguidePickCallsigns(\'' + pageKey + '\', [\'WOOD\',\'WWMT\',\'WZZM\',\'WXMI\'])">GR Big 4</button>' +
+    '<button type="button" class="secondary" style="padding:2px 10px;font-size:12px" onclick="tvguidePickCallsigns(\'' + pageKey + '\', [\'WOOD\',\'WWMT\',\'WOTV\',\'WXMI\'])">Big 4 + WOTV</button>' +
+    '</div>';
   return html;
 }
 
