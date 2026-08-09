@@ -865,10 +865,11 @@ HTTPS / SELF-SIGNED CERTS
   Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
-CURSOR (Raspberry Pi):
-  No reliable hide-cursor fix on all Pis — ydotool and vc4-hdmi udev rules can black-screen the TV.
-  Cleanup experiments: sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh --cleanup
-  Restore display:     sudo bash $SCRIPT_DIR/scripts/signage-restore-display.sh
+CURSOR (Raspberry Pi — phantom vc4-hdmi pointer, no mouse):
+  VT switch fix (safe): sudo bash $SCRIPT_DIR/scripts/signage-install-cursor-vt-fix.sh
+                        sudo systemctl start signage-cursor-vt.service
+  Do NOT use ydotool or libinput udev ignore — black screen on many Pis.
+  Cleanup old attempts: sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh --cleanup
   See docs/kiosk-setup.md § Cursor on Raspberry Pi.
 
 WATCHDOG (auto-restart if the browser stops serving board.php):

@@ -191,46 +191,78 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ---
 
-## Cursor on Raspberry Pi (known limitation)
+## Cursor on Raspberry Pi (phantom HDMI pointer)
 
-On many **Pi kiosks**, **cage** draws a compositor pointer when the HDMI stack exposes a phantom input (`vc4-hdmi-0`) — even with no mouse plugged in. It often sits in the **center of the screen**.
+On many **Pi kiosks**, **cage** draws a compositor pointer from the HDMI/CEC input node (`vc4-hdmi-0`) — **no mouse plugged in**. CSS and blank Xcursor themes cannot remove it.
 
-Board CSS, `cursor:none`, and the blank Xcursor theme **do not** remove that layer — it is drawn by the compositor, not Chromium.
+**Do not use** on Pi:
 
-### What not to use on Pi
+| Approach | Why |
+|----------|-----|
+| **ydotool** | Black screen / journal spam |
+| **libinput udev ignore** (`LIBINPUT_IGNORE_DEVICE`) | Black screen on some Pis (kills CEC keyboard events too) |
 
-| Approach | Result on Pi OS Trixie |
-|----------|-------------------------|
-| **ydotool** / hide-cursor | Black screen, journal spam when `ydotoold` is down |
-| **libinput udev** (ignore `vc4-hdmi-*`) | Black screen on some Pis (including tested hardware) |
+### Recommended: VT switch (cage keeps running)
 
-**Leave the working kiosk alone.** A visible pointer is preferable to a black TV.
+After the rotation shell has loaded, a one-time **virtual-terminal switch** makes cage drop its cursor overlay plane without touching input devices or the launcher. Documented for Pi + cage in [cage#299](https://github.com/cage-kiosk/cage/issues/299#issuecomment-...) (2026).
 
-### Practical options
+```bash
+cd ~/signage-suite && git pull
+sudo bash scripts/signage-install-cursor-vt-fix.sh
+sudo systemctl start signage-cursor-vt.service
+```
 
-1. **Live with the pointer** — signage still works; many boards are dark enough that a small center arrow is tolerable.
-2. **Unplug unused USB mice** — any real pointer device keeps cage drawing a cursor.
-3. **Clean up failed experiments** (after roll-back, or to be sure nothing is left):
+This waits for `board.php` to respond, settles ~90s for the page to finish painting, then runs `chvt 2` / `chvt 1` while **cage stays running**. Watch the log:
+
+```bash
+journalctl -u signage-cursor-vt -f
+```
+
+Enable at every boot (already done by the install script):
+
+```bash
+sudo systemctl enable signage-cursor-vt.service
+```
+
+**Undo:**
+
+```bash
+sudo systemctl disable --now signage-cursor-vt.service
+sudo rm /etc/systemd/system/signage-cursor-vt.service
+sudo systemctl daemon-reload
+# Reboot or live with cursor until next signage restart
+```
+
+### Manual one-liner (try before installing)
+
+After the wall has been up for ~2 minutes:
+
+```bash
+sudo chvt 2 && sleep 1 && sudo chvt 1
+```
+
+If the cursor vanishes and stays gone, install the service above so it runs automatically after boot.
+
+### If the cursor comes back ~1 minute later
+
+The VT switch was too early (page still repainting). Re-run the service — it retries with a confirmation window. Or increase settle time:
+
+```bash
+sudo SIGNAGE_CURSOR_VT_SETTLE=120 systemctl start signage-cursor-vt.service
+```
+
+### Cleanup failed experiments
 
 ```bash
 sudo bash scripts/signage-fix-cursor-pi.sh --cleanup
 ```
 
-4. **Full display restore** (if the wall is black or broken):
+### Full display rollback
 
 ```bash
 sudo bash scripts/signage-restore-display.sh
 sudo reboot
 ```
-
-### Status / diagnostics
-
-```bash
-sudo bash scripts/signage-fix-cursor-pi.sh --status
-libinput list-devices
-```
-
-Upstream: [cage hide-cursor discussion](https://github.com/cage-kiosk/cage/issues/299) — no stable option in packaged cage yet.
 
 ---
 
