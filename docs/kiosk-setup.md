@@ -193,7 +193,11 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ## Cursor still visible
 
-Cage draws a compositor cursor whenever a pointer-capable device exists (USB mouse, some IR/CEC receivers).
+Cage draws a compositor cursor whenever a pointer-capable device exists (USB mouse, some IR/CEC receivers). Setup installs a **transparent cursor theme** by default. On distros where **`ydotool`** is packaged (most Bookworm installs), it also parks the pointer off-screen.
+
+**ydotool** is not available on every release (e.g. some Raspberry Pi OS **Trixie** images). Kiosk setup continues without it — if you still see a pointer, try unplugging unused USB mice first.
+
+When `ydotool` is available:
 
 ```bash
 sudo apt install -y ydotool
@@ -201,8 +205,6 @@ sudo bash scripts/install-signage-blank-cursor.sh
 sudo install -m 755 scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
 sudo systemctl restart signage
 ```
-
-Unplug unused USB mice if the pointer keeps waking.
 
 ---
 

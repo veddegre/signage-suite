@@ -450,7 +450,12 @@ CHROMIUM=""
 if [[ $SKIP_APT -eq 0 ]]; then
 echo "==> Installing packages"
 apt-get update -q
-apt-get install -y -q cage seatd curl python3 ydotool
+apt-get install -y -q cage seatd curl python3
+if apt-get install -y -q ydotool 2>/dev/null; then
+  echo "==> ydotool installed (optional off-screen pointer helper)"
+else
+  echo "==> ydotool not in apt — skipping off-screen pointer helper (blank cursor theme still applies)"
+fi
 # Chromium packaging differs by distro: Pi OS has a real deb named
 # chromium-browser; Ubuntu's chromium-browser/chromium packages are snap
 # shims. Try them in order, then fall back to installing the snap directly.
@@ -507,9 +512,11 @@ else
   echo "==> Warning: scripts/install-signage-blank-cursor.sh not found — cursor may remain visible." >&2
 fi
 
-if [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
+if command -v ydotool >/dev/null 2>&1 && [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
   echo "==> Installing pointer off-screen helper (cage compositor cursor)"
   install -m 755 "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" /usr/local/bin/signage-hide-cursor
+elif [[ -f "$SCRIPT_DIR/scripts/signage-hide-cursor.sh" ]]; then
+  echo "==> Skipping pointer off-screen helper — install ydotool manually if the cursor stays visible"
 else
   echo "==> Warning: scripts/signage-hide-cursor.sh not found — compositor cursor may remain visible." >&2
 fi
@@ -875,10 +882,11 @@ HTTPS / SELF-SIGNED CERTS
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
 CURSOR (if the mouse pointer is still visible after a server update):
-  sudo apt install -y ydotool
+  sudo apt install -y ydotool   # optional; not packaged on all Pi OS / Debian releases
   sudo bash $SCRIPT_DIR/scripts/install-signage-blank-cursor.sh
   sudo install -m 755 $SCRIPT_DIR/scripts/signage-hide-cursor.sh /usr/local/bin/signage-hide-cursor
   sudo systemctl restart signage
+  If ydotool is unavailable, unplug unused USB mice or rely on the blank cursor theme.
 
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer
