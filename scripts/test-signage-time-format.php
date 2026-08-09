@@ -12,6 +12,9 @@ $_GET = ['clockfmt' => '12'];
 assert(signage_clock_24h() === false, 'clockfmt=12');
 assert(signage_time_format_php() === 'g:i A', '12h php format');
 
+$_GET = ['clockfmt' => '12', 'screen' => 'main'];
+assert(signage_time_format_php() === signage_time_format_php_for('main'), 'screen overrides stale clockfmt');
+
 unset($_GET['clockfmt']);
 $ts = strtotime('2026-08-06 15:30:00');
 assert(signage_format_time($ts) === date('g:i A', $ts), 'default 12h format time');

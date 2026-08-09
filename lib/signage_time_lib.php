@@ -1,7 +1,8 @@
 <?php
 /**
  * 12/24-hour clock formatting — global default with per-screen override via rotation.
- * Rotation passes ?clockfmt=12|24 on board iframes; direct views use ?screen= or global default.
+ * Rotation may pass ?clockfmt=12|24 on board iframes for shells without ?screen=;
+ * when ?screen= is present, the display's clock setting takes precedence.
  */
 
 /** True when ?clockfmt= suppresses format (rotation iframe). */
@@ -17,16 +18,18 @@ function signage_clock_format_from_query(): ?bool
 /** Effective 24-hour mode for the current request. */
 function signage_clock_24h(?string $screen = null): bool
 {
-    $fromQuery = signage_clock_format_from_query();
-    if ($fromQuery !== null) {
-        return $fromQuery;
-    }
     require_once __DIR__ . '/rotation_lib.php';
     if ($screen === null && isset($_GET['screen']) && trim((string)$_GET['screen']) !== '') {
         $screen = rotation_normalize_screen_key((string)$_GET['screen']);
     }
+    // Display setting wins when ?screen= or an explicit screen arg is present.
+    // ?clockfmt= is a fallback for requests without display context (legacy embeds).
     if ($screen !== null && $screen !== '') {
         return rotation_screen_clock_24h($screen);
+    }
+    $fromQuery = signage_clock_format_from_query();
+    if ($fromQuery !== null) {
+        return $fromQuery;
     }
 
     return rotation_global_clock_24h();
