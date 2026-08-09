@@ -1089,8 +1089,8 @@ function tvguide_build_row_blocks(
             'width' => $pos['width'],
             'title' => tvguide_program_title($pgm),
             'subtitle' => tvguide_program_subtitle($pgm),
-            'start' => $entry['start']->format('g:i'),
-            'end' => $entry['end']->format('g:i A'),
+            'start_ts' => $entry['start']->getTimestamp(),
+            'end_ts' => $entry['end']->getTimestamp(),
             'tone' => tvguide_program_tone($pgm),
             'live' => $entry['start'] <= $now && $entry['end'] > $now,
         ];
@@ -1099,18 +1099,114 @@ function tvguide_build_row_blocks(
     return $blocks;
 }
 
+function tvguide_format_prime_label(DateTimeImmutable $start, DateTimeImmutable $end, ?string $screen = null): string
+{
+    require_once __DIR__ . '/signage_time_lib.php';
+    if (signage_clock_24h($screen)) {
+        return signage_dt_format_time($start, $screen) . '–' . signage_dt_format_time($end, $screen);
+    }
+
+    $fmtStart = $start->format('g') . ($start->format('i') !== '00' ? ':' . $start->format('i') : '') . $start->format('a');
+    $fmtEnd = $end->format('g') . ($end->format('i') !== '00' ? ':' . $end->format('i') : '') . $end->format('a');
+
+    return $fmtStart . '–' . $fmtEnd;
+}
+
+/** @return array{start:string,end:string} */
+function tvguide_format_block_times(int $startTs, int $endTs, ?string $screen = null): array
+{
+    require_once __DIR__ . '/signage_time_lib.php';
+    $tz = new DateTimeZone(tvguide_timezone());
+    $start = (new DateTimeImmutable('@' . $startTs))->setTimezone($tz);
+    $end = (new DateTimeImmutable('@' . $endTs))->setTimezone($tz);
+    if (signage_clock_24h($screen)) {
+        return [
+            'start' => $start->format('H:i'),
+            'end' => $end->format('H:i'),
+        ];
+    }
+
+    return [
+        'start' => $start->format('g:i'),
+        'end' => $end->format('g:i A'),
+    ];
+}
+
+function tvguide_hour_label(int $hour, ?string $screen = null): string
+{
+    require_once __DIR__ . '/signage_time_lib.php';
+    $dt = DateTimeImmutable::createFromFormat('G', (string)$hour, new DateTimeZone(tvguide_timezone()));
+    if ($dt === false) {
+        return (string)$hour;
+    }
+    if (signage_clock_24h($screen)) {
+        return $dt->format('H:00');
+    }
+
+    return $dt->format('g A');
+}
+
+/** @param list<array<string,mixed>> $rows */
+function tvguide_apply_block_time_labels(array $rows, ?string $screen = null): array
+{
+    foreach ($rows as &$row) {
+        if (!is_array($row['blocks'] ?? null)) {
+            continue;
+        }
+        foreach ($row['blocks'] as &$block) {
+            if (!is_array($block)) {
+                continue;
+            }
+            $startTs = (int)($block['start_ts'] ?? 0);
+            $endTs = (int)($block['end_ts'] ?? 0);
+            if ($startTs > 0 && $endTs > 0) {
+                $times = tvguide_format_block_times($startTs, $endTs, $screen);
+                $block['start'] = $times['start'];
+                $block['end'] = $times['end'];
+            }
+        }
+        unset($block);
+    }
+    unset($row);
+
+    return $rows;
+}
+
 /** @param array<string,mixed> $payload */
-function tvguide_finalize_grid_payload(array $payload, array $window): array
+function tvguide_finalize_grid_payload(array $payload, array $window, ?string $screen = null): array
 {
     $payload['date_label'] = $window['date']->format('l, M j');
-    $payload['prime_label'] = $window['label'];
+    $payload['prime_label'] = tvguide_format_prime_label($window['start'], $window['end'], $screen);
     $payload['hours'] = $window['hours'];
     $payload['half_hours'] = (int)$window['half_hours'];
     $payload['prime_start_ts'] = $window['start']->getTimestamp();
     $payload['prime_end_ts'] = $window['end']->getTimestamp();
     if (!empty($payload['rows']) && is_array($payload['rows'])) {
         $payload['rows'] = tvguide_sort_grid_rows($payload['rows']);
+        $payload['rows'] = tvguide_apply_block_time_labels($payload['rows'], $screen);
     }
+
+    return $payload;
+}
+
+function tvguide_strip_block_time_labels(array $payload): array
+{
+    if (empty($payload['rows']) || !is_array($payload['rows'])) {
+        return $payload;
+    }
+    foreach ($payload['rows'] as &$row) {
+        if (!is_array($row['blocks'] ?? null)) {
+            continue;
+        }
+        foreach ($row['blocks'] as &$block) {
+            if (!is_array($block)) {
+                continue;
+            }
+            unset($block['start'], $block['end']);
+        }
+        unset($block);
+    }
+    unset($row);
 
     return $payload;
 }
@@ -1169,7 +1265,7 @@ function tvguide_fetch_programs(array $programIds, ?string &$error = null): arra
  *   cache_age:int
  * }
  */
-function tvguide_fetch_grid_data(array $page): array
+function tvguide_fetch_grid_data(array $page, ?string $screen = null): array
 {
     $empty = [
         'ok' => false,
@@ -1222,7 +1318,7 @@ function tvguide_fetch_grid_data(array $page): array
         if (is_array($cached) && tvguide_grid_window_matches($cached, $window)) {
             $cached['cache_age'] = time() - filemtime($cacheFile);
 
-            return tvguide_finalize_grid_payload($cached, $window);
+            return tvguide_finalize_grid_payload($cached, $window, $screen);
         }
     }
 
@@ -1234,7 +1330,7 @@ function tvguide_fetch_grid_data(array $page): array
     if ($schedules === [] && $error !== null) {
         $empty['error'] = $error;
 
-        return tvguide_stale_grid_data($empty, $cacheFile, $error);
+        return tvguide_stale_grid_data($empty, $cacheFile, $error, $screen);
     }
 
     $programIds = [];
@@ -1293,21 +1389,21 @@ function tvguide_fetch_grid_data(array $page): array
         'cache_age' => 0,
         'rows' => $rows,
     ];
-    $payload = tvguide_finalize_grid_payload($payload, $window);
-    @file_put_contents($cacheFile, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), LOCK_EX);
+    $payload = tvguide_finalize_grid_payload($payload, $window, $screen);
+    @file_put_contents($cacheFile, json_encode(tvguide_strip_block_time_labels($payload), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), LOCK_EX);
 
     return $payload;
 }
 
 /** @return array<string,mixed> */
-function tvguide_stale_grid_data(array $empty, string $cacheFile, ?string $error): array
+function tvguide_stale_grid_data(array $empty, string $cacheFile, ?string $error, ?string $screen = null): array
 {
     if (is_file($cacheFile)) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
         if (is_array($cached) && !empty($cached['rows'])) {
             $window = tvguide_prime_window(new DateTimeZone(tvguide_timezone()));
             if (tvguide_grid_window_matches($cached, $window)) {
-                $cached = tvguide_finalize_grid_payload($cached, $window);
+                $cached = tvguide_finalize_grid_payload($cached, $window, $screen);
             }
             $cached['ok'] = true;
             $cached['error'] = ($error ?? 'upstream error') . ' — showing cached listings';

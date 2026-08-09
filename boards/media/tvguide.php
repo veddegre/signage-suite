@@ -9,12 +9,15 @@
 require_once dirname(__DIR__, 2) . '/lib/tvguide_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/signage_theme_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/rotation_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/signage_time_lib.php';
 
 $themePreset = signage_theme_preset(signage_active_theme_key());
 $themeLight = $themePreset !== null && ($themePreset['light'] ?? '0') === '1';
 
 $page = tvguide_resolve_page((string)($_GET['d'] ?? ''));
 $pageOff = !empty($page['off']);
+$SCREEN = signage_request_screen();
 define('BOARD_TITLE', (string)($page['title'] ?? tvguide_default_page_title()));
 define('BOARD_SUB', (string)($page['sub'] ?? tvguide_default_page_sub()));
 define('TIMEZONE', tvguide_timezone());
@@ -24,7 +27,7 @@ date_default_timezone_set(TIMEZONE);
 $configured = tvguide_configured();
 $data = $pageOff
     ? ['ok' => false, 'error' => 'This page is marked Off wall in admin.', 'rows' => [], 'hours' => []]
-    : tvguide_fetch_grid_data($page);
+    : tvguide_fetch_grid_data($page, $SCREEN);
 
 $rows = is_array($data['rows'] ?? null) ? $data['rows'] : [];
 $hours = is_array($data['hours'] ?? null) ? $data['hours'] : [];
@@ -40,16 +43,6 @@ $channelLabelMode = tvguide_channel_label_mode();
 $channelColClass = $channelLabelMode === 'none' ? ' grid-no-badge' : '';
 
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
-
-function tvguide_hour_label(int $hour): string
-{
-    $dt = DateTimeImmutable::createFromFormat('G', (string)$hour, new DateTimeZone(TIMEZONE));
-    if ($dt === false) {
-        return (string)$hour;
-    }
-
-    return $dt->format('g A');
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -207,7 +200,7 @@ function tvguide_hour_label(int $hour): string
       <div class="grid<?= h($channelColClass) ?>">
         <div class="corner">Channel</div>
         <?php foreach ($hours as $hour): ?>
-        <div class="hour"><?= h(tvguide_hour_label((int)$hour)) ?></div>
+        <div class="hour"><?= h(tvguide_hour_label((int)$hour, $SCREEN)) ?></div>
         <?php endforeach; ?>
 
         <?php foreach ($rows as $row):
@@ -296,22 +289,7 @@ function tvguide_hour_label(int $hour): string
 </div>
 
 <?php if ($showClock): ?>
-<script>
-(function () {
-  const el = document.getElementById('clock');
-  if (!el) return;
-  const tz = <?= json_encode(TIMEZONE, JSON_UNESCAPED_UNICODE) ?>;
-  function tick() {
-    try {
-      el.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
-    } catch (e) {
-      el.textContent = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    }
-  }
-  tick();
-  setInterval(tick, 1000);
-})();
-</script>
+<script><?= signage_clock_tick_script('clock', TIMEZONE, $SCREEN) ?></script>
 <?php endif; ?>
 </body>
 </html>
