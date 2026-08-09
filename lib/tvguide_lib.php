@@ -808,6 +808,26 @@ function tvguide_prime_window(?DateTimeZone $tz = null): array
     ];
 }
 
+/** CSS layout classes from block width on the timeline (% of prime-time track). */
+function tvguide_block_layout_classes(float $widthPct, float $hourPct): string
+{
+    $classes = [];
+    if ($widthPct < 9) {
+        $classes[] = 'fit-sliver';
+    } elseif ($widthPct < 16) {
+        $classes[] = 'fit-narrow';
+    } elseif ($widthPct < 26) {
+        $classes[] = 'fit-medium';
+    } else {
+        $classes[] = 'fit-full';
+    }
+    if ($widthPct >= max(18, $hourPct * 0.85)) {
+        $classes[] = 'continues';
+    }
+
+    return $classes !== [] ? ' ' . implode(' ', $classes) : '';
+}
+
 /** @return array{left:float,width:float}|null */
 function tvguide_block_timeline_pct(
     DateTimeImmutable $start,

@@ -139,13 +139,37 @@ function tvguide_hour_label(int $hour): string
                          color-mix(in srgb, var(--hairline) 82%, transparent) <?= round($hourPct, 6) ?>%); }
   .grid .track-pane { position:relative; height:100%; min-height:0; }
   .grid .block { --bar: color-mix(in srgb, var(--beacon) 72%, var(--snow));
-                 position:absolute; top:0; bottom:0; min-width:0; border-radius:10px; padding:10px 12px;
-                 display:flex; flex-direction:column; justify-content:center; gap:4px;
+                 position:absolute; top:0; bottom:0; min-width:0; border-radius:10px; padding:8px 10px;
+                 display:flex; flex-direction:column; justify-content:flex-start; gap:0;
                  background:linear-gradient(90deg,
                    color-mix(in srgb, var(--bar) 24%, var(--lake-night)) 0%,
                    color-mix(in srgb, var(--bar) 12%, var(--lake-night)) 100%);
                  border:1px solid color-mix(in srgb, var(--bar) 28%, transparent);
                  box-shadow:inset 3px 0 0 var(--bar); overflow:hidden; }
+  .grid .block .block-body { flex:1 1 auto; min-height:0; overflow:hidden;
+                              display:flex; flex-direction:column; gap:2px; }
+  .grid .block .title { font-size:<?= $boardH < 1080 ? 20 : 24 ?>px; line-height:1.18; font-weight:600;
+                        overflow:hidden; overflow-wrap:break-word;
+                        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .grid .block .sub { font-size:<?= $boardH < 1080 ? 14 : 16 ?>px; color:color-mix(in srgb, var(--snow) 72%, var(--mist));
+                     line-height:1.2; overflow:hidden; overflow-wrap:break-word;
+                     display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
+  .grid .block .time { flex:0 0 auto; margin-top:auto; padding-top:4px;
+                       font-size:<?= $boardH < 1080 ? 13 : 15 ?>px; color:color-mix(in srgb, var(--mist) 88%, transparent);
+                       font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .grid .block.fit-sliver { padding:6px 8px; }
+  .grid .block.fit-sliver .title { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; line-height:1.15;
+                                    display:block; -webkit-line-clamp:unset;
+                                    white-space:nowrap; text-overflow:ellipsis; }
+  .grid .block.fit-sliver .sub { display:none; }
+  .grid .block.fit-sliver .time { font-size:12px; padding-top:2px; }
+  .grid .block.fit-narrow .title { font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; -webkit-line-clamp:2; }
+  .grid .block.fit-narrow .sub { display:none; }
+  .grid .block.fit-medium .title { -webkit-line-clamp:2; }
+  .grid .block.fit-medium .sub { -webkit-line-clamp:1; }
+  .grid .block.fit-full .title { -webkit-line-clamp:2; }
+  .grid .block.fit-full .sub { -webkit-line-clamp:2; }
+  .grid .block.continues .block-body { padding-right:12px; }
   .grid .block.tone-news    { --bar:#6ea8e8; }
   .grid .block.tone-sports  { --bar:#5ecf8a; }
   .grid .block.tone-kids    { --bar:#e8b86a; }
@@ -153,17 +177,10 @@ function tvguide_hour_label(int $hour): string
   .grid .block.tone-variety { --bar:#d892b0; }
   .grid .block.tone-series  { --bar:#7aa8c8; }
   .grid .block.tone-default { --bar: color-mix(in srgb, var(--beacon) 68%, var(--snow)); }
-  .grid .block.wide::after {
+  .grid .block.continues::after {
     content:''; position:absolute; right:8px; top:50%; transform:translateY(-50%);
     width:0; height:0; border-top:6px solid transparent; border-bottom:6px solid transparent;
     border-left:7px solid color-mix(in srgb, var(--bar) 55%, transparent); opacity:.55; }
-  .grid .block .title { font-size:<?= $boardH < 1080 ? 22 : 26 ?>px; line-height:1.2; font-weight:600;
-                        display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
-                        padding-right:<?= $hourCount > 2 ? '18px' : '0' ?>; }
-  .grid .block .sub { font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:color-mix(in srgb, var(--snow) 72%, var(--mist));
-                     line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .grid .block .time { font-size:15px; color:color-mix(in srgb, var(--mist) 88%, transparent); margin-top:2px;
-                       font-variant-numeric:tabular-nums; }
   .grid .block.live { box-shadow:inset 3px 0 0 var(--bar), 0 0 0 1px color-mix(in srgb, var(--up) 45%, transparent); }
   .grid .block.live .time::before { content:'● '; color:var(--up); }
 
@@ -263,7 +280,7 @@ function tvguide_hour_label(int $hour): string
               $left = max(0.0, min(99.0, (float)($block['left'] ?? 0)));
               $width = max(1.0, min(100.0 - $left, (float)($block['width'] ?? 1)));
               $tone = preg_replace('/[^a-z0-9_-]/', '', (string)($block['tone'] ?? 'default')) ?: 'default';
-              $wideClass = $width >= ($hourPct * 0.85) ? ' wide' : '';
+              $layoutClass = tvguide_block_layout_classes($width, $hourPct);
               $liveClass = !empty($block['live']) ? ' live' : '';
               $style = sprintf(
                   'left:calc(%s%% + 2px);width:calc(%s%% - 4px);',
@@ -271,11 +288,13 @@ function tvguide_hour_label(int $hour): string
                   rtrim(rtrim(sprintf('%.4F', $width), '0'), '.')
               );
           ?>
-          <div class="block tone-<?= h($tone) ?><?= h($wideClass) ?><?= h($liveClass) ?>" style="<?= h($style) ?>">
+          <div class="block tone-<?= h($tone) ?><?= h($layoutClass) ?><?= h($liveClass) ?>" style="<?= h($style) ?>">
+            <div class="block-body">
             <div class="title"><?= h((string)($block['title'] ?? '')) ?></div>
             <?php if (!empty($block['subtitle'])): ?>
             <div class="sub"><?= h((string)$block['subtitle']) ?></div>
             <?php endif; ?>
+            </div>
             <div class="time"><?= h((string)($block['start'] ?? '')) ?>–<?= h((string)($block['end'] ?? '')) ?></div>
           </div>
           <?php endforeach; ?>
