@@ -46,8 +46,10 @@ $camJson['streamApi'] = 'webcam.php?cam=' . rawurlencode((string)$cam['key']) . 
 $camJson['streamIframe'] = (string)$cam['url'];
 $camJson['preferIframe'] = webcam_stream_prefers_iframe_embed($cam);
 $earthcamIframeWarmup = webcam_earthcam_iframe_warmup($cam);
-$iframeEmbed = $available && !$usesImage && !$usesStream;
+$wetmetIframe = $available && webcam_stream_prefers_iframe_embed($cam);
+$iframeEmbed = $available && !$usesImage && !$usesStream && !$wetmetIframe;
 $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
+$camJson['wetmetIframe'] = $wetmetIframe;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,8 +57,11 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
 <meta charset="UTF-8">
 <title><?= h($available ? (string)$cam['name'] : TITLE) ?></title>
 <?= signage_theme_fonts_head_html() ?>
-<?php if ($usesStream && is_file(dirname(__DIR__, 2) . '/' . webcam_hls_js_url())): ?>
+<?php if (($usesStream || $wetmetIframe) && is_file(dirname(__DIR__, 2) . '/' . webcam_hls_js_url())): ?>
 <script src="<?= h(webcam_hls_js_url()) ?>"></script>
+<?php endif; ?>
+<?php if ($wetmetIframe): ?>
+<script src="<?= h(signage_map_canvas_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
   <?= signage_theme_css() ?>
@@ -146,6 +151,12 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
     return base + sep + 't=' + Date.now();
   }
 
+  function isLowEndKiosk() {
+    if (window.SignageMapCanvas) return SignageMapCanvas.profile().low;
+    const ua = (navigator.userAgent || '') + ' ' + (navigator.platform || '');
+    return /raspberry|aarch64|armv7|armv8|linux arm/i.test(ua);
+  }
+
   function showStreamIframe(url) {
     const frame = document.getElementById('frame');
     if (!frame) return;
@@ -153,24 +164,41 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
     frame.innerHTML = '<iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager" src="' + url + '"></iframe>';
   }
 
-  function loadStream(playlistUrl) {
-    const video = document.getElementById('cam-video');
+  function ensureVideoFrame() {
+    const frame = document.getElementById('frame');
+    if (!frame) return null;
+    frame.classList.remove('iframe-embed');
+    let video = document.getElementById('cam-video');
+    if (!video) {
+      frame.innerHTML = '<video id="cam-video" autoplay muted playsinline></video>';
+      video = document.getElementById('cam-video');
+    }
+    return video;
+  }
+
+  function loadStream(playlistUrl, direct) {
+    const video = ensureVideoFrame();
     if (!video || !playlistUrl) {
       if (cam.streamIframe) showStreamIframe(cam.streamIframe);
       return;
     }
+    const lowEnd = isLowEndKiosk();
     if (window.Hls && window.Hls.isSupported()) {
       if (hlsPlayer) {
         hlsPlayer.destroy();
         hlsPlayer = null;
       }
-      hlsPlayer = new window.Hls({ enableWorker: true, lowLatencyMode: true });
+      hlsPlayer = new window.Hls({
+        enableWorker: !lowEnd,
+        lowLatencyMode: false,
+        maxBufferLength: lowEnd ? 24 : 12,
+      });
       hlsPlayer.on(window.Hls.Events.ERROR, function (_event, data) {
         if (data && data.fatal && cam.streamIframe) {
           showStreamIframe(cam.streamIframe);
         }
       });
-      hlsPlayer.loadSource(refreshImageSrc(playlistUrl));
+      hlsPlayer.loadSource(direct ? playlistUrl : refreshImageSrc(playlistUrl));
       hlsPlayer.attachMedia(video);
       hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
         video.play().catch(function () {
@@ -181,11 +209,11 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
         if (video.readyState < 2 && cam.streamIframe) {
           showStreamIframe(cam.streamIframe);
         }
-      }, 12000);
+      }, lowEnd ? 18000 : 12000);
       return;
     }
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = refreshImageSrc(playlistUrl);
+      video.src = direct ? playlistUrl : refreshImageSrc(playlistUrl);
       video.play().catch(function () {
         if (cam.streamIframe) showStreamIframe(cam.streamIframe);
       });
@@ -194,23 +222,42 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
     if (cam.streamIframe) showStreamIframe(cam.streamIframe);
   }
 
+  async function refreshWetmetDirect() {
+    try {
+      const res = await fetch(cam.streamApi + '&wetmet=1', { cache: 'no-store' });
+      const data = await res.json();
+      if (data && data.ok && data.playlist) {
+        loadStream(data.playlist, true);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   async function refreshStreamPlaylist() {
     try {
       const res = await fetch(cam.streamApi, { cache: 'no-store' });
       const data = await res.json();
       if (data && data.ok && data.playlist) {
-        loadStream(data.playlist);
+        loadStream(data.playlist, false);
       }
     } catch (e) {}
   }
 
   if (cam.preferIframe && cam.streamIframe) {
+    if (isLowEndKiosk()) {
+      refreshWetmetDirect().then(function (ok) {
+        if (!ok) showStreamIframe(cam.streamIframe);
+        else setInterval(refreshWetmetDirect, 25 * 60 * 1000);
+      });
+      return;
+    }
     showStreamIframe(cam.streamIframe);
     return;
   }
 
   if (cam.streamPlaylist) {
-    loadStream(cam.streamPlaylist);
+    loadStream(cam.streamPlaylist, false);
     setInterval(refreshStreamPlaylist, streamRefreshMs);
     return;
   }

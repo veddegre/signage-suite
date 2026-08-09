@@ -214,6 +214,14 @@ Deploy updated signage-suite on the **server** (boards are rendered there, not o
 
 If still choppy: lower **Max flows** on attack maps in admin, or use **scale 1** on 1080p TVs (`KIOSK_SCALE=1` in `/etc/signage/kiosk.conf`).
 
+### GRPM / WetMet webcam (`webcam.php?cam=grpm`)
+
+Uses a **nested iframe** to WetMet’s Video.js player on desktop (signed HLS — not proxied from the server). On **Pi kiosks**, the board auto-switches to a **single `<video>` + hls.js** path with a fresh signed playlist from the server (lighter than iframe-in-iframe). Falls back to the WetMet iframe if direct HLS fails.
+
+WetMet’s embed also cycles its player about every **5 minutes** — a brief flash can happen even on desktop when using the iframe path.
+
+**Debug:** `?mapperf=low` on the webcam URL forces the direct-HLS path on any browser.
+
 ---
 
 ## Cursor on Raspberry Pi (phantom HDMI pointer)

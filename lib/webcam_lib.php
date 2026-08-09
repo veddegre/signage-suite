@@ -727,7 +727,21 @@ function webcam_hls_serve(string $camKey): void
 function webcam_stream_api_response(array $cam): void
 {
     header('Content-Type: application/json; charset=UTF-8');
-    if ($cam['off'] || trim((string)$cam['url']) === '' || !webcam_uses_stream_tag($cam)) {
+    if ($cam['off'] || trim((string)$cam['url']) === '') {
+        echo json_encode(['ok' => false], JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    if (isset($_GET['wetmet']) && (string)$_GET['wetmet'] === '1'
+        && webcam_stream_prefers_iframe_embed($cam)) {
+        $playlist = webcam_stream_playlist_url((string)$cam['url']);
+        echo json_encode([
+            'ok' => $playlist !== null,
+            'playlist' => $playlist,
+            'direct' => true,
+        ], JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    if (!webcam_uses_stream_tag($cam)) {
         echo json_encode(['ok' => false], JSON_UNESCAPED_SLASHES);
         exit;
     }
