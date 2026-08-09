@@ -141,6 +141,17 @@ EOF
 fi
 chmod +x /usr/local/bin/signage-kiosk
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SIGNAGE_EXEC_START_POST=""
+if [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null; then
+  if [[ -f "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh" ]]; then
+    echo "==> Installing Pi phantom cursor suppress (VT switch)"
+    SIGNAGE_QUIET=1 bash "$SCRIPT_DIR/signage-install-cursor-vt-fix.sh"
+    SIGNAGE_EXEC_START_POST="ExecStartPost=-/bin/systemctl start signage-cursor-vt.service"
+    systemctl enable signage-cursor-vt.service 2>/dev/null || true
+  fi
+fi
+
 cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
 Description=Signage kiosk (cage + Chromium)
@@ -157,6 +168,7 @@ Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
 ExecStart=/usr/local/bin/signage-kiosk "$URL"
+${SIGNAGE_EXEC_START_POST}
 Restart=always
 RestartSec=2
 
@@ -166,9 +178,16 @@ EOF
 
 systemctl daemon-reload
 systemctl restart signage.service
+if systemctl is-enabled signage-cursor-vt.service >/dev/null 2>&1; then
+  systemctl start signage-cursor-vt.service 2>/dev/null || true
+fi
 
 echo
 echo "Restored. URL: $URL"
 echo "Browser: $CHROMIUM"
-echo "Pointer may be visible again — that is OK for now."
+if [[ -n "$SIGNAGE_EXEC_START_POST" ]]; then
+  echo "Pi cursor suppress: enabled (VT switch ~2 min after wall is up)"
+else
+  echo "Pointer may be visible on Pi until setup-kiosk.sh is re-run."
+fi
 echo "If still black after 10s: sudo reboot"

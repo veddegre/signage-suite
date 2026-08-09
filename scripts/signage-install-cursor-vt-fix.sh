@@ -26,11 +26,15 @@ ExecStart=/usr/local/bin/signage-suppress-cursor-vt
 WantedBy=multi-user.target
 EOF
 
+systemctl disable --now getty@tty2.service 2>/dev/null || true
+
 systemctl daemon-reload
 systemctl enable signage-cursor-vt.service
 
-echo "Installed signage-cursor-vt.service (runs once after boot when signage is up)."
-echo "Apply now on a running kiosk:"
-echo "  sudo systemctl start signage-cursor-vt.service"
-echo "Watch: journalctl -u signage-cursor-vt -f"
-echo "Undo:  sudo systemctl disable --now signage-cursor-vt.service"
+if [[ "${SIGNAGE_QUIET:-0}" != "1" ]]; then
+  echo "Installed signage-cursor-vt.service (runs after boot when signage is up)."
+  echo "Apply now on a running kiosk:"
+  echo "  sudo systemctl start signage-cursor-vt.service"
+  echo "Watch: journalctl -u signage-cursor-vt -f"
+  echo "Undo:  sudo systemctl disable --now signage-cursor-vt.service"
+fi

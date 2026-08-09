@@ -9,17 +9,14 @@ usage() {
   cat <<EOF
 Pi compositor cursor (cage + HDMI phantom pointer)
 
-There is no reliable software fix on every Raspberry Pi yet:
-  - ydotool          → black screen / journal spam on Pi OS Trixie
-  - libinput udev    → black screen on some Pis (ignore vc4-hdmi-*)
-
-Recommended: leave the pointer visible, or unplug unused USB mice.
+setup-kiosk.sh installs signage-cursor-vt.service on Raspberry Pi (VT switch after wall loads).
+Unsafe on Pi (black screen): ydotool, libinput udev ignore of vc4-hdmi-*.
 
 Commands:
   sudo bash $0 --cleanup     Remove failed cursor experiments; restart signage
   sudo bash $0 --status       Show pointer-related config
 
-Do NOT run cursor "fix" scripts on a working kiosk unless you can SSH in to roll back:
+Do NOT run old cursor "fix" scripts on a working kiosk unless you can SSH in to roll back:
   sudo bash scripts/signage-undo-cursor-pi.sh
   sudo bash scripts/signage-restore-display.sh && sudo reboot
 
@@ -61,6 +58,13 @@ status() {
   echo "==> signage"
   systemctl is-active signage.service 2>/dev/null || true
   grep KIOSK_URL= /etc/signage/kiosk.conf 2>/dev/null || true
+  echo
+  echo "==> Pi VT cursor suppress"
+  if systemctl is-enabled signage-cursor-vt.service >/dev/null 2>&1; then
+    systemctl is-active signage-cursor-vt.service 2>/dev/null || echo "(enabled; runs after boot / signage restart)"
+  else
+    echo "(not installed — re-run setup-kiosk.sh on Pi)"
+  fi
 }
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -74,7 +78,8 @@ case "${1:-}" in
   --help|-h) usage ;;
   *)
     usage
-    echo "No automatic cursor fix is applied — previous fixes caused black screens on this hardware."
+    echo "Pi cursor fix is installed by setup-kiosk.sh (signage-cursor-vt.service)."
+    echo "Re-run: sudo systemctl start signage-cursor-vt.service"
     exit 0
     ;;
 esac

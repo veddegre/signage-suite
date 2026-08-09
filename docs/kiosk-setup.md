@@ -68,7 +68,8 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **unattended-upgrades** | Security patches between nightly runs |
 | **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
-| **Blank cursor** | Transparent theme + off-screen pointer helper (cage still draws a cursor if a USB mouse / CEC “pointer” is present) |
+| **signage-cursor-vt.service** | **Pi only** — after boot, waits for the wall to load, then VT switch to hide cage’s phantom HDMI cursor |
+| **Blank cursor theme** | Transparent Xcursor theme (does not remove cage’s compositor pointer on Pi — use VT service above) |
 
 On first run, setup **prompts for the signage server** (hostname only — no `/boards` path), **screen name**, **timezone**, and **4K scale**, then **tests** `board.php` before installing. Pass **`--server`**, **`--screen`**, and **`--timezone`** to skip prompts (used by unattended git refresh).
 
@@ -195,6 +196,8 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 On many **Pi kiosks**, **cage** draws a compositor pointer from the HDMI/CEC input node (`vc4-hdmi-0`) — **no mouse plugged in**. CSS and blank Xcursor themes cannot remove it.
 
+**`setup-kiosk.sh` installs the fix automatically on Raspberry Pi:** `signage-cursor-vt.service` waits for `board.php` to load, settles ~90s, then runs a VT switch (`chvt 2` / `chvt 1`) while **cage keeps running**. The same service is triggered when `signage.service` restarts (watchdog, maintenance).
+
 **Do not use** on Pi:
 
 | Approach | Why |
@@ -202,46 +205,39 @@ On many **Pi kiosks**, **cage** draws a compositor pointer from the HDMI/CEC inp
 | **ydotool** | Black screen / journal spam |
 | **libinput udev ignore** (`LIBINPUT_IGNORE_DEVICE`) | Black screen on some Pis (kills CEC keyboard events too) |
 
-### Recommended: VT switch (cage keeps running)
-
-After the rotation shell has loaded, a one-time **virtual-terminal switch** makes cage drop its cursor overlay plane without touching input devices or the launcher. Documented for Pi + cage in [cage#299](https://github.com/cage-kiosk/cage/issues/299#issuecomment-...) (2026).
-
-```bash
-cd ~/signage-suite && git pull
-sudo bash scripts/signage-install-cursor-vt-fix.sh
-sudo systemctl start signage-cursor-vt.service
-```
-
-This waits for `board.php` to respond, settles ~90s for the page to finish painting, then runs `chvt 2` / `chvt 1` while **cage stays running**. Watch the log:
+### Logs and manual re-run
 
 ```bash
 journalctl -u signage-cursor-vt -f
+sudo systemctl start signage-cursor-vt.service
 ```
 
-Enable at every boot (already done by the install script):
+After a fresh `setup-kiosk.sh` on an already-running Pi (without reboot):
 
 ```bash
-sudo systemctl enable signage-cursor-vt.service
+cd ~/signage-suite && git pull
+sudo bash setup-kiosk.sh --skip-apt
+sudo systemctl start signage-cursor-vt.service
 ```
+
+Documented for Pi + cage in [cage#299](https://github.com/cage-kiosk/cage/issues/299).
 
 **Undo:**
 
 ```bash
 sudo systemctl disable --now signage-cursor-vt.service
-sudo rm /etc/systemd/system/signage-cursor-vt.service
+sudo rm /etc/systemd/system/signage-cursor-vt.service /usr/local/bin/signage-suppress-cursor-vt
 sudo systemctl daemon-reload
-# Reboot or live with cursor until next signage restart
+# Re-run setup-kiosk.sh to drop ExecStartPost from signage.service
 ```
 
-### Manual one-liner (try before installing)
+### Manual one-liner (debug)
 
 After the wall has been up for ~2 minutes:
 
 ```bash
 sudo chvt 2 && sleep 1 && sudo chvt 1
 ```
-
-If the cursor vanishes and stays gone, install the service above so it runs automatically after boot.
 
 ### If the cursor comes back ~1 minute later
 

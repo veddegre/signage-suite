@@ -36,6 +36,7 @@
 #   * nightly OS updates + optional git pull (signage-update.timer)
 #   * scheduled maintenance reboot or browser restart (signage-maint.timer)
 #   * HDMI-CEC sync (polls admin schedule every minute via board.php?api=cec)
+#   * Pi only: VT switch after boot to hide cage's phantom HDMI cursor
 #
 # Works on Pi 4/5 and on x86 mini PCs running Ubuntu Server — the script
 # handles both distros' Chromium packaging (Ubuntu's is a snap).
@@ -426,6 +427,23 @@ apply_timezone() {
   fi
 }
 
+is_raspberry_pi() {
+  [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null
+}
+
+install_pi_cursor_vt_fix() {
+  if [[ -f "$SCRIPT_DIR/scripts/signage-install-cursor-vt-fix.sh" ]]; then
+    SIGNAGE_QUIET=1 bash "$SCRIPT_DIR/scripts/signage-install-cursor-vt-fix.sh"
+  else
+    echo "==> Warning: scripts/signage-install-cursor-vt-fix.sh not found — phantom cursor may show on Pi." >&2
+  fi
+}
+
+remove_pi_cursor_vt_fix() {
+  systemctl disable --now signage-cursor-vt.service 2>/dev/null || true
+  rm -f /etc/systemd/system/signage-cursor-vt.service /usr/local/bin/signage-suppress-cursor-vt 2>/dev/null || true
+}
+
 UPDATE_CAL="$(calendar_time "$UPDATE_TIME")"
 MAINT_CAL="$(calendar_time "$MAINT_TIME")"
 
@@ -663,8 +681,19 @@ EOF
   fi
 fi
 
+if is_raspberry_pi; then
+  echo "==> Pi phantom cursor suppress (VT switch after signage is up)"
+  install_pi_cursor_vt_fix
+else
+  remove_pi_cursor_vt_fix
+fi
+
 echo "==> Writing systemd service"
 SIGNAGE_AFTER="network-online.target systemd-user-sessions.service seatd.service"
+SIGNAGE_EXEC_START_POST=""
+if is_raspberry_pi && [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
+  SIGNAGE_EXEC_START_POST="ExecStartPost=-/bin/systemctl start signage-cursor-vt.service"
+fi
 
 cat > /etc/systemd/system/signage.service <<EOF
 [Unit]
@@ -682,6 +711,7 @@ Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
+${SIGNAGE_EXEC_START_POST}
 Restart=always
 RestartSec=2
 
@@ -824,6 +854,9 @@ if [[ $WITH_CEC -eq 1 ]] && [[ -x /usr/local/bin/signage-cec-sync ]]; then
   systemctl enable signage-cec.timer
   systemctl start signage-cec.timer
 fi
+if is_raspberry_pi && [[ -x /usr/local/bin/signage-suppress-cursor-vt ]]; then
+  systemctl enable signage-cursor-vt.service
+fi
 
 if [[ $FROM_UPDATE -eq 0 ]]; then
 cat <<NOTES
@@ -865,12 +898,11 @@ HTTPS / SELF-SIGNED CERTS
   Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
-CURSOR (Raspberry Pi — phantom vc4-hdmi pointer, no mouse):
-  VT switch fix (safe): sudo bash $SCRIPT_DIR/scripts/signage-install-cursor-vt-fix.sh
-                        sudo systemctl start signage-cursor-vt.service
+CURSOR (Raspberry Pi — installed automatically on Pi):
+  VT switch runs after boot (~2 min after wall is up). Logs: journalctl -u signage-cursor-vt -f
+  Manual re-run: sudo systemctl start signage-cursor-vt.service
   Do NOT use ydotool or libinput udev ignore — black screen on many Pis.
   Cleanup old attempts: sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh --cleanup
-  See docs/kiosk-setup.md § Cursor on Raspberry Pi.
 
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer

@@ -56,8 +56,17 @@ elif [[ -r /sys/kernel/debug/dri/0/state ]] || [[ -r /sys/kernel/debug/dri/1/sta
   have_drm_debug=1
 fi
 
-if ! pgrep -x cage >/dev/null 2>&1; then
-  logger -t signage-cursor-vt "cage not running — skip"
+wait_for_cage() {
+  local deadline=$(( $(date +%s) + 600 ))
+  while [[ $(date +%s) -lt $deadline ]]; do
+    pgrep -x cage >/dev/null 2>&1 && return 0
+    sleep 3
+  done
+  return 1
+}
+
+if ! wait_for_cage; then
+  logger -t signage-cursor-vt "cage not running after wait — skip"
   exit 0
 fi
 
