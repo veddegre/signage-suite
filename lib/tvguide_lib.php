@@ -792,24 +792,20 @@ function tvguide_program_subtitle(array $program): string
 
 /**
  * @param list<string> $stationIds
+ * @param list<string> $dateYmds
  * @return array<string,list<array<string,mixed>>>
  */
-function tvguide_fetch_schedules_for_date(array $stationIds, string $dateYmd, ?string &$error = null): array
+function tvguide_fetch_schedules_for_dates(array $stationIds, array $dateYmds, ?string &$error = null): array
 {
-    if ($stationIds === []) {
+    if ($stationIds === [] || $dateYmds === []) {
         return [];
     }
 
-    $query = [[
-        'stationID' => $stationIds[0],
-        'date' => [$dateYmd],
-    ]];
-    if (count($stationIds) > 1) {
-        $query = array_map(static fn(string $sid): array => [
-            'stationID' => $sid,
-            'date' => [$dateYmd],
-        ], $stationIds);
-    }
+    $dateYmds = array_values(array_unique(array_filter(array_map('trim', $dateYmds))));
+    $query = array_map(static fn(string $sid): array => [
+        'stationID' => $sid,
+        'date' => $dateYmds,
+    ], $stationIds);
 
     $resp = tvguide_sd_api('POST', '/schedules', $query, 60, $error);
     if ($resp['code'] !== 200 || !is_array($resp['body'])) {
@@ -819,18 +815,118 @@ function tvguide_fetch_schedules_for_date(array $stationIds, string $dateYmd, ?s
     }
 
     $out = [];
+    // Response is a flat list of {stationID, programs} blocks (one per station/date).
     foreach ($resp['body'] as $block) {
         if (!is_array($block)) {
             continue;
         }
         $sid = trim((string)($block['stationID'] ?? ''));
-        if ($sid === '') {
+        if ($sid === '' || !is_array($block['programs'] ?? null)) {
             continue;
         }
-        $out[$sid] = is_array($block['programs'] ?? null) ? $block['programs'] : [];
+        if (!isset($out[$sid])) {
+            $out[$sid] = [];
+        }
+        foreach ($block['programs'] as $slot) {
+            if (is_array($slot)) {
+                $out[$sid][] = $slot;
+            }
+        }
     }
 
     return $out;
+}
+
+/** @param list<string> $stationIds */
+function tvguide_fetch_schedules_for_date(array $stationIds, string $dateYmd, ?string &$error = null): array
+{
+    return tvguide_fetch_schedules_for_dates($stationIds, [$dateYmd], $error);
+}
+
+/** @return array{start:DateTimeImmutable,end:DateTimeImmutable,pid:string}|null */
+function tvguide_parse_schedule_slot(array $slot, DateTimeZone $tz, array $programs): ?array
+{
+    $air = trim((string)($slot['airDateTime'] ?? ''));
+    $pid = trim((string)($slot['programID'] ?? ''));
+    $duration = max(0, (int)($slot['duration'] ?? 0));
+    if ($air === '' || $pid === '') {
+        return null;
+    }
+    if ($duration <= 0 && isset($programs[$pid])) {
+        $duration = max(0, (int)($programs[$pid]['duration'] ?? 0));
+    }
+    if ($duration <= 0) {
+        return null;
+    }
+
+    try {
+        $start = new DateTimeImmutable($air, new DateTimeZone('UTC'));
+        $start = $start->setTimezone($tz);
+    } catch (Exception) {
+        return null;
+    }
+    $end = $start->modify('+' . $duration . ' seconds');
+
+    return ['start' => $start, 'end' => $end, 'pid' => $pid];
+}
+
+/**
+ * @param list<array<string,mixed>> $slots
+ * @param list<int> $hours
+ * @return array<string,array<string,mixed>|null>
+ */
+function tvguide_build_hour_cells(
+    array $slots,
+    array $hours,
+    DateTimeImmutable $gridDate,
+    DateTimeImmutable $primeStart,
+    DateTimeImmutable $primeEnd,
+    DateTimeZone $tz,
+    array $programs
+): array {
+    $parsed = [];
+    foreach ($slots as $slot) {
+        if (!is_array($slot)) {
+            continue;
+        }
+        $entry = tvguide_parse_schedule_slot($slot, $tz, $programs);
+        if ($entry === null) {
+            continue;
+        }
+        if ($entry['end'] <= $primeStart || $entry['start'] >= $primeEnd) {
+            continue;
+        }
+        $parsed[] = $entry;
+    }
+
+    usort($parsed, static fn(array $a, array $b): int => $a['start'] <=> $b['start']);
+
+    $cells = [];
+    foreach ($hours as $hour) {
+        $slotStart = $gridDate->setTime((int)$hour, 0);
+        $slotEnd = $slotStart->modify('+1 hour');
+        $best = null;
+        $bestStart = null;
+        foreach ($parsed as $entry) {
+            if ($entry['end'] <= $slotStart || $entry['start'] >= $slotEnd) {
+                continue;
+            }
+            if ($bestStart === null || $entry['start'] > $bestStart) {
+                $bestStart = $entry['start'];
+                $pgm = $programs[$entry['pid']] ?? [];
+                $best = [
+                    'title' => tvguide_program_title($pgm),
+                    'subtitle' => tvguide_program_subtitle($pgm),
+                    'start' => $entry['start']->format('g:i'),
+                    'end' => $entry['end']->format('g:i'),
+                    'duration_min' => (int)round(($entry['end']->getTimestamp() - $entry['start']->getTimestamp()) / 60),
+                ];
+            }
+        }
+        $cells[(string)$hour] = $best;
+    }
+
+    return $cells;
 }
 
 /**
@@ -913,11 +1009,12 @@ function tvguide_fetch_grid_data(array $page): array
     $tz = new DateTimeZone(tvguide_timezone());
     $window = tvguide_prime_window($tz);
     $dateYmd = $window['date']->format('Y-m-d');
-    $cacheKey = 'tvguide_grid_' . md5(json_encode([
+    $scheduleDates = [$dateYmd, $window['date']->modify('+1 day')->format('Y-m-d')];
+    $cacheKey = 'tvguide_grid_v2_' . md5(json_encode([
         $lineup,
         $page['key'] ?? '',
         $stationIds,
-        $dateYmd,
+        $scheduleDates,
         (string)cfg('tvguide.PRIME_START', '19:00'),
         (string)cfg('tvguide.PRIME_END', '23:00'),
         tvguide_timezone(),
@@ -937,7 +1034,7 @@ function tvguide_fetch_grid_data(array $page): array
     $lineupData = tvguide_sd_lineup_channels($lineup, $error);
     $channelMap = $lineupData['map'];
 
-    $schedules = tvguide_fetch_schedules_for_date($stationIds, $dateYmd, $error);
+    $schedules = tvguide_fetch_schedules_for_dates($stationIds, $scheduleDates, $error);
     if ($schedules === [] && $error !== null) {
         $empty['error'] = $error;
 
@@ -961,6 +1058,7 @@ function tvguide_fetch_grid_data(array $page): array
     $primeStart = $window['start'];
     $primeEnd = $window['end'];
     $hours = $window['hours'];
+    $gridDate = $window['date'];
     $rows = [];
 
     foreach ($stationIds as $sid) {
@@ -968,50 +1066,15 @@ function tvguide_fetch_grid_data(array $page): array
             continue;
         }
         $ch = $channelMap[$sid];
-        $cells = [];
-        foreach ($hours as $hour) {
-            $cells[(string)$hour] = null;
-        }
-
-        foreach ((array)($schedules[$sid] ?? []) as $slot) {
-            if (!is_array($slot)) {
-                continue;
-            }
-            $pid = trim((string)($slot['programID'] ?? ''));
-            $air = trim((string)($slot['airDateTime'] ?? ''));
-            $duration = max(0, (int)($slot['duration'] ?? 0));
-            if ($air === '' || $duration <= 0) {
-                continue;
-            }
-            try {
-                $start = new DateTimeImmutable($air);
-                $start = $start->setTimezone($tz);
-            } catch (Exception) {
-                continue;
-            }
-            $end = $start->modify('+' . $duration . ' seconds');
-            if ($end <= $primeStart || $start >= $primeEnd) {
-                continue;
-            }
-
-            $pgm = $programs[$pid] ?? [];
-            $title = tvguide_program_title($pgm);
-            $subtitle = tvguide_program_subtitle($pgm);
-            $hourKey = (string)(int)$start->format('G');
-            if (!array_key_exists($hourKey, $cells)) {
-                continue;
-            }
-            if ($cells[$hourKey] !== null) {
-                continue;
-            }
-            $cells[$hourKey] = [
-                'title' => $title,
-                'subtitle' => $subtitle,
-                'start' => $start->format('g:i'),
-                'end' => $end->format('g:i'),
-                'duration_min' => (int)round($duration / 60),
-            ];
-        }
+        $cells = tvguide_build_hour_cells(
+            (array)($schedules[$sid] ?? []),
+            $hours,
+            $gridDate,
+            $primeStart,
+            $primeEnd,
+            $tz,
+            $programs
+        );
 
         $rows[] = [
             'station_id' => $sid,
