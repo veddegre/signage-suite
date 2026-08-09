@@ -73,7 +73,6 @@ function sports_board_stamp_text(array $board, bool $showDebug = false): string
 $cards = $board['cards'];
 $teamCount = (int)$board['team_count'];
 $anyLive = (bool)$board['any_live'];
-$focusLive = (bool)$board['focus_live'];
 $nextStrip = $board['next_strip'];
 $showNextStrip = (bool)$board['show_next_strip'];
 $recentStrip = $board['recent_strip'];
@@ -93,7 +92,7 @@ $rowNext = $showNextStrip ? max(136, (int)round(162 * $boardH / 1080)) : 0;
 $extraRows = ($rowRecent > 0 ? 1 : 0) + ($rowNext > 0 ? 1 : 0);
 $rowCards = $boardH - $padY - ($gap * (2 + $extraRows)) - $stampH - $rowHead - $rowRecent - $rowNext;
 $rowCards = max(400, $rowCards);
-$layoutClass = 'layout-' . max(1, min(4, $teamCount)) . ($focusLive ? ' focus-live' : '');
+$layoutClass = 'layout-' . max(1, min(4, $teamCount));
 $pollMs = $anyLive ? max(45000, $reloadSec * 1000) : 120000;
 $apiUrl = 'sports.php?api=1&screen=' . rawurlencode($SCREEN);
 
@@ -142,8 +141,6 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   .cards.layout-3 { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }
   .cards.layout-3 .card:first-child { grid-column:1 / -1; }
   .cards.layout-4 { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }
-  .cards.focus-live { grid-template-columns:1.45fr .85fr; grid-template-rows:1fr 1fr; }
-  .cards.focus-live .card.live.focus { grid-row:1 / span 2; }
 
   .card { position:relative; background:var(--surface); border:1px solid color-mix(in srgb, var(--hairline) 65%, transparent);
           border-radius:14px;
@@ -258,8 +255,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
   <?php if ($hasData): ?>
   <div class="cards <?= h($layoutClass) ?>" id="sports-cards">
     <?php foreach ($cards as $c):
-      $isFocus = $focusLive && ($c['mode'] ?? '') === 'live';
-      echo sports_render_card($c, $isFocus);
+      echo sports_render_card($c);
     endforeach; ?>
   </div>
 
