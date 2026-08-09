@@ -47,6 +47,12 @@ function webcam_default_cameras(): array
             'kind' => 'iframe',
             'attribution' => 'EarthCam · MACkite · Surf Grand Haven',
         ],
+        'anaheim' => [
+            'name' => 'Anaheim · Disneyland Area',
+            'url' => 'https://www.earthcam.com/usa/california/anaheim/?cam=anaheim',
+            'kind' => 'stream',
+            'attribution' => 'EarthCam · Hilton Anaheim',
+        ],
     ];
 }
 
@@ -120,6 +126,53 @@ function webcam_normalize_entry(array $row, ?array $fallback = null): ?array
 function webcam_is_earthcam_share_url(string $url): bool
 {
     return preg_match('~^https://share\.earthcam\.net/[^/?#]+~i', trim($url)) === 1;
+}
+
+/** Public earthcam.com cam page (not share.earthcam.net). */
+function webcam_is_earthcam_dotcom_page_url(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '') {
+        return false;
+    }
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return false;
+    }
+    $host = strtolower((string)($parts['host'] ?? ''));
+    if (!preg_match('#(^|\.)earthcam\.com$#', $host)) {
+        return false;
+    }
+    if (preg_match('~[?&]cam=~i', (string)($parts['query'] ?? ''))) {
+        return true;
+    }
+
+    return preg_match('#^/(usa|world)/#i', (string)($parts['path'] ?? '')) === 1;
+}
+
+/** Signed HLS playlist URL from an earthcam.com cam page (token refreshed on each fetch). */
+function webcam_earthcam_dotcom_stream_url(string $pageUrl): ?string
+{
+    if (!webcam_is_earthcam_dotcom_page_url($pageUrl)) {
+        return null;
+    }
+    $pageUrl = webcam_validate_url($pageUrl);
+    if ($pageUrl === null) {
+        return null;
+    }
+    $html = webcam_http_get($pageUrl, 15, true, $pageUrl);
+    if ($html === null) {
+        return null;
+    }
+    if (!preg_match('/"stream"\s*:\s*"([^"]+)"/', $html, $m)) {
+        return null;
+    }
+    $stream = json_decode('"' . $m[1] . '"');
+    if (!is_string($stream) || $stream === '') {
+        $stream = str_replace('\/', '/', $m[1]);
+    }
+
+    return webcam_validate_url($stream);
 }
 
 /** Client token from a share.earthcam.net viewer URL (includes trailing punctuation such as !). */
@@ -230,6 +283,9 @@ function webcam_earthcam_iframe_warmup(array $cam): bool
 function webcam_detect_kind(string $url): string
 {
     if (webcam_is_ant_media_play_url($url)) {
+        return 'stream';
+    }
+    if (webcam_is_earthcam_dotcom_page_url($url)) {
         return 'stream';
     }
     if (webcam_is_stream_frame_url($url)) {
@@ -405,6 +461,8 @@ function webcam_http_context(string $url, ?string $referer = null): array
         if ($referer === null) {
             $referer = 'https://api.wetmet.net/';
         }
+    } elseif ($referer === null && preg_match('#(^|\.)earthcam\.com$#', $host)) {
+        $referer = 'https://www.earthcam.com/';
     } elseif ($referer === null && str_contains($host, 'earthcam.net')) {
         $referer = 'https://share.earthcam.net/';
     }
@@ -428,14 +486,15 @@ function webcam_http_get(string $url, int $timeout = 12, bool $noCache = false, 
         $headers[] = 'Referer: ' . $ctx['referer'];
     }
     $ch = curl_init($url);
-    curl_setopt_array($ch, [
+    require_once __DIR__ . '/security_lib.php';
+    curl_setopt_array($ch, array_merge([
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_CONNECTTIMEOUT => 5,
         CURLOPT_TIMEOUT => $timeout,
         CURLOPT_USERAGENT => $ctx['ua'],
         CURLOPT_HTTPHEADER => $headers,
-    ]);
+    ], signage_curl_tls_options()));
     $body = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err = curl_error($ch);
@@ -463,6 +522,9 @@ function webcam_stream_playlist_url(string $streamFrameUrl): ?string
 {
     if (webcam_is_ant_media_play_url($streamFrameUrl)) {
         return webcam_ant_media_hls_master_url($streamFrameUrl);
+    }
+    if (webcam_is_earthcam_dotcom_page_url($streamFrameUrl)) {
+        return webcam_earthcam_dotcom_stream_url($streamFrameUrl);
     }
     $html = webcam_http_get($streamFrameUrl);
     if ($html === null) {
@@ -494,6 +556,8 @@ function webcam_hls_remote_allowed(string $url): bool
 
     return preg_match('#(^|\.)wetmet\.net$#', $host) === 1
         || preg_match('#(^|\.)gvsu\.edu$#', $host) === 1
+        || preg_match('#(^|\.)earthcam\.com$#', $host) === 1
+        || preg_match('#(^|\.)earthcam\.net$#', $host) === 1
         || str_contains($host, 'amazonaws.com');
 }
 
@@ -709,6 +773,21 @@ function webcam_stream_image(string $camKey): void
     exit;
 }
 
+/** earthcam.com cam pages use proxied HLS (signed playlist URL parsed from the page). */
+function webcam_apply_earthcam_dotcom_defaults(array $entry, string $key): array
+{
+    $url = (string)($entry['url'] ?? '');
+    if (!webcam_is_earthcam_dotcom_page_url($url)) {
+        return $entry;
+    }
+    $kind = (string)($entry['kind'] ?? '');
+    if ($kind === '' || $kind === 'auto' || $kind === 'iframe') {
+        $entry['kind'] = 'stream';
+    }
+
+    return $entry;
+}
+
 /** EarthCam share links use the live iframe embed (not proxied stills). */
 function webcam_apply_earthcam_iframe_defaults(array $entry, string $key): array
 {
@@ -781,6 +860,7 @@ function webcam_registry(): array
             $entry = webcam_normalize_entry($row, is_array($out[$key] ?? null) ? $out[$key] : null);
             if ($entry !== null) {
                 $entry = webcam_apply_grpm_defaults($entry, $key);
+                $entry = webcam_apply_earthcam_dotcom_defaults($entry, $key);
                 $out[$key] = webcam_apply_earthcam_iframe_defaults($entry, $key);
             }
         }
@@ -796,6 +876,7 @@ function webcam_registry(): array
 
     foreach ($out as $key => $entry) {
         if (is_array($entry)) {
+            $entry = webcam_apply_earthcam_dotcom_defaults($entry, (string)$key);
             $out[$key] = webcam_apply_earthcam_iframe_defaults($entry, (string)$key);
         }
     }
@@ -1045,6 +1126,9 @@ function webcam_probe_uses_hls(string $url, string $kind): bool
     // WetMet frame pages embed Video.js; signed CDN playlists reject server-side fetches.
     if (webcam_is_stream_frame_url($url)) {
         return false;
+    }
+    if (webcam_is_earthcam_dotcom_page_url($url)) {
+        return true;
     }
     if ($kind === 'stream' || webcam_is_ant_media_play_url($url)) {
         return true;
