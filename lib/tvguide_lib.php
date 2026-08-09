@@ -748,6 +748,9 @@ function tvguide_prime_window(?DateTimeZone $tz = null): array
         $hours[] = $startH;
     }
 
+    $durationSec = max(1, $primeEnd->getTimestamp() - $primeStart->getTimestamp());
+    $halfHours = max(1, (int)ceil($durationSec / 1800));
+
     $label = $primeStart->format('g') . ($primeStart->format('i') !== '00' ? ':' . $primeStart->format('i') : '')
         . $primeStart->format('a') . '–'
         . $primeEnd->format('g') . ($primeEnd->format('i') !== '00' ? ':' . $primeEnd->format('i') : '')
@@ -758,7 +761,32 @@ function tvguide_prime_window(?DateTimeZone $tz = null): array
         'end' => $primeEnd,
         'date' => $date,
         'hours' => $hours,
+        'half_hours' => $halfHours,
+        'duration_sec' => $durationSec,
         'label' => $label,
+    ];
+}
+
+/** @return array{left:float,width:float}|null */
+function tvguide_block_timeline_pct(
+    DateTimeImmutable $start,
+    DateTimeImmutable $end,
+    DateTimeImmutable $primeStart,
+    DateTimeImmutable $primeEnd
+): ?array {
+    $winStart = max($start->getTimestamp(), $primeStart->getTimestamp());
+    $winEnd = min($end->getTimestamp(), $primeEnd->getTimestamp());
+    if ($winEnd <= $winStart) {
+        return null;
+    }
+
+    $duration = max(1, $primeEnd->getTimestamp() - $primeStart->getTimestamp());
+    $left = ($winStart - $primeStart->getTimestamp()) / $duration * 100;
+    $width = ($winEnd - $winStart) / $duration * 100;
+
+    return [
+        'left' => round($left, 4),
+        'width' => round(max(1.2, $width), 4),
     ];
 }
 
@@ -941,16 +969,13 @@ function tvguide_parse_schedule_slot(array $slot, DateTimeZone $tz, array $progr
 }
 
 /**
- * Prime-time row as spanning blocks (one bar per show, not repeated per hour).
+ * Prime-time row blocks positioned on a continuous timeline (30-minute grid).
  *
  * @param list<array<string,mixed>> $slots
- * @param list<int> $hours
  * @return list<array<string,mixed>>
  */
 function tvguide_build_row_blocks(
     array $slots,
-    array $hours,
-    DateTimeImmutable $gridDate,
     DateTimeImmutable $primeStart,
     DateTimeImmutable $primeEnd,
     DateTimeZone $tz,
@@ -973,63 +998,24 @@ function tvguide_build_row_blocks(
 
     usort($parsed, static fn(array $a, array $b): int => $a['start'] <=> $b['start']);
 
-    /** @var list<array{start:DateTimeImmutable,end:DateTimeImmutable,pid:string}|null> $hourPicks */
-    $hourPicks = [];
-    foreach ($hours as $hour) {
-        $slotStart = $gridDate->setTime((int)$hour, 0);
-        $slotEnd = $slotStart->modify('+1 hour');
-        $best = null;
-        $bestStart = null;
-        foreach ($parsed as $entry) {
-            if ($entry['end'] <= $slotStart || $entry['start'] >= $slotEnd) {
-                continue;
-            }
-            if ($bestStart === null || $entry['start'] > $bestStart) {
-                $bestStart = $entry['start'];
-                $best = $entry;
-            }
-        }
-        $hourPicks[] = $best;
-    }
-
     $now = new DateTimeImmutable('now', $tz);
     $blocks = [];
-    $hourCount = count($hours);
-    $index = 0;
-    while ($index < $hourCount) {
-        $pick = $hourPicks[$index];
-        if ($pick === null) {
-            $blocks[] = ['empty' => true, 'col_start' => $index, 'col_span' => 1];
-            $index++;
-
+    foreach ($parsed as $entry) {
+        $pos = tvguide_block_timeline_pct($entry['start'], $entry['end'], $primeStart, $primeEnd);
+        if ($pos === null) {
             continue;
         }
 
-        $pid = $pick['pid'];
-        $colStart = $index;
-        while ($index < $hourCount && $hourPicks[$index] !== null && $hourPicks[$index]['pid'] === $pid) {
-            $index++;
-        }
-        $colSpan = $index - $colStart;
-
-        $full = $pick;
-        foreach ($parsed as $entry) {
-            if ($entry['pid'] === $pid) {
-                $full = $entry;
-                break;
-            }
-        }
-
-        $pgm = $programs[$pid] ?? [];
+        $pgm = $programs[$entry['pid']] ?? [];
         $blocks[] = [
-            'col_start' => $colStart,
-            'col_span' => $colSpan,
+            'left' => $pos['left'],
+            'width' => $pos['width'],
             'title' => tvguide_program_title($pgm),
             'subtitle' => tvguide_program_subtitle($pgm),
-            'start' => $full['start']->format('g:i'),
-            'end' => $full['end']->format('g:i A'),
+            'start' => $entry['start']->format('g:i'),
+            'end' => $entry['end']->format('g:i A'),
             'tone' => tvguide_program_tone($pgm),
-            'live' => $full['start'] <= $now && $full['end'] > $now,
+            'live' => $entry['start'] <= $now && $entry['end'] > $now,
         ];
     }
 
@@ -1117,7 +1103,7 @@ function tvguide_fetch_grid_data(array $page): array
     $window = tvguide_prime_window($tz);
     $dateYmd = $window['date']->format('Y-m-d');
     $scheduleDates = [$dateYmd, $window['date']->modify('+1 day')->format('Y-m-d')];
-    $cacheKey = 'tvguide_grid_v3_' . md5(json_encode([
+    $cacheKey = 'tvguide_grid_v4_' . md5(json_encode([
         $lineup,
         $page['key'] ?? '',
         $stationIds,
@@ -1165,7 +1151,6 @@ function tvguide_fetch_grid_data(array $page): array
     $primeStart = $window['start'];
     $primeEnd = $window['end'];
     $hours = $window['hours'];
-    $gridDate = $window['date'];
     $rows = [];
 
     foreach ($stationIds as $sid) {
@@ -1175,8 +1160,6 @@ function tvguide_fetch_grid_data(array $page): array
         $ch = $channelMap[$sid];
         $blocks = tvguide_build_row_blocks(
             (array)($schedules[$sid] ?? []),
-            $hours,
-            $gridDate,
             $primeStart,
             $primeEnd,
             $tz,
@@ -1203,6 +1186,7 @@ function tvguide_fetch_grid_data(array $page): array
         'date_label' => $window['date']->format('l, M j'),
         'prime_label' => $window['label'],
         'hours' => $hours,
+        'half_hours' => (int)($window['half_hours'] ?? max(1, count($hours) * 2)),
         'rows' => $rows,
         'cache_age' => 0,
     ];
@@ -1301,12 +1285,62 @@ function tvguide_reload_sec(): int
     return max(300, (int)cfg('tvguide.RELOAD_SEC', 3600));
 }
 
-/** affiliate | callsign | broadcast | none */
+/** affiliate | callsign | broadcast | custom | none */
 function tvguide_channel_label_mode(): string
 {
     $mode = strtolower(trim((string)cfg('tvguide.CHANNEL_LABEL', 'affiliate')));
 
-    return in_array($mode, ['affiliate', 'callsign', 'broadcast', 'none'], true) ? $mode : 'affiliate';
+    return in_array($mode, ['affiliate', 'callsign', 'broadcast', 'custom', 'none'], true) ? $mode : 'affiliate';
+}
+
+/** @return array{callsign:array<string,string>,station:array<string,string>} */
+function tvguide_channel_number_map(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $cache = ['callsign' => [], 'station' => []];
+    $raw = cfg('tvguide.CHANNEL_NUMBERS', []);
+    if (!is_array($raw)) {
+        return $cache;
+    }
+
+    foreach ($raw as $key => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $num = trim((string)($row['number'] ?? ''));
+        if ($num === '') {
+            continue;
+        }
+        $callKey = tvguide_callsign_short((string)($row['_key'] ?? $key));
+        if ($callKey !== '') {
+            $cache['callsign'][strtoupper($callKey)] = $num;
+        }
+        $stationKey = trim((string)($row['station_id'] ?? ''));
+        if ($stationKey !== '' && preg_match('/^\d+$/', $stationKey)) {
+            $cache['station'][$stationKey] = $num;
+        }
+    }
+
+    return $cache;
+}
+
+function tvguide_channel_number_for(array $row): string
+{
+    $map = tvguide_channel_number_map();
+    $call = strtoupper(tvguide_callsign_short((string)($row['callsign'] ?? '')));
+    if ($call !== '' && isset($map['callsign'][$call])) {
+        return $map['callsign'][$call];
+    }
+    $sid = trim((string)($row['station_id'] ?? ''));
+    if ($sid !== '' && isset($map['station'][$sid])) {
+        return $map['station'][$sid];
+    }
+
+    return '';
 }
 
 function tvguide_callsign_short(string $callsign): string
@@ -1334,7 +1368,11 @@ function tvguide_channel_admin_label(array $ch): string
     $affiliate = trim((string)($ch['affiliate'] ?? ''));
     $callsign = tvguide_callsign_short((string)($ch['callsign'] ?? ''));
     $broadcast = trim((string)($ch['channel'] ?? ''));
+    $custom = tvguide_channel_number_for($ch);
     $parts = [];
+    if ($custom !== '') {
+        $parts[] = $custom;
+    }
     if ($affiliate !== '') {
         $parts[] = strtoupper($affiliate);
     }
@@ -1348,9 +1386,14 @@ function tvguide_channel_admin_label(array $ch): string
     return $parts !== [] ? implode(' · ', $parts) : (string)($ch['station_id'] ?? '');
 }
 
-/** Badge in the channel column on the wall (network name, not 8.1-style numbers). */
+/** Badge in the channel column on the wall (network name or custom channel #). */
 function tvguide_row_channel_badge(array $row): string
 {
+    $custom = tvguide_channel_number_for($row);
+    if ($custom !== '') {
+        return $custom;
+    }
+
     switch (tvguide_channel_label_mode()) {
         case 'none':
             return '';
@@ -1358,6 +1401,8 @@ function tvguide_row_channel_badge(array $row): string
             return trim((string)($row['channel'] ?? ''));
         case 'callsign':
             return tvguide_callsign_short((string)($row['callsign'] ?? ''));
+        case 'custom':
+            return tvguide_channel_number_for($row);
         case 'affiliate':
         default:
             $affiliate = trim((string)($row['affiliate'] ?? ''));
@@ -1374,15 +1419,52 @@ function tvguide_row_channel_subtitle(array $row): string
     $mode = tvguide_channel_label_mode();
     $callsign = tvguide_callsign_short((string)($row['callsign'] ?? ''));
     $name = trim((string)($row['name'] ?? ''));
+    $affiliate = trim((string)($row['affiliate'] ?? ''));
+    $custom = tvguide_channel_number_for($row);
 
-    if ($mode === 'affiliate' && $callsign !== '') {
-        return $callsign;
+    if ($mode === 'custom') {
+        if ($callsign !== '') {
+            return $callsign;
+        }
+
+        return $affiliate !== '' ? strtoupper($affiliate) : $name;
+    }
+
+    if ($mode === 'affiliate') {
+        if ($custom !== '' && $affiliate !== '') {
+            return strtoupper($affiliate);
+        }
+        if ($callsign !== '') {
+            return $callsign;
+        }
     }
     if ($mode !== 'none' && $name !== '' && tvguide_callsign_short($name) !== $callsign) {
         return $name;
     }
 
     return '';
+}
+
+function tvguide_row_channel_logo_url(array $row): string
+{
+    $url = trim((string)($row['logo'] ?? ''));
+    if ($url === '' || !preg_match('#^https?://#i', $url)) {
+        return '';
+    }
+
+    return $url;
+}
+
+function tvguide_row_channel_logo_fallback(array $row): string
+{
+    $affiliate = strtoupper(trim((string)($row['affiliate'] ?? '')));
+    if ($affiliate !== '') {
+        return strlen($affiliate) <= 4 ? $affiliate : substr($affiliate, 0, 3);
+    }
+
+    $call = tvguide_callsign_short((string)($row['callsign'] ?? ''));
+
+    return $call !== '' ? substr($call, 0, 3) : '?';
 }
 
 /** @param list<array<string,mixed>> $channels */
@@ -1408,6 +1490,14 @@ function tvguide_sort_channels(array $channels): array
 function tvguide_sort_grid_rows(array $rows): array
 {
     usort($rows, static function (array $a, array $b): int {
+        $na = tvguide_channel_number_for($a);
+        $nb = tvguide_channel_number_for($b);
+        $ia = ($na !== '' && ctype_digit($na)) ? (int)$na : PHP_INT_MAX;
+        $ib = ($nb !== '' && ctype_digit($nb)) ? (int)$nb : PHP_INT_MAX;
+        if ($ia !== $ib) {
+            return $ia <=> $ib;
+        }
+
         $ra = tvguide_affiliate_sort_rank((string)($a['affiliate'] ?? ''));
         $rb = tvguide_affiliate_sort_rank((string)($b['affiliate'] ?? ''));
         if ($ra !== $rb) {

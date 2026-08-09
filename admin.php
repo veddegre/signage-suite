@@ -2224,7 +2224,7 @@ $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK'
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
 $zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
-$tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRIME_END', 'CHANNEL_LABEL', 'BOARD_TITLE', 'BOARD_SUB', 'RELOAD_SEC', 'TIMEZONE', 'CACHE_TTL'];
+$tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRIME_END', 'CHANNEL_LABEL', 'CHANNEL_NUMBERS', 'BOARD_TITLE', 'BOARD_SUB', 'RELOAD_SEC', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
 $splunkdashBoardKeys = ['HIDE_CHROME', 'HIDE_SCROLLBARS', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
@@ -6206,7 +6206,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
               <?php else: ?>
               <div class="help" style="margin:6px 0 10px">Lineup <code><?= h(tvguide_lineup_id()) ?></code> —
-                <?= count($tvguideLineupChannels) ?> channel(s). Labels show network · callsign · broadcast number.
+                <?= count($tvguideLineupChannels) ?> channel(s). Labels show your channel # · network · callsign when configured.
                 <?php if (!$pageRo): ?>
                 <span style="display:inline-flex;gap:8px;margin-left:8px;flex-wrap:wrap">
                   <button type="button" class="secondary" style="padding:2px 10px;font-size:12px"
