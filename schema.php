@@ -828,7 +828,7 @@ function admin_schema(): array
             ['key' => 'SD_PASSWORD', 'label' => 'Schedules Direct password', 'type' => 'password',
              'help' => 'Server-side only. Plain text or 40-char SHA-1 hash. Account ~$35/yr at schedulesdirect.org'],
             ['key' => 'LINEUP', 'label' => 'Lineup ID', 'type' => 'text',
-             'help' => 'From your SD account — e.g. USA-MI49503-X. Use Test connection to list lineups.'],
+             'help' => 'From your SD account — API id like USA-MI21553-X (web edit URL MI21553:X is the same lineup). Test connection lists exact IDs.'],
             ['key' => 'PRIME_START', 'label' => 'Prime time start', 'type' => 'text', 'default' => '19:00',
              'help' => 'Local wall time — hour or HH:MM (default 7:00 PM)'],
             ['key' => 'PRIME_END', 'label' => 'Prime time end', 'type' => 'text', 'default' => '23:00',

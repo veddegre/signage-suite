@@ -38,7 +38,56 @@ function tvguide_cache_ttl(): int
 
 function tvguide_lineup_id(): string
 {
-    return trim((string)cfg('tvguide.LINEUP', ''));
+    return tvguide_normalize_lineup_id((string)cfg('tvguide.LINEUP', ''));
+}
+
+/** Web UI uses MI21553:X — JSON API uses USA-MI21553-X. */
+function tvguide_normalize_lineup_id(string $raw): string
+{
+    $raw = trim(urldecode($raw));
+    if ($raw === '') {
+        return '';
+    }
+    $raw = str_replace(':', '-', $raw);
+    if (preg_match('/^[A-Z]{3}-/i', $raw)) {
+        return strtoupper($raw);
+    }
+    if (preg_match('/^([A-Z0-9]+)-([A-Z0-9]+)$/i', $raw, $m)) {
+        return 'USA-' . strtoupper($m[1]) . '-' . strtoupper($m[2]);
+    }
+
+    return strtoupper($raw);
+}
+
+/** Pick the configured lineup, matching account list when possible. */
+function tvguide_resolved_lineup_id(?string &$error = null): string
+{
+    $want = tvguide_lineup_id();
+    if ($want === '') {
+        return '';
+    }
+
+    $lineups = tvguide_sd_lineups($error);
+    if ($lineups === []) {
+        return $want;
+    }
+
+    foreach ($lineups as $row) {
+        $id = trim((string)($row['lineup'] ?? ''));
+        if ($id === $want) {
+            return $id;
+        }
+    }
+
+    $slug = preg_replace('/^[A-Z]{3}-/i', '', $want);
+    foreach ($lineups as $row) {
+        $id = trim((string)($row['lineup'] ?? ''));
+        if ($id !== '' && str_ends_with(strtoupper($id), strtoupper($slug))) {
+            return $id;
+        }
+    }
+
+    return $want;
 }
 
 /** @return list<string> */
@@ -542,7 +591,7 @@ function tvguide_sd_lineups(?string &$error = null, bool $forceRefresh = false):
  */
 function tvguide_sd_lineup_channels(string $lineup, ?string &$error = null, bool $forceRefresh = false): array
 {
-    $lineup = trim($lineup);
+    $lineup = tvguide_normalize_lineup_id($lineup);
     if ($lineup === '') {
         $error = 'Lineup not set';
 
@@ -638,7 +687,7 @@ function tvguide_sd_lineup_channels(string $lineup, ?string &$error = null, bool
 /** @return list<array<string,mixed>> */
 function tvguide_lineup_channels_for_admin(?string &$error = null): array
 {
-    $lineup = tvguide_lineup_id();
+    $lineup = tvguide_resolved_lineup_id($error);
     if ($lineup === '') {
         $error = 'Set a lineup under Board settings';
 
@@ -846,7 +895,7 @@ function tvguide_fetch_grid_data(array $page): array
         return $empty;
     }
 
-    $lineup = tvguide_lineup_id();
+    $lineup = tvguide_resolved_lineup_id($error);
     if ($lineup === '') {
         $empty['error'] = 'Set a lineup in admin';
 
@@ -1023,13 +1072,26 @@ function tvguide_test_connection(bool $refreshLineups = true): array
     $lineups = tvguide_sd_lineups($lineupErr, $refreshLineups);
     $lineupCount = count($lineups);
     $detail = $lineupCount . ' lineup(s) on account';
-    $lineup = tvguide_lineup_id();
-    $channelCount = 0;
-    $channelErr = null;
-
-    if ($lineupCount === 0) {
+    if ($lineupCount > 0) {
+        $names = [];
+        foreach ($lineups as $row) {
+            $id = trim((string)($row['lineup'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+            $label = trim((string)($row['name'] ?? ''));
+            $names[] = $label !== '' ? ($id . ' — ' . $label) : $id;
+        }
+        if ($names !== []) {
+            $detail .= ': ' . implode('; ', $names);
+        }
+    } else {
         $detail .= ' — add a lineup at schedulesdirect.org (Lineups → Add), then Save here';
     }
+
+    $lineup = tvguide_resolved_lineup_id($lineupErr);
+    $channelCount = 0;
+    $channelErr = null;
 
     if ($lineup !== '') {
         $channels = tvguide_sd_lineup_channels($lineup, $channelErr, $refreshLineups);
@@ -1040,11 +1102,11 @@ function tvguide_test_connection(bool $refreshLineups = true): array
         } elseif ($channelCount === 0 && $lineupCount > 0) {
             $onAccount = array_column($lineups, 'lineup');
             if (!in_array($lineup, $onAccount, true)) {
-                $detail .= ' — lineup ID not on your account; pick one from the list after Test connection';
+                $detail .= ' — paste an exact Lineup ID from the list above into Board settings';
             }
         }
     } elseif ($lineupCount > 0) {
-        $detail .= ' · set Lineup ID under Board settings (e.g. ' . ($lineups[0]['lineup'] ?? '') . ')';
+        $detail .= ' · set Lineup ID under Board settings (use an ID from the list above)';
     }
 
     return [
