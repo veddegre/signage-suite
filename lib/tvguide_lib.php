@@ -1103,7 +1103,7 @@ function tvguide_fetch_grid_data(array $page): array
     $window = tvguide_prime_window($tz);
     $dateYmd = $window['date']->format('Y-m-d');
     $scheduleDates = [$dateYmd, $window['date']->modify('+1 day')->format('Y-m-d')];
-    $cacheKey = 'tvguide_grid_v4_' . md5(json_encode([
+    $cacheKey = 'tvguide_grid_v5_' . md5(json_encode([
         $lineup,
         $page['key'] ?? '',
         $stationIds,
@@ -1111,12 +1111,16 @@ function tvguide_fetch_grid_data(array $page): array
         (string)cfg('tvguide.PRIME_START', '19:00'),
         (string)cfg('tvguide.PRIME_END', '23:00'),
         tvguide_timezone(),
+        tvguide_channel_number_map(),
     ]));
     $cacheFile = tvguide_cache_dir() . '/' . $cacheKey . '.json';
     $ttl = tvguide_cache_ttl();
     if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $ttl) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
         if (is_array($cached)) {
+            if (!empty($cached['rows']) && is_array($cached['rows'])) {
+                $cached['rows'] = tvguide_sort_grid_rows($cached['rows']);
+            }
             $cached['cache_age'] = time() - filemtime($cacheFile);
 
             return $cached;
@@ -1174,6 +1178,10 @@ function tvguide_fetch_grid_data(array $page): array
             'affiliate' => (string)($ch['affiliate'] ?? ''),
             'label' => (string)($ch['label'] ?? $sid),
             'logo' => (string)($ch['logo'] ?? ''),
+            'display_number' => tvguide_channel_number_for([
+                'station_id' => $sid,
+                'callsign' => (string)($ch['callsign'] ?? ''),
+            ]),
             'blocks' => $blocks,
         ];
     }
@@ -1201,6 +1209,7 @@ function tvguide_stale_grid_data(array $empty, string $cacheFile, ?string $error
     if (is_file($cacheFile)) {
         $cached = json_decode((string)file_get_contents($cacheFile), true);
         if (is_array($cached) && !empty($cached['rows'])) {
+            $cached['rows'] = tvguide_sort_grid_rows((array)$cached['rows']);
             $cached['ok'] = true;
             $cached['error'] = ($error ?? 'upstream error') . ' — showing cached listings';
             $cached['cache_age'] = time() - filemtime($cacheFile);
@@ -1330,6 +1339,11 @@ function tvguide_channel_number_map(): array
 
 function tvguide_channel_number_for(array $row): string
 {
+    $preset = trim((string)($row['display_number'] ?? ''));
+    if ($preset !== '') {
+        return $preset;
+    }
+
     $map = tvguide_channel_number_map();
     $call = strtoupper(tvguide_callsign_short((string)($row['callsign'] ?? '')));
     if ($call !== '' && isset($map['callsign'][$call])) {
@@ -1341,6 +1355,17 @@ function tvguide_channel_number_for(array $row): string
     }
 
     return '';
+}
+
+/** Sort key for provider channel numbers (lower = higher on the grid). */
+function tvguide_channel_number_sort_value(array $row): int
+{
+    $raw = trim(tvguide_channel_number_for($row));
+    if ($raw !== '' && preg_match('/^(\d+)/', $raw, $m)) {
+        return (int)$m[1];
+    }
+
+    return PHP_INT_MAX;
 }
 
 /**
@@ -1532,10 +1557,8 @@ function tvguide_sort_channels(array $channels): array
 function tvguide_sort_grid_rows(array $rows): array
 {
     usort($rows, static function (array $a, array $b): int {
-        $na = tvguide_channel_number_for($a);
-        $nb = tvguide_channel_number_for($b);
-        $ia = ($na !== '' && ctype_digit($na)) ? (int)$na : PHP_INT_MAX;
-        $ib = ($nb !== '' && ctype_digit($nb)) ? (int)$nb : PHP_INT_MAX;
+        $ia = tvguide_channel_number_sort_value($a);
+        $ib = tvguide_channel_number_sort_value($b);
         if ($ia !== $ib) {
             return $ia <=> $ib;
         }
