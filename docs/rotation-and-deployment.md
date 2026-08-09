@@ -144,6 +144,7 @@ video.php?v=drone
 slides.php?slide=birthday.png
 webcam.php?cam=grpm
 webcam.php?cam=grandhaven
+webcam.php?cam=muskegon
 bridgecam.php
 air.php
 uv.php

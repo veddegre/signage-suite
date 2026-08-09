@@ -89,6 +89,7 @@ Full-screen live feeds — **one camera per rotation slot**, same pattern as `za
 |-----|--------|
 | `grpm` | [Grand Rapids Public Museum](https://www.wmta.org/live-west-michigan-camera-gallery/grand-rapids-public-museum-west-michigan-live-camera/) live stream (WMTA / WetMet iframe) |
 | `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
+| `muskegon` | [Muskegon Surf Cam](https://muskegonsurfcam.com/) Pere Marquette Beach live HLS |
 
 **Setup:** admin → **Webcam** → **Cameras** — override built-in feeds or add rows with a unique **Key**. Each camera appears in **Rotation → Quick add** as its own entry (e.g. **Webcam — GR Public Museum**).
 
@@ -97,6 +98,7 @@ Full-screen live feeds — **one camera per rotation slot**, same pattern as `za
 ```
 webcam.php?cam=grpm
 webcam.php?cam=grandhaven
+webcam.php?cam=muskegon
 ```
 
 Custom cameras: `webcam.php?cam=yourkey`. Set **Off** on a row to hide it from quick-add and disable a built-in feed.

@@ -4489,6 +4489,37 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="video_key" id="videoDeleteKey" value="">
       </form>
+
+      <div class="upload-box" style="margin-bottom:18px">
+        <h3 style="margin:0 0 10px">Add YouTube live stream</h3>
+        <form method="post" class="upload-row" action="?board=video">
+          <input type="hidden" name="action" value="add_video_live">
+          <input type="hidden" name="board" value="video">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <input type="text" name="video_key" placeholder="Key (e.g. news-live)" style="min-width:140px" aria-label="Live stream key">
+          <input type="text" name="video_title" placeholder="Title (optional)" style="min-width:160px" aria-label="Live stream title">
+          <input type="text" name="youtube_url" placeholder="https://youtube.com/live/…" style="min-width:320px" aria-label="YouTube live URL">
+          <button class="save" type="submit">Add live stream</button>
+        </form>
+        <div class="help" style="margin-top:10px;margin-bottom:0">No file upload — embeds the stream in the browser.
+          Paste a <code>youtube.com/live/…</code> link (or any YouTube URL with <strong>Live stream</strong> checked in the playlist below).
+          Set rotation dwell under <strong>Board settings → Live stream dwell</strong>.</div>
+      </div>
+
+      <div class="upload-box" style="margin-bottom:18px">
+        <h3 style="margin:0 0 10px">Upload local video file</h3>
+        <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=video">
+          <input type="hidden" name="action" value="upload_video">
+          <input type="hidden" name="board" value="video">
+          <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+          <input type="text" name="video_key" placeholder="Key (e.g. lantern)" style="min-width:140px" aria-label="Video key">
+          <input type="text" name="video_title" placeholder="Title (optional)" style="min-width:160px" aria-label="Video title">
+          <input type="file" name="video" accept="video/mp4,video/webm,video/x-matroska,.mp4,.webm,.mkv" required>
+          <button class="save" type="submit">Upload</button>
+        </form>
+        <div class="help" style="margin-top:10px;margin-bottom:0">MP4, WebM, or MKV up to <?= h(video_upload_max_label()) ?>.
+          Key defaults from the filename if left blank. Adds the video to your playlist and syncs rotation on your display.</div>
+      </div>
       <?php endif; ?>
 
       <?php if ($board === 'video' && admin_is_super()): ?>
@@ -5556,37 +5587,6 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               Pi/kiosk boxes must be set up with <code>setup-kiosk.sh</code> (autoplay policy is already included).</div>
           </div>
           <?php endif; ?>
-
-          <div class="upload-box" style="margin-bottom:18px">
-            <h3 style="margin:0 0 10px">Add YouTube live stream</h3>
-            <form method="post" class="upload-row" action="?board=video">
-              <input type="hidden" name="action" value="add_video_live">
-              <input type="hidden" name="board" value="video">
-              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-              <input type="text" name="video_key" placeholder="Key (e.g. news-live)" style="min-width:140px" aria-label="Live stream key">
-              <input type="text" name="video_title" placeholder="Title (optional)" style="min-width:160px" aria-label="Live stream title">
-              <input type="text" name="youtube_url" placeholder="https://youtube.com/live/…" style="min-width:320px" required aria-label="YouTube live URL">
-              <button class="save" type="submit">Add live stream</button>
-            </form>
-            <div class="help" style="margin-top:10px;margin-bottom:0">No file upload — embeds the stream in the browser.
-              Paste a <code>youtube.com/live/…</code> link (or any YouTube URL with <strong>Live stream</strong> checked in the playlist below).
-              Set rotation dwell under <strong>Board settings → Live stream dwell</strong>.</div>
-          </div>
-
-          <div class="upload-box" style="margin-bottom:18px">
-            <h3 style="margin:0 0 10px">Upload local video file</h3>
-            <form method="post" enctype="multipart/form-data" class="upload-row" action="?board=video">
-              <input type="hidden" name="action" value="upload_video">
-              <input type="hidden" name="board" value="video">
-              <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-              <input type="text" name="video_key" placeholder="Key (e.g. lantern)" style="min-width:140px" aria-label="Video key">
-              <input type="text" name="video_title" placeholder="Title (optional)" style="min-width:160px" aria-label="Video title">
-              <input type="file" name="video" accept="video/mp4,video/webm,video/x-matroska,.mp4,.webm,.mkv" required>
-              <button class="save" type="submit">Upload</button>
-            </form>
-            <div class="help" style="margin-top:10px;margin-bottom:0">MP4, WebM, or MKV up to <?= h(video_upload_max_label()) ?>.
-              Key defaults from the filename if left blank. Adds the video to your playlist and syncs rotation on your display.</div>
-          </div>
 
           <div class="section-title">Video playlist</div>
           <div class="help" style="margin-bottom:12px">Drag cards to set play order (top = first). Each entry needs a unique <strong>Key</strong>

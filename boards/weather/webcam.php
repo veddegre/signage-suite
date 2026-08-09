@@ -127,7 +127,7 @@ $camJson['earthcamWarmup'] = $earthcamIframeWarmup;
        Add a working feed under admin → <strong>Webcam</strong>, or pick another quick-add entry in <strong>Rotation</strong>.</p>
     <?php else: ?>
     <p>Add cameras in admin → <strong>Webcam</strong>, then add each feed to rotation separately —
-       e.g. <code>webcam.php?cam=grpm</code>, <code>webcam.php?cam=grandhaven</code>.</p>
+       e.g. <code>webcam.php?cam=grpm</code>, <code>webcam.php?cam=grandhaven</code>, <code>webcam.php?cam=muskegon</code>.</p>
     <?php endif; ?>
   </div>
   <?php endif; ?>

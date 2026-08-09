@@ -53,6 +53,12 @@ function webcam_default_cameras(): array
             'kind' => 'stream',
             'attribution' => 'EarthCam · Hilton Anaheim',
         ],
+        'muskegon' => [
+            'name' => 'Muskegon Surf Cam',
+            'url' => 'https://stream.muskegonsurfcam.com/substream/stream.m3u8',
+            'kind' => 'stream',
+            'attribution' => 'Muskegon Surf Cam · Pere Marquette Beach',
+        ],
     ];
 }
 
@@ -295,6 +301,9 @@ function webcam_detect_kind(string $url): string
         return 'widget';
     }
     $path = strtolower(parse_url($url, PHP_URL_PATH) ?: '');
+    if (preg_match('/\.m3u8(\?|$)/i', $path) === 1) {
+        return 'stream';
+    }
     if (preg_match('/\.(jpe?g|png|gif|webp)(\?|$)/i', $path) === 1) {
         return 'image';
     }
@@ -465,6 +474,8 @@ function webcam_http_context(string $url, ?string $referer = null): array
         $referer = 'https://www.earthcam.com/';
     } elseif ($referer === null && str_contains($host, 'earthcam.net')) {
         $referer = 'https://share.earthcam.net/';
+    } elseif ($referer === null && preg_match('#(^|\.)muskegonsurfcam\.com$#', $host)) {
+        $referer = 'https://muskegonsurfcam.com/';
     }
 
     return ['ua' => $ua, 'referer' => $referer];
@@ -520,6 +531,9 @@ function webcam_widget_image_url(string $frameUrl): ?string
 
 function webcam_stream_playlist_url(string $streamFrameUrl): ?string
 {
+    if (preg_match('#\.m3u8(\?|$)#i', $streamFrameUrl)) {
+        return webcam_validate_url($streamFrameUrl);
+    }
     if (webcam_is_ant_media_play_url($streamFrameUrl)) {
         return webcam_ant_media_hls_master_url($streamFrameUrl);
     }
@@ -558,6 +572,7 @@ function webcam_hls_remote_allowed(string $url): bool
         || preg_match('#(^|\.)gvsu\.edu$#', $host) === 1
         || preg_match('#(^|\.)earthcam\.com$#', $host) === 1
         || preg_match('#(^|\.)earthcam\.net$#', $host) === 1
+        || preg_match('#(^|\.)muskegonsurfcam\.com$#', $host) === 1
         || str_contains($host, 'amazonaws.com');
 }
 
@@ -589,8 +604,16 @@ function webcam_hls_absolute_url(string $base, string $ref): ?string
     return webcam_validate_url($scheme . '://' . $host . $port . $dir . $ref);
 }
 
+function webcam_hls_is_media_playlist(string $body): bool
+{
+    return str_contains($body, '#EXTINF:');
+}
+
 function webcam_hls_pick_media_playlist(string $masterUrl, string $masterBody): ?string
 {
+    if (webcam_hls_is_media_playlist($masterBody)) {
+        return null;
+    }
     $base = preg_replace('#/[^/]*$#', '/', $masterUrl) ?? $masterUrl;
     $picked = null;
     foreach (explode("\n", str_replace("\r", '', $masterBody)) as $line) {
