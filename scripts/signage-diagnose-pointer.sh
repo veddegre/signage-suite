@@ -87,6 +87,5 @@ else
 fi
 echo
 
-echo "Fix:"
-echo "  sudo bash scripts/signage-fix-cursor-pi.sh"
-echo "  sudo bash scripts/signage-undo-cursor-pi.sh"
+echo "Fix (cleanup only — do not re-apply udev/ydotool fixes on Pi):"
+echo "  sudo bash scripts/signage-fix-cursor-pi.sh --cleanup"

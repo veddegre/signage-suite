@@ -191,47 +191,46 @@ sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
 
 ---
 
-## Cursor still visible (Raspberry Pi)
+## Cursor on Raspberry Pi (known limitation)
 
-On a **Pi kiosk**, cage draws a compositor cursor when the HDMI stack reports a phantom pointer (`vc4-hdmi-0`) — even with no mouse plugged in. CSS and blank Xcursor themes alone usually cannot hide it.
+On many **Pi kiosks**, **cage** draws a compositor pointer when the HDMI stack exposes a phantom input (`vc4-hdmi-0`) — even with no mouse plugged in. It often sits in the **center of the screen**.
 
-**Do not use ydotool** on Pi kiosks — it adds a virtual pointer, spams the journal when `ydotoold` is down, and has caused **black screens** on Pi OS Trixie.
+Board CSS, `cursor:none`, and the blank Xcursor theme **do not** remove that layer — it is drawn by the compositor, not Chromium.
 
-### Safe fix (after the wall is working)
+### What not to use on Pi
+
+| Approach | Result on Pi OS Trixie |
+|----------|-------------------------|
+| **ydotool** / hide-cursor | Black screen, journal spam when `ydotoold` is down |
+| **libinput udev** (ignore `vc4-hdmi-*`) | Black screen on some Pis (including tested hardware) |
+
+**Leave the working kiosk alone.** A visible pointer is preferable to a black TV.
+
+### Practical options
+
+1. **Live with the pointer** — signage still works; many boards are dark enough that a small center arrow is tolerable.
+2. **Unplug unused USB mice** — any real pointer device keeps cage drawing a cursor.
+3. **Clean up failed experiments** (after roll-back, or to be sure nothing is left):
 
 ```bash
-cd ~/signage-suite && git pull
-sudo bash scripts/signage-fix-cursor-pi.sh
+sudo bash scripts/signage-fix-cursor-pi.sh --cleanup
 ```
 
-This only:
-
-1. Ignores `vc4-hdmi-*` via libinput udev rules
-2. Refreshes the blank cursor theme
-3. Restarts `signage` — **does not re-run setup-kiosk or change the launcher**
-
-**Undo** (cursor may return; display stays up):
-
-```bash
-sudo bash scripts/signage-undo-cursor-pi.sh
-```
-
-**Full rollback** (if the wall goes black or breaks):
+4. **Full display restore** (if the wall is black or broken):
 
 ```bash
 sudo bash scripts/signage-restore-display.sh
 sudo reboot
 ```
 
-### Verify
+### Status / diagnostics
 
 ```bash
-cat /etc/udev/rules.d/99-signage-phantom-pointer.rules
+sudo bash scripts/signage-fix-cursor-pi.sh --status
 libinput list-devices
-pgrep -af 'ydotool|hide-cursor'   # should print nothing
 ```
 
-Unplug unused USB mice if the pointer keeps reappearing.
+Upstream: [cage hide-cursor discussion](https://github.com/cage-kiosk/cage/issues/299) — no stable option in packaged cage yet.
 
 ---
 

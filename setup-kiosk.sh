@@ -865,10 +865,11 @@ HTTPS / SELF-SIGNED CERTS
   Re-run setup after changing URL or SSL behavior. Use --strict-ssl only with
   a publicly trusted certificate (e.g. Let's Encrypt on your proxy).
 
-CURSOR (Raspberry Pi — compositor pointer, no ydotool):
-  sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh
-  Undo: sudo bash $SCRIPT_DIR/scripts/signage-undo-cursor-pi.sh
-  Do not use ydotool on Pi — it can black-screen the kiosk. See docs/kiosk-setup.md.
+CURSOR (Raspberry Pi):
+  No reliable hide-cursor fix on all Pis — ydotool and vc4-hdmi udev rules can black-screen the TV.
+  Cleanup experiments: sudo bash $SCRIPT_DIR/scripts/signage-fix-cursor-pi.sh --cleanup
+  Restore display:     sudo bash $SCRIPT_DIR/scripts/signage-restore-display.sh
+  See docs/kiosk-setup.md § Cursor on Raspberry Pi.
 
 WATCHDOG (auto-restart if the browser stops serving board.php):
   systemctl status signage-watchdog.timer

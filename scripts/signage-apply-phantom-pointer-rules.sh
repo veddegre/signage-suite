@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Ignore phantom pointer-capable inputs (Pi HDMI, CEC) so cage stops drawing a cursor.
+# Ignore phantom pointer-capable inputs (Pi HDMI) — EXPERIMENTAL: black-screens some Pis.
+# Prefer leaving the compositor cursor visible. See docs/kiosk-setup.md
 set -euo pipefail
 
 RULES=/etc/udev/rules.d/99-signage-phantom-pointer.rules
