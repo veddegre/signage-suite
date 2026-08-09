@@ -11731,21 +11731,16 @@ function initPresencePanel() {
       const dotCls = s.online ? 'presence-dot online' : 'presence-dot';
       let statusText = s.online ? 'Online' : 'Offline';
       if (s.online && s.blank) statusText = 'Online · blank';
-      let ipHtml = '<span class="presence-now muted">—</span>';
-      if (s.local_ip) {
-        ipHtml = '<code>' + esc(s.local_ip) + '</code> <span class="presence-stats">LAN</span>';
-        if (s.client_ip && s.client_ip !== s.local_ip) {
-          ipHtml += '<div class="presence-stats">seen as ' + esc(s.client_ip) + '</div>';
-        } else if (s.ip_via_proxy && s.remote_addr) {
-          ipHtml += '<div class="presence-stats">via ' + esc(s.remote_addr) + '</div>';
-        }
-      } else if (s.client_ip) {
-        ipHtml = '<code>' + esc(s.client_ip) + '</code>';
+      let ipHtml = '<div class="presence-stats">LAN: '
+        + (s.local_ip ? '<code>' + esc(s.local_ip) + '</code>' : '<span class="presence-now muted">—</span>')
+        + '</div>';
+      if (s.client_ip) {
+        ipHtml += '<div class="presence-stats">seen as <code>' + esc(s.client_ip) + '</code></div>';
         if (s.ip_via_proxy && s.remote_addr) {
           ipHtml += '<div class="presence-stats">via ' + esc(s.remote_addr) + '</div>';
         }
       } else if (s.remote_addr) {
-        ipHtml = '<code>' + esc(s.remote_addr) + '</code>';
+        ipHtml += '<div class="presence-stats"><code>' + esc(s.remote_addr) + '</code></div>';
       }
       let nowHtml = '<span class="presence-now muted">—</span>';
       if (s.online && s.now && s.now.label) {

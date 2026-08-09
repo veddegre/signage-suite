@@ -52,6 +52,9 @@ $tickerInsetPx = ($showTicker || $emergencyTicker) ? SIGNAGE_TICKER_H : 0;
 $rotationFrameH = max(720, 1080 - $tickerInsetPx - $heroStripHeight);
 $showDebug = !empty($runtime['show_debug']) || (isset($_GET['debug']) && (string)$_GET['debug'] === '1');
 $kioskLocalIpParam = signage_presence_sanitize_local_ip((string)($_GET['kiosk_local_ip'] ?? ''));
+if ($kioskLocalIpParam !== '' && (string)($_GET['api'] ?? '') === '') {
+    signage_presence_touch_local_ip($SCREEN, $kioskLocalIpParam);
+}
 
 if (($_GET['api'] ?? '') === '1') {
     header('Content-Type: application/json; charset=utf-8');
@@ -88,6 +91,14 @@ if (($_GET['api'] ?? '') === 'presence') {
         $payload = json_decode($raw, true);
         if (!is_array($payload)) {
             $payload = [];
+        }
+        if (!empty($payload['local_ip_only'])) {
+            signage_presence_touch_local_ip($SCREEN, (string)($payload['local_ip'] ?? ''));
+            echo json_encode(['ok' => true]);
+            exit;
+        }
+        if (empty($payload['local_ip'])) {
+            $payload['local_ip'] = (string)($_GET['kiosk_local_ip'] ?? '');
         }
         signage_presence_touch($SCREEN, $payload);
         echo json_encode(['ok' => true]);

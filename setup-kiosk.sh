@@ -555,13 +555,34 @@ echo "==> Using browser: $CHROMIUM"
 fi
 
 if [[ -f "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh" ]]; then
-  echo "==> Installing transparent cursor theme (may reduce pointer visibility)"
-  bash "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh"
+  echo "==> Installing transparent cursor theme (patches system themes for cage)"
+  SIGNAGE_PATCH_SYSTEM_CURSORS=1 bash "$SCRIPT_DIR/scripts/install-signage-blank-cursor.sh"
 else
   echo "==> Warning: scripts/install-signage-blank-cursor.sh not found — cursor may remain visible." >&2
 fi
 
 install_x86_cursor_hide
+
+# Helpers needed before kiosk.conf (LAN IP detection + reporting).
+for _helper in signage-kiosk-primary-ip.sh signage-kiosk-url-local-ip.sh signage-kiosk-report-local-ip.sh; do
+  if [[ -f "$SCRIPT_DIR/scripts/$_helper" ]]; then
+    install -m 755 "$SCRIPT_DIR/scripts/$_helper" "/usr/local/bin/${_helper%.sh}"
+  fi
+done
+
+detect_kiosk_local_ip() {
+  if [[ -x /usr/local/bin/signage-kiosk-primary-ip ]]; then
+    /usr/local/bin/signage-kiosk-primary-ip 2>/dev/null || true
+    return
+  fi
+  local ip_cmd=""
+  for c in /sbin/ip /usr/bin/ip; do [[ -x "$c" ]] && ip_cmd="$c" && break; done
+  [[ -n "$ip_cmd" ]] || return 0
+  "$ip_cmd" -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}'
+}
+
+KIOSK_DETECTED_LOCAL_IP="$(detect_kiosk_local_ip)"
+[[ -n "$KIOSK_DETECTED_LOCAL_IP" ]] && echo "==> Detected kiosk LAN IP: $KIOSK_DETECTED_LOCAL_IP"
 
 echo "==> Writing /etc/signage/kiosk.conf"
 mkdir -p /etc/signage
@@ -579,6 +600,7 @@ SIGNAGE_UPDATE_TIME="$UPDATE_TIME"
 SIGNAGE_MAINT_TIME="$MAINT_TIME"
 SIGNAGE_TIMEZONE="$TIMEZONE"
 KIOSK_IGNORE_SSL="$IGNORE_SSL"
+KIOSK_LOCAL_IP="$KIOSK_DETECTED_LOCAL_IP"
 EOF
 chmod 644 /etc/signage/kiosk.conf
 
@@ -696,6 +718,7 @@ StandardInput=tty
 StandardOutput=journal
 Environment=XCURSOR_THEME=signage-blank
 Environment=XCURSOR_SIZE=24
+Environment=XDG_DEFAULT_CURSOR_THEME=signage-blank
 ${SIGNAGE_EXEC_START_PRE}
 ExecStart=/usr/local/bin/signage-kiosk "$KIOSK_URL"
 ${SIGNAGE_EXEC_START_POST}

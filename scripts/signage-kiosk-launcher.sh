@@ -19,9 +19,10 @@ if [[ -z "$KIOSK_URL" ]]; then
   exit 1
 fi
 
-export XCURSOR_PATH=/usr/share/icons
+export XCURSOR_PATH=/usr/share/icons:/usr/local/share/icons
 export XCURSOR_THEME=signage-blank
 export XCURSOR_SIZE=24
+export XDG_DEFAULT_CURSOR_THEME=signage-blank
 
 signage_kiosk_blackout_tty() {
   if command -v setterm >/dev/null 2>&1; then
@@ -72,8 +73,8 @@ fi
 logger -t signage-kiosk "starting cage browser=$CHROMIUM url=$KIOSK_URL scale=$SCALE"
 
 launch_url="$KIOSK_URL"
-KIOSK_LOCAL_IP=""
-if command -v signage-kiosk-primary-ip >/dev/null; then
+KIOSK_LOCAL_IP="${KIOSK_LOCAL_IP:-}"
+if [[ -z "$KIOSK_LOCAL_IP" ]] && command -v signage-kiosk-primary-ip >/dev/null; then
   KIOSK_LOCAL_IP="$(signage-kiosk-primary-ip 2>/dev/null || true)"
 fi
 if [[ -n "$KIOSK_LOCAL_IP" ]]; then

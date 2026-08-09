@@ -26,15 +26,28 @@ ExecStart=/usr/local/bin/signage-suppress-cursor-vt
 WantedBy=multi-user.target
 EOF
 
+cat > /etc/systemd/system/signage-cursor-vt.timer <<'EOF'
+[Unit]
+Description=Repeat cage cursor VT suppress (cursor can return)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl disable --now getty@tty2.service 2>/dev/null || true
 
 systemctl daemon-reload
-systemctl enable signage-cursor-vt.service
+systemctl enable signage-cursor-vt.service signage-cursor-vt.timer
+systemctl start signage-cursor-vt.timer 2>/dev/null || true
 
 if [[ "${SIGNAGE_QUIET:-0}" != "1" ]]; then
-  echo "Installed signage-cursor-vt.service (runs after boot when signage is up)."
+  echo "Installed signage-cursor-vt.service + timer (boot + every 10 min)."
   echo "Apply now on a running kiosk:"
   echo "  sudo systemctl start signage-cursor-vt.service"
   echo "Watch: journalctl -u signage-cursor-vt -f"
-  echo "Undo:  sudo systemctl disable --now signage-cursor-vt.service"
 fi

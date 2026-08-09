@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# Suppress cage's phantom HDMI cursor on Raspberry Pi via a one-time VT switch.
-# cage keeps running — no udev ignore, no ydotool. See cage-kiosk/cage#299 (magicalmarc, 2026).
+# Suppress cage's compositor pointer via VT switch while cage keeps running.
+# Works on Pi and x86 — not udev/ydotool. See cage-kiosk/cage#299.
 set -euo pipefail
 
 CONF=/etc/signage/kiosk.conf
 KIOSK_VT="${SIGNAGE_KIOSK_VT:-1}"
 SCRATCH_VT="${SIGNAGE_CURSOR_SCRATCH_VT:-2}"
 MAX_ATTEMPTS="${SIGNAGE_CURSOR_VT_ATTEMPTS:-6}"
-CONFIRM_WAIT="${SIGNAGE_CURSOR_VT_CONFIRM:-45}"
-SETTLE_SEC="${SIGNAGE_CURSOR_VT_SETTLE:-90}"
+CONFIRM_WAIT="${SIGNAGE_CURSOR_VT_CONFIRM:-20}"
+SETTLE_SEC="${SIGNAGE_CURSOR_VT_SETTLE:-30}"
+
+if [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model 2>/dev/null; then
+  SETTLE_SEC="${SIGNAGE_CURSOR_VT_SETTLE:-90}"
+  CONFIRM_WAIT="${SIGNAGE_CURSOR_VT_CONFIRM:-45}"
+fi
 
 if [[ -f "$CONF" ]]; then
   # shellcheck disable=SC1091
@@ -20,21 +25,21 @@ if [[ -z "$URL" && -f "$CONF" ]]; then
   URL="$(grep -E '^KIOSK_URL=' "$CONF" | head -1 | cut -d= -f2- | tr -d '"')"
 fi
 
-curl_args=(-fsS --max-time 20)
+curl_args=(--max-time 20)
 [[ "${KIOSK_IGNORE_SSL:-1}" == "1" ]] && curl_args+=(-k)
 
 wait_for_kiosk_url() {
   [[ -n "$URL" ]] || return 0
-  local deadline=$(( $(date +%s) + 300 ))
+  local deadline=$(( $(date +%s) + 180 ))
   while [[ $(date +%s) -lt $deadline ]]; do
-    if curl "${curl_args[@]}" "$URL" | grep -q 'const PAGES'; then
+    if curl "${curl_args[@]}" -fsS "$URL" 2>/dev/null | grep -q 'const PAGES'; then
       logger -t signage-cursor-vt "rotation shell ready — settling ${SETTLE_SEC}s before VT switch"
       sleep "$SETTLE_SEC"
       return 0
     fi
     sleep 5
   done
-  logger -t signage-cursor-vt "rotation shell not confirmed — proceeding anyway after timeout"
+  logger -t signage-cursor-vt "rotation shell not confirmed — proceeding after timeout"
   return 0
 }
 
@@ -65,6 +70,13 @@ wait_for_cage() {
   return 1
 }
 
+vt_switch_once() {
+  chvt "$SCRATCH_VT" 2>/dev/null || true
+  sleep 1
+  chvt "$KIOSK_VT" 2>/dev/null || true
+  sleep 1
+}
+
 if ! wait_for_cage; then
   logger -t signage-cursor-vt "cage not running after wait — skip"
   exit 0
@@ -75,15 +87,12 @@ wait_for_kiosk_url
 logger -t signage-cursor-vt "VT switch ${KIOSK_VT}<->${SCRATCH_VT} (cage stays running)"
 
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-  chvt "$SCRATCH_VT"
-  sleep 1
-  chvt "$KIOSK_VT"
-  sleep 2
+  vt_switch_once
 
   if [[ $have_drm_debug -eq 1 ]]; then
     if cursor_plane_present; then
       logger -t signage-cursor-vt "cursor plane still present after attempt $attempt/$MAX_ATTEMPTS"
-      sleep 10
+      sleep 5
       continue
     fi
     sleep "$CONFIRM_WAIT"
@@ -93,8 +102,11 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     fi
     logger -t signage-cursor-vt "cursor plane returned during confirm window — retry"
   else
-    logger -t signage-cursor-vt "no DRM debug state — single VT cycle done (attempt $attempt)"
-    break
+    logger -t signage-cursor-vt "no DRM debug — VT cycle $attempt/$MAX_ATTEMPTS done"
+    if [[ "$attempt" -ge 3 ]]; then
+      break
+    fi
+    sleep 3
   fi
 done
 
