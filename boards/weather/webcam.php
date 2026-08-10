@@ -145,7 +145,13 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   const imageRefreshMs = <?= (int)$imageRefreshSec ?> * 1000;
   const streamRefreshMs = <?= (int)$streamRefreshSec ?> * 1000;
   const EMBEDDED = <?= json_encode($embedded) ?>;
-  let armed = !EMBEDDED || window.parent === window;
+  /** WetMet / plain iframe embeds only — HLS and still-image cams start immediately. */
+  const DEFER_PLAYBACK = EMBEDDED && (
+    (cam.preferIframe && cam.streamIframe) ||
+    (!cam.streamPlaylist && !cam.imageSrc)
+  );
+  let armed = !EMBEDDED || window.parent === window || !DEFER_PLAYBACK;
+  let boardStarted = false;
   let hlsPlayer = null;
   let timers = [];
 
@@ -170,6 +176,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   }
 
   function teardown() {
+    boardStarted = false;
     clearAllTimers();
     if (hlsPlayer) {
       hlsPlayer.destroy();
@@ -457,7 +464,8 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   }
 
   function runBoard() {
-    if (!armed) return;
+    if (!armed || boardStarted) return;
+    boardStarted = true;
     if (cam.preferIframe && cam.streamIframe) {
       runWetmet();
       return;
@@ -473,6 +481,11 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     runPlainIframe();
   }
 
+  function notifyReady() {
+    if (!DEFER_PLAYBACK || !EMBEDDED || window.parent === window) return;
+    try { window.parent.postMessage({ type: 'signage-ready' }, '*'); } catch (e) {}
+  }
+
   if (EMBEDDED) {
     window.addEventListener('message', function (ev) {
       if (!ev.data) return;
@@ -481,11 +494,16 @@ $camJson['wetmetIframe'] = $wetmetIframe;
         teardown();
         return;
       }
-      if (ev.data.type === 'signage-show') {
+      if (ev.data.type === 'signage-show' && DEFER_PLAYBACK) {
         armed = true;
         runBoard();
       }
     });
+    if (DEFER_PLAYBACK) {
+      notifyReady();
+      if (document.readyState === 'complete') notifyReady();
+      else window.addEventListener('load', notifyReady, { once: true });
+    }
   }
 
   if (armed) runBoard();
