@@ -49,44 +49,13 @@ if [[ $upgraded -eq 1 ]] || [[ -f /var/run/reboot-required ]]; then
   log "marked reboot pending (packages or kernel)"
 fi
 
-repo="${SIGNAGE_REPO:-}"
-if [[ -n "$repo" && -d "$repo/.git" ]]; then
-  old_head=""
-  new_head=""
-  old_head="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
-  if git -C "$repo" pull --ff-only 2>&1 | logger -t signage-update; then
-    new_head="$(git -C "$repo" rev-parse HEAD 2>/dev/null || true)"
-    if [[ -n "$old_head" && -n "$new_head" && "$old_head" != "$new_head" ]]; then
-      log "git updated $old_head -> $new_head — re-applying setup-kiosk"
-      scale="${KIOSK_SCALE:-1}"
-      cec_args=()
-      if [[ "${KIOSK_WITH_CEC:-1}" == "0" ]]; then
-        cec_args=(--no-cec)
-      fi
-      tz_args=()
-      if [[ -n "${SIGNAGE_TIMEZONE:-}" ]]; then
-        tz_args=(--timezone="$SIGNAGE_TIMEZONE")
-      fi
-      server="${SIGNAGE_SERVER:-${BOARDS_URL:-}}"
-      screen="${SCREEN:-main}"
-      if [[ -x "$repo/setup-kiosk.sh" ]]; then
-        if [[ -n "$server" ]]; then
-          bash "$repo/setup-kiosk.sh" --skip-apt --from-update "${cec_args[@]}" "${tz_args[@]}" \
-            --server="$server" --screen="$screen" --scale="$scale"
-        else
-          bash "$repo/setup-kiosk.sh" --skip-apt --from-update "${cec_args[@]}" "${tz_args[@]}" \
-            --scale="$scale" "${KIOSK_URL:-}"
-        fi
-      else
-        log "setup-kiosk.sh missing in $repo"
-      fi
-      systemctl restart signage.service 2>/dev/null || true
-    fi
+# Refresh kiosk scripts/systemd units; signage-maint runs this again before reboot/restart.
+if [[ -x /usr/local/bin/signage-kiosk-sync-repo ]]; then
+  if /usr/local/bin/signage-kiosk-sync-repo; then
+    log "repo sync finished"
   else
-    log "git pull failed in $repo"
+    log "repo sync failed (continuing)"
   fi
-elif [[ -n "$repo" ]]; then
-  log "SIGNAGE_REPO set but not a git directory: $repo"
 fi
 
 log "update run complete"

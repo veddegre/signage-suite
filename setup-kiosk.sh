@@ -446,9 +446,14 @@ install_pi_cursor_vt_fix() {
   install_cursor_vt_fix
 }
 
+remove_cursor_vt_fix() {
+  systemctl disable --now signage-cursor-vt.timer signage-cursor-vt.service 2>/dev/null || true
+  rm -f /etc/systemd/system/signage-cursor-vt.service /etc/systemd/system/signage-cursor-vt.timer \
+    /usr/local/bin/signage-suppress-cursor-vt 2>/dev/null || true
+}
+
 remove_pi_cursor_vt_fix() {
-  systemctl disable --now signage-cursor-vt.service 2>/dev/null || true
-  rm -f /etc/systemd/system/signage-cursor-vt.service /usr/local/bin/signage-suppress-cursor-vt 2>/dev/null || true
+  remove_cursor_vt_fix
 }
 
 install_x86_cursor_hide() {
@@ -655,11 +660,12 @@ EOF
 fi
 
 if is_raspberry_pi; then
-  echo "==> Phantom cursor suppress (VT switch after signage is up)"
+  echo "==> Phantom cursor suppress (VT switch after signage is up — Pi only)"
+  install_cursor_vt_fix
 else
-  echo "==> Phantom cursor suppress (VT switch — cage compositor pointer)"
+  echo "==> x86 NUC: ydotool only for cursor (no VT switch — avoids tty2 login flash)"
+  remove_cursor_vt_fix
 fi
-install_cursor_vt_fix
 
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" ]]; then
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-wait-for-server.sh" /usr/local/bin/signage-kiosk-wait-for-server
@@ -732,6 +738,9 @@ EOF
 echo "==> Nightly maintenance timers"
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-update.sh" ]]; then
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-update.sh" /usr/local/bin/signage-kiosk-update
+fi
+if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-sync-repo.sh" ]]; then
+  install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-sync-repo.sh" /usr/local/bin/signage-kiosk-sync-repo
 fi
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-maint.sh" ]]; then
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-maint.sh" /usr/local/bin/signage-kiosk-maint
@@ -872,8 +881,8 @@ WantedBy=timers.target
 EOF
 fi
 
-echo "==> Disabling console getty on tty1 (kiosk owns the display)"
-systemctl disable --now getty@tty1.service || true
+echo "==> Disabling console getty on tty1 and tty2 (kiosk owns the display; VT cursor fix uses tty2 on Pi)"
+systemctl disable --now getty@tty1.service getty@tty2.service 2>/dev/null || true
 
 echo "==> Kiosk session helpers (seatd + persistent runtime dir for cage)"
 systemctl enable seatd.service 2>/dev/null || true
@@ -932,11 +941,12 @@ HARDWARE (see docs/kiosk-setup.md → Hardware requirements)
   Pi 4: basic static playlists only — not for heavy iframe or live video boards.
 
 AUTO UPDATES (default on)
-  $UPDATE_TIME daily — apt upgrade + git pull in SIGNAGE_REPO (if set)
-  $MAINT_TIME daily — reboot when kernel/packages need it, else restart browser
+  $UPDATE_TIME daily — apt upgrade + git pull / setup-kiosk --skip-apt (SIGNAGE_REPO)
+  $MAINT_TIME daily — git pull / setup again, then reboot if needed else restart browser
   unattended-upgrades — security patches between nightly runs
   Timers:  systemctl list-timers 'signage-*'
-  Logs:    journalctl -u signage-update -u signage-maint
+  Logs:    journalctl -u signage-update -u signage-maint -u signage-sync
+  Manual:  sudo /usr/local/bin/signage-kiosk-sync-repo
   Disable: re-run setup with --no-auto-update
 
 HDMI-CEC (TV power from admin → Rotation → Displays):
@@ -950,8 +960,9 @@ HDMI-CEC (TV power from admin → Rotation → Displays):
   Re-run setup with --no-cec to skip CEC entirely.
 
 GIT / SCRIPT UPDATES
-  Clone signage-suite on the Pi and re-run setup once — SIGNAGE_REPO is saved in
-  /etc/signage/kiosk.conf. Nightly git pull re-runs setup-kiosk.sh (--skip-apt).
+  Clone signage-suite on each kiosk and run setup once — SIGNAGE_REPO is saved in
+  /etc/signage/kiosk.conf. Nightly: git pull + setup-kiosk.sh --skip-apt at $UPDATE_TIME
+  and again at $MAINT_TIME (always, before reboot/browser restart).
   Content on the wall still comes from the server (admin.php).
 
 HTTPS / SELF-SIGNED CERTS

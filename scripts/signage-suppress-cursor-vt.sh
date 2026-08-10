@@ -71,6 +71,11 @@ wait_for_cage() {
 }
 
 vt_switch_once() {
+  systemctl stop "getty@tty${SCRATCH_VT}.service" 2>/dev/null || true
+  systemctl disable "getty@tty${SCRATCH_VT}.service" 2>/dev/null || true
+  if command -v setterm >/dev/null 2>&1; then
+    setterm -background black -foreground black -clear all >"/dev/tty${SCRATCH_VT}" 2>/dev/null || true
+  fi
   chvt "$SCRATCH_VT" 2>/dev/null || true
   sleep 1
   chvt "$KIOSK_VT" 2>/dev/null || true

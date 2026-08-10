@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily maintenance: reboot when updates require it, otherwise restart the browser.
+# Daily maintenance: sync repo, reboot when updates require it, otherwise restart the browser.
 # Installed by setup-kiosk.sh — signage-maint.timer (default 04:00).
 set -euo pipefail
 
@@ -8,6 +8,20 @@ FLAG_DIR=/run/signage
 PENDING="$FLAG_DIR/reboot-pending"
 
 log() { logger -t signage-maint "$*"; echo "signage-maint: $*"; }
+
+if [[ -f "$CONF" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONF"
+fi
+
+# Always pull + re-apply kiosk scripts/systemd before reboot or browser restart.
+if [[ "${SIGNAGE_AUTO_UPDATE:-1}" != "0" ]] && [[ -x /usr/local/bin/signage-kiosk-sync-repo ]]; then
+  if /usr/local/bin/signage-kiosk-sync-repo; then
+    log "repo sync finished"
+  else
+    log "repo sync failed (continuing maint)"
+  fi
+fi
 
 reboot_needed=0
 if [[ -f /var/run/reboot-required ]]; then

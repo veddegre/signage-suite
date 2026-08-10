@@ -92,14 +92,14 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 |-------|------|
 | **cage** + **Chromium** | Fullscreen kiosk compositor + browser |
 | **signage.service** | Starts at boot; restarts Chromium if it crashes |
-| **signage-update.timer** | Daily **03:30** (default) — `apt upgrade` + optional `git pull` in `SIGNAGE_REPO` |
-| **signage-maint.timer** | Daily **04:00** (default) — **reboot** if updates need it, else restart browser (memory flush) |
+| **signage-update.timer** | Daily **03:30** (default) — `apt upgrade` + `git pull` / `setup-kiosk.sh --skip-apt` |
+| **signage-maint.timer** | Daily **04:00** (default) — **`git pull` + setup again**, then reboot if needed else browser restart |
 | **unattended-upgrades** | Security patches between nightly runs |
 | **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
-| **signage-cursor-vt.service** | After boot, VT switch to hide cage’s compositor pointer (**Pi + x86**) |
+| **signage-cursor-vt.service** | **Pi only** — VT switch to hide cage’s compositor pointer |
 | **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors only) |
-| **signage-hide-cursor** | **x86 optional** — ydotool; does not hide cage compositor pointer |
+| **signage-hide-cursor** | **x86** — ydotool parks pointer off-screen (no VT switch on NUCs) |
 
 On first run, setup **prompts for the signage server** (hostname only — no `/boards` path), **screen name**, **timezone**, and **4K scale**, then **tests** `board.php` before installing. Pass **`--server`**, **`--screen`**, and **`--timezone`** to skip prompts (used by unattended git refresh).
 
@@ -149,15 +149,18 @@ sudo systemctl restart signage
 
 | Time (default) | Timer | Action |
 |----------------|-------|--------|
-| **03:30** | `signage-update.timer` | `apt update` / `apt upgrade`, optional `git pull` + re-apply `setup-kiosk.sh` |
-| **04:00** | `signage-maint.timer` | Reboot if `/var/run/reboot-required` or packages changed; otherwise `systemctl restart signage` |
+| **03:30** | `signage-update.timer` | `apt update` / `apt upgrade`; then **`git pull` + `setup-kiosk.sh --skip-apt`** (if `SIGNAGE_REPO` is set) |
+| **04:00** | `signage-maint.timer` | **`git pull` + `setup-kiosk.sh --skip-apt` again**, then reboot if kernel/packages need it; otherwise `systemctl restart signage` |
+
+Every night the maint window **always** syncs the local git clone and re-installs kiosk scripts/systemd units **before** reboot or browser restart — so boxes pick up repo changes even when `apt` did not need a reboot.
 
 **Content on the TV** still comes from the **signage server** (`admin.php`) — kiosks only update **OS + local helper scripts**.
 
 ```bash
 systemctl list-timers 'signage-*'
-journalctl -u signage-update -u signage-maint -n 50
-sudo /usr/local/bin/signage-kiosk-update    # manual run
+journalctl -u signage-update -u signage-maint -u signage-sync -n 50
+sudo /usr/local/bin/signage-kiosk-sync-repo   # manual git pull + setup only
+sudo /usr/local/bin/signage-kiosk-update      # manual apt + sync
 ```
 
 Customize schedule when installing:
@@ -266,22 +269,31 @@ Use the **Video board**, not Webcam or Websites, for YouTube. Details: [video-yo
 
 ## Cursor on x86 (mini PC / NUC)
 
-**cage** draws its **own compositor pointer** (center of screen, even with no mouse). CSS `cursor:none` and ydotool do **not** remove it — same as on Pi.
-
-**`setup-kiosk.sh` installs the real fix on every cage kiosk:** **`signage-cursor-vt.service`** — after the wall loads, a one-time **`chvt 2` / `chvt 1`** while cage keeps running (~2 min after boot). This is the same VT switch used on Pi; it is **not Pi-only**.
-
-Optional **ydotool** + **`signage-hide-cursor`** may also be installed on x86 but only moves the libinput pointer; rely on **VT switch** for the visible cursor.
-
-**Check on the box:**
+**cage** may draw a compositor pointer (center of screen). **`setup-kiosk.sh` uses ydotool on x86 only** — it parks the libinput pointer off-screen. **Do not use the VT switch on NUCs** — it briefly switches to tty2 and flashes a **login prompt** on the TV (especially after Chromium snap updates restart `signage.service`).
 
 ```bash
-systemctl status signage-cursor-vt
-journalctl -u signage-cursor-vt -n 20
-sudo systemctl start signage-cursor-vt.service   # manual re-run
+systemctl status signage-cursor-vt   # should be inactive/disabled on NUCs
 bash scripts/signage-diagnose-kiosk.sh
 ```
 
-**After re-running setup**, wait ~2 minutes after reboot for the VT switch (or run `signage-cursor-vt.service` manually once).
+### Screen blinking between signage and a login prompt (NUC)
+
+Cause: **`signage-cursor-vt.timer`** running `chvt 2` / `chvt 1` every 10 minutes (or after each browser restart). tty2 still had **getty** → visible login screen during the switch.
+
+**Fix immediately:**
+
+```bash
+sudo systemctl disable --now signage-cursor-vt.timer signage-cursor-vt.service
+sudo systemctl disable --now getty@tty2.service getty@tty1.service
+sudo systemctl restart signage
+```
+
+Then re-run setup from git (disables VT fix on x86 permanently):
+
+```bash
+cd ~/signage-suite && git pull
+sudo bash setup-kiosk.sh --skip-apt
+```
 
 ---
 

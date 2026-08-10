@@ -59,7 +59,14 @@ if [[ -n "$started" ]]; then
 fi
 
 # Grace period after boot/restart while Chromium loads and first heartbeat posts.
-if [[ "$service_uptime" -lt 180 ]]; then
+# Must exceed signage-kiosk-wait-for-runtime + wait-for-server (up to ~330s) before cage starts.
+if [[ "$service_uptime" -lt 360 ]]; then
+  rm -f "$BROWSER_FAIL_FILE"
+  exit 0
+fi
+
+# No cage process yet — still in launcher wait or crash loop settling; do not count as missing heartbeat.
+if ! pgrep -x cage >/dev/null 2>&1; then
   rm -f "$BROWSER_FAIL_FILE"
   exit 0
 fi
@@ -113,7 +120,7 @@ fi
 browser_fails=$((browser_fails + 1))
 echo "$browser_fails" > "$BROWSER_FAIL_FILE"
 
-if [[ "$browser_fails" -ge 2 ]]; then
+if [[ "$browser_fails" -ge 3 ]]; then
   rm -f "$BROWSER_FAIL_FILE"
   logger -t signage-watchdog "restarting signage.service — server OK but no heartbeat from screen ${SCREEN} (${browser_fails} checks, uptime ${service_uptime}s)"
   systemctl restart signage.service
