@@ -3199,7 +3199,7 @@ function admin_rotation_kiosk_settings_panel(
           <?php if (!$canEditDisplayCalendarFeeds): ?>
           <div class="help" style="margin:6px 0 0">Main-display calendar feeds and countdowns are set by a super admin under <strong>Calendar → Signage wall feeds / countdowns</strong>.</div>
           <?php else: ?>
-          <div class="help" style="margin:6px 0 10px">Feeds on <code>calendar.php</code> and <code>glance.php</code> for this display only. Leave all unchecked to use the site list from <strong>Calendar → Signage wall feeds</strong> (main / unassigned kiosks).</div>
+          <div class="help" style="margin:6px 0 10px">Feeds on <code>calendar.php</code> and <code>glance.php</code> for this display only. Check the feeds you want, then <strong>Save from the Kiosk settings tab</strong>. Leave all unchecked to use the site list from <strong>Calendar → Signage wall feeds</strong> (main / unassigned kiosks only).</div>
           <?php if ($catalogCalendarFeedKeys === []): ?>
           <div class="help">No calendar feeds you can use — add feeds under <strong>Calendar</strong> (your rows only).</div>
           <?php else: ?>
@@ -3254,6 +3254,7 @@ function admin_rotation_kiosk_settings_panel(
               <label class="mini">Left column title</label>
               <input type="text" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h1_title]"
                      value="<?= h($glanceH1Title) ?>" placeholder="<?= h($globalGlanceH1Title !== '' ? $globalGlanceH1Title : 'GVNext') ?>">
+              <div class="help" style="margin-top:4px">Shown above the story list. Leave blank to use the RSS feed name when a feed is selected below, or the site default for GVNext/page scrape.</div>
             </div>
             <div class="field span-2">
               <label class="mini">Left column page URL</label>

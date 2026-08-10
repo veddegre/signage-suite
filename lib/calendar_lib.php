@@ -713,15 +713,17 @@ function calendar_feeds_for_signage(?string $screen = null): array
         $raw = [];
     }
 
+    $screenKeys = rotation_screen_calendar_feed_keys($screen);
+    if ($screenKeys !== []) {
+        // Explicit per-display picks (Rotation → Kiosk settings) are authoritative —
+        // do not run the public allowlist first (empty PUBLIC_FEED_KEYS would wipe them).
+        return array_values(calendar_filter_feeds_by_keys($raw, $screenKeys));
+    }
+
     $feeds = admin_filter_list_for_display($raw);
 
     if (admin_display_scope_user_id() === null) {
         $feeds = calendar_filter_feeds_by_keys($feeds, calendar_public_feed_keys());
-    }
-
-    $screenKeys = rotation_screen_calendar_feed_keys($screen);
-    if ($screenKeys !== []) {
-        $feeds = calendar_filter_feeds_by_keys($feeds, $screenKeys);
     }
 
     return array_values($feeds);
@@ -866,13 +868,13 @@ function calendar_countdowns_for_signage(?string $screen = null): array
 
     $map = admin_filter_scalar_map_for_display($raw);
 
-    if (admin_display_scope_user_id() === null) {
-        $map = calendar_filter_countdowns_by_keys($map, calendar_public_countdown_keys());
-    }
-
     $screenKeys = rotation_screen_calendar_countdown_keys($screen);
     if ($screenKeys !== []) {
-        $map = calendar_filter_countdowns_by_keys($map, $screenKeys);
+        return calendar_filter_countdowns_by_keys($map, $screenKeys);
+    }
+
+    if (admin_display_scope_user_id() === null) {
+        $map = calendar_filter_countdowns_by_keys($map, calendar_public_countdown_keys());
     }
 
     return $map;

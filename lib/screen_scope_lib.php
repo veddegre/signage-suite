@@ -416,19 +416,41 @@ function rotation_glance_resolve_rss_key(string $key, ?string $scopeUserId = nul
     return $feed !== null ? (string)$feed['key'] : '';
 }
 
+function rotation_glance_site_default_page_title(): string
+{
+    return trim((string)cfg('glance.HEADLINES_1_TITLE', 'GVNext'));
+}
+
+function rotation_glance_rss_feed_label(string $feedKey, ?string $scopeUserId = null): string
+{
+    $feedKey = trim($feedKey);
+    if ($feedKey === '') {
+        return '';
+    }
+    require_once __DIR__ . '/rss_ticker_lib.php';
+    $feed = rss_ticker_resolve_feed($feedKey, $scopeUserId);
+    if (!is_array($feed)) {
+        return '';
+    }
+    $name = trim((string)($feed['name'] ?? ''));
+
+    return $name !== '' ? $name : trim((string)($feed['key'] ?? $feedKey));
+}
+
 /**
  * Resolved headline panels for glance.php — per-display overrides with glance board defaults.
  *
- * @return array{panel1:array{active:bool,title:string,page_url:string,rss:string,max:int},panel2:array{active:bool,title:string,rss:string,max:int},ttl:int}
+ * @return array{panel1:array{active:bool,title:string,page_url:string,rss:string,rss_primary:bool,max:int},panel2:array{active:bool,title:string,rss:string,max:int},ttl:int}
  */
 function rotation_screen_glance_headlines(string $screen): array
 {
     require_once __DIR__ . '/users_lib.php';
     $scopeUid = users_screen_assignments()[rotation_normalize_screen_key($screen)] ?? null;
     $scopeUid = is_string($scopeUid) && $scopeUid !== '' ? $scopeUid : null;
+    $siteDefaultPageTitle = rotation_glance_site_default_page_title();
     $panel1 = [
         'active' => (bool)cfg('glance.SHOW_HEADLINES_1', true),
-        'title' => trim((string)cfg('glance.HEADLINES_1_TITLE', 'GVNext')),
+        'title' => $siteDefaultPageTitle !== '' ? $siteDefaultPageTitle : 'GVNext',
         'page_url' => trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/')),
         'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_1_RSS', ''), $scopeUid),
         'rss_primary' => false,
@@ -448,6 +470,7 @@ function rotation_screen_glance_headlines(string $screen): array
     }
 
     $scr = rotation_screen_raw_entry($screen);
+    $panel1TitleFromKiosk = false;
     if (is_array($scr)) {
         if (!empty($scr['glance_h1_off'])) {
             $panel1['active'] = false;
@@ -455,6 +478,7 @@ function rotation_screen_glance_headlines(string $screen): array
         $h1Title = trim((string)($scr['glance_h1_title'] ?? ''));
         if ($h1Title !== '') {
             $panel1['title'] = $h1Title;
+            $panel1TitleFromKiosk = true;
         }
         $h1Page = trim((string)($scr['glance_h1_page_url'] ?? ''));
         if ($h1Page !== '') {
@@ -486,6 +510,15 @@ function rotation_screen_glance_headlines(string $screen): array
             } elseif ($h2Rss !== '') {
                 $panel2['rss'] = $h2Rss;
             }
+        }
+    }
+
+    if (!$panel1TitleFromKiosk && !empty($panel1['rss_primary']) && $panel1['rss'] !== '') {
+        $feedLabel = rotation_glance_rss_feed_label($panel1['rss'], $scopeUid);
+        if ($feedLabel !== '') {
+            $panel1['title'] = $feedLabel;
+        } elseif ($panel1['title'] === $siteDefaultPageTitle || $panel1['title'] === 'GVNext') {
+            $panel1['title'] = 'Headlines';
         }
     }
 
