@@ -2118,7 +2118,7 @@ function rotation_screen_active_pages(string $screen = 'main', bool $applySeason
 
     $cache[$cacheKey] = array_values(array_filter(
         $effective,
-        static function ($p) use ($activeFiles, $hasSlideEntries, $screen, $applySeasonalSkip) {
+        static function ($p) use ($activeFiles, $hasSlideEntries, $screen, $applySeasonalSkip, $forceWebcamProbe) {
             if (!is_array($p)
                 || trim((string)($p['url'] ?? '')) === ''
                 || rotation_page_dwell($p) <= 0
