@@ -473,7 +473,15 @@ journalctl -u signage --since "30 min ago" | grep -E 'waiting for server|restart
 journalctl -u signage-watchdog --since "30 min ago"
 ```
 
-If **server OK** but the TV is blank, the browser is hung — exactly the case `signage-watchdog` now detects via missing heartbeats.
+If **server OK** but the TV is blank, the browser is hung — exactly the case `signage-watchdog` detects via missing heartbeats (requires `board.php?api=kiosk-health` on the server).
+
+**Verify the API is deployed** (from kiosk or server):
+
+```bash
+curl -k "https://YOUR-SERVER/board.php?screen=YOURSCREEN&api=kiosk-health"
+```
+
+You should get a **small JSON** blob like `{"ok":true,"online":false,...}`. If you get a full HTML page (~50KB), the server needs `git pull` + the watchdog cannot auto-recover hung browsers until that is deployed.
 
 **Fix (re-run on each new player)**
 

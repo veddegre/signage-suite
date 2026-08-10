@@ -71,18 +71,37 @@ else
   health_url="${health_url}?api=kiosk-health"
 fi
 
+health_ok=0
 online=0
-pages=0
+pages=-1
 if curl "${curl_args[@]}" -o "$tmp" "$health_url"; then
-  if grep -q '"online"[[:space:]]*:[[:space:]]*true' "$tmp"; then
-    online=1
-  fi
-  if grep -q '"pages"[[:space:]]*:[[:space:]]*true' "$tmp"; then
-    pages=1
+  # Without kiosk-health on the server, curl returns full board.php HTML (~50KB).
+  # Treat that as "API unavailable" — not "empty playlist" (pages=0).
+  if grep -q '"ok"[[:space:]]*:[[:space:]]*true' "$tmp" && ! grep -qi '<html' "$tmp"; then
+    health_ok=1
+    if grep -q '"online"[[:space:]]*:[[:space:]]*true' "$tmp"; then
+      online=1
+    fi
+    if grep -q '"pages"[[:space:]]*:[[:space:]]*false' "$tmp"; then
+      pages=0
+    elif grep -q '"pages"[[:space:]]*:[[:space:]]*true' "$tmp"; then
+      pages=1
+    fi
   fi
 fi
 
-if [[ "$online" -eq 1 || "$pages" -eq 0 ]]; then
+if [[ "$health_ok" -eq 0 ]]; then
+  # Server has not been updated with ?api=kiosk-health yet — server-only checks apply.
+  rm -f "$BROWSER_FAIL_FILE"
+  exit 0
+fi
+
+if [[ "$pages" -eq 0 ]]; then
+  rm -f "$BROWSER_FAIL_FILE"
+  exit 0
+fi
+
+if [[ "$online" -eq 1 ]]; then
   rm -f "$BROWSER_FAIL_FILE"
   exit 0
 fi

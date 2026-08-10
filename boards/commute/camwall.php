@@ -20,6 +20,7 @@ define('SUBTITLE', $labels['subtitle']);
 define('ATTRIBUTION', cfg('camwall.ATTRIBUTION', 'MDOT Mi Drive'));
 define('SHOW_OVERLAY', cfg('camwall.SHOW_OVERLAY', true));
 define('REFRESH_SEC', max(15, (int)cfg('camwall.REFRESH_SEC', 45)));
+define('RELOAD_SEC', max(0, (int)cfg('camwall.RELOAD_SEC', 600)));
 define('TIMEZONE', cfg('camwall.TIMEZONE', 'America/Detroit'));
 
 date_default_timezone_set(TIMEZONE);
@@ -145,6 +146,8 @@ $heightPx = $boardH . 'px';
 <script>
 (function(){
   const refreshMs = <?= (int)REFRESH_SEC ?> * 1000;
+  const staggerMs = 250;
+  let refreshTimer = null;
 
   function bust(base) {
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
@@ -152,18 +155,41 @@ $heightPx = $boardH . 'px';
   }
 
   function refreshAll() {
-    document.querySelectorAll('.tile img[data-base]').forEach(function(img) {
-      const next = bust(img.getAttribute('data-base'));
-      img.onload = function() { img.classList.remove('err'); };
-      img.onerror = function() { img.classList.add('err'); };
-      img.src = next;
+    const imgs = Array.from(document.querySelectorAll('.tile img[data-base]'));
+    imgs.forEach(function(img, i) {
+      setTimeout(function() {
+        const next = bust(img.getAttribute('data-base'));
+        img.onload = function() { img.classList.remove('err'); };
+        img.onerror = function() { img.classList.add('err'); };
+        img.src = next;
+      }, i * staggerMs);
     });
   }
 
-  setInterval(refreshAll, refreshMs);
+  function startRefresh() {
+    if (refreshTimer) return;
+    refreshAll();
+    refreshTimer = setInterval(refreshAll, refreshMs);
+  }
+
+  function stopRefresh() {
+    if (!refreshTimer) return;
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+
+  startRefresh();
+
+  window.addEventListener('message', function(ev) {
+    if (!ev.data || ev.data.type !== 'signage-stop') return;
+    stopRefresh();
+  });
 })();
 <?php if ($showClock && SHOW_OVERLAY): ?>
 <?= signage_clock_tick_script('clock', TIMEZONE) ?>
+<?php endif; ?>
+<?php if (RELOAD_SEC > 0): ?>
+setTimeout(function () { location.reload(); }, <?= (int)RELOAD_SEC * 1000 ?>);
 <?php endif; ?>
 </script>
 <?php
