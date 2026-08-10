@@ -267,7 +267,7 @@ Compact **today + tomorrow** calendar (left), **weather summary** (top right), a
 
 **Admin:** **Today at a Glance** — site-wide defaults for title, event count, tomorrow preview, weather on/off, headline column titles, GVNext URL, RSS keys, max headlines, cache TTL. Per-display overrides: **Rotation → Kiosk settings** (same pattern as sports teams, **calendar feed picks**, and ticker RSS). Calendar events use the same filtered feeds as **Calendar** (`calendar.PUBLIC_FEED_KEYS` + per-display picks).
 
-**Headlines (left, site default):** [GVNext](https://www.gvsu.edu/gvnext/) — scrapes `preview-title` story titles; autodiscovers RSS when the page links a feed. Per display: override page URL, column title, or RSS fallback (used when scrape returns nothing).
+**Headlines (left, site default):** [GVNext](https://www.gvsu.edu/gvnext/) — scrapes `preview-title` story titles; autodiscovers RSS when the page links a feed. Per display: override page URL, column title, or **RSS feed** (picking a feed under **Rotation → Kiosk settings** replaces the page scrape for that display; site-default RSS is only a fallback when scrape returns nothing).
 
 **Headlines (right, site default):** RSS feed key from **RSS Stories**. Per display: override feed key or hide the column.
 

@@ -3262,7 +3262,7 @@ function admin_rotation_kiosk_settings_panel(
               <div class="help" style="margin-top:4px">Scrapes story titles (GVNext uses <code>preview-title</code>). Autodiscovers RSS when the page links a feed.</div>
             </div>
             <div class="field span-2">
-              <label class="mini">Left column RSS fallback</label>
+              <label class="mini">Left column RSS feed</label>
               <select name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h1_rss]">
                 <option value="">— site default<?= $globalGlanceH1Rss !== '' ? ' (' . h($globalGlanceH1Rss) . ')' : '' ?> —</option>
                 <option value="_off" <?= $glanceH1Rss === '_off' ? 'selected' : '' ?>>Off — page scrape only</option>
@@ -3275,6 +3275,7 @@ function admin_rotation_kiosk_settings_panel(
                 <option value="<?= h((string)$feedKey) ?>" <?= $glanceH1Rss === (string)$feedKey ? 'selected' : '' ?>><?= h($feedLabel) ?> (<?= h((string)$feedKey) ?>)</option>
                 <?php endforeach; ?>
               </select>
+              <div class="help" style="margin-top:4px">When you pick a feed here, it <strong>replaces</strong> the GVNext/page scrape for this display. Leave on site default to keep page-first with RSS as fallback.</div>
             </div>
             <div class="field span-2" style="margin-top:6px">
               <label class="check"><input type="checkbox" name="SCREEN_OPTS[<?= h($screenKey) ?>][glance_h2_off]" value="1"

@@ -58,7 +58,7 @@ Open **Display settings** on the Rotation page (screen list, names, shared edito
 | Location | Optional lat/lon + place name for this kiosk — weather, air, UV, photo, traffic map, and NWS ticker (blank = global **Weather** board) |
 | Sports teams | Up to four ESPN teams for `sports.php` on this display (blank = site default) |
 | Ticker news fallback | RSS feed key for headlines when there are no NWS weather alerts (blank = ticker hidden when no alerts) |
-| Glance headline columns | Left page URL / RSS fallback and right RSS feed for `glance.php` (blank = site defaults from **Today at a Glance**) |
+| Glance headline columns | Left page URL / RSS feed and right RSS feed for `glance.php` (blank = site defaults from **Today at a Glance**; per-display RSS replaces GVNext scrape) |
 | Blank hours / CEC | HDMI-CEC power schedule |
 
 Operators with **multiple displays** assigned, or **shared editors** on a display, see a playlist panel per screen (or a combined view where the UI groups their displays). Deploy pickers on **Slides**, **Photo Rotator**, **RSS**, and **Video** target any display they may fully edit.

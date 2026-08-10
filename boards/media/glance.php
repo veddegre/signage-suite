@@ -66,9 +66,10 @@ $headlines2 = ['items' => [], 'source' => ''];
 $headlines1Active = (bool)$headlinePanel1['active'];
 $headlines2Active = (bool)$headlinePanel2['active'];
 if ($headlines1Active) {
+    $headline1Mode = !empty($headlinePanel1['rss_primary']) ? 'rss' : 'page';
     $headlines1 = glance_headlines_panel(
-        'page',
-        (string)$headlinePanel1['page_url'],
+        $headline1Mode,
+        $headline1Mode === 'rss' ? '' : (string)$headlinePanel1['page_url'],
         (string)$headlinePanel1['rss'],
         (int)$headlinePanel1['max'],
         $headlinesTtl
@@ -345,9 +346,9 @@ $compact = $boardH < 1080;
             (string)$headlinePanel1['title'],
             $headlines1,
             !$headlines2Active,
-            (string)$headlinePanel1['page_url'] !== ''
-                ? 'No headlines from that page yet — check the URL or RSS fallback in Rotation kiosk settings.'
-                : 'Set a page URL or RSS feed under <strong>Rotation → Kiosk settings</strong> or Today at a Glance defaults.'
+            (string)$headlinePanel1['page_url'] !== '' && empty($headlinePanel1['rss_primary'])
+                ? 'No headlines from that page yet — check the URL or pick an RSS feed in Rotation kiosk settings.'
+                : 'Pick an RSS feed key in <strong>Rotation → Kiosk settings</strong> (or Today at a Glance defaults).'
         );
     endif; ?>
     <?php if ($headlines2Active):

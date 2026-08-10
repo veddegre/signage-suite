@@ -431,6 +431,7 @@ function rotation_screen_glance_headlines(string $screen): array
         'title' => trim((string)cfg('glance.HEADLINES_1_TITLE', 'GVNext')),
         'page_url' => trim((string)cfg('glance.HEADLINES_1_PAGE_URL', 'https://www.gvsu.edu/gvnext/')),
         'rss' => rotation_glance_resolve_rss_key((string)cfg('glance.HEADLINES_1_RSS', ''), $scopeUid),
+        'rss_primary' => false,
         'max' => max(3, min(8, (int)cfg('glance.HEADLINES_1_MAX', 5))),
     ];
     $panel2 = [
@@ -463,8 +464,10 @@ function rotation_screen_glance_headlines(string $screen): array
             $h1Rss = rotation_glance_resolve_rss_key((string)$scr['glance_h1_rss'], $scopeUid);
             if ($h1Rss === '_off') {
                 $panel1['rss'] = '';
+                $panel1['rss_primary'] = false;
             } elseif ($h1Rss !== '') {
                 $panel1['rss'] = $h1Rss;
+                $panel1['rss_primary'] = true;
             }
         }
 
