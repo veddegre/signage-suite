@@ -1394,7 +1394,7 @@ function webcam_parse_cam_from_rotation_url(string $url): string
     return (string)(array_key_first(webcam_registry()) ?? '');
 }
 
-function webcam_skip_rotation(?string $rotationUrl = null): bool
+function webcam_skip_rotation(?string $rotationUrl = null, bool $forceProbe = true): bool
 {
     if ($rotationUrl !== null && webcam_rotation_url_is_retired($rotationUrl)) {
         return true;
@@ -1411,7 +1411,7 @@ function webcam_skip_rotation(?string $rotationUrl = null): bool
         return true;
     }
 
-    return webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'), true)['skip_rotation'];
+    return webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'), $forceProbe)['skip_rotation'];
 }
 
 /** @deprecated */

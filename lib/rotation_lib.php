@@ -2025,7 +2025,7 @@ function rotation_page_url_is_webcam(string $url): bool
 }
 
 /** Whether a playlist URL is omitted from rotation for seasonal/offline auto-skip (lake, sports, webcam). */
-function rotation_page_seasonal_skip(string $url, string $screen = 'main'): bool
+function rotation_page_seasonal_skip(string $url, string $screen = 'main', bool $forceWebcamProbe = true): bool
 {
     $url = trim($url);
     if ($url === '') {
@@ -2056,7 +2056,7 @@ function rotation_page_seasonal_skip(string $url, string $screen = 'main'): bool
         }
         require_once $lib;
 
-        return webcam_skip_rotation($url);
+        return webcam_skip_rotation($url, $forceWebcamProbe);
     }
     if (preg_match('~(?:^|/)announce\.php$~i', (string)(parse_url($url, PHP_URL_PATH) ?? ''))) {
         $lib = __DIR__ . '/announce_lib.php';
@@ -2072,13 +2072,13 @@ function rotation_page_seasonal_skip(string $url, string $screen = 'main'): bool
 }
 
 /** @return list<array<string,mixed>> Active pages for the rotation shell (url set, dwell > 0, not skipped). */
-function rotation_screen_active_pages(string $screen = 'main', bool $applySeasonalSkip = true): array
+function rotation_screen_active_pages(string $screen = 'main', bool $applySeasonalSkip = true, bool $forceWebcamProbe = true): array
 {
     static $cache = [];
 
     require_once __DIR__ . '/slides_lib.php';
     $screen = rotation_normalize_screen_key($screen);
-    $cacheKey = $screen . "\0" . ($applySeasonalSkip ? '1' : '0');
+    $cacheKey = $screen . "\0" . ($applySeasonalSkip ? '1' : '0') . "\0" . ($forceWebcamProbe ? '1' : '0');
     if (array_key_exists($cacheKey, $cache)) {
         return $cache[$cacheKey];
     }
@@ -2131,7 +2131,7 @@ function rotation_screen_active_pages(string $screen = 'main', bool $applySeason
             }
             $file = slide_rotation_parse_file($url);
             if ($file === null) {
-                if ($applySeasonalSkip && rotation_page_seasonal_skip($url, $screen)) {
+                if ($applySeasonalSkip && rotation_page_seasonal_skip($url, $screen, $forceWebcamProbe)) {
                     return false;
                 }
                 if (!signage_profile_rotation_url_allowed($url)) {
@@ -2170,11 +2170,21 @@ function rotation_config_revision(string $screen = 'main'): string
     require_once __DIR__ . '/rotation_pages_store_lib.php';
     $pagesPath = rotation_pages_store_path($screen);
     $pagesMtime = ($pagesPath !== null && is_file($pagesPath)) ? (int)filemtime($pagesPath) : 0;
+    $activeUrls = array_values(array_filter(array_map(
+        static function ($p) {
+            if (!is_array($p)) {
+                return '';
+            }
+
+            return trim((string)($p['url'] ?? ''));
+        },
+        rotation_screen_active_pages($screen, true, false)
+    )));
     $blob = json_encode([
         'mtime' => $mtime,
         'pages_mtime' => $pagesMtime,
         'screen' => $screen,
-        'pages' => rotation_screen_active_pages($screen),
+        'page_urls' => $activeUrls,
         'shuffle' => $settings['shuffle'] && !$settings['weighted'],
         'show_ticker' => $settings['show_ticker'],
         'show_clock' => $settings['show_clock'],

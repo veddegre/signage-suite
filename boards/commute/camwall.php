@@ -126,7 +126,7 @@ $heightPx = $boardH . 'px';
     <?php foreach ($tiles as $i => $tile): ?>
     <div class="tile<?= $tile['src'] === '' ? ' empty' : '' ?>" data-key="<?= h($tile['key']) ?>">
       <?php if ($tile['src'] !== ''): ?>
-      <img id="cam-<?= (int)$i ?>" alt="<?= h($tile['name']) ?>" src="<?= h($tile['src']) ?>"
+      <img id="cam-<?= (int)$i ?>" alt="<?= h($tile['name']) ?>"<?php if (!$embedded): ?> src="<?= h($tile['src']) ?>"<?php endif; ?>
            data-base="<?= h($tile['src']) ?>" loading="eager"
            style="object-position:<?= h($tile['focus']) ?>">
       <div class="cap">
@@ -147,7 +147,9 @@ $heightPx = $boardH . 'px';
 (function(){
   const refreshMs = <?= (int)REFRESH_SEC ?> * 1000;
   const staggerMs = 250;
+  const embedded = <?= $embedded ? 'true' : 'false' ?>;
   let refreshTimer = null;
+  let armed = !embedded || window.parent === window;
 
   function bust(base) {
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
@@ -178,17 +180,27 @@ $heightPx = $boardH . 'px';
     refreshTimer = null;
   }
 
-  startRefresh();
+  if (embedded) {
+    window.addEventListener('message', function(ev) {
+      if (!ev.data) return;
+      if (ev.data.type === 'signage-stop') {
+        armed = false;
+        stopRefresh();
+        return;
+      }
+      if (ev.data.type === 'signage-show') {
+        armed = true;
+        startRefresh();
+      }
+    });
+  }
 
-  window.addEventListener('message', function(ev) {
-    if (!ev.data || ev.data.type !== 'signage-stop') return;
-    stopRefresh();
-  });
+  if (armed) startRefresh();
 })();
 <?php if ($showClock && SHOW_OVERLAY): ?>
 <?= signage_clock_tick_script('clock', TIMEZONE) ?>
 <?php endif; ?>
-<?php if (RELOAD_SEC > 0): ?>
+<?php if (!$embedded && RELOAD_SEC > 0): ?>
 setTimeout(function () { location.reload(); }, <?= (int)RELOAD_SEC * 1000 ?>);
 <?php endif; ?>
 </script>

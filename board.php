@@ -533,7 +533,64 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     return eligibleFingerprint(shuffleEligibleIndices());
   }
 
-  function rebuildShuffleDeck(lastShown) {
+  /** Push recently played indices to the end when a deck rebuilds mid-cycle. */
+  function deferRecentlyPlayed(deck, recentIndices) {
+    if (deck.length < 2 || !recentIndices || !recentIndices.length) return deck;
+    const recent = {};
+    recentIndices.forEach(function (i) {
+      if (i >= 0) recent[i] = true;
+    });
+    if (!Object.keys(recent).length) return deck;
+    const early = [];
+    const late = [];
+    deck.forEach(function (i) {
+      if (recent[i]) late.push(i);
+      else early.push(i);
+    });
+    if (!early.length) return deck;
+    const merged = early.concat(late);
+    breakAdjacentDeckDuplicates(merged);
+    return merged;
+  }
+
+  /** Spread duplicate playlist indices so the same board rarely plays back-to-back. */
+  function breakAdjacentDeckDuplicates(deck) {
+    if (deck.length < 2) return deck;
+    for (let i = 1; i < deck.length; i++) {
+      if (deck[i] !== deck[i - 1]) continue;
+      let fixed = false;
+      for (let j = i + 1; j < deck.length; j++) {
+        if (deck[j] === deck[i - 1]) continue;
+        if (j + 1 < deck.length && deck[j] === deck[j + 1]) continue;
+        const tmp = deck[i];
+        deck[i] = deck[j];
+        deck[j] = tmp;
+        fixed = true;
+        break;
+      }
+      if (!fixed && deck[i] === deck[0] && i === deck.length - 1) {
+        for (let j = 1; j < deck.length - 1; j++) {
+          if (deck[j] !== deck[i] && deck[j] !== deck[j - 1]) {
+            const tmp = deck[i];
+            deck[i] = deck[j];
+            deck[j] = tmp;
+            break;
+          }
+        }
+      }
+    }
+    return deck;
+  }
+
+  function recentPlayIndices() {
+    const recent = pageHistory.slice(-12);
+    if (idx >= 0 && recent[recent.length - 1] !== idx) {
+      recent.push(idx);
+    }
+    return recent;
+  }
+
+  function rebuildShuffleDeck(lastShown, midCycle) {
     shuffleDeck = shuffleEligibleIndices();
     if (shuffleDeck.length === 0) {
       shufflePos = 0;
@@ -542,6 +599,10 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     for (let i = shuffleDeck.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffleDeck[i], shuffleDeck[j]] = [shuffleDeck[j], shuffleDeck[i]];
+    }
+    breakAdjacentDeckDuplicates(shuffleDeck);
+    if (midCycle) {
+      shuffleDeck = deferRecentlyPlayed(shuffleDeck, recentPlayIndices());
     }
     if (shuffleDeck.length > 1 && shuffleDeck[0] === lastShown) {
       const last = shuffleDeck.length - 1;
@@ -554,7 +615,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   function nextShufflePage() {
     const fp = shuffleEligibleFingerprint();
     if (fp !== shuffleEligibleKey || shufflePos >= shuffleDeck.length) {
-      rebuildShuffleDeck(idx);
+      rebuildShuffleDeck(idx, shufflePos > 0 && fp !== shuffleEligibleKey);
     }
     if (!shuffleDeck.length) {
       return 0;
@@ -562,7 +623,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     return shuffleDeck[shufflePos++];
   }
 
-  function rebuildWeightedDeck(lastShown) {
+  function rebuildWeightedDeck(lastShown, midCycle) {
     const eligible = eligiblePageIndices();
     weightedDeck = [];
     for (let k = 0; k < eligible.length; k++) {
@@ -581,6 +642,10 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       const j = Math.floor(Math.random() * (i + 1));
       [weightedDeck[i], weightedDeck[j]] = [weightedDeck[j], weightedDeck[i]];
     }
+    breakAdjacentDeckDuplicates(weightedDeck);
+    if (midCycle) {
+      weightedDeck = deferRecentlyPlayed(weightedDeck, recentPlayIndices());
+    }
     if (weightedDeck.length > 1 && weightedDeck[0] === lastShown) {
       for (let s = weightedDeck.length - 1; s > 0; s--) {
         if (weightedDeck[s] !== lastShown) {
@@ -596,7 +661,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   function nextWeightedPage() {
     const fp = eligibleFingerprint(eligiblePageIndices());
     if (fp !== weightedEligibleKey || weightedPos >= weightedDeck.length) {
-      rebuildWeightedDeck(idx);
+      rebuildWeightedDeck(idx, weightedPos > 0 && fp !== weightedEligibleKey);
     }
     if (!weightedDeck.length) {
       return 0;
@@ -696,6 +761,9 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
           el.muted = true;
           el.removeAttribute('src');
           if (typeof el.load === 'function') el.load();
+        });
+        doc.querySelectorAll('iframe').forEach(function (el) {
+          try { el.src = 'about:blank'; } catch (e) {}
         });
       }
     } catch (e) {}

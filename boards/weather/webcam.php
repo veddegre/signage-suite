@@ -111,7 +111,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
     <iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager"<?php
-      if (!$earthcamIframeWarmup): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
+      if (!$earthcamIframeWarmup && !$embedded): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
     <?php endif; ?>
   </div>
   <?php if (SHOW_OVERLAY): ?>
@@ -144,7 +144,48 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   const reloadMs = <?= (int)$reloadSec ?> * 1000;
   const imageRefreshMs = <?= (int)$imageRefreshSec ?> * 1000;
   const streamRefreshMs = <?= (int)$streamRefreshSec ?> * 1000;
+  const EMBEDDED = <?= json_encode($embedded) ?>;
+  let armed = !EMBEDDED || window.parent === window;
   let hlsPlayer = null;
+  let timers = [];
+
+  function trackInterval(fn, ms) {
+    const id = setInterval(fn, ms);
+    timers.push(id);
+    return id;
+  }
+
+  function trackTimeout(fn, ms) {
+    const id = setTimeout(fn, ms);
+    timers.push(id);
+    return id;
+  }
+
+  function clearAllTimers() {
+    timers.forEach(function (id) {
+      clearInterval(id);
+      clearTimeout(id);
+    });
+    timers = [];
+  }
+
+  function teardown() {
+    clearAllTimers();
+    if (hlsPlayer) {
+      hlsPlayer.destroy();
+      hlsPlayer = null;
+    }
+    document.querySelectorAll('video, audio').forEach(function (el) {
+      el.pause();
+      try {
+        el.removeAttribute('src');
+        if (typeof el.load === 'function') el.load();
+      } catch (e) {}
+    });
+    document.querySelectorAll('iframe').forEach(function (el) {
+      try { el.src = 'about:blank'; } catch (e) {}
+    });
+  }
 
   function refreshImageSrc(base) {
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
@@ -165,6 +206,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   }
 
   function showStreamIframe(url) {
+    if (!armed) return;
     const frame = document.getElementById('frame');
     if (!frame) return;
     frame.classList.add('iframe-embed');
@@ -184,6 +226,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   }
 
   function loadStream(playlistUrl, direct, opts) {
+    if (!armed) return;
     opts = opts || {};
     const video = ensureVideoFrame();
     if (!video || !playlistUrl) {
@@ -203,7 +246,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
         maxBufferLength: lowEnd ? 24 : 12,
       });
       hlsPlayer.on(window.Hls.Events.ERROR, function (_event, data) {
-        if (!data || !data.fatal) return;
+        if (!armed || !data || !data.fatal) return;
         if (typeof opts.onFatal === 'function') {
           opts.onFatal(data);
           return;
@@ -213,13 +256,15 @@ $camJson['wetmetIframe'] = $wetmetIframe;
       hlsPlayer.loadSource(direct ? playlistUrl : refreshImageSrc(playlistUrl));
       hlsPlayer.attachMedia(video);
       hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
+        if (!armed) return;
         video.play().catch(function () {
+          if (!armed) return;
           if (typeof opts.onGiveUp === 'function') opts.onGiveUp();
           else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
         });
       });
-      setTimeout(function () {
-        if (video.readyState >= 2) return;
+      trackTimeout(function () {
+        if (!armed || video.readyState >= 2) return;
         if (typeof opts.onStall === 'function') {
           opts.onStall();
           return;
@@ -231,6 +276,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = direct ? playlistUrl : refreshImageSrc(playlistUrl);
       video.play().catch(function () {
+        if (!armed) return;
         if (typeof opts.onGiveUp === 'function') opts.onGiveUp();
         else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
       });
@@ -240,27 +286,28 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
   }
 
-  if (cam.preferIframe && cam.streamIframe) {
+  function runWetmet() {
     let wetmetUsingIframe = false;
     let wetmetHlsRetries = 0;
     let wetmetLastVideoTime = -1;
     let wetmetLastVideoAdvanceAt = Date.now();
     const wetmetMaxHlsRetries = 2;
-    // WetMet signed URLs expire ~30 min; refresh sooner (like a manual reload) when stuck.
     const wetmetRefreshMs = streamRefreshMs > 0
       ? Math.max(300000, Math.min(streamRefreshMs, 600000))
       : 600000;
 
     function showWetmetIframe() {
+      if (!armed) return;
       wetmetUsingIframe = true;
       showStreamIframe(iframeBustUrl(cam.streamIframe));
     }
 
     function wetmetRetryOrIframe() {
+      if (!armed) return;
       if (wetmetHlsRetries < wetmetMaxHlsRetries) {
         wetmetHlsRetries++;
-        setTimeout(function () {
-          refreshWetmetDirect();
+        trackTimeout(function () {
+          if (armed) refreshWetmetDirect();
         }, 1200 * wetmetHlsRetries);
         return;
       }
@@ -268,9 +315,11 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     }
 
     async function refreshWetmetDirect() {
+      if (!armed) return false;
       try {
         const res = await fetch(cam.streamApi + '&wetmet=1', { cache: 'no-store' });
         const data = await res.json();
+        if (!armed) return false;
         if (data && data.ok && data.playlist) {
           wetmetUsingIframe = false;
           wetmetHlsRetries = 0;
@@ -288,21 +337,22 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     }
 
     function wetmetPeriodicRefresh() {
+      if (!armed) return;
       if (wetmetUsingIframe) {
         showWetmetIframe();
         return;
       }
       refreshWetmetDirect().then(function (ok) {
-        if (!ok) showWetmetIframe();
+        if (armed && !ok) showWetmetIframe();
       });
     }
 
     refreshWetmetDirect().then(function (ok) {
-      if (!ok) showWetmetIframe();
+      if (armed && !ok) showWetmetIframe();
     });
-    setInterval(wetmetPeriodicRefresh, wetmetRefreshMs);
-    setInterval(function () {
-      if (wetmetUsingIframe) return;
+    trackInterval(wetmetPeriodicRefresh, wetmetRefreshMs);
+    trackInterval(function () {
+      if (!armed || wetmetUsingIframe) return;
       const video = document.getElementById('cam-video');
       if (!video || video.readyState < 2) return;
       if (video.currentTime > wetmetLastVideoTime + 0.05) {
@@ -315,26 +365,25 @@ $camJson['wetmetIframe'] = $wetmetIframe;
         wetmetRetryOrIframe();
       }
     }, 12000);
-    return;
   }
 
   async function refreshStreamPlaylist() {
+    if (!armed) return;
     try {
       const res = await fetch(cam.streamApi, { cache: 'no-store' });
       const data = await res.json();
-      if (data && data.ok && data.playlist) {
+      if (armed && data && data.ok && data.playlist) {
         loadStream(data.playlist, false);
       }
     } catch (e) {}
   }
 
-  if (cam.streamPlaylist) {
+  function runStreamPlaylist() {
     loadStream(cam.streamPlaylist, false);
-    setInterval(refreshStreamPlaylist, streamRefreshMs);
-    return;
+    trackInterval(refreshStreamPlaylist, streamRefreshMs);
   }
 
-  if (cam.imageSrc) {
+  function runImageRefresh() {
     const img = document.getElementById('cam-img');
     if (!img) return;
     const preload = new Image();
@@ -346,59 +395,100 @@ $camJson['wetmetIframe'] = $wetmetIframe;
       img.src = el.src;
     }
     function refresh() {
-      preload.onload = function () { showLoaded(preload); };
+      if (!armed) return;
+      preload.onload = function () { if (armed) showLoaded(preload); };
       preload.onerror = function () {};
       preload.src = refreshImageSrc(cam.imageSrc);
       if (frameOk(preload)) showLoaded(preload);
     }
     img.onerror = function () {};
     refresh();
-    setInterval(refresh, imageRefreshMs);
-    return;
+    trackInterval(refresh, imageRefreshMs);
   }
 
-  const frame = document.getElementById('cam-frame');
-  if (!frame) return;
+  function runPlainIframe() {
+    const frame = document.getElementById('cam-frame');
+    if (!frame) return;
 
-  function iframeBaseUrl() {
-    return (cam.url || '').split('#')[0];
-  }
-
-  function startIframeHourlyReload() {
-    if (reloadMs <= 0) return;
-    setInterval(function () {
-      frame.src = iframeBustUrl(iframeBaseUrl());
-    }, reloadMs);
-  }
-
-  if (cam.earthcamWarmup) {
-    frame.style.opacity = '0';
-    frame.style.transition = 'opacity 0.4s ease';
-    let loadPass = 0;
-    let shown = false;
-    function revealIframe() {
-      if (shown) return;
-      shown = true;
-      frame.style.opacity = '1';
-      startIframeHourlyReload();
+    function iframeBaseUrl() {
+      return (cam.url || '').split('#')[0];
     }
-    frame.onload = function () {
-      loadPass++;
-      if (loadPass === 1) {
-        setTimeout(function () {
-          frame.src = iframeBustUrl();
-        }, 700);
+
+    function startIframeHourlyReload() {
+      if (reloadMs <= 0) return;
+      trackInterval(function () {
+        if (!armed) return;
+        frame.src = iframeBustUrl(iframeBaseUrl());
+      }, reloadMs);
+    }
+
+    if (cam.earthcamWarmup) {
+      frame.style.opacity = '0';
+      frame.style.transition = 'opacity 0.4s ease';
+      let loadPass = 0;
+      let shown = false;
+      function revealIframe() {
+        if (!armed || shown) return;
+        shown = true;
+        frame.style.opacity = '1';
+        startIframeHourlyReload();
+      }
+      frame.onload = function () {
+        if (!armed) return;
+        loadPass++;
+        if (loadPass === 1) {
+          trackTimeout(function () {
+            if (armed) frame.src = iframeBustUrl(iframeBaseUrl());
+          }, 700);
+          return;
+        }
+        frame.onload = null;
+        revealIframe();
+      };
+      frame.src = iframeBustUrl(iframeBaseUrl());
+      trackTimeout(revealIframe, 14000);
+      return;
+    }
+
+    if (!frame.getAttribute('src') || frame.src === 'about:blank') {
+      frame.src = iframeBustUrl(iframeBaseUrl());
+    }
+    startIframeHourlyReload();
+  }
+
+  function runBoard() {
+    if (!armed) return;
+    if (cam.preferIframe && cam.streamIframe) {
+      runWetmet();
+      return;
+    }
+    if (cam.streamPlaylist) {
+      runStreamPlaylist();
+      return;
+    }
+    if (cam.imageSrc) {
+      runImageRefresh();
+      return;
+    }
+    runPlainIframe();
+  }
+
+  if (EMBEDDED) {
+    window.addEventListener('message', function (ev) {
+      if (!ev.data) return;
+      if (ev.data.type === 'signage-stop') {
+        armed = false;
+        teardown();
         return;
       }
-      frame.onload = null;
-      revealIframe();
-    };
-    frame.src = iframeBustUrl();
-    setTimeout(revealIframe, 14000);
-    return;
+      if (ev.data.type === 'signage-show') {
+        armed = true;
+        runBoard();
+      }
+    });
   }
 
-  startIframeHourlyReload();
+  if (armed) runBoard();
 })();
 <?php if ($showClock && SHOW_OVERLAY): ?>
 <?= signage_clock_tick_script('clock', TIMEZONE) ?>
