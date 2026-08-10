@@ -3876,6 +3876,8 @@ function admin_field(array $f, $val, string $board): void
   .rotation-template-row select { min-width:220px; padding:8px 10px; font-size:14px; background:var(--harbor);
     color:var(--snow); border:1px solid var(--line); border-radius:8px; }
   .rotation-playlist-panel.rotation-playlist-active > summary { background:rgba(255,179,71,.08); }
+  .rotation-playlist-panel:not([open]) > summary { opacity:.92; }
+  .rotation-playlist-panel:not([open]):not(.rotation-playlist-active) > summary { opacity:.72; }
   .rotation-playlist-empty { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
   @media (max-width: 900px) { .video-card-grid, .rotation-card-grid, .rotation-card-grid.cols-4 { grid-template-columns:1fr; } }
   .inline-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px; }
@@ -10643,13 +10645,26 @@ function refreshBoardPickerInPlaylistMarks() {
   });
 }
 
+function syncRotationPlaylistPanels(screenKey, options) {
+  options = options || {};
+  const expandActive = options.expandActive !== false;
+  const collapseOthers = options.collapseOthers !== false;
+  document.querySelectorAll('.rotation-playlist-panel[data-rotation-screen]').forEach(function (panel) {
+    const active = screenKey !== '' && panel.getAttribute('data-rotation-screen') === screenKey;
+    panel.classList.toggle('rotation-playlist-active', active);
+    if (active && expandActive) {
+      panel.open = true;
+    } else if (!active && collapseOthers && screenKey !== '') {
+      panel.open = false;
+    }
+  });
+}
+
 function highlightActiveRotationPlaylist() {
   const sel = document.getElementById('rotationTargetScreen');
   const opt = sel && sel.options[sel.selectedIndex];
   const sk = opt ? (opt.getAttribute('data-screen-key') || '') : '';
-  document.querySelectorAll('.rotation-playlist-panel[data-rotation-screen]').forEach(function (panel) {
-    panel.classList.toggle('rotation-playlist-active', panel.getAttribute('data-rotation-screen') === sk);
-  });
+  syncRotationPlaylistPanels(sk, { expandActive: true, collapseOthers: true });
 }
 
 function selectRotationTargetByScreenKey(screenKey, openPanel) {
@@ -10664,11 +10679,10 @@ function selectRotationTargetByScreenKey(screenKey, openPanel) {
     sel.value = opt.value;
     sel.dispatchEvent(new Event('change'));
   } else {
-    highlightActiveRotationPlaylist();
+    syncRotationPlaylistPanels(screenKey, { expandActive: openPanel, collapseOthers: openPanel });
     refreshBoardPickerInPlaylistMarks();
+    syncRotationFocusScreenField();
   }
-  const panel = document.querySelector('.rotation-playlist-panel[data-rotation-screen="' + screenKey + '"]');
-  if (openPanel && panel && !panel.open) panel.open = true;
 }
 
 function initRotationSetupTabs() {
