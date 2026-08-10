@@ -1154,6 +1154,39 @@ function rotation_page_effective_weight(array $page, DateTimeInterface|int|null 
     return $base;
 }
 
+/** Admin snapshot label for effective weight right now — e.g. "5 (7–9 window)" or "1 (default)". */
+function rotation_page_weight_snapshot_label(array $page, ?DateTimeInterface $now = null): string
+{
+    $now = $now ?? rotation_now();
+    $eff = rotation_page_effective_weight($page, $now);
+    $base = rotation_page_base_weight($page);
+    $nowMin = rotation_minutes_since_midnight($now);
+    $matchedWeight = null;
+    $matchedLabel = null;
+    foreach (rotation_page_window_ranges($page) as $w) {
+        if (!rotation_minutes_in_range((int)$w['from_min'], (int)$w['to_min'], $nowMin)) {
+            continue;
+        }
+        if (empty($w['weight']) || (int)$w['weight'] <= 1) {
+            continue;
+        }
+        $wt = (int)$w['weight'];
+        $wl = rotation_format_time_label($w['from_min']) . '–' . rotation_format_time_label($w['to_min']);
+        if ($matchedWeight === null || $wt >= $matchedWeight) {
+            $matchedWeight = $wt;
+            $matchedLabel = $wl;
+        }
+    }
+    if ($matchedWeight !== null && $eff === $matchedWeight && $eff !== $base) {
+        return $eff . ' (' . $matchedLabel . ' window)';
+    }
+    if ($eff > 1) {
+        return $eff . ' (default)';
+    }
+
+    return '1';
+}
+
 /** Full schedule label including weekdays when restricted. */
 function rotation_page_schedule_label(array $page): string
 {
@@ -1465,6 +1498,7 @@ function rotation_schedule_snapshot(string $screen = 'main', ?DateTimeInterface 
             'url' => $url,
             'dwell' => rotation_page_dwell($page),
             'weight' => rotation_page_effective_weight($page, $now),
+            'weight_label' => rotation_page_weight_snapshot_label($page, $now),
             'schedule' => $schedLabel,
             'status' => $status,
             'reason' => $reason,

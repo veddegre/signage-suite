@@ -5272,10 +5272,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <span class="pill <?= h($pillClass) ?>" style="min-width:72px;justify-content:center"><?= h($playsStatusLabel[$st] ?? $st) ?></span>
                 <span><strong><?= h((string)($snapRow['label'] ?? '')) ?></strong><?php if (($snapRow['schedule'] ?? '') !== ''): ?>
                   <span class="help" style="margin:0"> · <?= h((string)$snapRow['schedule']) ?></span><?php endif; ?>
-                  <?php if ($st === 'playing' && !empty($playsNow['weighted']) && isset($snapRow['weight_pct'])): ?>
+                  <?php if ($st === 'playing' && !empty($playsNow['weighted'])): ?>
+                  <span class="help" style="margin:0"> · weight <?= h((string)($snapRow['weight_label'] ?? (string)(int)($snapRow['weight'] ?? 1))) ?></span>
+                  <?php if (isset($snapRow['weight_pct'])): ?>
                   <span class="help" style="margin:0"> · ~<?= h((string)$snapRow['weight_pct']) ?>% picks</span>
-                  <?php elseif ($st === 'playing' && !empty($playsNow['weighted']) && (int)($snapRow['weight'] ?? 1) > 1): ?>
-                  <span class="help" style="margin:0"> · weight <?= (int)$snapRow['weight'] ?></span>
+                  <?php endif; ?>
                   <?php endif; ?></span>
               </div>
               <?php endforeach; ?>
