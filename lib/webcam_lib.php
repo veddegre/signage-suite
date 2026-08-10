@@ -356,10 +356,10 @@ function webcam_board_is_available(array $cam): bool
     $url = (string)($cam['url'] ?? '');
     $kind = (string)($cam['kind'] ?? 'iframe');
     if (webcam_wetmet_stream_frame_url($url) || webcam_uses_stream_tag($cam)) {
-        return webcam_url_status($url, $kind)['online'];
+        return webcam_url_status($url, $kind, true)['online'];
     }
     if ($kind === 'widget' || webcam_is_widget_frame_url($url) || $kind === 'image') {
-        return webcam_url_status($url, $kind)['online'];
+        return webcam_url_status($url, $kind, true)['online'];
     }
 
     return true;
@@ -413,9 +413,18 @@ function webcam_ant_media_hls_master_url(string $playUrl): ?string
 }
 
 /** True when an HLS media playlist looks like a live stream (not a stale ENDLIST snapshot). */
+function webcam_hls_body_is_playlist(string $body): bool
+{
+    if ($body === '' || str_contains($body, '<html') || str_contains($body, '<HTML')) {
+        return false;
+    }
+
+    return str_contains($body, '#EXTM3U');
+}
+
 function webcam_hls_playlist_is_live(string $body): bool
 {
-    if ($body === '' || str_contains($body, '#EXT-X-ENDLIST')) {
+    if (!webcam_hls_body_is_playlist($body) || str_contains($body, '#EXT-X-ENDLIST')) {
         return false;
     }
     if (preg_match('#EXT-X-PROGRAM-DATE-TIME:([^\n]+)#', $body, $m)) {
@@ -425,7 +434,56 @@ function webcam_hls_playlist_is_live(string $body): bool
         }
     }
 
-    return true;
+    return str_contains($body, '#EXTINF');
+}
+
+function webcam_hls_last_segment_url(string $body, string $playlistUrl): ?string
+{
+    if (!webcam_hls_body_is_playlist($body)) {
+        return null;
+    }
+    $base = preg_replace('#/[^/]*$#', '/', $playlistUrl) ?? $playlistUrl;
+    $last = null;
+    foreach (explode("\n", str_replace("\r", '', $body)) as $line) {
+        $trim = trim($line);
+        if ($trim === '' || str_starts_with($trim, '#')) {
+            continue;
+        }
+        $last = webcam_hls_absolute_url($base, $trim);
+    }
+
+    return $last;
+}
+
+function webcam_hls_segment_reachable(string $segmentUrl): bool
+{
+    $segmentUrl = webcam_validate_url($segmentUrl);
+    if ($segmentUrl === null || !function_exists('curl_init')) {
+        return false;
+    }
+    $ctx = webcam_http_context($segmentUrl);
+    $headers = ['Range: bytes=0-4095'];
+    if ($ctx['referer'] !== null && $ctx['referer'] !== '') {
+        $headers[] = 'Referer: ' . $ctx['referer'];
+    }
+    require_once __DIR__ . '/security_lib.php';
+    $ch = curl_init($segmentUrl);
+    curl_setopt_array($ch, signage_curl_merge_options([
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_USERAGENT => $ctx['ua'],
+        CURLOPT_HTTPHEADER => $headers,
+    ]));
+    $body = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $err = curl_error($ch);
+
+    return $err === ''
+        && ($code === 200 || $code === 206)
+        && is_string($body)
+        && strlen($body) >= 512;
 }
 
 function webcam_uses_stream_tag(array $cam): bool
@@ -565,7 +623,8 @@ function webcam_stream_playlist_url(string $streamFrameUrl): ?string
     if ($html === null) {
         return null;
     }
-    if (preg_match("#var vurl = '([^']+)'#", $html, $m)) {
+    if (preg_match("#var vurl = '([^']+)'#", $html, $m)
+        || preg_match('#var vurl = "([^"]+)"#', $html, $m)) {
         return webcam_validate_url($m[1]);
     }
 
@@ -632,6 +691,9 @@ function webcam_hls_is_media_playlist(string $body): bool
 
 function webcam_hls_pick_media_playlist(string $masterUrl, string $masterBody): ?string
 {
+    if (!webcam_hls_body_is_playlist($masterBody)) {
+        return null;
+    }
     if (webcam_hls_is_media_playlist($masterBody)) {
         return null;
     }
@@ -642,7 +704,10 @@ function webcam_hls_pick_media_playlist(string $masterUrl, string $masterBody): 
         if ($trim === '' || str_starts_with($trim, '#')) {
             continue;
         }
-        $picked = webcam_hls_absolute_url($base, $trim);
+        $candidate = webcam_hls_absolute_url($base, $trim);
+        if ($candidate !== null && preg_match('#\.m3u8(\?|$)#i', $candidate)) {
+            $picked = $candidate;
+        }
     }
 
     return $picked;
@@ -755,9 +820,10 @@ function webcam_stream_api_response(array $cam): void
     if (isset($_GET['wetmet']) && (string)$_GET['wetmet'] === '1'
         && webcam_stream_prefers_iframe_embed($cam)) {
         $playlist = webcam_stream_playlist_url((string)$cam['url']);
+        $live = $playlist !== null && webcam_probe_hls_playlist_live($playlist);
         echo json_encode([
-            'ok' => $playlist !== null,
-            'playlist' => $playlist,
+            'ok' => $live,
+            'playlist' => $live ? $playlist : null,
             'direct' => true,
         ], JSON_UNESCAPED_SLASHES);
         exit;
@@ -1138,7 +1204,7 @@ function webcam_cam_label(string $key): string
 }
 
 /** Bump when probe logic changes — invalidates stale cache entries on deploy. */
-const WEBCAM_PROBE_CACHE_VER = 3;
+const WEBCAM_PROBE_CACHE_VER = 5;
 
 function webcam_status_cache_path(string $url): string
 {
@@ -1201,16 +1267,20 @@ function webcam_probe_hls_playlist_live(string $pageOrPlaylistUrl): bool
         return false;
     }
     $masterBody = webcam_http_get($master);
-    if ($masterBody === null) {
+    if ($masterBody === null || !webcam_hls_body_is_playlist($masterBody)) {
         return false;
     }
     $mediaUrl = webcam_hls_pick_media_playlist($master, $masterBody);
     $mediaBody = $mediaUrl !== null ? webcam_http_get($mediaUrl) : $masterBody;
-    if ($mediaBody === null) {
+    if ($mediaBody === null || !webcam_hls_playlist_is_live($mediaBody)) {
+        return false;
+    }
+    $segmentUrl = webcam_hls_last_segment_url($mediaBody, $mediaUrl ?? $master);
+    if ($segmentUrl === null) {
         return false;
     }
 
-    return webcam_hls_playlist_is_live($mediaBody);
+    return webcam_hls_segment_reachable($segmentUrl);
 }
 
 function webcam_probe_url(string $url, string $kind = 'iframe'): bool
@@ -1259,7 +1329,7 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
 /**
  * @return array{online:bool,skip_rotation:bool,embed_configured:bool}
  */
-function webcam_url_status(string $url, string $kind = 'iframe'): array
+function webcam_url_status(string $url, string $kind = 'iframe', bool $forceProbe = false): array
 {
     $url = webcam_validate_url($url);
     if ($url === null) {
@@ -1272,7 +1342,8 @@ function webcam_url_status(string $url, string $kind = 'iframe'): array
 
     $cache = webcam_status_read_cache($url);
     $now = time();
-    $needsProbe = ($cache['last_probe'] ?? null) === null
+    $needsProbe = $forceProbe
+        || ($cache['last_probe'] ?? null) === null
         || ($now - (int)$cache['last_probe']) >= webcam_probe_ttl_sec();
     // Don't hold skip/offline for the full TTL when last success is already stale.
     if (!$needsProbe && ($cache['last_ok'] ?? null) !== null) {
@@ -1340,7 +1411,7 @@ function webcam_skip_rotation(?string $rotationUrl = null): bool
         return true;
     }
 
-    return webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'))['skip_rotation'];
+    return webcam_url_status((string)$entry['url'], (string)($entry['kind'] ?? 'iframe'), true)['skip_rotation'];
 }
 
 /** @deprecated */

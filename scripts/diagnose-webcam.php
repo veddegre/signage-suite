@@ -46,9 +46,10 @@ foreach ($registry as $key => $entry) {
         }
     }
 
-    $status = webcam_url_status($url, $kind);
+    $status = webcam_url_status($url, $kind, true);
     echo '  probe online: ' . ($status['online'] ? 'yes' : 'no') . "\n";
     echo '  skip rotation: ' . ($status['skip_rotation'] ? 'yes' : 'no') . "\n";
+    echo '  rotation skip: ' . (webcam_skip_rotation('webcam.php?cam=' . rawurlencode($key)) ? 'yes' : 'no') . "\n";
 
     if (webcam_is_stream_frame_url($url) || webcam_is_ant_media_play_url($url) || $kind === 'stream') {
         $master = webcam_stream_playlist_url($url);
@@ -64,6 +65,13 @@ foreach ($registry as $key => $entry) {
                 echo '  last segment: ' . trim($m[1]) . "\n";
             }
             echo '  hls live: ' . (is_string($mediaBody) && webcam_hls_playlist_is_live($mediaBody) ? 'yes' : 'no') . "\n";
+            if (is_string($mediaBody) && $master !== null) {
+                $seg = webcam_hls_last_segment_url($mediaBody, $mediaUrl ?? $master);
+                if ($seg !== null) {
+                    echo '  hls segment: ' . ($seg) . "\n";
+                    echo '  segment ok: ' . (webcam_hls_segment_reachable($seg) ? 'yes' : 'no') . "\n";
+                }
+            }
             if ($kind === 'stream' && !webcam_is_stream_frame_url($url)) {
                 echo '  board playlist: ' . (webcam_hls_proxied_playlist(['key' => $key, 'url' => $url, 'kind' => 'stream']) !== null ? 'ok' : 'unavailable') . "\n";
             }

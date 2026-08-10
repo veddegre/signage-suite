@@ -157,6 +157,13 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     return /raspberry|aarch64|armv7|armv8|linux arm/i.test(ua);
   }
 
+  function iframeBustUrl(base) {
+    base = (base || '').split('#')[0];
+    if (!base) return base;
+    const sep = base.indexOf('?') >= 0 ? '&' : '?';
+    return base + sep + 'ec=' + Date.now();
+  }
+
   function showStreamIframe(url) {
     const frame = document.getElementById('frame');
     if (!frame) return;
@@ -176,10 +183,12 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     return video;
   }
 
-  function loadStream(playlistUrl, direct) {
+  function loadStream(playlistUrl, direct, opts) {
+    opts = opts || {};
     const video = ensureVideoFrame();
     if (!video || !playlistUrl) {
-      if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+      if (typeof opts.onGiveUp === 'function') opts.onGiveUp();
+      else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
       return;
     }
     const lowEnd = isLowEndKiosk();
@@ -194,44 +203,119 @@ $camJson['wetmetIframe'] = $wetmetIframe;
         maxBufferLength: lowEnd ? 24 : 12,
       });
       hlsPlayer.on(window.Hls.Events.ERROR, function (_event, data) {
-        if (data && data.fatal && cam.streamIframe) {
-          showStreamIframe(cam.streamIframe);
+        if (!data || !data.fatal) return;
+        if (typeof opts.onFatal === 'function') {
+          opts.onFatal(data);
+          return;
         }
+        if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
       });
       hlsPlayer.loadSource(direct ? playlistUrl : refreshImageSrc(playlistUrl));
       hlsPlayer.attachMedia(video);
       hlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, function () {
         video.play().catch(function () {
-          if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+          if (typeof opts.onGiveUp === 'function') opts.onGiveUp();
+          else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
         });
       });
       setTimeout(function () {
-        if (video.readyState < 2 && cam.streamIframe) {
-          showStreamIframe(cam.streamIframe);
+        if (video.readyState >= 2) return;
+        if (typeof opts.onStall === 'function') {
+          opts.onStall();
+          return;
         }
+        if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
       }, lowEnd ? 18000 : 12000);
       return;
     }
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = direct ? playlistUrl : refreshImageSrc(playlistUrl);
       video.play().catch(function () {
-        if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+        if (typeof opts.onGiveUp === 'function') opts.onGiveUp();
+        else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
       });
       return;
     }
-    if (cam.streamIframe) showStreamIframe(cam.streamIframe);
+    if (typeof opts.onGiveUp === 'function') opts.onGiveUp();
+    else if (cam.streamIframe) showStreamIframe(iframeBustUrl(cam.streamIframe));
   }
 
-  async function refreshWetmetDirect() {
-    try {
-      const res = await fetch(cam.streamApi + '&wetmet=1', { cache: 'no-store' });
-      const data = await res.json();
-      if (data && data.ok && data.playlist) {
-        loadStream(data.playlist, true);
-        return true;
+  if (cam.preferIframe && cam.streamIframe) {
+    let wetmetUsingIframe = false;
+    let wetmetHlsRetries = 0;
+    let wetmetLastVideoTime = -1;
+    let wetmetLastVideoAdvanceAt = Date.now();
+    const wetmetMaxHlsRetries = 2;
+    // WetMet signed URLs expire ~30 min; refresh sooner (like a manual reload) when stuck.
+    const wetmetRefreshMs = streamRefreshMs > 0
+      ? Math.max(300000, Math.min(streamRefreshMs, 600000))
+      : 600000;
+
+    function showWetmetIframe() {
+      wetmetUsingIframe = true;
+      showStreamIframe(iframeBustUrl(cam.streamIframe));
+    }
+
+    function wetmetRetryOrIframe() {
+      if (wetmetHlsRetries < wetmetMaxHlsRetries) {
+        wetmetHlsRetries++;
+        setTimeout(function () {
+          refreshWetmetDirect();
+        }, 1200 * wetmetHlsRetries);
+        return;
       }
-    } catch (e) {}
-    return false;
+      showWetmetIframe();
+    }
+
+    async function refreshWetmetDirect() {
+      try {
+        const res = await fetch(cam.streamApi + '&wetmet=1', { cache: 'no-store' });
+        const data = await res.json();
+        if (data && data.ok && data.playlist) {
+          wetmetUsingIframe = false;
+          wetmetHlsRetries = 0;
+          wetmetLastVideoTime = -1;
+          wetmetLastVideoAdvanceAt = Date.now();
+          loadStream(data.playlist, true, {
+            onFatal: wetmetRetryOrIframe,
+            onStall: wetmetRetryOrIframe,
+            onGiveUp: showWetmetIframe,
+          });
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function wetmetPeriodicRefresh() {
+      if (wetmetUsingIframe) {
+        showWetmetIframe();
+        return;
+      }
+      refreshWetmetDirect().then(function (ok) {
+        if (!ok) showWetmetIframe();
+      });
+    }
+
+    refreshWetmetDirect().then(function (ok) {
+      if (!ok) showWetmetIframe();
+    });
+    setInterval(wetmetPeriodicRefresh, wetmetRefreshMs);
+    setInterval(function () {
+      if (wetmetUsingIframe) return;
+      const video = document.getElementById('cam-video');
+      if (!video || video.readyState < 2) return;
+      if (video.currentTime > wetmetLastVideoTime + 0.05) {
+        wetmetLastVideoTime = video.currentTime;
+        wetmetLastVideoAdvanceAt = Date.now();
+        return;
+      }
+      if (Date.now() - wetmetLastVideoAdvanceAt > 45000) {
+        wetmetLastVideoAdvanceAt = Date.now();
+        wetmetRetryOrIframe();
+      }
+    }, 12000);
+    return;
   }
 
   async function refreshStreamPlaylist() {
@@ -242,18 +326,6 @@ $camJson['wetmetIframe'] = $wetmetIframe;
         loadStream(data.playlist, false);
       }
     } catch (e) {}
-  }
-
-  if (cam.preferIframe && cam.streamIframe) {
-    if (isLowEndKiosk()) {
-      refreshWetmetDirect().then(function (ok) {
-        if (!ok) showStreamIframe(cam.streamIframe);
-        else setInterval(refreshWetmetDirect, 25 * 60 * 1000);
-      });
-      return;
-    }
-    showStreamIframe(cam.streamIframe);
-    return;
   }
 
   if (cam.streamPlaylist) {
@@ -292,17 +364,10 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     return (cam.url || '').split('#')[0];
   }
 
-  function iframeBustUrl() {
-    const base = iframeBaseUrl();
-    if (!base) return base;
-    const sep = base.indexOf('?') >= 0 ? '&' : '?';
-    return base + sep + 'ec=' + Date.now();
-  }
-
   function startIframeHourlyReload() {
     if (reloadMs <= 0) return;
     setInterval(function () {
-      frame.src = iframeBaseUrl();
+      frame.src = iframeBustUrl(iframeBaseUrl());
     }, reloadMs);
   }
 

@@ -8438,6 +8438,34 @@ function serializeSlideDeckForSave() {
   stripSlideDeckFormNames(deck);
 }
 
+function collectRotationWindowRows(card) {
+  const windowRows = [];
+  card.querySelectorAll('[data-rotation-window-row]').forEach(function (winRow) {
+    const fromInp = winRow.querySelector('input[name*="[from]"]');
+    const toInp = winRow.querySelector('input[name*="[to]"]');
+    const wtInp = winRow.querySelector('input[name*="[weight]"]');
+    const from = fromInp ? fromInp.value.trim() : '';
+    const to = toInp ? toInp.value.trim() : '';
+    if (from === '' || to === '') return;
+    const win = { from: from, to: to };
+    const wt = wtInp ? wtInp.value.trim() : '';
+    if (wt !== '') win.weight = wt;
+    windowRows.push(win);
+  });
+  return windowRows;
+}
+
+function applyRotationWindowRowsToPayload(row, windowRows) {
+  if (windowRows.length === 0) return;
+  // Single window without weight keeps legacy from/to fields; any weight needs windows[].
+  if (windowRows.length === 1 && !windowRows[0].weight) {
+    row.from = windowRows[0].from;
+    row.to = windowRows[0].to;
+    return;
+  }
+  row.windows = windowRows;
+}
+
 function collectRotationCardRow(card) {
   const row = {};
   const urlInp = card.querySelector('[data-rotation-url], input[name*="[url]"]');
@@ -8446,22 +8474,7 @@ function collectRotationCardRow(card) {
   const offInp = card.querySelector('input[name*="[off]"]');
   if (urlInp) row.url = urlInp.value.trim();
   if (dwellInp) row.dwell = dwellInp.value.trim();
-  const windowRows = [];
-  card.querySelectorAll('[data-rotation-window-row]').forEach(function (winRow) {
-    const fromInp = winRow.querySelector('input[name*="[from]"]');
-    const toInp = winRow.querySelector('input[name*="[to]"]');
-    const from = fromInp ? fromInp.value.trim() : '';
-    const to = toInp ? toInp.value.trim() : '';
-    if (from !== '' && to !== '') {
-      windowRows.push({ from: from, to: to });
-    }
-  });
-  if (windowRows.length === 1) {
-    row.from = windowRows[0].from;
-    row.to = windowRows[0].to;
-  } else if (windowRows.length > 1) {
-    row.windows = windowRows;
-  }
+  applyRotationWindowRowsToPayload(row, collectRotationWindowRows(card));
   const wdAll = card.querySelectorAll('input[name*="[weekdays]"]');
   const wdChecked = card.querySelectorAll('input[name*="[weekdays]"]:checked');
   if (wdAll.length && wdChecked.length < wdAll.length) {

@@ -267,4 +267,29 @@ if (($stored['windows'][0]['weight'] ?? 0) !== 4 || isset($stored['windows'][1][
     fwrite(STDERR, "FAIL: rotation_store_window_fields weight serialization\n");
     exit(1);
 }
+$parsedJsonRow = rotation_parse_pages_rows([[
+    'url' => 'slides.php?slide=test.png',
+    'dwell' => 12,
+    'windows' => [
+        ['from' => '7', 'to' => '9', 'weight' => '5'],
+        ['from' => '16', 'to' => '18', 'weight' => '3'],
+    ],
+]]);
+if (count($parsedJsonRow) !== 1
+    || (int)(($parsedJsonRow[0]['windows'][0]['weight'] ?? 0)) !== 5
+    || (int)(($parsedJsonRow[0]['windows'][1]['weight'] ?? 0)) !== 3) {
+    fwrite(STDERR, "FAIL: rotation_parse_pages_rows window weights from JSON-shaped row\n");
+    exit(1);
+}
+$parsedSingleWeighted = rotation_parse_pages_rows([[
+    'url' => 'photo.php',
+    'dwell' => 60,
+    'windows' => [['from' => '14', 'to' => '22', 'weight' => '8']],
+]]);
+if (count($parsedSingleWeighted) !== 1
+    || !isset($parsedSingleWeighted[0]['windows'][0]['weight'])
+    || (int)$parsedSingleWeighted[0]['windows'][0]['weight'] !== 8) {
+    fwrite(STDERR, "FAIL: rotation_parse_pages_rows single window with weight\n");
+    exit(1);
+}
 echo "Sync metadata preservation: OK\n";

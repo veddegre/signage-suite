@@ -247,9 +247,14 @@ If still choppy: lower **Max flows** on attack maps in admin, or use **scale 1**
 
 ### GRPM / WetMet webcam (`webcam.php?cam=grpm`)
 
-Uses a **nested iframe** to WetMet’s Video.js player on desktop (signed HLS — not proxied from the server). On **Pi kiosks**, the board auto-switches to a **single `<video>` + hls.js** path with a fresh signed playlist from the server (lighter than iframe-in-iframe). Falls back to the WetMet iframe if direct HLS fails. **Requires Pi 5 or x86** for reliable live playback ([Hardware requirements](#hardware-requirements)).
+Uses **direct HLS** first (fresh signed URL from your signage server), then falls back to WetMet’s iframe if needed. **Auto-recovery** mimics a manual browser reload:
 
-WetMet’s embed also cycles its player about every **5 minutes** — a brief flash can happen even on desktop when using the iframe path.
+- Re-fetches a new signed playlist on a timer (every **5–10 minutes**; tune via admin → Webcam → **Live stream token refresh**)
+- Retries HLS twice on fatal errors or startup stall before iframe fallback
+- Reloads the iframe with a cache-bust query when in fallback mode
+- Detects frozen video (no frame advance for ~45s) and triggers recovery
+
+WetMet’s embed also cycles its player about every **5 minutes** — a brief flash can still happen on the iframe path.
 
 When WetMet’s HLS feed is offline, **`webcam.php?cam=grpm` is auto-skipped in rotation** (and shows “Webcam not available” if opened directly). The server re-probes on a timer (default **30 minutes**; shorten in admin → **Webcam** → **Offline re-probe interval** for testing) and adds it back when the stream is live again.
 
