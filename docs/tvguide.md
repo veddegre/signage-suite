@@ -2,6 +2,8 @@
 
 Prime-time grid for channels you pick — `tvguide.php?d=<key>` in rotation.
 
+**Install profile:** Available on **home** only. The **work** profile hides TV Guide from admin, rotation, and direct URLs (same as Meal Calendar and homelab boards).
+
 ## Requirements
 
 - **[Schedules Direct](https://schedulesdirect.org/)** account (~$35/year)

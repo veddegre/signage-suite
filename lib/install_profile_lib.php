@@ -13,6 +13,7 @@ const SIGNAGE_WORK_DISABLED_BOARDS = [
     'tailscale',
     'ntfy',
     'meals',
+    'tvguide',
 ];
 
 /** @return 'home'|'work' */

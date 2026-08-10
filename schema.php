@@ -49,7 +49,7 @@ function admin_schema(): array
         'site' => ['title' => 'Site', 'fields' => [
             ['key' => 'PROFILE', 'label' => 'Install profile', 'type' => 'select',
              'options' => ['home', 'work'], 'default' => 'home',
-             'help' => 'Work hides Homelab, UniFi, Uptime Kuma, Tailscale, ntfy, and Meal Calendar from admin, rotation quick-add, playlists, and direct board URLs. Save here, then refresh kiosks (~30s).'],
+             'help' => 'Work hides Homelab, UniFi, Uptime Kuma, Tailscale, ntfy, Meal Calendar, and TV Guide from admin, rotation quick-add, playlists, and direct board URLs. Save here, then refresh kiosks (~30s).'],
         ]],
         'security' => ['title' => 'Security', 'fields' => [
             ['key' => 'ALLOW_PRIVATE_FETCH', 'label' => 'Allow private URL fetches', 'type' => 'bool', 'default' => false,
