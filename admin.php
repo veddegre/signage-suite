@@ -365,6 +365,9 @@ if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()
         } elseif (rotation_playlist_template_is_builtin($name)) {
             $flash = 'That name is reserved for a built-in template — choose another name.';
             $flashOk = false;
+        } elseif (!rotation_playlist_template_can_save_overwrite($name)) {
+            $flash = 'That template name is already in use — pick another name, or ask an admin to update the site template.';
+            $flashOk = false;
         } elseif (rotation_playlist_template_save($name, $pages)) {
             audit_log('rotation.template.save', 'Saved playlist template', ['name' => $name]);
             $flash = 'Saved playlist template “' . $name . '”.';
@@ -383,6 +386,9 @@ if ($authed && $board === 'rotation' && admin_can_board('rotation') && csrf_ok()
             $flashOk = false;
         } elseif (rotation_playlist_template_is_builtin($name)) {
             $flash = 'Built-in templates cannot be deleted — load one and save under a new name to customize.';
+            $flashOk = false;
+        } elseif (!rotation_playlist_template_can_delete($name)) {
+            $flash = 'You can only delete your own templates. Site templates can be removed by an admin.';
             $flashOk = false;
         } elseif (rotation_playlist_template_delete($name)) {
             audit_log('rotation.template.delete', 'Deleted playlist template', ['name' => $name]);
@@ -2262,6 +2268,7 @@ foreach ($rotationQuickAdd as $item) {
 $rotationStarterPages = rotation_starter_pages();
 $rotationMainPages = [];
 $rotationTemplates = [];
+$rotationTemplateMeta = [];
 if ($authed && $board === 'rotation') {
     require_once __DIR__ . '/lib/rotation_calendar_lib.php';
     $rotationMainPages = rotation_screen_pages('main');
@@ -2269,6 +2276,7 @@ if ($authed && $board === 'rotation') {
         $rotationMainPages = $rotationStarterPages;
     }
     $rotationTemplates = rotation_playlist_templates_all();
+    $rotationTemplateMeta = rotation_playlist_template_meta_for_session();
     $rotationCalendarFeedKeys = rotation_calendar_feed_catalog();
     $rotationCalendarOverrides = is_array($rawConf['rotation.CALENDAR_OVERRIDES'] ?? null)
         ? $rawConf['rotation.CALENDAR_OVERRIDES'] : [];
@@ -5059,24 +5067,30 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 endforeach; ?>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="templates" role="tabpanel" hidden>
-                <p class="help" style="margin:0 0 10px">Save the selected display’s playlist as a named preset, or load a preset onto that display (replaces current pages).</p>
+                <p class="help" style="margin:0 0 10px">Save the selected display’s playlist as a named preset, or load a preset onto that display (replaces current pages).<?php if (signage_install_profile_is_work()): ?> You see site templates saved by admins and your own saved templates — not other users’ private presets.<?php else: ?> You see built-in presets, site templates saved by admins, and your own saved templates — not other users’ private presets.<?php endif; ?></p>
                 <div class="rotation-template-row">
                   <div>
                     <label class="mini" for="rotationTemplateSelect">Saved templates</label>
                     <select id="rotationTemplateSelect">
                       <option value="">Choose a template…</option>
                       <?php foreach ($rotationTemplates as $tplName => $tplPages):
-                        $tplBuiltin = rotation_playlist_template_is_builtin($tplName);
+                        $tplMeta = $rotationTemplateMeta[$tplName] ?? null;
+                        $tplBuiltin = !empty($tplMeta['builtin']);
+                        $tplScope = (string)($tplMeta['scope'] ?? '');
+                        $scopeSuffix = $tplBuiltin ? ' (built-in)' : ($tplScope === 'site' ? ' (site)' : ($tplScope === 'mine' ? ' (yours)' : ($tplScope !== '' ? ' (' . $tplScope . ')' : '')));
                       ?>
-                      <option value="<?= h($tplName) ?>"><?= h($tplName) ?><?= $tplBuiltin ? ' (built-in)' : '' ?> (<?= count($tplPages) ?> page<?= count($tplPages) === 1 ? '' : 's' ?>)</option>
+                      <option value="<?= h($tplName) ?>"><?= h($tplName) ?><?= h($scopeSuffix) ?> (<?= count($tplPages) ?> page<?= count($tplPages) === 1 ? '' : 's' ?>)</option>
                       <?php endforeach; ?>
                     </select>
                   </div>
                   <button type="button" class="addrow" onclick="loadRotationTemplate(document.getElementById('rotationTargetScreen').value)">Load onto display</button>
                   <button type="button" class="secondary" onclick="saveRotationTemplate()">Save current playlist</button>
-                  <button type="button" class="secondary" onclick="deleteRotationTemplate()">Delete template</button>
+                  <button type="button" class="secondary" id="rotationTemplateDeleteBtn" onclick="deleteRotationTemplate()">Delete template</button>
                 </div>
-                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — meal calendar, weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. <strong>Security wall</strong> — KEV, CVE, cert expiry, phish, ransomware, HIBP (~45–60s each). Create the dinner slide from Slides → Create → Dinner menu template; plan the week on <strong>Meal calendar</strong>.</p>
+                <p class="help" style="margin:10px 0 0"><?php if (admin_is_super()): ?>Templates you save are <strong>site-wide</strong> (every user can load them).<?php else: ?>Templates you save are <strong>private to your account</strong>.<?php if (signage_install_profile_is_work()): ?> You can also load admin site templates.<?php else: ?> You can also load built-in and admin site templates.<?php endif; ?><?php endif; ?> Delete removes only templates you’re allowed to manage.</p>
+                <?php if (!signage_install_profile_is_work()): ?>
+                <p class="help" style="margin:10px 0 0"><strong>Kitchen weeknight</strong> — meal calendar, weather, dinner slide (<code>slides.php?slide=dinner-menu.png</code>), traffic (evenings). <strong>Weekly planner</strong> — today at a glance, full calendar, weather. <strong>Security wall</strong> — KEV, CVE, cert expiry, phish, ransomware, HIBP (~45–60s each).</p>
+                <?php endif; ?>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="calendar" role="tabpanel" hidden>
                 <p class="help" style="margin:0 0 10px">During a matching calendar event, either swap the whole playlist or limit the slide deck to specific files while other rotation boards keep playing. Feeds come from <strong>Calendar → ICS feeds</strong>. Full-playlist overrides beat the normal playlist; slide sets filter the deck only. Emergency mode beats both.</p>
@@ -10860,6 +10874,7 @@ function rotationAdminPageUrl() {
 const ROTATION_STARTER = <?= json_encode($rotationStarterPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_MAIN_PAGES = <?= json_encode($rotationMainPages, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_TEMPLATES = <?= json_encode($rotationTemplates, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
+const ROTATION_TEMPLATE_META = <?= json_encode($rotationTemplateMeta ?? [], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 const ROTATION_BUILTIN_NAMES = <?= json_encode(array_keys(rotation_playlist_builtin_templates()), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
 
 function serializeRotationDeckPages(deck) {
@@ -10940,13 +10955,30 @@ function deleteRotationTemplate() {
     alert('Choose a template to delete.');
     return;
   }
-  if (ROTATION_BUILTIN_NAMES && ROTATION_BUILTIN_NAMES.indexOf(name) >= 0) {
+  const meta = ROTATION_TEMPLATE_META && ROTATION_TEMPLATE_META[name];
+  if (meta && meta.builtin) {
     alert('Built-in templates cannot be deleted. Load one and save under a new name to customize.');
+    return;
+  }
+  if (meta && meta.can_delete === false) {
+    alert('You can only delete your own templates. Site templates can be removed by an admin.');
     return;
   }
   if (!confirm('Delete playlist template “' + name + '”?\n\nThis cannot be undone.')) return;
   rotationTemplatePost('rotation_template_delete', { template_name: name });
 }
+
+function syncRotationTemplateDeleteBtn() {
+  const sel = document.getElementById('rotationTemplateSelect');
+  const btn = document.getElementById('rotationTemplateDeleteBtn');
+  if (!sel || !btn) return;
+  const name = sel.value;
+  const meta = name && ROTATION_TEMPLATE_META ? ROTATION_TEMPLATE_META[name] : null;
+  btn.disabled = !name || !meta || meta.can_delete === false;
+}
+
+document.getElementById('rotationTemplateSelect')?.addEventListener('change', syncRotationTemplateDeleteBtn);
+syncRotationTemplateDeleteBtn();
 
 function bindPlaylistDeckDrag(deck, cardSelector, handleSelector, reindexFn, bindCardFn) {
   if (deck.dataset.dragDeckBound) {

@@ -4234,6 +4234,9 @@ function rotation_playlist_filter_pages_for_profile(array $pages): array
 /** @return array<string,list<array<string,mixed>>> */
 function rotation_playlist_builtin_templates(): array
 {
+    if (signage_install_profile_is_work()) {
+        return [];
+    }
     $raw = [
         'Kitchen weeknight' => [
             ['url' => 'meals.php', 'dwell' => 60, 'from' => 16, 'to' => 21],
@@ -4271,7 +4274,107 @@ function rotation_playlist_template_is_builtin(string $name): bool
     return array_key_exists(trim($name), rotation_playlist_builtin_templates());
 }
 
-/** Built-in presets plus saved templates (saved names override built-ins). */
+/**
+ * Normalize stored template (legacy page list or {owner, pages}).
+ * @return array{owner: ?string, pages: list<array<string,mixed>>}|null
+ */
+function rotation_playlist_template_normalize_entry(mixed $raw): ?array
+{
+    if (!is_array($raw)) {
+        return null;
+    }
+    if (array_key_exists('pages', $raw) && is_array($raw['pages'])) {
+        $owner = trim((string)($raw['owner'] ?? ''));
+        $pages = rotation_parse_pages_rows($raw['pages']);
+        if ($pages === []) {
+            return null;
+        }
+
+        return [
+            'owner' => $owner !== '' ? $owner : null,
+            'pages' => $pages,
+        ];
+    }
+    $pages = rotation_parse_pages_rows($raw);
+    if ($pages === []) {
+        return null;
+    }
+
+    return ['owner' => null, 'pages' => $pages];
+}
+
+/** @return array<string,array{owner: ?string, pages: list<array<string,mixed>>}> */
+function rotation_playlist_templates_stored(): array
+{
+    $raw = cfg('rotation.PLAYLIST_TEMPLATES', []);
+    if (!is_array($raw)) {
+        return [];
+    }
+    $out = [];
+    foreach ($raw as $name => $entry) {
+        if (!is_string($name) || trim($name) === '') {
+            continue;
+        }
+        $normalized = rotation_playlist_template_normalize_entry($entry);
+        if ($normalized === null) {
+            continue;
+        }
+        $out[trim($name)] = $normalized;
+    }
+    ksort($out, SORT_NATURAL | SORT_FLAG_CASE);
+
+    return $out;
+}
+
+function rotation_playlist_template_session_is_super(): bool
+{
+    if (!function_exists('admin_is_super')) {
+        require_once __DIR__ . '/users_lib.php';
+    }
+
+    return admin_is_super();
+}
+
+function rotation_playlist_template_session_user_id(): ?string
+{
+    if (!function_exists('admin_user_id')) {
+        require_once __DIR__ . '/users_lib.php';
+    }
+    $uid = admin_user_id();
+
+    return ($uid !== null && $uid !== '') ? $uid : null;
+}
+
+/** Site templates (owner null) and the user's own templates; super sees all saved. */
+function rotation_playlist_template_visible_to_session(array $entry): bool
+{
+    if (rotation_playlist_template_session_is_super()) {
+        return true;
+    }
+    $owner = $entry['owner'] ?? null;
+    if ($owner === null) {
+        return true;
+    }
+    $uid = rotation_playlist_template_session_user_id();
+
+    return $uid !== null && $owner === $uid;
+}
+
+/** @return array<string,list<array<string,mixed>>> Saved templates visible to the current admin session. */
+function rotation_playlist_templates(): array
+{
+    $out = [];
+    foreach (rotation_playlist_templates_stored() as $name => $entry) {
+        if (!rotation_playlist_template_visible_to_session($entry)) {
+            continue;
+        }
+        $out[$name] = $entry['pages'];
+    }
+
+    return $out;
+}
+
+/** Built-in presets plus saved templates visible to the current session. */
 function rotation_playlist_templates_all(): array
 {
     $merged = rotation_playlist_builtin_templates();
@@ -4283,27 +4386,109 @@ function rotation_playlist_templates_all(): array
     return $merged;
 }
 
-/** @return array<string,list<array<string,mixed>>> */
-function rotation_playlist_templates(): array
+/** @return array<string,array{owner: ?string, pages: list<array<string,mixed>>}>|null */
+function rotation_playlist_template_stored_entry(string $name): ?array
 {
-    $raw = cfg('rotation.PLAYLIST_TEMPLATES', []);
-    if (!is_array($raw)) {
-        return [];
+    $name = trim($name);
+    if ($name === '') {
+        return null;
     }
-    $out = [];
-    foreach ($raw as $name => $pages) {
-        if (!is_string($name) || trim($name) === '' || !is_array($pages)) {
-            continue;
-        }
-        $parsed = rotation_parse_pages_rows($pages);
-        if ($parsed === []) {
-            continue;
-        }
-        $out[trim($name)] = $parsed;
-    }
-    ksort($out, SORT_NATURAL | SORT_FLAG_CASE);
+    $stored = rotation_playlist_templates_stored();
 
-    return $out;
+    return $stored[$name] ?? null;
+}
+
+function rotation_playlist_template_scope_label(array $entry): string
+{
+    if (($entry['owner'] ?? null) === null) {
+        return 'site';
+    }
+    if (rotation_playlist_template_session_is_super()) {
+        if (!function_exists('admin_username_for_id')) {
+            require_once __DIR__ . '/users_lib.php';
+        }
+
+        return admin_username_for_id((string)$entry['owner']);
+    }
+
+    return 'mine';
+}
+
+/**
+ * UI + JS metadata for template permissioning.
+ * @return array<string,array{builtin:bool,scope:string,can_delete:bool,page_count:int}>
+ */
+function rotation_playlist_template_meta_for_session(): array
+{
+    $meta = [];
+    foreach (rotation_playlist_builtin_templates() as $name => $pages) {
+        $meta[$name] = [
+            'builtin' => true,
+            'scope' => 'builtin',
+            'can_delete' => false,
+            'page_count' => count($pages),
+        ];
+    }
+    foreach (rotation_playlist_templates_stored() as $name => $entry) {
+        if (!rotation_playlist_template_visible_to_session($entry)) {
+            continue;
+        }
+        $meta[$name] = [
+            'builtin' => false,
+            'scope' => rotation_playlist_template_scope_label($entry),
+            'can_delete' => rotation_playlist_template_can_delete($name),
+            'page_count' => count($entry['pages']),
+        ];
+    }
+    ksort($meta, SORT_NATURAL | SORT_FLAG_CASE);
+
+    return $meta;
+}
+
+function rotation_playlist_template_can_delete(string $name): bool
+{
+    if (rotation_playlist_template_is_builtin($name)) {
+        return false;
+    }
+    $entry = rotation_playlist_template_stored_entry($name);
+    if ($entry === null) {
+        return false;
+    }
+    if (rotation_playlist_template_session_is_super()) {
+        return true;
+    }
+    $uid = rotation_playlist_template_session_user_id();
+    if ($uid === null) {
+        return false;
+    }
+    $owner = $entry['owner'] ?? null;
+
+    return $owner !== null && $owner === $uid;
+}
+
+function rotation_playlist_template_can_save_overwrite(string $name): bool
+{
+    $name = trim($name);
+    if ($name === '' || rotation_playlist_template_is_builtin($name)) {
+        return false;
+    }
+    $entry = rotation_playlist_template_stored_entry($name);
+    if ($entry === null) {
+        return true;
+    }
+    if (rotation_playlist_template_session_is_super()) {
+        return true;
+    }
+    if (!rotation_playlist_template_visible_to_session($entry)) {
+        return false;
+    }
+    $uid = rotation_playlist_template_session_user_id();
+    if ($uid === null) {
+        return false;
+    }
+    $owner = $entry['owner'] ?? null;
+
+    return $owner !== null && $owner === $uid;
 }
 
 /** @param list<array<string,mixed>> $pages */
@@ -4313,15 +4498,27 @@ function rotation_playlist_template_save(string $name, array $pages): bool
     if ($name === '' || strlen($name) > 80) {
         return false;
     }
+    if (!rotation_playlist_template_can_save_overwrite($name)) {
+        return false;
+    }
     $pages = rotation_parse_pages_rows($pages);
     if ($pages === []) {
         return false;
     }
+    $owner = rotation_playlist_template_session_is_super()
+        ? null
+        : rotation_playlist_template_session_user_id();
+    if ($owner === null && !rotation_playlist_template_session_is_super()) {
+        return false;
+    }
 
-    return cfg_update(static function (array $conf) use ($name, $pages): array {
+    return cfg_update(static function (array $conf) use ($name, $pages, $owner): array {
         $templates = is_array($conf['rotation.PLAYLIST_TEMPLATES'] ?? null)
             ? $conf['rotation.PLAYLIST_TEMPLATES'] : [];
-        $templates[$name] = $pages;
+        $templates[$name] = [
+            'owner' => $owner,
+            'pages' => $pages,
+        ];
         $conf['rotation.PLAYLIST_TEMPLATES'] = $templates;
 
         return $conf;
@@ -4331,7 +4528,7 @@ function rotation_playlist_template_save(string $name, array $pages): bool
 function rotation_playlist_template_delete(string $name): bool
 {
     $name = trim($name);
-    if ($name === '') {
+    if ($name === '' || !rotation_playlist_template_can_delete($name)) {
         return false;
     }
 
