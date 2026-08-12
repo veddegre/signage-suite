@@ -476,13 +476,13 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     inset: 0;
     background: var(--harbor);
   }
-  /* Roads / shorelines / admin lines on dark_nolabels — lift without touching labels. */
+  /* Voyager linework (roads/coasts/borders), dimmed to stay dark on signage. */
   #radarMap .radar-basemap-base {
-    filter: contrast(1.55) brightness(1.3) saturate(1.08);
+    filter: brightness(0.48) contrast(1.12) saturate(0.9);
   }
-  /* Place names on dark_only_labels — keep readable on TVs. */
+  /* Place names — separate light-on-dark label tiles. */
   #radarMap .radar-basemap-labels {
-    filter: brightness(1.75) contrast(1.2);
+    filter: brightness(1.65) contrast(1.15);
   }
   #radarMap .leaflet-control-attribution {
     background: rgba(12, 20, 34, 0.7);
@@ -876,8 +876,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
     }).setView(HOME, 7);
 
-    // Dark basemap + separate label layer above radar (each brightened via CSS).
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    // Dimmed Voyager (strong roads/borders) + dark-map labels on top.
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 10,
       className: 'radar-basemap-base',
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'
@@ -902,8 +902,7 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     updateRadarTagAlertNote();
 
     function showFrame(i) {
-      // Slightly clearer basemap lines under the radar wash
-      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.62 : 0));
+      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.68 : 0));
       if (radarFrames[i]) {
         document.getElementById('radarTime').textContent = fmtFrameTime(radarFrames[i].time);
       }
