@@ -476,6 +476,10 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     inset: 0;
     background: var(--harbor);
   }
+  /* Brighten label tiles only — base stays dark, place names read on TVs. */
+  #radarMap .radar-basemap-labels {
+    filter: brightness(1.75) contrast(1.2);
+  }
   #radarMap .leaflet-control-attribution {
     background: rgba(12, 20, 34, 0.7);
     color: var(--mist);
@@ -868,21 +872,32 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
     }).setView(HOME, 7);
 
-    // Voyager has high-contrast place names — dark_all labels wash out on many TVs.
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    // Dark basemap + separate label layer above radar (labels brightened via CSS).
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 10,
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'
     }).addTo(map);
+    if (!map.getPane('basemapLabels')) {
+      map.createPane('basemapLabels');
+      map.getPane('basemapLabels').style.zIndex = 450;
+      map.getPane('basemapLabels').style.pointerEvents = 'none';
+    }
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 10,
+      className: 'radar-basemap-labels',
+      pane: 'basemapLabels',
+      attribution: ''
+    }).addTo(map);
 
     L.circleMarker(HOME, {
-      radius: 8, color: '#0c1422', weight: 3, fillColor: '#ffb347', fillOpacity: 0.95
+      radius: 7, color: '#ffb347', weight: 2.5, fillColor: '#ffb347', fillOpacity: 0.95
     }).addTo(map);
 
     addNwsAlertLayer(map);
     updateRadarTagAlertNote();
 
     function showFrame(i) {
-      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.72 : 0));
+      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.7 : 0));
       if (radarFrames[i]) {
         document.getElementById('radarTime').textContent = fmtFrameTime(radarFrames[i].time);
       }
