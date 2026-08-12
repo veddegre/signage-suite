@@ -19,10 +19,10 @@
  * are no white flashes; a safety timeout moves on if a page ever hangs.
  *
  * The shell lays out at a fixed 1920×1080 and Chromium `documentElement.zoom`
- * fits it to the real window (4K kiosks). Do not use transform:scale() on a
- * parent of the board iframes — Wayland/GPU leaves iframe layers unscaled
- * (blue shell fills the panel, boards stuck in the upper-left). Kiosk Chromium
- * must use --force-device-scale-factor=1 under cage/Wayland.
+ * fits it to the real window (4K kiosks). Zoom is measured at zoom=1 then applied
+ * once (clamped) — never innerWidth×currentZoom, which runaway-scales. Do not use
+ * transform:scale() on a parent of the board iframes under Wayland/GPU. Kiosk
+ * Chromium must use --force-device-scale-factor=1 under cage/Wayland.
  */
 
 require_once __DIR__ . '/config.php';
@@ -157,16 +157,22 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
 <meta charset="UTF-8">
 <title>Signage</title>
 <script>
-/* signage-fit-zoom-v2 — early zoom so the first paint is not a 1080p corner on 4K */
+/* signage-fit-zoom-v3 — fit 1920×1080 canvas to the window without runaway zoom */
 (function () {
   function fit() {
-    var z = parseFloat(document.documentElement.style.zoom || '1') || 1;
-    var w = Math.max((window.innerWidth || 0) * z, window.outerWidth || 0, (screen && screen.width) || 0);
-    var h = Math.max((window.innerHeight || 0) * z, window.outerHeight || 0, (screen && screen.height) || 0);
-    if (!w || !h) return;
+    var html = document.documentElement;
+    // Measure at zoom=1. Never multiply innerWidth by the current zoom — Chromium
+    // keeps innerWidth in unzoomed CSS pixels, so that feedback loop goes 2→4→8…
+    html.style.zoom = '1';
+    var w = window.innerWidth || 1920;
+    var h = window.innerHeight || 1080;
     var s = Math.min(w / 1920, h / 1080);
-    if (s > 0 && isFinite(s)) document.documentElement.style.zoom = String(s);
+    if (!(s > 0) || !isFinite(s)) return;
+    if (s < 0.5) s = 0.5;
+    if (s > 3) s = 3;
+    html.style.zoom = String(s);
   }
+  window.signageFitZoom = fit;
   fit();
   addEventListener('resize', fit);
 })();
@@ -176,7 +182,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   <?= $signageThemeCss ?>
   * { margin:0; padding:0; }
   <?= signage_kiosk_cursor_css() ?>
-  /* Design canvas is 1920×1080; signage-fit-zoom-v2 scales via documentElement.zoom. */
+  /* Design canvas is 1920×1080; signage-fit-zoom-v3 scales via documentElement.zoom. */
   html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night); }
   #stage { position:absolute; top:0; left:0; width:1920px; height:1080px; overflow:hidden; }
   #stage iframe { position:absolute; top:0; left:0; width:1920px;
@@ -994,21 +1000,12 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   // Periodic shell reload flushes Chromium memory and stuck renderer state.
   setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
 
-  // Keep zoom in sync if the early head script ran before the window was sized.
-  // Marker: signage-fit-zoom-v2
-  (function () {
-    function fit() {
-      const z = parseFloat(document.documentElement.style.zoom || '1') || 1;
-      const w = Math.max((window.innerWidth || 0) * z, window.outerWidth || 0, (screen && screen.width) || 0);
-      const h = Math.max((window.innerHeight || 0) * z, window.outerHeight || 0, (screen && screen.height) || 0);
-      const s = Math.min(w / 1920, h / 1080);
-      if (!(s > 0) || !isFinite(s)) return;
-      document.documentElement.style.zoom = String(s);
-    }
-    fit();
-    addEventListener('resize', fit);
-    if (window.visualViewport) visualViewport.addEventListener('resize', fit);
-  })();
+  // Re-fit after layout settles (head script may have run before the window was sized).
+  // Marker: signage-fit-zoom-v3
+  if (typeof window.signageFitZoom === 'function') {
+    window.signageFitZoom();
+    if (window.visualViewport) visualViewport.addEventListener('resize', window.signageFitZoom);
+  }
 </script>
 <?php if ($showTicker):
     $signageTickerScreen = $SCREEN;
