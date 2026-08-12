@@ -476,7 +476,11 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     inset: 0;
     background: var(--harbor);
   }
-  /* Brighten label tiles only — base stays dark, place names read on TVs. */
+  /* Roads / shorelines / admin lines on dark_nolabels — lift without touching labels. */
+  #radarMap .radar-basemap-base {
+    filter: contrast(1.55) brightness(1.3) saturate(1.08);
+  }
+  /* Place names on dark_only_labels — keep readable on TVs. */
   #radarMap .radar-basemap-labels {
     filter: brightness(1.75) contrast(1.2);
   }
@@ -872,9 +876,10 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
     }).setView(HOME, 7);
 
-    // Dark basemap + separate label layer above radar (labels brightened via CSS).
+    // Dark basemap + separate label layer above radar (each brightened via CSS).
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 10,
+      className: 'radar-basemap-base',
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'
     }).addTo(map);
     if (!map.getPane('basemapLabels')) {
@@ -897,7 +902,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     updateRadarTagAlertNote();
 
     function showFrame(i) {
-      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.7 : 0));
+      // Slightly clearer basemap lines under the radar wash
+      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.62 : 0));
       if (radarFrames[i]) {
         document.getElementById('radarTime').textContent = fmtFrameTime(radarFrames[i].time);
       }
