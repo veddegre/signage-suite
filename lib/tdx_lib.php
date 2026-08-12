@@ -282,27 +282,73 @@ function tdx_admin_pages(?array $rawConf = null): array
     );
 }
 
+/**
+ * Whether a TDX page should load on the current display / preview scope.
+ * Matches the kiosk rule: ownerless pages are global; owned pages must be
+ * visible to the display assignee (or the logged-in operator in preview).
+ */
+function tdx_page_visible_on_display(array $entry): bool
+{
+    require_once __DIR__ . '/users_lib.php';
+    if (admin_preview_session_ready() && admin_is_super()) {
+        return true;
+    }
+    $scopeUid = admin_display_scope_user_id();
+    if ($scopeUid === null || $scopeUid === '') {
+        if (admin_preview_session_ready() && !admin_is_super()) {
+            return admin_entry_visible($entry);
+        }
+
+        return true;
+    }
+    $owner = admin_entry_owner($entry);
+    if ($owner === null) {
+        return true;
+    }
+
+    return admin_entry_visible_for_user($entry, $scopeUid);
+}
+
 /** @return array<string,mixed> */
 function tdx_resolve_page(?string $pageKey = null): array
 {
-    $pages = tdx_pages_config();
-    if ($pages === []) {
-        return ['key' => 'main', 'title' => 'Not available', 'sub' => '', 'app_id' => 0];
-    }
-
     require_once __DIR__ . '/users_lib.php';
+    $registry = tdx_pages_registry();
     $normalize = static fn($k) => tdx_normalize_page_key((string)$k);
-    $resolved = admin_resolve_display_registry_key($pages, (string)($pageKey ?? ''), $normalize);
-    if ($resolved === null || !isset($pages[$resolved])) {
+    $requested = trim((string)($pageKey ?? ''));
+    $unavailable = static function (string $key): array {
         return [
-            'key' => tdx_normalize_page_key((string)($pageKey ?? '')),
+            'key' => $key,
             'title' => 'Not available',
             'sub' => '',
             'app_id' => 0,
         ];
+    };
+
+    // Explicit ?d= key: load that page's settings from the full registry.
+    // Admin playlist preview adds ?screen= for the focused display; the old path
+    // re-filtered via admin_filter_map_for_scope and dropped ownerless / unshared
+    // pages as "Not available" even though the wall (and the URL) had settings.
+    if ($requested !== '') {
+        $resolved = admin_registry_resolve_key($registry, $requested, $normalize);
+        if ($resolved === null || !isset($registry[$resolved]) || !is_array($registry[$resolved])) {
+            return $unavailable($normalize($requested));
+        }
+        $entry = $registry[$resolved];
+        if (!tdx_page_visible_on_display($entry)) {
+            return $unavailable($resolved);
+        }
+
+        return ['key' => $resolved] + $entry;
     }
 
-    return ['key' => $resolved] + $pages[$resolved];
+    $pages = tdx_pages_config();
+    if ($pages === []) {
+        return $unavailable('main');
+    }
+    $first = array_key_first($pages);
+
+    return ['key' => (string)$first] + $pages[$first];
 }
 
 /**

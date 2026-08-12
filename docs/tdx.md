@@ -254,7 +254,8 @@ Same model as **Zabbix Monitoring**:
 | **Super admin** | Sets global URL + credentials; can share all pages with Operators |
 | **Operators** | Create pages for their team; **Access** controls who sees each page |
 
-- Pages without an owner are super-admin only on the wall and in rotation quick-add.
+- Pages without an owner are treated as **global** on the wall (any display can play them). In admin, ownerless pages stay super-admin–managed for editing / quick-add unless shared.
+- Previewing a playlist item while focused on an operator’s display loads that page’s saved settings (same as the wall). Super-admin preview is not blocked by the operator ACL for an explicit `tdx.php?d=` key.
 - **Share all with Operators** — bulk-shares every page tab.
 - Per-page **Access** — owner, users, roles (Operators).
 
