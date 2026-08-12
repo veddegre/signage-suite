@@ -476,6 +476,10 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     inset: 0;
     background: var(--harbor);
   }
+  /* Dark Carto labels are thin on TVs — lift contrast on the basemap only. */
+  #radarMap .radar-basemap {
+    filter: contrast(1.4) brightness(1.28) saturate(1.15);
+  }
   #radarMap .leaflet-control-attribution {
     background: rgba(12, 20, 34, 0.7);
     color: var(--mist);
@@ -505,15 +509,17 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     position: absolute;
     top: 18px;
     left: 22px;
-    font-size: 20px;
-    font-weight: 600;
+    z-index: 500;
+    font-size: 22px;
+    font-weight: 700;
     letter-spacing: 3px;
     text-transform: uppercase;
     color: var(--snow);
-    background: rgba(12, 20, 34, 0.82);
-    border: 1px solid var(--hairline);
+    background: rgba(12, 20, 34, 0.88);
+    border: 2px solid color-mix(in srgb, var(--snow) 35%, var(--hairline));
     border-radius: 8px;
-    padding: 8px 14px;
+    padding: 9px 15px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   }
   .radar .tag span { color: var(--beacon); }
   .radar .tag .alert-sev { color: #ff9d9d; }
@@ -527,21 +533,22 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-width: 340px;
+    max-width: 360px;
     pointer-events: none;
   }
   .radar-legend-item {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 17px;
+    font-weight: 700;
     letter-spacing: 0.5px;
     color: var(--snow);
-    background: rgba(12, 20, 34, 0.88);
+    background: rgba(12, 20, 34, 0.9);
     border-radius: 8px;
-    padding: 8px 12px;
-    border: 2px solid var(--hairline);
+    padding: 9px 13px;
+    border: 2px solid color-mix(in srgb, var(--snow) 28%, var(--hairline));
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
   }
   .radar-legend-item .swatch {
     width: 18px;
@@ -804,8 +811,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   let radarLayers = [], radarFrames = [], radarIdx = 0, radarTimer = null;
 
   const NWS_ALERT_STYLE = {
-    warning: { color: '#ff5d5d', fillColor: '#ff5d5d', fillOpacity: 0.22, weight: 2.5, opacity: 0.95 },
-    watch:   { color: '#ffb347', fillColor: '#ffb347', fillOpacity: 0.18, weight: 2.5, opacity: 0.92 },
+    warning: { color: '#ff6b6b', fillColor: '#ff5d5d', fillOpacity: 0.28, weight: 4.5, opacity: 1 },
+    watch:   { color: '#ffc14d', fillColor: '#ffb347', fillOpacity: 0.24, weight: 4.5, opacity: 1 },
   };
 
   function nwsAlertStyle(props) {
@@ -869,19 +876,22 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 10,
+      className: 'radar-basemap',
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'
     }).addTo(map);
 
-    // Home marker: Allendale
+    // Home marker — thick ring so it stays visible under radar frames
     L.circleMarker(HOME, {
-      radius: 6, color: '#ffb347', weight: 2, fillColor: '#ffb347', fillOpacity: 0.9
+      radius: 9, color: '#ffe0a3', weight: 3.5, fillColor: '#ffb347', fillOpacity: 0.95,
+      opacity: 1
     }).addTo(map);
 
     addNwsAlertLayer(map);
     updateRadarTagAlertNote();
 
     function showFrame(i) {
-      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.8 : 0));
+      // Keep radar a bit translucent so basemap labels/roads stay readable
+      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.58 : 0));
       if (radarFrames[i]) {
         document.getElementById('radarTime').textContent = fmtFrameTime(radarFrames[i].time);
       }
