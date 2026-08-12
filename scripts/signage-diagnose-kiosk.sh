@@ -29,11 +29,14 @@ pgrep -a ydotoold 2>/dev/null || echo "no ydotoold process"
 echo
 
 echo "-- config --"
-grep -E '^(KIOSK_URL|SIGNAGE_SERVER|SCREEN|KIOSK_IGNORE_SSL)=' /etc/signage/kiosk.conf 2>/dev/null || echo "no kiosk.conf"
+grep -E '^(KIOSK_URL|SIGNAGE_SERVER|SCREEN|KIOSK_SCALE|KIOSK_IGNORE_SSL)=' /etc/signage/kiosk.conf 2>/dev/null || echo "no kiosk.conf"
 echo
 
 echo "-- chromium --"
 command -v chromium-browser 2>/dev/null || command -v chromium 2>/dev/null || echo "Chromium NOT FOUND"
+if pgrep -a chromium >/dev/null 2>&1; then
+  echo "force-device-scale-factor: $(pgrep -a chromium 2>/dev/null | tr ' ' '\n' | grep -A1 'force-device-scale-factor' | paste - - || echo '(flag missing — expect 1/4 screen on 4K)')"
+fi
 echo
 
 echo "-- launcher --"

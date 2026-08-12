@@ -58,6 +58,8 @@ TIMEZONE=""
 SIGNAGE_SERVER=""
 SCREEN=""
 KIOSK_URL=""
+SCALE=""
+SCALE_FROM_CLI=0
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
@@ -72,7 +74,10 @@ for arg in "$@"; do
     --timezone=*) TIMEZONE="${arg#*=}" ;;
     --server=*) SIGNAGE_SERVER="${arg#*=}" ;;
     --screen=*) SCREEN="${arg#*=}" ;;
-    --scale=*) SCALE="${arg#*=}" ;;
+    --scale=*)
+      SCALE="${arg#*=}"
+      SCALE_FROM_CLI=1
+      ;;
     *) ARGS+=("$arg") ;;
   esac
 done
@@ -81,11 +86,16 @@ LEGACY_KIOSK_URL="${ARGS[0]:-}"
 if [[ -z "$KIOSK_URL" && -n "$LEGACY_KIOSK_URL" && "$LEGACY_KIOSK_URL" != -* ]]; then
   KIOSK_URL="$LEGACY_KIOSK_URL"
 fi
-SCALE="${ARGS[1]:-1}"
-if [[ "$SCALE" != "1" && "$SCALE" != "2" && -n "${ARGS[1]:-}" ]]; then
-  if [[ "$SCALE" == -* ]]; then
-    SCALE="1"
-  fi
+# Positional [scale] only when present — never clobber --scale=N with a default of 1
+if [[ -n "${ARGS[1]:-}" && "${ARGS[1]}" =~ ^[12]$ ]]; then
+  SCALE="${ARGS[1]}"
+  SCALE_FROM_CLI=1
+elif [[ -z "${SCALE:-}" ]]; then
+  SCALE=1
+fi
+if [[ "$SCALE_FROM_CLI" -eq 1 && "$SCALE" != "1" && "$SCALE" != "2" ]]; then
+  echo "Invalid --scale=$SCALE (use 1 for 1080p or 2 for 4K)." >&2
+  exit 1
 fi
 
 if [[ $EUID -ne 0 ]]; then
@@ -303,6 +313,7 @@ resolve_kiosk_target() {
   local cli_screen="$SCREEN"
   local cli_url="$KIOSK_URL"
   local cli_scale="$SCALE"
+  local cli_scale_set=$SCALE_FROM_CLI
   local had_existing=0
   local cli_explicit=0
 
@@ -314,10 +325,11 @@ resolve_kiosk_target() {
   [[ -n "$cli_server" ]] && SIGNAGE_SERVER="$cli_server"
   [[ -n "$cli_screen" ]] && SCREEN="$cli_screen"
   [[ -n "$cli_url" ]] && KIOSK_URL="$cli_url"
-  if [[ -n "${ARGS[1]:-}" && "${ARGS[1]}" =~ ^[12]$ ]]; then
-    SCALE="${ARGS[1]}"
-  elif [[ -n "$cli_scale" ]]; then
+  # Only override conf when the operator passed --scale=N or positional scale
+  if [[ "$cli_scale_set" -eq 1 ]]; then
     SCALE="$cli_scale"
+  elif [[ -z "${SCALE:-}" ]]; then
+    SCALE=1
   fi
 
   if [[ -n "$cli_server" || -n "$cli_screen" ]]; then

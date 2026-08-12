@@ -7,7 +7,7 @@ Turn a dedicated Linux box into a fullscreen Chromium display pointed at your si
 | **Script** | [`setup-kiosk.sh`](../setup-kiosk.sh) at the repo root |
 | **OS** | Raspberry Pi OS Lite (Bookworm+) or Ubuntu Server 24.04+ |
 | **Hardware** | **Recommended:** x86 mini PC / NUC (8 GB+). **Pi:** Raspberry Pi **5** (8 GB) for video & advanced boards; Pi 4 — basic playlists only |
-| **Display** | Boards are designed at **1920×1080** |
+| **Display** | Boards are designed at **1920×1080**; `board.php` CSS-scales to fill larger panels (4K) |
 
 ---
 
@@ -66,7 +66,8 @@ sudo bash setup-kiosk.sh --server=https://your-server --screen=garage
 # Legacy full URL (still accepted; /boards/ prefix is stripped automatically)
 sudo bash setup-kiosk.sh "https://your-server/board.php?screen=garage"
 
-# 4K display — pixel-double to fill the panel
+# 4K display — also set scale 2 (helps Chromium DPI when the flag is honored;
+# board.php CSS-fit fills the panel either way)
 sudo bash setup-kiosk.sh --server=https://your-server --screen=garage --scale=2
 
 # Skip HDMI-CEC TV power control

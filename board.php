@@ -17,6 +17,10 @@
  *
  * Two stacked iframes preload each board fully before it's revealed, so there
  * are no white flashes; a safety timeout moves on if a page ever hangs.
+ *
+ * The shell is a fixed 1920×1080 #stage that CSS-scales to the browser
+ * viewport — so 4K kiosks fill the panel even when Chromium/Wayland ignores
+ * --force-device-scale-factor.
  */
 
 require_once __DIR__ . '/config.php';
@@ -155,12 +159,15 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   <?= $signageThemeCss ?>
   * { margin:0; padding:0; }
   <?= signage_kiosk_cursor_css() ?>
-  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night); }
-  iframe { position:absolute; top:0; left:0; width:1920px;
+  /* Stage stays 1920×1080; JS scales it to the real viewport (4K / cage+Wayland). */
+  html,body { width:100%; height:100%; overflow:hidden; background:#000; }
+  #stage { position:absolute; top:50%; left:50%; width:1920px; height:1080px;
+           transform-origin:center center; background:var(--lake-night); overflow:hidden; }
+  #stage iframe { position:absolute; top:0; left:0; width:1920px;
            height:calc(1080px - var(--signage-ticker-inset, 0px) - var(--signage-hero-inset, 0px)); border:0;
            opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease;
            pointer-events:none; }
-  iframe.show { opacity:1; }
+  #stage iframe.show { opacity:1; }
   #hero-strip { position:absolute; left:0; right:0; bottom:var(--signage-ticker-inset, 0px); height:var(--signage-hero-inset, 0px);
                display:flex; align-items:center; gap:18px; padding:0 28px; overflow:hidden;
                background:color-mix(in srgb, var(--harbor) 94%, transparent); border-top:1px solid var(--hairline); z-index:9000;
@@ -201,6 +208,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
 </style>
 </head>
 <body<?= $blankActive ? ' class="signage-blank' . ($emergencyTicker ? ' signage-emergency-ticker' : '') . '"' : ($emergencyTicker ? ' class="signage-emergency-ticker"' : '') ?> style="--signage-hero-inset: <?= (int)$heroStripHeight ?>px">
+<div id="stage">
 <?php if ($SCREEN !== 'main' && $showDebug): ?>
 <div id="screen-badge" title="Rotation display key"><?= htmlspecialchars($SCREEN) ?></div>
 <?php endif; ?>
@@ -228,7 +236,6 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
 <iframe id="fA" allow="autoplay; fullscreen"></iframe>
 <iframe id="fB" allow="autoplay; fullscreen"></iframe>
 <div id="hero-strip" aria-live="polite"><?= !empty($heroStrip['html']) ? $heroStrip['html'] : '' ?></div>
-<?php signage_kiosk_pointer_shield_html(); ?>
 <script>
   const PAGES   = <?= json_encode($runtime['pages'], JSON_UNESCAPED_SLASHES) ?>;
   const REVISION = <?= json_encode($runtime['revision']) ?>;
@@ -970,12 +977,27 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
 
   // Periodic shell reload flushes Chromium memory and stuck renderer state.
   setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
+
+  // Fit 1920×1080 stage to the real window — Chromium on Wayland/cage often
+  // ignores --force-device-scale-factor, leaving a 1080p board in the corner of 4K.
+  (function () {
+    const stage = document.getElementById('stage');
+    if (!stage) return;
+    function fit() {
+      const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+    }
+    fit();
+    addEventListener('resize', fit);
+  })();
 </script>
-<?php signage_kiosk_hide_pointer_script(); ?>
 <?php if ($showTicker):
     $signageTickerScreen = $SCREEN;
     signage_ticker_bootstrap($SCREEN);
     include __DIR__ . '/ticker.php';
 endif; ?>
+</div>
+<?php signage_kiosk_pointer_shield_html(); ?>
+<?php signage_kiosk_hide_pointer_script(); ?>
 </body>
 </html>

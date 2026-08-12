@@ -106,7 +106,7 @@ while true; do
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
-    --disable-features=TranslateUI \
+    --disable-features=TranslateUI,WaylandFractionalScaleV1,WaylandPerSurfaceScale \
     --disable-dev-shm-usage \
     --autoplay-policy=no-user-gesture-required \
     --check-for-update-interval=31536000 \
