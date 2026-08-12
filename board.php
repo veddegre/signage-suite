@@ -18,11 +18,11 @@
  * Two stacked iframes preload each board fully before it's revealed, so there
  * are no white flashes; a safety timeout moves on if a page ever hangs.
  *
- * The shell is a fixed 1920×1080 #stage fitted with Chromium `zoom` (not
- * transform:scale — that scales the shell background but leaves board iframes
- * stuck in the upper-left on Wayland/GPU). Kiosk Chromium must use device
- * scale factor 1; cage+Wayland + force-device-scale-factor=2 also causes a
- * corner layout.
+ * The shell lays out at a fixed 1920×1080 and Chromium `documentElement.zoom`
+ * fits it to the real window (4K kiosks). Do not use transform:scale() on a
+ * parent of the board iframes — Wayland/GPU leaves iframe layers unscaled
+ * (blue shell fills the panel, boards stuck in the upper-left). Kiosk Chromium
+ * must use --force-device-scale-factor=1 under cage/Wayland.
  */
 
 require_once __DIR__ . '/config.php';
@@ -156,17 +156,29 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
 <head>
 <meta charset="UTF-8">
 <title>Signage</title>
+<script>
+/* signage-fit-zoom-v2 — early zoom so the first paint is not a 1080p corner on 4K */
+(function () {
+  function fit() {
+    var z = parseFloat(document.documentElement.style.zoom || '1') || 1;
+    var w = Math.max((window.innerWidth || 0) * z, window.outerWidth || 0, (screen && screen.width) || 0);
+    var h = Math.max((window.innerHeight || 0) * z, window.outerHeight || 0, (screen && screen.height) || 0);
+    if (!w || !h) return;
+    var s = Math.min(w / 1920, h / 1080);
+    if (s > 0 && isFinite(s)) document.documentElement.style.zoom = String(s);
+  }
+  fit();
+  addEventListener('resize', fit);
+})();
+</script>
 <?= signage_theme_fonts_head_html($signageFontPackKey) ?>
 <style>
   <?= $signageThemeCss ?>
   * { margin:0; padding:0; }
   <?= signage_kiosk_cursor_css() ?>
-  /* Stage stays 1920×1080. Fit uses Chromium `zoom` (not transform:scale) —
-     Wayland/GPU leaves iframe layers unscaled under ancestor transforms, which
-     looked like a blue full-screen stage with boards only in the upper-left. */
-  html,body { width:100%; height:100%; overflow:hidden; background:#000; }
-  #stage { position:absolute; top:0; left:0; width:1920px; height:1080px;
-           background:var(--lake-night); overflow:hidden; }
+  /* Design canvas is 1920×1080; signage-fit-zoom-v2 scales via documentElement.zoom. */
+  html,body { width:1920px; height:1080px; overflow:hidden; background:var(--lake-night); }
+  #stage { position:absolute; top:0; left:0; width:1920px; height:1080px; overflow:hidden; }
   #stage iframe { position:absolute; top:0; left:0; width:1920px;
            height:calc(1080px - var(--signage-ticker-inset, 0px) - var(--signage-hero-inset, 0px)); border:0;
            opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease;
@@ -982,21 +994,16 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   // Periodic shell reload flushes Chromium memory and stuck renderer state.
   setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
 
-  // Fit 1920×1080 stage via zoom so nested board iframes scale too.
-  // transform:scale() on #stage only scaled the shell chrome/background.
+  // Keep zoom in sync if the early head script ran before the window was sized.
+  // Marker: signage-fit-zoom-v2
   (function () {
-    const stage = document.getElementById('stage');
-    if (!stage) return;
     function fit() {
-      const vv = window.visualViewport;
-      const w = Math.max(window.innerWidth || 0, (vv && vv.width) || 0, document.documentElement.clientWidth || 0);
-      const h = Math.max(window.innerHeight || 0, (vv && vv.height) || 0, document.documentElement.clientHeight || 0);
+      const z = parseFloat(document.documentElement.style.zoom || '1') || 1;
+      const w = Math.max((window.innerWidth || 0) * z, window.outerWidth || 0, (screen && screen.width) || 0);
+      const h = Math.max((window.innerHeight || 0) * z, window.outerHeight || 0, (screen && screen.height) || 0);
       const s = Math.min(w / 1920, h / 1080);
       if (!(s > 0) || !isFinite(s)) return;
-      stage.style.zoom = String(s);
-      // Pre-zoom coordinates: center letterbox when aspect ratios differ.
-      stage.style.left = ((w / s - 1920) / 2) + 'px';
-      stage.style.top = ((h / s - 1080) / 2) + 'px';
+      document.documentElement.style.zoom = String(s);
     }
     fit();
     addEventListener('resize', fit);
