@@ -68,6 +68,8 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 
 Allendale weather, RainViewer animated radar, sunrise arc. **Latitude / longitude** here are the site default for every location-aware board (weather, air, UV, photo, traffic, **NWS alert ticker**) unless a display overrides them under **Rotation → Kiosk settings**.
 
+**Radar basemap:** each display can pick **Light (Voyager)** or **Dark** under **Rotation → Kiosk settings → Weather radar basemap** (default light).
+
 **Setup:** set `OWM_API_KEY` in admin → **Weather**.
 
 ### lake.php — Lake Michigan Conditions

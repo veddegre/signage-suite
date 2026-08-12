@@ -81,6 +81,21 @@ function rotation_screen_location_fields(string $screen): array
     ];
 }
 
+/**
+ * Weather radar basemap for one display: light (Voyager) or dark (Carto dark_all).
+ * @return 'dark'|'light'
+ */
+function rotation_screen_weather_radar_basemap(string $screen): string
+{
+    $scr = rotation_screen_raw_entry($screen);
+    $raw = is_array($scr) ? strtolower(trim((string)($scr['weather_radar_basemap'] ?? ''))) : '';
+    if ($raw === 'dark' || $raw === 'dark_all') {
+        return 'dark';
+    }
+
+    return 'light';
+}
+
 /** Apply location, sports, ticker, and glance headline fields from SCREEN_OPTS POST onto a screen registry entry. */
 function rotation_apply_screen_scope_post_row(array $entry, array $row, string $screenKey = ''): array
 {
@@ -101,6 +116,13 @@ function rotation_apply_screen_scope_post_row(array $entry, array $row, string $
         } else {
             unset($entry['location_place'], $entry['location_lat'], $entry['location_lon']);
         }
+    }
+
+    $radarBasemap = strtolower(trim((string)($row['weather_radar_basemap'] ?? '')));
+    if ($radarBasemap === 'dark' || $radarBasemap === 'dark_all') {
+        $entry['weather_radar_basemap'] = 'dark';
+    } else {
+        unset($entry['weather_radar_basemap']);
     }
 
     require_once __DIR__ . '/sports_lib.php';

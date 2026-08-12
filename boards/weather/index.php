@@ -19,6 +19,7 @@ require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 
 $SCREEN = signage_request_screen();
 $LOC = rotation_screen_location($SCREEN);
+$RADAR_BASEMAP = rotation_screen_weather_radar_basemap($SCREEN);
 
 define('OWM_API_KEY', cfg('index.OWM_API_KEY', 'PUT-YOUR-OPENWEATHERMAP-KEY-HERE'));
 define('LAT', $LOC['lat']);
@@ -797,10 +798,11 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   placeSun();
   setInterval(placeSun, 60 * 1000);
 
-  // ── Radar: dark animated composite (RainViewer over Carto dark) ────────
+  // ── Radar: RainViewer over Carto basemap (dark or light per display) ───
   // Falls back to the NWS RIDGE KGRR loop if tiles or the API are unavailable.
   const HOME = [<?= LAT ?>, <?= LON ?>];
   const RADAR_BASE = <?= json_encode(RADAR_URL) ?>;
+  const RADAR_BASEMAP = <?= json_encode($RADAR_BASEMAP) ?>;
   const NWS_ALERT_GEOJSON = <?= json_encode($nwsMapGeoJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   let radarLayers = [], radarFrames = [], radarIdx = 0, radarTimer = null;
 
@@ -868,13 +870,20 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
     }).setView(HOME, 7);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    const basemapUrl = RADAR_BASEMAP === 'light'
+      ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    L.tileLayer(basemapUrl, {
       subdomains: 'abcd', maxZoom: 10,
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'
     }).addTo(map);
 
     L.circleMarker(HOME, {
-      radius: 6, color: '#0c1422', weight: 2, fillColor: '#ffb347', fillOpacity: 0.9
+      radius: 6,
+      color: RADAR_BASEMAP === 'light' ? '#0c1422' : '#ffb347',
+      weight: 2,
+      fillColor: '#ffb347',
+      fillOpacity: 0.9
     }).addTo(map);
 
     addNwsAlertLayer(map);

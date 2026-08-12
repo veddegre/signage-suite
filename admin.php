@@ -2869,6 +2869,7 @@ function admin_rotation_kiosk_settings_panel(
     $heroSlots = is_array($heroCfg['slots'] ?? null) && $heroCfg['slots'] !== []
         ? $heroCfg['slots'] : [['source' => (string)($heroCfg['source'] ?? ''), 'key' => (string)($heroCfg['key'] ?? '')]];
     $locationFields = rotation_screen_location_fields($screenKey);
+    $weatherRadarBasemap = rotation_screen_weather_radar_basemap($screenKey);
     $sportsTeamKeys = rotation_screen_sports_team_keys($screenKey);
     $screenCalendarFeedKeys = rotation_screen_calendar_feed_keys($screenKey);
     $screenCalendarCountdownKeys = rotation_screen_calendar_countdown_keys($screenKey);
@@ -2921,6 +2922,9 @@ function admin_rotation_kiosk_settings_panel(
     }
     if (trim($locationFields['place']) !== '' || trim($locationFields['lat']) !== '') {
         $hints[] = 'Custom weather location';
+    }
+    if ($weatherRadarBasemap === 'dark') {
+        $hints[] = 'Dark weather radar map';
     }
     if (array_filter($sportsTeamKeys)) {
         $hints[] = 'Custom sports teams';
@@ -3132,6 +3136,14 @@ function admin_rotation_kiosk_settings_panel(
               <input type="number" step="any" name="SCREEN_OPTS[<?= h($screenKey) ?>][location_lon]"
                      value="<?= h($locationFields['lon']) ?>" placeholder="<?= h((string)$globalLoc['lon']) ?>">
             </div>
+          </div>
+          <div class="field" style="margin-top:12px;max-width:320px">
+            <label class="mini">Weather radar basemap</label>
+            <select name="SCREEN_OPTS[<?= h($screenKey) ?>][weather_radar_basemap]">
+              <option value="light" <?= $weatherRadarBasemap === 'light' ? 'selected' : '' ?>>Light (Voyager — default)</option>
+              <option value="dark" <?= $weatherRadarBasemap === 'dark' ? 'selected' : '' ?>>Dark</option>
+            </select>
+            <div class="help" style="margin-top:6px">Per-display. Light is easier to read on most TVs; pick dark to match the board chrome.</div>
           </div>
         </div>
         <div class="field span-2 rotation-section">
