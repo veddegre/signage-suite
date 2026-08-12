@@ -476,14 +476,6 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     inset: 0;
     background: var(--harbor);
   }
-  /* Voyager linework (roads/coasts/borders), dimmed to stay dark on signage. */
-  #radarMap .radar-basemap-base {
-    filter: brightness(0.48) contrast(1.12) saturate(0.9);
-  }
-  /* Place names — separate light-on-dark label tiles. */
-  #radarMap .radar-basemap-labels {
-    filter: brightness(1.65) contrast(1.15);
-  }
   #radarMap .leaflet-control-attribution {
     background: rgba(12, 20, 34, 0.7);
     color: var(--mist);
@@ -813,8 +805,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
   let radarLayers = [], radarFrames = [], radarIdx = 0, radarTimer = null;
 
   const NWS_ALERT_STYLE = {
-    warning: { color: '#ff5d5d', fillColor: '#ff5d5d', fillOpacity: 0.22, weight: 3.5, opacity: 0.95 },
-    watch:   { color: '#ffb347', fillColor: '#ffb347', fillOpacity: 0.18, weight: 3.5, opacity: 0.92 },
+    warning: { color: '#ff5d5d', fillColor: '#ff5d5d', fillOpacity: 0.22, weight: 2.5, opacity: 0.95 },
+    watch:   { color: '#ffb347', fillColor: '#ffb347', fillOpacity: 0.18, weight: 2.5, opacity: 0.92 },
   };
 
   function nwsAlertStyle(props) {
@@ -876,33 +868,20 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false
     }).setView(HOME, 7);
 
-    // Dimmed Voyager (strong roads/borders) + dark-map labels on top.
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd', maxZoom: 10,
-      className: 'radar-basemap-base',
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'
-    }).addTo(map);
-    if (!map.getPane('basemapLabels')) {
-      map.createPane('basemapLabels');
-      map.getPane('basemapLabels').style.zIndex = 450;
-      map.getPane('basemapLabels').style.pointerEvents = 'none';
-    }
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd', maxZoom: 10,
-      className: 'radar-basemap-labels',
-      pane: 'basemapLabels',
-      attribution: ''
     }).addTo(map);
 
     L.circleMarker(HOME, {
-      radius: 7, color: '#ffb347', weight: 2.5, fillColor: '#ffb347', fillOpacity: 0.95
+      radius: 6, color: '#0c1422', weight: 2, fillColor: '#ffb347', fillOpacity: 0.9
     }).addTo(map);
 
     addNwsAlertLayer(map);
     updateRadarTagAlertNote();
 
     function showFrame(i) {
-      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.68 : 0));
+      radarLayers.forEach((l, j) => l.setOpacity(j === i ? 0.8 : 0));
       if (radarFrames[i]) {
         document.getElementById('radarTime').textContent = fmtFrameTime(radarFrames[i].time);
       }
