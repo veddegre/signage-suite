@@ -70,7 +70,12 @@ if [[ "$IGNORE_SSL" == "1" ]]; then
   SSL_ARGS+=(--ignore-certificate-errors --allow-insecure-localhost)
 fi
 
-logger -t signage-kiosk "starting cage browser=$CHROMIUM url=$KIOSK_URL scale=$SCALE"
+logger -t signage-kiosk "starting cage browser=$CHROMIUM url=$KIOSK_URL conf_scale=$SCALE (chromium always 1; board.php CSS-fits)"
+
+# Never pass KIOSK_SCALE into Chromium on Wayland/cage. force-device-scale-factor>1
+# shrinks the CSS viewport to 1080p while the DRM mode stays 4K, so a 1920×1080
+# board sits in the upper-left quarter. board.php scales the stage to the window.
+CHROMIUM_SCALE=1
 
 launch_url="$KIOSK_URL"
 KIOSK_LOCAL_IP="${KIOSK_LOCAL_IP:-}"
@@ -102,7 +107,7 @@ while true; do
   set +e
   cage -- "$CHROMIUM" \
     --kiosk "$launch_url" \
-    --force-device-scale-factor="$SCALE" \
+    --force-device-scale-factor="$CHROMIUM_SCALE" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \

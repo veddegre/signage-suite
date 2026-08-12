@@ -159,10 +159,11 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   <?= $signageThemeCss ?>
   * { margin:0; padding:0; }
   <?= signage_kiosk_cursor_css() ?>
-  /* Stage stays 1920×1080; JS scales it to the real viewport (4K / cage+Wayland). */
+  /* Stage stays 1920×1080; CSS (+ JS) scales it to the real window (4K kiosks). */
   html,body { width:100%; height:100%; overflow:hidden; background:#000; }
   #stage { position:absolute; top:50%; left:50%; width:1920px; height:1080px;
-           transform-origin:center center; background:var(--lake-night); overflow:hidden; }
+           transform-origin:center center; background:var(--lake-night); overflow:hidden;
+           transform:translate(-50%,-50%) scale(min(calc(100vw / 1920), calc(100vh / 1080))); }
   #stage iframe { position:absolute; top:0; left:0; width:1920px;
            height:calc(1080px - var(--signage-ticker-inset, 0px) - var(--signage-hero-inset, 0px)); border:0;
            opacity:0; transition:opacity <?= (int)$runtime['fade_ms'] ?>ms ease;
@@ -978,17 +979,21 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   // Periodic shell reload flushes Chromium memory and stuck renderer state.
   setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
 
-  // Fit 1920×1080 stage to the real window — Chromium on Wayland/cage often
-  // ignores --force-device-scale-factor, leaving a 1080p board in the corner of 4K.
+  // Fit 1920×1080 stage to the window (CSS has the same min(100vw/1920,…) rule).
   (function () {
     const stage = document.getElementById('stage');
     if (!stage) return;
     function fit() {
-      const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      const vv = window.visualViewport;
+      const w = Math.max(window.innerWidth || 0, (vv && vv.width) || 0, document.documentElement.clientWidth || 0);
+      const h = Math.max(window.innerHeight || 0, (vv && vv.height) || 0, document.documentElement.clientHeight || 0);
+      const s = Math.min(w / 1920, h / 1080);
+      if (!(s > 0) || !isFinite(s)) return;
       stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
     }
     fit();
     addEventListener('resize', fit);
+    if (window.visualViewport) visualViewport.addEventListener('resize', fit);
   })();
 </script>
 <?php if ($showTicker):
