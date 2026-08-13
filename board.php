@@ -137,14 +137,23 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
     $all = signage_presence_read_all();
-    $entry = $all[$SCREEN] ?? null;
+    $entry = is_array($all[$SCREEN] ?? null) ? $all[$SCREEN] : null;
     $pages = is_array($runtime['pages'] ?? null) ? $runtime['pages'] : [];
+    $pageSince = (int)($entry['page_since'] ?? 0);
+    $pageAge = ($pageSince > 0) ? max(0, time() - $pageSince) : 0;
     echo json_encode([
         'ok' => true,
         'screen' => $SCREEN,
         'online' => signage_presence_online($entry),
         'pages' => count($pages) > 0,
-        'blank' => $blankActive,
+        'page_total' => (int)($entry['page_total'] ?? count($pages)),
+        'blank' => $blankActive || !empty($entry['blank']),
+        'page_url' => (string)($entry['page_url'] ?? ''),
+        'page_label' => (string)($entry['page_label'] ?? ''),
+        'page_since' => $pageSince > 0 ? $pageSince : null,
+        'page_age_sec' => $pageAge,
+        'status' => (string)($entry['status'] ?? ''),
+        'last_seen' => isset($entry['last_seen']) ? (int)$entry['last_seen'] : null,
         'local_ip' => (string)($entry['local_ip'] ?? ''),
         'client_ip' => (string)($entry['client_ip'] ?? ''),
     ], JSON_UNESCAPED_SLASHES);
@@ -997,8 +1006,9 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     rotateForward();
   }, 30000);
 
-  // Periodic shell reload flushes Chromium memory and stuck renderer state.
-  setTimeout(function () { location.reload(); }, 8 * 60 * 60 * 1000);
+  // Periodic shell reload flushes Chromium memory and stuck renderer/compositor state.
+  // 2h is aggressive enough for kiosk freezes that still heartbeat ("online but frozen").
+  setTimeout(function () { location.reload(); }, 2 * 60 * 60 * 1000);
 
   // Re-fit after layout settles (head script may have run before the window was sized).
   // Marker: signage-fit-zoom-v3

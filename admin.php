@@ -4029,6 +4029,7 @@ function admin_field(array $f, $val, string $board): void
   .presence-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px;
                   background:var(--bad); vertical-align:middle; }
   .presence-dot.online { background:var(--ok); box-shadow:0 0 0 3px rgba(57,196,109,.18); }
+  .presence-dot.online.stuck { background:var(--warn, #e6a23c); box-shadow:0 0 0 3px rgba(230,162,60,.22); }
   .presence-now { color:var(--snow); font-weight:500; }
   .presence-now.muted { color:var(--mist); font-weight:400; font-size:13px; }
   .presence-stats { font-size:12px; color:var(--mist); font-weight:400; }
@@ -11802,9 +11803,12 @@ function initPresencePanel() {
       + '<th>Display</th><th>Status</th><th>Now showing</th><th>IP</th><th>Plays today</th>'
       + '</tr></thead><tbody>';
     data.screens.forEach(function (s) {
-      const dotCls = s.online ? 'presence-dot online' : 'presence-dot';
+      const dotCls = s.online
+        ? (s.stuck ? 'presence-dot online stuck' : 'presence-dot online')
+        : 'presence-dot';
       let statusText = s.online ? 'Online' : 'Offline';
       if (s.online && s.blank) statusText = 'Online · blank';
+      if (s.online && s.stuck) statusText = 'Online · stuck?';
       let ipHtml = '<div class="presence-stats">LAN: '
         + (s.local_ip ? '<code>' + esc(s.local_ip) + '</code>' : '<span class="presence-now muted">—</span>')
         + '</div>';
@@ -11824,6 +11828,10 @@ function initPresencePanel() {
         }
         if (s.now.status === 'loading') {
           nowHtml += ' <span class="presence-stats">loading…</span>';
+        }
+        if (s.stuck && s.now.age_sec) {
+          const mins = Math.max(1, Math.floor(s.now.age_sec / 60));
+          nowHtml += ' <span class="presence-stats">same page ' + mins + ' min</span>';
         }
       } else if (!s.online) {
         nowHtml = '<span class="presence-now muted">Last seen ' + esc(s.last_seen_ago || 'never') + '</span>';

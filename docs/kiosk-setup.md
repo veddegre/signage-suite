@@ -96,7 +96,7 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **signage-update.timer** | Daily **03:30** (default) — `apt upgrade` + `git pull` / `setup-kiosk.sh --skip-apt` |
 | **signage-maint.timer** | Daily **04:00** (default) — **`git pull` + setup again**, then reboot if needed else browser restart |
 | **unattended-upgrades** | Security patches between nightly runs |
-| **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding |
+| **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding, heartbeats stop, or the same board stays up too long while Online |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **signage-cursor-vt.service** | **Pi only** — VT switch to hide cage’s compositor pointer |
 | **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors only) |
@@ -383,9 +383,9 @@ Common triggers:
 |-------|------|
 | **Chromium crash / OOM** | Random, often on heavy iframe boards (Grafana, Splunk, webcam) |
 | **signage-maint.timer** | Daily ~04:00 — intentional `systemctl restart signage` (memory flush) |
-| **signage-watchdog** | After 3 failed health checks (~15 min apart if the server was unreachable) |
+| **signage-watchdog** | After 3 failed health checks (~15 min apart if the server was unreachable), or when the screen stays on the same board too long while still heartbeating |
 | **Package updates** | Reboot when kernel/apt updates require it |
-| **board.php reload** | Every 8h or after admin saves rotation — stays in-browser (usually a dark flash, not the console) |
+| **board.php reload** | Every 2h or after admin saves rotation — stays in-browser (usually a dark flash, not the console) |
 
 **Diagnose on the kiosk**
 
@@ -409,10 +409,12 @@ Recovery is layered (board shell + systemd):
 |-------|----------------|
 | **board.php** | Unloads the hidden iframe after each crossfade (limits memory creep) |
 | **board.php watchdog** | Stall ~2× dwell (+ 90s) → next board; second trip → full shell reload |
-| **board.php** | Automatic shell reload every 8 hours |
+| **board.php** | Automatic shell reload every 2 hours |
 | **signage-maint.timer** | Daily reboot-if-needed else browser restart |
 | **signage-restart.timer** | Only when `--no-auto-update` (04:00 browser restart) |
-| **signage-watchdog.timer** | Every 5 min (first check 2 min after boot) — restarts if the server is down **or** the browser is hung with no heartbeat |
+| **signage-watchdog.timer** | Every 5 min (first check 2 min after boot) — restarts if the server is down, the browser has no heartbeat, **or** Status is still Online but the same multi-page board has been reported for ~12+ minutes (two consecutive checks) |
+
+Admin **Status** shows **Online · stuck?** when a multi-page display reports the same URL for 10+ minutes while still heartbeating — that is the “frozen TV, green dot” failure mode.
 
 **Quick checks**
 

@@ -322,12 +322,25 @@ function signage_presence_touch(string $screen, array $payload): void
             $lastPlayUrl = '';
         }
 
+        // How long this display has reported the same page_url / blank state.
+        // Used by kiosk-health + signage-watchdog to catch "online but frozen" freezes.
+        $prevUrl = (string)($prev['page_url'] ?? '');
+        $prevBlank = !empty($prev['blank']);
+        $pageSince = (int)($prev['page_since'] ?? $now);
+        if ($pageSince <= 0) {
+            $pageSince = $now;
+        }
+        if ($isBlank !== $prevBlank || $pageUrl !== $prevUrl) {
+            $pageSince = $now;
+        }
+
         $all[$screen] = [
             'screen' => $screen,
             'last_seen' => $now,
             'blank' => $isBlank,
             'page_url' => $pageUrl,
             'page_label' => $pageLabel,
+            'page_since' => $pageSince,
             'page_index' => (int)($payload['page_index'] ?? -1),
             'page_total' => (int)($payload['page_total'] ?? 0),
             'status' => $status,
@@ -406,10 +419,21 @@ function signage_presence_dashboard(): array
             }
         }
 
+        $pageSince = (int)($entry['page_since'] ?? 0);
+        $pageAgeSec = ($online && $pageSince > 0) ? max(0, time() - $pageSince) : 0;
+        // Multi-page rotation stuck on one URL while still heartbeating (GPU/shell freeze).
+        $stuck = $online
+            && empty($entry['blank'])
+            && $pageAgeSec >= 600
+            && (int)($entry['page_total'] ?? 0) > 1
+            && $nowUrl !== '';
+
         $out[] = [
             'screen' => $key,
             'name' => rotation_screen_display_name($key, $screens),
             'online' => $online,
+            'stuck' => $stuck,
+            'page_age_sec' => $pageAgeSec,
             'last_seen' => $entry['last_seen'] ?? null,
             'last_seen_ago' => signage_presence_format_ago($entry['last_seen'] ?? null),
             'blank' => !empty($entry['blank']),
@@ -428,6 +452,8 @@ function signage_presence_dashboard(): array
                 'status' => $nowStatus,
                 'index' => (int)($entry['page_index'] ?? -1),
                 'total' => (int)($entry['page_total'] ?? 0),
+                'since' => $pageSince > 0 ? $pageSince : null,
+                'age_sec' => $pageAgeSec,
             ],
             'plays_today' => (int)($entry['plays_today'] ?? 0),
             'plays_total' => (int)($entry['plays_total'] ?? 0),
