@@ -2814,11 +2814,11 @@ function rotation_quick_add_items(): array
             continue;
         }
         $title = trim((string)($v['title'] ?? ''));
-        $st = video_entry_status($key, $v);
+        $live = video_entry_is_live($v);
         $items[] = [
             'label' => 'Video — ' . ($title !== '' ? $title : $key),
             'url' => video_rotation_url($key),
-            'dwell' => max(15, (int)($st['rotation_dwell'] ?? 60)),
+            'dwell' => $live ? max(15, video_live_dwell()) : 60,
             'group' => 'Videos',
         ];
     }

@@ -48,7 +48,13 @@ function cached_get(string $url, string $key, ?array $auth = null): ?string
     }
     if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0775, true);
     $f = CACHE_DIR . "/$key.dat";
-    if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) return (string)file_get_contents($f);
+    $allowNetwork = !function_exists('calendar_allow_network_fetch') || calendar_allow_network_fetch();
+    if (is_file($f) && ((time() - filemtime($f)) < CACHE_TTL || !$allowNetwork)) {
+        return (string)file_get_contents($f);
+    }
+    if (!$allowNetwork) {
+        return null;
+    }
     $ch = curl_init($url);
     $opts = signage_curl_merge_options([
         CURLOPT_RETURNTRANSFER => true,
@@ -146,6 +152,9 @@ function caldav_fetch(string $url, ?array $auth, int $winStart, int $winEnd, str
     $f = CACHE_DIR . "/$key.dat";
     if (is_file($f) && (time() - filemtime($f)) < CACHE_TTL) {
         return (string)file_get_contents($f);
+    }
+    if (function_exists('calendar_allow_network_fetch') && !calendar_allow_network_fetch()) {
+        return is_file($f) ? (string)file_get_contents($f) : null;
     }
 
     $start = gmdate('Ymd\THis\Z', $winStart);
@@ -839,6 +848,7 @@ function expand_event(array $ev, int $winStart, int $winEnd, array $overrides = 
  */
 function calendar_collect_events(int $winStart, int $winEnd, ?array $feeds = null): array
 {
+    static $memo = [];
     if ($feeds === null) {
         if (defined('ICS_FEEDS')) {
             $feeds = ICS_FEEDS;
@@ -850,6 +860,11 @@ function calendar_collect_events(int $winStart, int $winEnd, ?array $feeds = nul
                 $feeds = admin_filter_list_for_display($feeds);
             }
         }
+    }
+    $allowNet = !function_exists('calendar_allow_network_fetch') || calendar_allow_network_fetch();
+    $memoKey = $winStart . ':' . $winEnd . ':' . ($allowNet ? '1' : '0') . ':' . sha1((string)json_encode($feeds));
+    if (isset($memo[$memoKey])) {
+        return $memo[$memoKey];
     }
     $events = [];
     foreach ($feeds as $i => $feed) {
@@ -907,7 +922,7 @@ function calendar_collect_events(int $winStart, int $winEnd, ?array $feeds = nul
     }
     usort($events, fn($a, $b) => $a['ts'] <=> $b['ts']);
 
-    return $events;
+    return $memo[$memoKey] = $events;
 }
 
 function parse_ics_vevents(string $raw, array $feedMeta): array

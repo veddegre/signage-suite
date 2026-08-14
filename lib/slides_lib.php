@@ -1166,7 +1166,7 @@ function slide_background_url(string $presetId): ?string
         if (!is_file($file)) {
             return null;
         }
-        $v = substr(hash_file('sha256', $file), 0, 12);
+        $v = substr(hash('sha256', $file . '|' . (int)@filemtime($file) . '|' . (int)@filesize($file)), 0, 12);
 
         return 'slide_backgrounds/' . $preset['photo'] . '?v=' . $v;
     }
@@ -1177,7 +1177,7 @@ function slide_background_url(string $presetId): ?string
     if (!is_file($file)) {
         return null;
     }
-    $v = substr(hash_file('sha256', $file), 0, 12);
+    $v = substr(hash('sha256', $file . '|' . (int)@filemtime($file) . '|' . (int)@filesize($file)), 0, 12);
 
     return 'slide_backgrounds/' . $preset['thumb'] . '?v=' . $v;
 }

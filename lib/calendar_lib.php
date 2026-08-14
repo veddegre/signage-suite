@@ -3,6 +3,20 @@
  * Calendar board — shared feed palette and settings migration from legacy family.* keys.
  */
 
+/**
+ * When false, ICS/CalDAV helpers serve cache only and never block on HTTP.
+ * Admin Rotation uses this so a hung calendar feed cannot stall the page ~12s.
+ */
+function calendar_allow_network_fetch(?bool $set = null): bool
+{
+    static $allow = true;
+    if ($set !== null) {
+        $allow = $set;
+    }
+
+    return $allow;
+}
+
 /** Theme-complementary palette for calendar feeds on the dark navy wall. */
 function calendar_palette(): array
 {

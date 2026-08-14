@@ -70,6 +70,16 @@ function csrf_ok(): bool
     return isset($_POST['csrf'], $_SESSION['csrf']) && hash_equals($_SESSION['csrf'], $_POST['csrf']);
 }
 
+/** Close the session file so this request cannot block other admin tabs (presence, panel fetch). */
+function admin_release_session(): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+    csrf_token();
+    session_write_close();
+}
+
 $schema  = admin_schema();
 $needSetup = users_need_setup();
 $flash   = null;
@@ -197,6 +207,10 @@ if ($board === '') {
 if ($authed) {
     admin_enforce_board_access($board, $flash, $flashOk);
 }
+if ($authed && $board === 'rotation') {
+    // Rotation "Plays now" / calendar overrides must not wait on ICS (curl timeout 12s).
+    calendar_allow_network_fetch(false);
+}
 $tools = ($board === 'tools');
 $usersBoard = ($board === 'users');
 $accountBoard = ($board === 'account');
@@ -276,6 +290,7 @@ if ($authed && $board === 'slides' && isset($_GET['replaced'])) {
 }
 
 if ($authed && in_array($board, ['rotation', 'status'], true) && ($_GET['action'] ?? '') === 'presence') {
+    admin_release_session();
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
     echo json_encode(admin_filter_presence_dashboard(signage_presence_dashboard()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -2201,6 +2216,90 @@ function current_val(array $rawConf, string $board, string $key)
 {
     return $rawConf["$board.$key"] ?? null;
 }
+
+admin_release_session();
+
+if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'kiosk_panel') {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    if (!admin_can_board('rotation')) {
+        http_response_code(403);
+        echo 'Forbidden';
+        exit;
+    }
+    $panelScreens = admin_filter_screens(rotation_screens());
+    $panelScreen = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
+    if ($panelScreen === '' || !isset($panelScreens[$panelScreen]) || !admin_can_screen($panelScreen)) {
+        http_response_code(404);
+        echo 'Display not found';
+        exit;
+    }
+    $rssTickerFeeds = admin_filter_owned_map(rss_feed_registry());
+    $heroStripKeyOptions = hero_strip_key_options();
+    if (!admin_is_super()) {
+        unset($heroStripKeyOptions['kuma'], $heroStripKeyOptions['ntfy']);
+    }
+    $heroStripSources = admin_hero_strip_source_options();
+    $sportsCatalogGroups = sports_team_catalog_groups_for_admin();
+    require_once __DIR__ . '/lib/camwall_lib.php';
+    admin_rotation_kiosk_settings_panel(
+        $panelScreen,
+        $rawConf,
+        'rotation',
+        $rssTickerFeeds,
+        $heroStripSources,
+        $heroStripKeyOptions,
+        $sportsCatalogGroups,
+        true
+    );
+    exit;
+}
+
+if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'playlist_panel') {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    if (!admin_can_board('rotation')) {
+        http_response_code(403);
+        echo 'Forbidden';
+        exit;
+    }
+    require_once __DIR__ . '/lib/presence_lib.php';
+    require_once __DIR__ . '/lib/slides_lib.php';
+    $panelScreens = admin_filter_screens(rotation_screens());
+    $screenKey = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
+    if ($screenKey === '' || !isset($panelScreens[$screenKey]) || !admin_can_screen($screenKey)) {
+        http_response_code(404);
+        echo 'Display not found';
+        exit;
+    }
+    $rotationScreens = $panelScreens;
+    $rotationOperatorOptions = admin_is_super() ? users_admin_owner_options() : [];
+    $fieldKey = 'PAGES_' . $screenKey;
+    $storedRows = rotation_screen_own_pages($screenKey);
+    $pageRows = $storedRows;
+    if ($storedRows !== [] && !rotation_playlist_has_board_pages($storedRows)) {
+        $pageRows = rotation_resolved_playlist_pages($screenKey);
+    }
+    $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
+    $effectivePages = rotation_screen_effective_pages($screenKey);
+    $mirrorsMain = $storedRows === [] && $screenKey !== 'main';
+    $screenSettings = rotation_screen_settings($screenKey);
+    $presenceAll = signage_presence_read_all();
+    if (!admin_is_super()) {
+        $presenceAll = array_intersect_key($presenceAll, array_flip(admin_allowed_screen_keys()));
+    }
+    $screenPresence = is_array($presenceAll[$screenKey] ?? null) ? $presenceAll[$screenKey] : null;
+    $pageCount = rotation_playlist_counts($pageRows)['total'];
+    $slideEntryCount = rotation_playlist_counts($pageRows)['slide_entries'];
+    $activeEffective = count(rotation_effective_playlist_lines(
+        array_values(array_filter($effectivePages, static fn($ep) => is_array($ep) && !empty($ep['url']) && empty($ep['off'])))
+    ));
+    $slidesDeckRaw = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+    $deckTargetedForScreen = count(slides_rotation_pages($slidesDeckRaw, $screenKey));
+    require __DIR__ . '/admin_partials/rotation_playlist_body.php';
+    exit;
+}
+
 $videoYtdlpStatus = null;
 $videoDenoStatus = null;
 $videoYtdlpSupport = null;
@@ -2280,79 +2379,6 @@ if ($authed && $board === 'rotation') {
     $rotationCalendarFeedKeys = rotation_calendar_feed_catalog();
     $rotationCalendarOverrides = is_array($rawConf['rotation.CALENDAR_OVERRIDES'] ?? null)
         ? $rawConf['rotation.CALENDAR_OVERRIDES'] : [];
-}
-
-if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'kiosk_panel') {
-    header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: no-store, no-cache, must-revalidate');
-    if (!admin_can_board('rotation')) {
-        http_response_code(403);
-        echo 'Forbidden';
-        exit;
-    }
-    $panelScreens = admin_filter_screens(rotation_screens());
-    $panelScreen = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
-    if ($panelScreen === '' || !isset($panelScreens[$panelScreen]) || !admin_can_screen($panelScreen)) {
-        http_response_code(404);
-        echo 'Display not found';
-        exit;
-    }
-    require_once __DIR__ . '/lib/camwall_lib.php';
-    admin_rotation_kiosk_settings_panel(
-        $panelScreen,
-        $rawConf,
-        'rotation',
-        $rssTickerFeeds,
-        $heroStripSources,
-        $heroStripKeyOptions,
-        $sportsCatalogGroups,
-        true
-    );
-    exit;
-}
-
-if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'playlist_panel') {
-    header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: no-store, no-cache, must-revalidate');
-    if (!admin_can_board('rotation')) {
-        http_response_code(403);
-        echo 'Forbidden';
-        exit;
-    }
-    require_once __DIR__ . '/lib/presence_lib.php';
-    require_once __DIR__ . '/lib/slides_lib.php';
-    $panelScreens = admin_filter_screens(rotation_screens());
-    $screenKey = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
-    if ($screenKey === '' || !isset($panelScreens[$screenKey]) || !admin_can_screen($screenKey)) {
-        http_response_code(404);
-        echo 'Display not found';
-        exit;
-    }
-    $rotationScreens = $panelScreens;
-    $fieldKey = 'PAGES_' . $screenKey;
-    $storedRows = rotation_screen_own_pages($screenKey);
-    $pageRows = $storedRows;
-    if ($storedRows !== [] && !rotation_playlist_has_board_pages($storedRows)) {
-        $pageRows = rotation_resolved_playlist_pages($screenKey);
-    }
-    $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
-    $effectivePages = rotation_screen_effective_pages($screenKey);
-    $mirrorsMain = $storedRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
-    $screenSettings = rotation_screen_settings($screenKey);
-    $presenceAll = signage_presence_read_all();
-    if (!admin_is_super()) {
-        $presenceAll = array_intersect_key($presenceAll, array_flip(admin_allowed_screen_keys()));
-    }
-    $screenPresence = is_array($presenceAll[$screenKey] ?? null) ? $presenceAll[$screenKey] : null;
-    $pageCount = rotation_playlist_counts($pageRows)['total'];
-    $slideEntryCount = rotation_playlist_counts($pageRows)['slide_entries'];
-    $activeEffective = count(rotation_effective_playlist_lines(
-        array_values(array_filter($effectivePages, static fn($ep) => is_array($ep) && !empty($ep['url']) && empty($ep['off'])))
-    ));
-    $slidesDeckRaw = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
-    $deckTargetedForScreen = count(slides_rotation_pages($slidesDeckRaw, $screenKey));
-    require __DIR__ . '/admin_partials/rotation_playlist_body.php';
-    exit;
 }
 
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
@@ -5345,16 +5371,13 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
           <?php endif; ?>
 
           <?php foreach ($rotationScreens as $screenKey => $screenMeta):
+            $playlistOpen = ((string)$screenKey === (string)$rotationDefaultScreenKey);
             $fieldKey = 'PAGES_' . $screenKey;
             $storedRows = rotation_screen_own_pages($screenKey);
             $pageRows = $storedRows;
-            if ($storedRows !== [] && !rotation_playlist_has_board_pages($storedRows)) {
-                $pageRows = rotation_resolved_playlist_pages($screenKey);
-            }
             $screenName = rotation_screen_display_name($screenKey, $rotationScreens);
             $deckId = 'rotationDeck-' . preg_replace('/[^a-z0-9_\-]/i', '', $screenKey);
-            $effectivePages = rotation_screen_effective_pages($screenKey);
-            $mirrorsMain = $storedRows === [] && $screenKey !== 'main' && rotation_screen_own_pages($screenKey) === [];
+            $mirrorsMain = $storedRows === [] && $screenKey !== 'main';
             $screenSettings = rotation_screen_settings($screenKey);
             $screenPresence = is_array($presenceAll[$screenKey] ?? null) ? $presenceAll[$screenKey] : null;
             $wallNowLabel = '';
@@ -5374,30 +5397,54 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             } elseif ($screenPresence) {
                 $wallNowTitle = 'Last seen ' . signage_presence_format_ago((int)($screenPresence['last_seen'] ?? 0));
             }
-            $pageCount = rotation_playlist_counts($pageRows)['total'];
-            $slideEntryCount = rotation_playlist_counts($pageRows)['slide_entries'];
-            $activeEffective = count(rotation_effective_playlist_lines(
-                array_values(array_filter($effectivePages, static fn($ep) => is_array($ep) && !empty($ep['url']) && empty($ep['off'])))
-            ));
-            $slidesDeckRaw = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
-            $deckTargetedForScreen = count(slides_rotation_pages($slidesDeckRaw, $screenKey));
-            if ($mirrorsMain) {
-                $summaryNote = 'mirrors main (' . $activeEffective . ' page' . ($activeEffective === 1 ? '' : 's') . ')';
-                if ($deckTargetedForScreen > 0 && $slideEntryCount === 0) {
-                    $summaryNote .= ' · ' . $deckTargetedForScreen . ' slide' . ($deckTargetedForScreen === 1 ? '' : 's') . ' need deploy';
+            $effectivePages = [];
+            $slideEntryCount = 0;
+            $activeEffective = 0;
+            $deckTargetedForScreen = 0;
+            if ($playlistOpen) {
+                if ($storedRows !== [] && !rotation_playlist_has_board_pages($storedRows)) {
+                    $pageRows = rotation_resolved_playlist_pages($screenKey);
                 }
-            } elseif ($pageCount === 0) {
-                $summaryNote = 'empty';
+                $effectivePages = rotation_screen_effective_pages($screenKey);
+                $counts = rotation_playlist_counts($pageRows);
+                $pageCount = $counts['total'];
+                $slideEntryCount = $counts['slide_entries'];
+                $activeEffective = count(rotation_effective_playlist_lines(
+                    array_values(array_filter($effectivePages, static fn($ep) => is_array($ep) && !empty($ep['url']) && empty($ep['off'])))
+                ));
+                $slidesDeckRaw = is_array($rawConf['slides.SLIDES'] ?? null) ? $rawConf['slides.SLIDES'] : [];
+                $deckTargetedForScreen = count(slides_rotation_pages($slidesDeckRaw, $screenKey));
+                if ($mirrorsMain) {
+                    $summaryNote = 'mirrors main (' . $activeEffective . ' page' . ($activeEffective === 1 ? '' : 's') . ')';
+                    if ($deckTargetedForScreen > 0 && $slideEntryCount === 0) {
+                        $summaryNote .= ' · ' . $deckTargetedForScreen . ' slide' . ($deckTargetedForScreen === 1 ? '' : 's') . ' need deploy';
+                    }
+                } elseif ($pageCount === 0) {
+                    $summaryNote = 'empty';
+                } else {
+                    $summaryNote = $pageCount . ' page' . ($pageCount === 1 ? '' : 's');
+                    if ($slideEntryCount > 0) {
+                        $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
+                    }
+                    if ($slideEntryCount > 0 && $deckTargetedForScreen === 0) {
+                        $summaryNote .= ' · stale (deck does not target this display)';
+                    }
+                }
             } else {
-                $summaryNote = $pageCount . ' page' . ($pageCount === 1 ? '' : 's');
-                if ($slideEntryCount > 0) {
-                    $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
-                }
-                if ($slideEntryCount > 0 && $deckTargetedForScreen === 0) {
-                    $summaryNote .= ' · stale (deck does not target this display)';
+                $counts = rotation_playlist_counts($storedRows);
+                $pageCount = $counts['total'];
+                $slideEntryCount = $counts['slide_entries'];
+                if ($mirrorsMain) {
+                    $summaryNote = 'mirrors main';
+                } elseif ($pageCount === 0) {
+                    $summaryNote = 'empty';
+                } else {
+                    $summaryNote = $pageCount . ' page' . ($pageCount === 1 ? '' : 's');
+                    if ($slideEntryCount > 0) {
+                        $summaryNote .= ' · ' . $slideEntryCount . ' slide entr' . ($slideEntryCount === 1 ? 'y' : 'ies');
+                    }
                 }
             }
-            $playlistOpen = ($screenKey === $rotationDefaultScreenKey);
           ?>
           <details class="panel rotation-playlist-panel" data-rotation-screen="<?= h($screenKey) ?>"<?= $playlistOpen ? ' open' : '' ?><?= $playlistOpen ? '' : ' data-playlist-lazy="1"' ?>>
             <summary>

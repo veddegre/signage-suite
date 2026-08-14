@@ -83,6 +83,7 @@ function rotation_pages_store_write_file(string $screen, array $pages): bool
             signage_json_backup_previous($path);
             @unlink($path);
         }
+        rotation_pages_store_invalidate($screen);
 
         return true;
     }
@@ -93,6 +94,9 @@ function rotation_pages_store_write_file(string $screen, array $pages): bool
         'ensure_dir' => true,
         'backup' => true,
     ]);
+    if ($result['ok']) {
+        rotation_pages_store_invalidate($screen);
+    }
 
     return (bool)($result['ok'] ?? false);
 }
@@ -176,13 +180,31 @@ function rotation_pages_store_read_legacy(string $screen): array
 function rotation_pages_store_read(string $screen): array
 {
     $screen = rotation_pages_store_normalize_screen($screen);
+    if (isset($GLOBALS['__rotation_pages_memo'][$screen]) && is_array($GLOBALS['__rotation_pages_memo'][$screen])) {
+        return $GLOBALS['__rotation_pages_memo'][$screen];
+    }
     $path = rotation_pages_store_path($screen);
+    $pages = [];
     if ($path !== null && is_file($path)) {
         $fromFile = rotation_pages_store_read_file($screen);
         if ($fromFile !== []) {
-            return $fromFile;
+            $pages = $fromFile;
         }
     }
+    if ($pages === []) {
+        $pages = rotation_pages_store_read_legacy($screen);
+    }
+    $GLOBALS['__rotation_pages_memo'][$screen] = $pages;
 
-    return rotation_pages_store_read_legacy($screen);
+    return $pages;
+}
+
+function rotation_pages_store_invalidate(?string $screen = null): void
+{
+    if ($screen === null) {
+        unset($GLOBALS['__rotation_pages_memo']);
+
+        return;
+    }
+    unset($GLOBALS['__rotation_pages_memo'][rotation_pages_store_normalize_screen($screen)]);
 }
