@@ -1075,11 +1075,18 @@ function admin_rotation_font_picker(string $screenKey, string $savedFontPack): v
         $packs = [$savedFontPack => $legacy] + $packs;
     }
     $name = 'SCREEN_OPTS[' . $screenKey . '][font_pack]';
+
+    // Emit each Google Fonts CSS URL once per page. Previously this ran once per
+    // display in Rotation → Kiosk settings, so N screens × 8 packs = dozens of
+    // identical <link> tags. That font storm routinely hangs Firefox on Windows
+    // (DirectWrite + GPU) while macOS Firefox often survives.
+    static $linkedStylesheets = [];
     $previewUrls = [];
     foreach ($packs as $pid => $pack) {
         $url = (string)($pack['google_url'] ?? '');
-        if ($url !== '') {
+        if ($url !== '' && empty($linkedStylesheets[$url])) {
             $previewUrls[$url] = true;
+            $linkedStylesheets[$url] = true;
         }
     }
     foreach (array_keys($previewUrls) as $previewUrl): ?>
