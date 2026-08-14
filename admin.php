@@ -2281,6 +2281,36 @@ if ($authed && $board === 'rotation') {
     $rotationCalendarOverrides = is_array($rawConf['rotation.CALENDAR_OVERRIDES'] ?? null)
         ? $rawConf['rotation.CALENDAR_OVERRIDES'] : [];
 }
+
+if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'kiosk_panel') {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    if (!admin_can_board('rotation')) {
+        http_response_code(403);
+        echo 'Forbidden';
+        exit;
+    }
+    $panelScreens = admin_filter_screens(rotation_screens());
+    $panelScreen = rotation_normalize_screen_key((string)($_GET['screen'] ?? ''));
+    if ($panelScreen === '' || !isset($panelScreens[$panelScreen]) || !admin_can_screen($panelScreen)) {
+        http_response_code(404);
+        echo 'Display not found';
+        exit;
+    }
+    require_once __DIR__ . '/lib/camwall_lib.php';
+    admin_rotation_kiosk_settings_panel(
+        $panelScreen,
+        $rawConf,
+        'rotation',
+        $rssTickerFeeds,
+        $heroStripSources,
+        $heroStripKeyOptions,
+        $sportsCatalogGroups,
+        true
+    );
+    exit;
+}
+
 $slideHighlight = slide_safe_filename((string)($_GET['highlight'] ?? ''));
 $slidesTab = 'deck';
 if ($board === 'slides') {
@@ -2845,6 +2875,83 @@ function admin_settings_field_anchor(string $board, string $key): string
 }
 
 /** Per-display kiosk settings (ticker, hero strip, location, sports) for Rotation admin. */
+/**
+ * Optgroup/option HTML for a catalog select (emitted once per page, cloned into slots).
+ *
+ * @param array<string,list<array{key:string,label:string}>> $groups
+ */
+function admin_catalog_optgroups_html(array $groups): string
+{
+    $html = '';
+    foreach ($groups as $groupLabel => $items) {
+        if (!is_array($items) || $items === []) {
+            continue;
+        }
+        $html .= '<optgroup label="' . h((string)$groupLabel) . '">';
+        foreach ($items as $opt) {
+            if (!is_array($opt)) {
+                continue;
+            }
+            $key = (string)($opt['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $html .= '<option value="' . h($key) . '">' . h((string)($opt['label'] ?? $key)) . '</option>';
+        }
+        $html .= '</optgroup>';
+    }
+
+    return $html;
+}
+
+/** @param array<string,list<array{key:string,label:string}>> $groups */
+function admin_catalog_option_label(array $groups, string $key): string
+{
+    $key = trim($key);
+    if ($key === '') {
+        return '';
+    }
+    foreach ($groups as $items) {
+        if (!is_array($items)) {
+            continue;
+        }
+        foreach ($items as $opt) {
+            if (!is_array($opt)) {
+                continue;
+            }
+            if ((string)($opt['key'] ?? '') === $key) {
+                return (string)($opt['label'] ?? $key);
+            }
+        }
+    }
+
+    return $key;
+}
+
+/**
+ * Slim <select> that keeps only site-default + current value; full catalog is filled from a shared <template>.
+ *
+ * @param array<string,list<array{key:string,label:string}>> $groups
+ */
+function admin_shared_catalog_select(
+    string $name,
+    string $catalogId,
+    string $picked,
+    array $groups,
+    string $emptyLabel = '— site default —'
+): void {
+    $picked = trim($picked);
+    $pickedLabel = $picked !== '' ? admin_catalog_option_label($groups, $picked) : '';
+    ?>
+              <select name="<?= h($name) ?>" data-shared-catalog="<?= h($catalogId) ?>" data-selected="<?= h($picked) ?>">
+                <option value=""><?= h($emptyLabel) ?></option>
+                <?php if ($picked !== ''): ?>
+                <option value="<?= h($picked) ?>" selected><?= h($pickedLabel) ?></option>
+                <?php endif; ?>
+              </select>
+    <?php
+}
+
 function admin_rotation_kiosk_settings_panel(
     string $screenKey,
     array $rawConf,
@@ -3153,16 +3260,12 @@ function admin_rotation_kiosk_settings_panel(
             <?php foreach ($sportsSlots as $si => $picked): ?>
             <div class="field">
               <label class="mini">Team <?= (int)$si + 1 ?></label>
-              <select name="SCREEN_OPTS[<?= h($screenKey) ?>][sports_team_slots][<?= (int)$si ?>]">
-                <option value="">— site default —</option>
-                <?php foreach ($sportsCatalogGroups as $groupLabel => $groupTeams): ?>
-                <optgroup label="<?= h($groupLabel) ?>">
-                  <?php foreach ($groupTeams as $opt): ?>
-                  <option value="<?= h($opt['key']) ?>" <?= $picked === $opt['key'] ? 'selected' : '' ?>><?= h($opt['label']) ?></option>
-                  <?php endforeach; ?>
-                </optgroup>
-                <?php endforeach; ?>
-              </select>
+              <?php admin_shared_catalog_select(
+                  'SCREEN_OPTS[' . $screenKey . '][sports_team_slots][' . (int)$si . ']',
+                  'sports',
+                  (string)$picked,
+                  $sportsCatalogGroups
+              ); ?>
             </div>
             <?php endforeach; ?>
           </div>
@@ -3190,16 +3293,12 @@ function admin_rotation_kiosk_settings_panel(
             ?>
             <div class="field">
               <label class="mini"><?= h(camwall_slot_label((int)$ci, (int)$camwallGrid['cols'])) ?></label>
-              <select name="SCREEN_OPTS[<?= h($screenKey) ?>][camwall_slots][<?= (int)$ci ?>]">
-                <option value="">— site default —</option>
-                <?php foreach ($camwallCatalogGroups as $groupLabel => $groupCams): ?>
-                <optgroup label="<?= h($groupLabel) ?>">
-                  <?php foreach ($groupCams as $opt): ?>
-                  <option value="<?= h($opt['key']) ?>" <?= $picked === $opt['key'] ? 'selected' : '' ?>><?= h($opt['label']) ?></option>
-                  <?php endforeach; ?>
-                </optgroup>
-                <?php endforeach; ?>
-              </select>
+              <?php admin_shared_catalog_select(
+                  'SCREEN_OPTS[' . $screenKey . '][camwall_slots][' . (int)$ci . ']',
+                  'camwall',
+                  (string)$picked,
+                  $camwallCatalogGroups
+              ); ?>
             </div>
             <?php endforeach; ?>
           </div>
@@ -5066,17 +5165,34 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="kiosk" role="tabpanel" hidden>
                 <p class="help" style="margin:0 0 10px">Settings for the whole TV — rotation mode, bottom ticker, hero bar, location, sports, <strong>MDOT cam wall</strong>, and glance headline columns. Matches the display chosen above.</p>
+                <?php
+                  // Emit sports/camwall option lists once; each slot select is filled from these templates.
+                  // Previously every display × every slot inlined the full MDOT catalog (~70KB × N displays).
+                  require_once __DIR__ . '/lib/camwall_lib.php';
+                  $adminCamwallCatalogGroups = camwall_catalog_groups();
+                ?>
+                <template id="adminSportsCatalogOptions"><?= admin_catalog_optgroups_html($sportsCatalogGroups) ?></template>
+                <template id="adminCamwallCatalogOptions"><?= admin_catalog_optgroups_html($adminCamwallCatalogGroups) ?></template>
                 <?php foreach ($rotationScreens as $screenKey => $screenMeta):
-                  admin_rotation_kiosk_settings_panel(
-                      (string)$screenKey,
-                      $rawConf,
-                      $board,
-                      $rssTickerFeeds,
-                      $heroStripSources,
-                      $heroStripKeyOptions,
-                      $sportsCatalogGroups,
-                      (string)$screenKey === $rotationDefaultScreenKey
-                  );
+                  $isFocusKiosk = ((string)$screenKey === $rotationDefaultScreenKey);
+                  if ($isFocusKiosk) {
+                      admin_rotation_kiosk_settings_panel(
+                          (string)$screenKey,
+                          $rawConf,
+                          $board,
+                          $rssTickerFeeds,
+                          $heroStripSources,
+                          $heroStripKeyOptions,
+                          $sportsCatalogGroups,
+                          true
+                      );
+                  } else {
+                      // Lazy stub — full panel fetched when this display is selected (keeps Rotation HTML small).
+                      echo '<div class="rotation-display-options-wrap" data-display-options-screen="'
+                          . h((string)$screenKey) . '" data-kiosk-panel-lazy="1" hidden>'
+                          . '<p class="help" style="margin:0">Open this display to load kiosk settings…</p>'
+                          . '</div>';
+                  }
                 endforeach; ?>
               </div>
               <div class="rotation-setup-panel" data-rotation-tab-panel="templates" role="tabpanel" hidden>
@@ -10839,6 +10955,75 @@ function initRotationBoardPicker() {
   });
 }
 
+function fillSharedCatalogSelects(root) {
+  const scope = root || document;
+  const templates = {
+    sports: document.getElementById('adminSportsCatalogOptions'),
+    camwall: document.getElementById('adminCamwallCatalogOptions'),
+  };
+  scope.querySelectorAll('select[data-shared-catalog]').forEach(function (sel) {
+    if (sel.dataset.catalogFilled === '1') return;
+    const tpl = templates[sel.getAttribute('data-shared-catalog') || ''];
+    if (!tpl) return;
+    const selected = sel.getAttribute('data-selected') || sel.value || '';
+    const emptyOpt = sel.querySelector('option[value=""]');
+    const emptyLabel = emptyOpt ? emptyOpt.textContent : '— site default —';
+    sel.innerHTML = '';
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = emptyLabel;
+    sel.appendChild(empty);
+    sel.appendChild(tpl.content.cloneNode(true));
+    if (selected) {
+      sel.value = selected;
+      if (sel.value !== selected) {
+        const orphan = document.createElement('option');
+        orphan.value = selected;
+        orphan.textContent = selected;
+        orphan.selected = true;
+        sel.appendChild(orphan);
+      }
+    }
+    sel.dataset.catalogFilled = '1';
+  });
+}
+
+function loadRotationKioskPanel(screenKey) {
+  const wrap = document.querySelector('[data-display-options-screen="' + CSS.escape(screenKey) + '"]');
+  if (!wrap) return Promise.resolve(null);
+  if (wrap.getAttribute('data-kiosk-panel-lazy') !== '1') {
+    fillSharedCatalogSelects(wrap);
+    return Promise.resolve(wrap);
+  }
+  if (wrap.dataset.kioskLoading === '1') {
+    return Promise.resolve(wrap);
+  }
+  wrap.dataset.kioskLoading = '1';
+  wrap.innerHTML = '<p class="help" style="margin:0">Loading kiosk settings…</p>';
+  return fetch('admin.php?board=rotation&action=kiosk_panel&screen=' + encodeURIComponent(screenKey), {
+    credentials: 'same-origin',
+    cache: 'no-store',
+  })
+    .then(function (r) { return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+    .then(function (html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const panel = tmp.querySelector('[data-display-options-screen]') || tmp.firstElementChild;
+      if (!panel) throw new Error('empty panel');
+      panel.hidden = false;
+      wrap.replaceWith(panel);
+      fillSharedCatalogSelects(panel);
+      if (typeof initHeroStripSlots === 'function') initHeroStripSlots(panel);
+      if (typeof initAdminDetailsScrollFix === 'function') initAdminDetailsScrollFix(panel);
+      return panel;
+    })
+    .catch(function () {
+      wrap.dataset.kioskLoading = '';
+      wrap.innerHTML = '<p class="help" style="margin:0;color:var(--bad)">Could not load kiosk settings. Try refreshing the page.</p>';
+      return wrap;
+    });
+}
+
 function initRotationGlobalAdd() {
   const sel = document.getElementById('rotationTargetScreen');
   const copyBtn = document.getElementById('rotationCopyMainBtn');
@@ -10855,6 +11040,7 @@ function initRotationGlobalAdd() {
     document.querySelectorAll('.rotation-calendar-panel[data-calendar-screen]').forEach(function (el) {
       el.hidden = el.getAttribute('data-calendar-screen') !== sk;
     });
+    if (sk) loadRotationKioskPanel(sk);
   }
   function syncTargetDisplay() {
     syncCopyBtn();
@@ -10865,6 +11051,7 @@ function initRotationGlobalAdd() {
   }
   sel.addEventListener('change', syncTargetDisplay);
   syncTargetDisplay();
+  fillSharedCatalogSelects(document);
 }
 
 function syncRotationFocusScreenField() {
@@ -12741,8 +12928,8 @@ function bindHeroStripSlotRow(row) {
   });
 }
 
-function initHeroStripSlots() {
-  document.querySelectorAll('.hero-strip-slot-row').forEach(bindHeroStripSlotRow);
+function initHeroStripSlots(root) {
+  (root || document).querySelectorAll('.hero-strip-slot-row').forEach(bindHeroStripSlotRow);
 }
 
 function addHeroStripSlot(screenKey) {
