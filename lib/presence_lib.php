@@ -334,13 +334,25 @@ function signage_presence_touch(string $screen, array $payload): void
             $pageSince = $now;
         }
 
+        $pageDwell = max(0, (int)($payload['page_dwell'] ?? 0));
+
+        $lastContentUrl = (string)($prev['last_content_url'] ?? '');
+        $lastContentLabel = (string)($prev['last_content_label'] ?? '');
+        if (!$isBlank && $pageUrl !== '') {
+            $lastContentUrl = $pageUrl;
+            $lastContentLabel = $pageLabel;
+        }
+
         $all[$screen] = [
             'screen' => $screen,
             'last_seen' => $now,
             'blank' => $isBlank,
             'page_url' => $pageUrl,
             'page_label' => $pageLabel,
+            'last_content_url' => $lastContentUrl,
+            'last_content_label' => $lastContentLabel,
             'page_since' => $pageSince,
+            'page_dwell' => $pageDwell,
             'page_index' => (int)($payload['page_index'] ?? -1),
             'page_total' => (int)($payload['page_total'] ?? 0),
             'status' => $status,
@@ -400,11 +412,19 @@ function signage_presence_dashboard(): array
             }
         }
 
+        $scheduleBlank = rotation_screen_blank_active($key);
+        $kioskBlank = !empty($entry['blank']);
+        $lastContentUrl = (string)($entry['last_content_url'] ?? '');
+        $lastContentLabel = (string)($entry['last_content_label'] ?? '');
+        if ($lastContentLabel === '' && $lastContentUrl !== '') {
+            $lastContentLabel = rotation_page_label($lastContentUrl);
+        }
+
         $nowLabel = '';
         $nowUrl = '';
         $nowStatus = '';
         if ($entry) {
-            if (!empty($entry['blank'])) {
+            if ($kioskBlank) {
                 $nowLabel = 'Blank (scheduled off)';
                 $nowStatus = 'blank';
             } elseif ($online && (string)($entry['page_url'] ?? '') !== '') {
@@ -422,11 +442,14 @@ function signage_presence_dashboard(): array
         $pageSince = (int)($entry['page_since'] ?? 0);
         $pageAgeSec = ($online && $pageSince > 0) ? max(0, time() - $pageSince) : 0;
         // Multi-page rotation stuck on one URL while still heartbeating (GPU/shell freeze).
-        $stuck = $online
-            && empty($entry['blank'])
+        $stuckOnPage = $online
+            && !$kioskBlank
             && $pageAgeSec >= 600
             && (int)($entry['page_total'] ?? 0) > 1
             && $nowUrl !== '';
+        // Off hours started but the kiosk is still reporting a board (JS never applied blank).
+        $stuckShouldBlank = $online && $scheduleBlank && !$kioskBlank && $nowUrl !== '';
+        $stuck = $stuckOnPage || $stuckShouldBlank;
 
         $out[] = [
             'screen' => $key,
@@ -436,7 +459,10 @@ function signage_presence_dashboard(): array
             'page_age_sec' => $pageAgeSec,
             'last_seen' => $entry['last_seen'] ?? null,
             'last_seen_ago' => signage_presence_format_ago($entry['last_seen'] ?? null),
-            'blank' => !empty($entry['blank']),
+            'blank' => $kioskBlank,
+            'schedule_blank' => $scheduleBlank,
+            'last_content_url' => $lastContentUrl,
+            'last_content_label' => $lastContentLabel,
             'client_ip' => (string)($entry['client_ip'] ?? ''),
             'remote_addr' => (string)($entry['remote_addr'] ?? ''),
             'forwarded_for' => (string)($entry['forwarded_for'] ?? ''),

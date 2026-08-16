@@ -5385,7 +5385,14 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
             if ($screenPresence && signage_presence_online($screenPresence)) {
                 if (!empty($screenPresence['blank'])) {
                     $wallNowLabel = 'Blank (scheduled off)';
-                    $wallNowTitle = 'Kiosk is online but in scheduled blank hours';
+                    $lastWas = trim((string)($screenPresence['last_content_label'] ?? ''));
+                    if ($lastWas === '') {
+                        $lastUrl = trim((string)($screenPresence['last_content_url'] ?? ''));
+                        $lastWas = $lastUrl !== '' ? rotation_page_label($lastUrl) : '';
+                    }
+                    $wallNowTitle = $lastWas !== ''
+                        ? ('Kiosk reports scheduled blank (last on screen: ' . $lastWas . ')')
+                        : 'Kiosk is online but in scheduled blank hours';
                 } else {
                     $wallNowLabel = trim((string)($screenPresence['page_label'] ?? ''));
                     if ($wallNowLabel === '') {
@@ -11766,6 +11773,7 @@ function initPresencePanel() {
       let statusText = s.online ? 'Online' : 'Offline';
       if (s.online && s.blank) statusText = 'Online · blank';
       if (s.online && s.stuck) statusText = 'Online · stuck?';
+      if (s.online && s.schedule_blank && !s.blank) statusText = 'Online · stuck?';
       let ipHtml = '<div class="presence-stats">LAN: '
         + (s.local_ip ? '<code>' + esc(s.local_ip) + '</code>' : '<span class="presence-now muted">—</span>')
         + '</div>';
@@ -11789,6 +11797,12 @@ function initPresencePanel() {
         if (s.stuck && s.now.age_sec) {
           const mins = Math.max(1, Math.floor(s.now.age_sec / 60));
           nowHtml += ' <span class="presence-stats">same page ' + mins + ' min</span>';
+        }
+        if (s.blank && s.last_content_label) {
+          nowHtml += ' <span class="presence-stats">last: ' + esc(s.last_content_label) + '</span>';
+        }
+        if (s.schedule_blank && !s.blank) {
+          nowHtml += ' <span class="presence-stats">should be blank</span>';
         }
       } else if (!s.online) {
         nowHtml = '<span class="presence-now muted">Last seen ' + esc(s.last_seen_ago || 'never') + '</span>';

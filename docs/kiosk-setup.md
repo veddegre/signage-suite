@@ -383,7 +383,7 @@ Common triggers:
 |-------|------|
 | **Chromium crash / OOM** | Random, often on heavy iframe boards (Grafana, Splunk, webcam) |
 | **signage-maint.timer** | Daily ~04:00 — intentional `systemctl restart signage` (memory flush) |
-| **signage-watchdog** | After 3 failed health checks (~15 min apart if the server was unreachable), or when the screen stays on the same board too long while still heartbeating |
+| **signage-watchdog** | After 2 failed health checks (~10 min if the server was unreachable), when the screen stays on the same board too long while still heartbeating, or when off-hours start and the kiosk never actually blanked |
 | **Package updates** | Reboot when kernel/apt updates require it |
 | **board.php reload** | Every 2h or after admin saves rotation — stays in-browser (usually a dark flash, not the console) |
 
@@ -412,9 +412,9 @@ Recovery is layered (board shell + systemd):
 | **board.php** | Automatic shell reload every 2 hours |
 | **signage-maint.timer** | Daily reboot-if-needed else browser restart |
 | **signage-restart.timer** | Only when `--no-auto-update` (04:00 browser restart) |
-| **signage-watchdog.timer** | Every 5 min (first check 2 min after boot) — restarts if the server is down, the browser has no heartbeat, **or** Status is still Online but the same multi-page board has been reported for ~12+ minutes (two consecutive checks) |
+| **signage-watchdog.timer** | Every 5 min — restarts if the server is down, heartbeats stop (~10 min), the same multi-page board stays up too long (RSS ~3–8 min, other boards ~12+ min), **or** the schedule says blank but the kiosk is still on a board |
 
-Admin **Status** shows **Online · stuck?** when a multi-page display reports the same URL for 10+ minutes while still heartbeating — that is the “frozen TV, green dot” failure mode.
+Admin **Status** “Online” only means a heartbeat arrived in the last 2 minutes. **Blank (scheduled off)** is what the kiosk *reported*, not a photo of HDMI. After an RSS GPU hang the shell can still post “blank” while the TV shows the last news frame. Status shows **Online · stuck?** when a multi-page display reports the same URL for 10+ minutes, or when off-hours have started and the kiosk is still on a board.
 
 **Quick checks**
 

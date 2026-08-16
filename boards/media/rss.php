@@ -22,6 +22,7 @@ require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/security_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/rotation_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/rss_image_lib.php';
 
 define('FEEDS', rss_feeds_for_display());
 
@@ -230,7 +231,8 @@ function ago(?int $ts): string
 }
 $payload = array_map(fn($i) => [
     'title' => $i['title'], 'synopsis' => $i['synopsis'],
-    'image' => $i['image'], 'ago' => ago($i['time']),
+    'image' => rss_image_proxy_url($i['image'] ?? ''),
+    'ago' => ago($i['time']),
 ], $items);
 ?>
 <!DOCTYPE html>
@@ -251,8 +253,9 @@ $payload = array_map(fn($i) => [
   .photo { position:absolute; inset:0; opacity:0; transition:opacity 1.6s ease; --img:none; }
   .photo.show { opacity:1; }
   .photo-blur, .photo-main { position:absolute; background-image:var(--img); background-repeat:no-repeat; }
-  .photo-blur { inset:-40px; background-size:cover; background-position:center;
-    filter:blur(56px) brightness(0.38) saturate(1.12); transform:scale(1.06); }
+  /* Tiny bitmap scaled up — a 56px blur on a full-bleed 4K photo hangs Pi GPU. */
+  .photo-blur { width:64px; height:36px; left:0; top:0; background-size:cover; background-position:center;
+    filter:blur(3px) brightness(0.38) saturate(1.12); transform:scale(32); transform-origin:top left; }
   .photo-main { inset:0; z-index:1; }
   .photo.fit-cover .photo-blur { display:none; }
   .photo.fit-cover .photo-main { background-size:cover; background-position:center; }
@@ -349,12 +352,16 @@ $payload = array_map(fn($i) => [
       d.innerHTML = '<span class="p"></span>'; dots.appendChild(d);
     });
 
-    function preload(src) {
+    function preload(src, timeoutMs) {
+      timeoutMs = timeoutMs || 7000;
       return new Promise(res => {
         if (!src) return res(null);
+        let done = false;
+        const finish = (v) => { if (done) return; done = true; clearTimeout(tid); res(v); };
+        const tid = setTimeout(() => finish(null), timeoutMs);
         const i = new Image();
-        i.onload = () => res(i);
-        i.onerror = () => res(null);
+        i.onload = () => finish(i);
+        i.onerror = () => finish(null);
         i.src = src;
       });
     }
@@ -405,12 +412,17 @@ $payload = array_map(fn($i) => [
       }
       const s = STORIES[idx];
       const img = await preload(s.image);
+      if (stopped) return;
+      if (idx + 1 < STORIES.length) preload(STORIES[idx + 1].image);
 
       const back = 1 - front;
       applyPhotoLayer(photos[back], img);
       photos[back].classList.add('show');
       photos[front].classList.remove('show');
       front = back;
+      if (EMBEDDED) {
+        try { window.parent.postMessage({ type: 'signage-rss-tick', idx: idx }, '*'); } catch (e) {}
+      }
 
       textEl.classList.remove('show');
       setTimeout(() => {
@@ -442,8 +454,6 @@ $payload = array_map(fn($i) => [
     }
 
     if (EMBEDDED) {
-      // Warm story images while board.php loads this frame hidden.
-      STORIES.forEach(s => { preload(s.image); });
       window.addEventListener('message', (ev) => {
         if (!ev.data) return;
         if (ev.data.type === 'signage-stop') {

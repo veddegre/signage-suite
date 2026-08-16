@@ -147,11 +147,16 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
         'online' => signage_presence_online($entry),
         'pages' => count($pages) > 0,
         'page_total' => (int)($entry['page_total'] ?? count($pages)),
-        'blank' => $blankActive || !empty($entry['blank']),
+        'blank' => !empty($entry['blank']),
+        'schedule_blank' => $blankActive,
+        'cec_enabled' => !empty(rotation_screen_settings($SCREEN)['cec']['enabled']),
         'page_url' => (string)($entry['page_url'] ?? ''),
         'page_label' => (string)($entry['page_label'] ?? ''),
+        'last_content_url' => (string)($entry['last_content_url'] ?? ''),
+        'last_content_label' => (string)($entry['last_content_label'] ?? ''),
         'page_since' => $pageSince > 0 ? $pageSince : null,
         'page_age_sec' => $pageAge,
+        'page_dwell' => (int)($entry['page_dwell'] ?? 0),
         'status' => (string)($entry['status'] ?? ''),
         'last_seen' => isset($entry['last_seen']) ? (int)$entry['last_seen'] : null,
         'local_ip' => (string)($entry['local_ip'] ?? ''),
@@ -295,6 +300,8 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   const BLANK_POLL_MS = 30000;
   let showDebug = SHOW_DEBUG;
   let lastAdvanceAt = Date.now();
+  let rssTickAt = 0;
+  let rssWatchGen = 0;
   let pollFails = 0;
   let watchdogTrips = 0;
   const frames  = [document.getElementById('fA'), document.getElementById('fB')];
@@ -321,6 +328,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       page_label: blankActive ? '' : (p ? (p.label || p.url || '') : ''),
       page_index: blankActive ? -1 : idx,
       page_total: PAGES.length,
+      page_dwell: blankActive ? 0 : (p ? (+p.dwell || 0) : 0),
       status: presenceStatus,
     };
     if (KIOSK_LOCAL_IP) body.local_ip = KIOSK_LOCAL_IP;
@@ -421,6 +429,11 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       if (blankActive || PAGES.length === 0) return;
       if (ev.data.dir === 'prev') rotateBack();
       else if (ev.data.dir === 'next') rotateForward();
+      return;
+    }
+    if (ev.data.type === 'signage-rss-tick') {
+      rssTickAt = Date.now();
+      lastAdvanceAt = Date.now();
       return;
     }
     if (ev.data.type !== 'signage-done') return;
@@ -764,6 +777,9 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       document.dispatchEvent(new CustomEvent('signage-blank', { detail: { on: true } }));
       notifyParentBlank(true);
       sendPresence('blank');
+      // CSS overlay often never composites after an RSS GPU hang; reload into
+      // server-side blank so Chromium rebuilds the frame if JS can still navigate.
+      setTimeout(function () { location.reload(); }, 500);
     } else {
       if (blankEl) blankEl.style.display = 'none';
       document.body.classList.remove('signage-blank');
@@ -867,6 +883,17 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       const dwellMs = (+p.dwell) * 1000;
       const safetyMs = isRssUrl(p.url) ? Math.max(dwellMs + 15000, 60000) : dwellMs;
       scheduleRotate(safetyMs);
+      if (isRssUrl(p.url)) {
+        rssTickAt = 0;
+        rssWatchGen = myGen;
+        setTimeout(function () {
+          if (rssWatchGen !== gen || blankActive) return;
+          if (rssTickAt === 0) {
+            clearRotateTimer();
+            rotateForward();
+          }
+        }, 45000);
+      }
       const unloadGen = myGen;
       setTimeout(function () {
         if (unloadGen !== gen) return;

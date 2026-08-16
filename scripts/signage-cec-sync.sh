@@ -48,14 +48,28 @@ fi
 
 WANT=on
 [[ "$STANDBY" == "1" ]] && WANT=standby
-PREV="$(cat "$STATE_FILE" 2>/dev/null || true)"
-if [[ "$PREV" == "$WANT" ]]; then
+NOW_EPOCH="$(date +%s)"
+PREV_LINE="$(cat "$STATE_FILE" 2>/dev/null || true)"
+PREV="${PREV_LINE%% *}"
+PREV_AT="${PREV_LINE#* }"
+[[ "$PREV_AT" == "$PREV_LINE" ]] && PREV_AT=0
+# Re-send standby every 15 min: a failed cec-client used to record success and
+# never retry, leaving the TV on during off hours.
+if [[ "$WANT" == "standby" && "$PREV" == "standby" && "$PREV_AT" =~ ^[0-9]+$ ]]; then
+  age=$((NOW_EPOCH - PREV_AT))
+  if [[ "$age" -ge 0 && "$age" -lt 900 ]]; then
+    exit 0
+  fi
+elif [[ "$PREV" == "$WANT" && "$WANT" != "standby" ]]; then
   exit 0
 fi
 
+ok=0
 if [[ "$WANT" == "standby" ]]; then
-  echo "standby ${DEVICE}" | cec-client -s -d 1 >/dev/null 2>&1 || true
+  echo "standby ${DEVICE}" | cec-client -s -d 1 >/dev/null 2>&1 && ok=1
 else
-  echo "on ${DEVICE}" | cec-client -s -d 1 >/dev/null 2>&1 || true
+  echo "on ${DEVICE}" | cec-client -s -d 1 >/dev/null 2>&1 && ok=1
 fi
-echo "$WANT" >"$STATE_FILE"
+if [[ "$ok" -eq 1 ]]; then
+  echo "$WANT $NOW_EPOCH" >"$STATE_FILE"
+fi

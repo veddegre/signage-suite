@@ -114,10 +114,15 @@ health_ok=0
 online=0
 pages=-1
 blank=0
+schedule_blank=0
+cec_enabled=0
 page_total=0
 page_age_sec=0
+page_dwell=0
+page_url=""
 status=""
 page_label=""
+last_content_url=""
 if curl "${curl_args[@]}" -o "$tmp" "$health_url"; then
   # Without kiosk-health on the server, curl returns full board.php HTML (~50KB).
   # Treat that as "API unavailable" — not "empty playlist" (pages=0).
@@ -133,12 +138,20 @@ if curl "${curl_args[@]}" -o "$tmp" "$health_url"; then
     fi
     blank_raw="$(json_field "$tmp" blank)"
     [[ "$blank_raw" == "true" ]] && blank=1
+    schedule_blank_raw="$(json_field "$tmp" schedule_blank)"
+    [[ "$schedule_blank_raw" == "true" ]] && schedule_blank=1
+    cec_enabled_raw="$(json_field "$tmp" cec_enabled)"
+    [[ "$cec_enabled_raw" == "true" ]] && cec_enabled=1
     page_total="$(json_field "$tmp" page_total)"
     page_total="${page_total:-0}"
     page_age_sec="$(json_field "$tmp" page_age_sec)"
     page_age_sec="${page_age_sec:-0}"
+    page_dwell="$(json_field "$tmp" page_dwell)"
+    page_dwell="${page_dwell:-0}"
+    page_url="$(json_field "$tmp" page_url)"
     status="$(json_field "$tmp" status)"
     page_label="$(json_field "$tmp" page_label)"
+    last_content_url="$(json_field "$tmp" last_content_url)"
   fi
 fi
 
@@ -162,7 +175,7 @@ if [[ "$online" -eq 0 ]]; then
   browser_fails=$((browser_fails + 1))
   echo "$browser_fails" > "$BROWSER_FAIL_FILE"
 
-  if [[ "$browser_fails" -ge 3 ]]; then
+  if [[ "$browser_fails" -ge 2 ]]; then
     rm -f "$BROWSER_FAIL_FILE"
     logger -t signage-watchdog "restarting signage.service — server OK but no heartbeat from screen ${SCREEN} (${browser_fails} checks, uptime ${service_uptime}s)"
     systemctl restart signage.service
@@ -172,13 +185,48 @@ fi
 
 rm -f "$BROWSER_FAIL_FILE"
 
+BLANK_RESTART_FILE="$STATE_DIR/blank-hours-restarted"
+
+# Off-hours: the kiosk can still heartbeat and even report blank while HDMI
+# holds the last RSS frame. Restart Chromium once per blank window so the
+# overlay (and CEC) can take effect. signage-cec-sync re-asserts standby.
+if [[ "$schedule_blank" -eq 1 ]]; then
+  if [[ ! -f "$BLANK_RESTART_FILE" ]]; then
+    echo 1 > "$BLANK_RESTART_FILE"
+    rm -f "$STALE_FAIL_FILE"
+    if [[ "$blank" -eq 0 && -n "$page_url" ]]; then
+      logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} should be blank but is still on '${page_label:-unknown}'"
+    else
+      logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} entering blank hours (clear compositor)"
+    fi
+    systemctl restart signage.service
+    exit 0
+  fi
+else
+  rm -f "$BLANK_RESTART_FILE"
+fi
+
 # Online — detect frozen rotation: heartbeat alive, same board too long.
+# Use kiosk-reported blank only (not the server schedule) so off-hours cannot
+# hide a frozen RSS iframe that never actually blanked.
 stale=0
+stale_need=2
 if [[ "$blank" -eq 0 ]]; then
   if [[ "$status" == "loading" && "$page_age_sec" -ge "$STALE_LOADING_SEC" ]]; then
     stale=1
-  elif [[ "$page_total" -gt 1 && "$page_age_sec" -ge "$STALE_PAGE_SEC" ]]; then
-    stale=1
+  else
+    limit="$STALE_PAGE_SEC"
+    check_url="${page_url:-$last_content_url}"
+    if [[ "$check_url" == *rss.php* ]]; then
+      # RSS GPU hangs often freeze the shared renderer; don't wait 12+ minutes.
+      limit=$((page_dwell + 90))
+      if [[ "$limit" -lt 180 ]]; then limit=180; fi
+      if [[ "$limit" -gt 480 ]]; then limit=480; fi
+      stale_need=1
+    fi
+    if [[ "$page_total" -gt 1 && "$page_age_sec" -ge "$limit" ]]; then
+      stale=1
+    fi
   fi
 fi
 
@@ -194,7 +242,7 @@ fi
 stale_fails=$((stale_fails + 1))
 echo "$stale_fails" > "$STALE_FAIL_FILE"
 
-if [[ "$stale_fails" -ge 2 ]]; then
+if [[ "$stale_fails" -ge "$stale_need" ]]; then
   rm -f "$STALE_FAIL_FILE"
   logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} online but stuck on '${page_label:-unknown}' for ${page_age_sec}s (status=${status:-?} pages=${page_total})"
   systemctl restart signage.service
