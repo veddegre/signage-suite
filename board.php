@@ -433,7 +433,8 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     }
     if (ev.data.type === 'signage-rss-tick') {
       rssTickAt = Date.now();
-      lastAdvanceAt = Date.now();
+      // Do not bump lastAdvanceAt: story ticks can continue in JS while HDMI
+      // stays on one frame. The RSS safety timer / leave-RSS reload recover that.
       return;
     }
     if (ev.data.type !== 'signage-done') return;
@@ -840,8 +841,26 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     return /\.php(?:[?#]|$)/i.test(u);
   }
 
+  function flushAfterRss(reason) {
+    try {
+      const k = 'signage-rss-flush';
+      const last = +sessionStorage.getItem(k) || 0;
+      if (Date.now() - last < 90000) return false;
+      sessionStorage.setItem(k, String(Date.now()));
+    } catch (e) {}
+    updateRotateDebug(reason || 'rss flush', presencePage, idx, '');
+    location.reload();
+    return true;
+  }
+
   function rotateToIndex(targetIdx) {
     if (blankActive || PAGES.length === 0) return;
+    const leaving = presencePage;
+    if (leaving && isRssUrl(leaving.url)) {
+      // Parent often "rotates" after RSS while cage keeps scanning out the last
+      // story. Status stays Online with a new page_url; the TV does not.
+      if (flushAfterRss('leaving rss')) return;
+    }
     clearRotateTimer();
     postToFrame(frames[0], { type: 'signage-stop' });
     postToFrame(frames[1], { type: 'signage-stop' });
@@ -890,6 +909,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
           if (rssWatchGen !== gen || blankActive) return;
           if (rssTickAt === 0) {
             clearRotateTimer();
+            if (flushAfterRss('rss silent')) return;
             rotateForward();
           }
         }, 45000);
