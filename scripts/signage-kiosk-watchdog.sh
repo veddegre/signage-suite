@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Restart the local signage kiosk when the server or browser stops responding,
-# or when heartbeats continue but the same board stays on screen too long
-# ("online but frozen" — compositor/JS stall that still posts presence).
+# when heartbeats continue but the same board stays on screen too long, or when
+# cage has been up too long while still Online (compositor stall with a moving
+# page_url — RSS/Zabbix/Grafana GPU hangs that Status cannot see).
 # Installed by setup-kiosk.sh — polls every 5 minutes (first check 2 min after boot).
 set -euo pipefail
 
@@ -23,6 +24,9 @@ fi
 STALE_PAGE_SEC="${WATCHDOG_STALE_PAGE_SEC:-720}"
 # Stuck in "loading" longer than this → count toward restart.
 STALE_LOADING_SEC="${WATCHDOG_STALE_LOADING_SEC:-300}"
+# Recycle Chromium if cage has been up this long even while heartbeats look
+# healthy. Status page_url can keep changing during a compositor stall.
+MAX_BROWSER_SEC="${WATCHDOG_MAX_BROWSER_SEC:-1800}"
 
 STATE_DIR=/run/signage-watchdog
 mkdir -p "$STATE_DIR"
@@ -208,7 +212,7 @@ fi
 
 # Online — detect frozen rotation: heartbeat alive, same board too long.
 # Use kiosk-reported blank only (not the server schedule) so off-hours cannot
-# hide a frozen RSS iframe that never actually blanked.
+# hide a frozen iframe that never actually blanked.
 stale=0
 stale_need=2
 if [[ "$blank" -eq 0 ]]; then
@@ -217,8 +221,8 @@ if [[ "$blank" -eq 0 ]]; then
   else
     limit="$STALE_PAGE_SEC"
     check_url="${page_url:-$last_content_url}"
-    if [[ "$check_url" == *rss.php* ]]; then
-      # RSS GPU hangs often freeze the shared renderer; don't wait 12+ minutes.
+    if [[ "$check_url" == *rss.php* || "$check_url" == *zabbix.php* || "$check_url" == *grafana.php* ]]; then
+      # GPU-heavy boards often freeze the shared renderer; don't wait 12+ minutes.
       limit=$((page_dwell + 90))
       if [[ "$limit" -lt 180 ]]; then limit=180; fi
       if [[ "$limit" -gt 480 ]]; then limit=480; fi
@@ -232,18 +236,32 @@ fi
 
 if [[ "$stale" -eq 0 ]]; then
   rm -f "$STALE_FAIL_FILE"
-  exit 0
+else
+  stale_fails=0
+  if [[ -f "$STALE_FAIL_FILE" ]]; then
+    stale_fails=$(cat "$STALE_FAIL_FILE")
+  fi
+  stale_fails=$((stale_fails + 1))
+  echo "$stale_fails" > "$STALE_FAIL_FILE"
+
+  if [[ "$stale_fails" -ge "$stale_need" ]]; then
+    rm -f "$STALE_FAIL_FILE"
+    logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} online but stuck on '${page_label:-unknown}' for ${page_age_sec}s (status=${status:-?} pages=${page_total})"
+    systemctl restart signage.service
+    exit 0
+  fi
 fi
 
-stale_fails=0
-if [[ -f "$STALE_FAIL_FILE" ]]; then
-  stale_fails=$(cat "$STALE_FAIL_FILE")
-fi
-stale_fails=$((stale_fails + 1))
-echo "$stale_fails" > "$STALE_FAIL_FILE"
-
-if [[ "$stale_fails" -ge "$stale_need" ]]; then
-  rm -f "$STALE_FAIL_FILE"
-  logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} online but stuck on '${page_label:-unknown}' for ${page_age_sec}s (status=${status:-?} pages=${page_total})"
-  systemctl restart signage.service
+# Heartbeats and page_url can keep changing while cage scans out a dead frame
+# (RSS, Zabbix, Grafana). Recycle Chromium on a wall-clock cap.
+if [[ "$blank" -eq 0 && "$MAX_BROWSER_SEC" -gt 0 ]]; then
+  cage_pid="$(pgrep -n -x cage || true)"
+  if [[ -n "$cage_pid" ]]; then
+    browser_age="$(ps -o etimes= -p "$cage_pid" 2>/dev/null | tr -d ' ' || true)"
+    browser_age="${browser_age:-0}"
+    if [[ "$browser_age" =~ ^[0-9]+$ && "$browser_age" -ge "$MAX_BROWSER_SEC" ]]; then
+      logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} cage up ${browser_age}s (max ${MAX_BROWSER_SEC}s; compositor stall while still Online)"
+      systemctl restart signage.service
+    fi
+  fi
 fi

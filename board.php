@@ -360,6 +360,10 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     return /(?:^|[?&/])rss\.php(?:[?&#]|$)/.test(String(url));
   }
 
+  function needsGpuFlush(url) {
+    return /(?:^|[?&/])(rss|zabbix|grafana|splunk|webcam|video|camwall|attackmap|l3map|dshieldmap|dshieldsrc|iodamap|radar|homelab|unifi|web)\.php(?:[?&#]|$)/.test(String(url));
+  }
+
   function debugEsc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
@@ -841,14 +845,14 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     return /\.php(?:[?#]|$)/i.test(u);
   }
 
-  function flushAfterRss(reason) {
+  function flushCompositor(reason) {
     try {
-      const k = 'signage-rss-flush';
+      const k = 'signage-gpu-flush';
       const last = +sessionStorage.getItem(k) || 0;
       if (Date.now() - last < 90000) return false;
       sessionStorage.setItem(k, String(Date.now()));
     } catch (e) {}
-    updateRotateDebug(reason || 'rss flush', presencePage, idx, '');
+    updateRotateDebug(reason || 'gpu flush', presencePage, idx, '');
     location.reload();
     return true;
   }
@@ -856,10 +860,10 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   function rotateToIndex(targetIdx) {
     if (blankActive || PAGES.length === 0) return;
     const leaving = presencePage;
-    if (leaving && isRssUrl(leaving.url)) {
-      // Parent often "rotates" after RSS while cage keeps scanning out the last
-      // story. Status stays Online with a new page_url; the TV does not.
-      if (flushAfterRss('leaving rss')) return;
+    if (leaving && needsGpuFlush(leaving.url)) {
+      // Parent often "rotates" after RSS/Zabbix/Grafana while cage keeps the
+      // last frame on HDMI. Status stays Online with a new page_url; the TV does not.
+      if (flushCompositor('leaving ' + (leaving.url || 'board'))) return;
     }
     clearRotateTimer();
     postToFrame(frames[0], { type: 'signage-stop' });
@@ -909,7 +913,7 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
           if (rssWatchGen !== gen || blankActive) return;
           if (rssTickAt === 0) {
             clearRotateTimer();
-            if (flushAfterRss('rss silent')) return;
+            if (flushCompositor('rss silent')) return;
             rotateForward();
           }
         }, 45000);

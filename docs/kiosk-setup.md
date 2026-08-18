@@ -96,7 +96,7 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **signage-update.timer** | Daily **03:30** (default) — `apt upgrade` + `git pull` / `setup-kiosk.sh --skip-apt` |
 | **signage-maint.timer** | Daily **04:00** (default) — **`git pull` + setup again**, then reboot if needed else browser restart |
 | **unattended-upgrades** | Security patches between nightly runs |
-| **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding, heartbeats stop, or the same board stays up too long while Online |
+| **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding, heartbeats stop, the same board stays up too long, or cage has been running 30 min |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **signage-cursor-vt.service** | **Pi only** — VT switch to hide cage’s compositor pointer |
 | **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors only) |
@@ -412,7 +412,7 @@ Recovery is layered (board shell + systemd):
 | **board.php** | Automatic shell reload every 2 hours |
 | **signage-maint.timer** | Daily reboot-if-needed else browser restart |
 | **signage-restart.timer** | Only when `--no-auto-update` (04:00 browser restart) |
-| **signage-watchdog.timer** | Every 5 min — restarts if the server is down, heartbeats stop (~10 min), the same multi-page board stays up too long (RSS ~3–8 min, other boards ~12+ min), **or** the schedule says blank but the kiosk is still on a board |
+| **signage-watchdog.timer** | Every 5 min — restarts if the server is down, heartbeats stop (~10 min), the same multi-page board stays up too long (RSS/Zabbix/Grafana ~3–8 min, other boards ~12+ min), **cage has been up 30 min** (compositor stall while Status still Online), **or** the schedule says blank but the kiosk is still on a board |
 
 Admin **Status** “Online” only means a heartbeat arrived in the last 2 minutes. **Blank (scheduled off)** is what the kiosk *reported*, not a photo of HDMI. After an RSS GPU hang the shell can still post “blank” while the TV shows the last news frame. Status shows **Online · stuck?** when a multi-page display reports the same URL for 10+ minutes, or when off-hours have started and the kiosk is still on a board.
 
