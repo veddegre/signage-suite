@@ -84,7 +84,7 @@ SIGNAGE_WANTS="network-online.target seatd.service user@${KIOSK_UID}.service"
 SIGNAGE_REQUIRES="seatd.service"
 SIGNAGE_EXEC_START_PRE=""
 if [[ -x /usr/local/bin/signage-kiosk-wait-for-display ]]; then
-  SIGNAGE_EXEC_START_PRE="ExecStartPre=+/usr/local/bin/signage-kiosk-wait-for-display 45"
+  SIGNAGE_EXEC_START_PRE="ExecStartPre=+/usr/local/bin/signage-kiosk-wait-for-display 90"
 fi
 if [[ "$CHROMIUM" == *"/snap/"* ]] || [[ -x /snap/bin/chromium ]]; then
   SIGNAGE_AFTER="$SIGNAGE_AFTER snapd.service snapd.seeded.service"
@@ -92,7 +92,9 @@ if [[ "$CHROMIUM" == *"/snap/"* ]] || [[ -x /snap/bin/chromium ]]; then
 fi
 
 if command -v loginctl >/dev/null 2>&1; then
-  loginctl enable-linger "$KIOSK_USER" 2>/dev/null || true
+  mkdir -p /var/lib/systemd/linger
+  touch "/var/lib/systemd/linger/$KIOSK_USER"
+  loginctl enable-linger "$KIOSK_USER" || true
   systemctl start "user@${KIOSK_UID}.service" 2>/dev/null || true
 fi
 
@@ -102,6 +104,7 @@ Description=Signage kiosk (cage + Chromium)
 After=$SIGNAGE_AFTER
 Wants=$SIGNAGE_WANTS
 Requires=$SIGNAGE_REQUIRES
+Conflicts=getty@tty1.service
 
 [Service]
 User=$KIOSK_USER

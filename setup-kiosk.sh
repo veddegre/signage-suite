@@ -708,7 +708,7 @@ SIGNAGE_WANTS="network-online.target seatd.service user@${KIOSK_UID}.service"
 SIGNAGE_REQUIRES="seatd.service"
 SIGNAGE_EXEC_START_PRE=""
 if [[ -x /usr/local/bin/signage-kiosk-wait-for-display ]]; then
-  SIGNAGE_EXEC_START_PRE="ExecStartPre=+/usr/local/bin/signage-kiosk-wait-for-display 45"
+  SIGNAGE_EXEC_START_PRE="ExecStartPre=+/usr/local/bin/signage-kiosk-wait-for-display 90"
 fi
 if [[ "$CHROMIUM" == *"/snap/"* ]] || [[ -x /snap/bin/chromium ]]; then
   SIGNAGE_AFTER="$SIGNAGE_AFTER snapd.service snapd.seeded.service"
@@ -725,6 +725,7 @@ Description=Signage kiosk (cage + Chromium)
 After=$SIGNAGE_AFTER
 Wants=$SIGNAGE_WANTS
 Requires=$SIGNAGE_REQUIRES
+Conflicts=getty@tty1.service
 
 [Service]
 User=$KIOSK_USER
@@ -895,17 +896,23 @@ fi
 
 echo "==> Disabling console getty on tty1 and tty2 (kiosk owns the display; VT cursor fix uses tty2 on Pi)"
 systemctl disable --now getty@tty1.service getty@tty2.service 2>/dev/null || true
+systemctl mask getty@tty1.service getty@tty2.service 2>/dev/null || true
 
 echo "==> Kiosk session helpers (seatd + persistent runtime dir for cage)"
 systemctl enable seatd.service 2>/dev/null || true
 systemctl start seatd.service 2>/dev/null || true
+mkdir -p /var/lib/systemd/linger
+touch "/var/lib/systemd/linger/$KIOSK_USER"
 if command -v loginctl >/dev/null 2>&1; then
-  loginctl enable-linger "$KIOSK_USER" 2>/dev/null || true
-  systemctl start "user@${KIOSK_UID}.service" 2>/dev/null || true
+  loginctl enable-linger "$KIOSK_USER" || logger -t signage-kiosk "enable-linger failed for $KIOSK_USER"
 fi
+systemctl start "user@${KIOSK_UID}.service" 2>/dev/null || true
 
 systemctl daemon-reload
 systemctl enable signage.service
+if [[ $FROM_UPDATE -eq 0 ]]; then
+  systemctl restart signage.service || true
+fi
 systemctl disable --now signage-ydotoold.service 2>/dev/null || true
 rm -f /etc/systemd/system/signage-ydotoold.service 2>/dev/null || true
 systemctl daemon-reload 2>/dev/null || true
@@ -940,7 +947,9 @@ if [[ $FROM_UPDATE -eq 0 ]]; then
 cat <<NOTES
 
 ============================================================
-Done. Reboot to start the kiosk:  sudo reboot
+Done. Kiosk service started. If the TV is still blank, wait ~30s for the GPU, then:
+  sudo systemctl restart signage
+  sudo reboot   # only if restart is not enough
 
 Useful afterwards:
   systemctl status signage          # is it running

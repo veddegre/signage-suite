@@ -20,4 +20,4 @@ while [[ $(date +%s) -lt $deadline ]]; do
 done
 
 logger -t signage-kiosk "runtime/seatd not ready after ${MAX_WAIT}s (runtime=$runtime seatd=${seatd_ok:-0})"
-exit 0
+exit 1

@@ -460,7 +460,7 @@ Also confirm the new screen key has **pages in its playlist** in admin → Rotat
 
 Rebooting may not help; only restarting the **signage** service fixes it. On **x86 mini PCs / NUCs**, the usual cause is a **VT/DRM race at boot**: cage starts before the kernel attaches scanout to HDMI, so the TV stays black even though `signage.service` is running. Opening another console (tty2) and switching back often “wakes” the display — same effect as `chvt 1`.
 
-**Fix (re-run on each player — installs display prep + boot retry):**
+**Fix (re-run on each player — waits for the real GPU, not firmware simpledrm):**
 
 ```bash
 cd ~/signage-suite && git pull
@@ -472,7 +472,7 @@ What changed:
 
 | Fix | Purpose |
 |-----|---------|
-| **`signage-kiosk-wait-for-display`** (root, before cage) | `chvt 1` + wait for `/dev/dri/card*` |
+| **`signage-kiosk-wait-for-display`** (root, before cage) | `chvt 1` + wait for a real KMS driver (`i915`/`xe`/`vc4`), not firmware `simpledrm` |
 | **`user@<uid>.service` + linger** | `/run/user/<uid>` exists before cage (PAM session) |
 | **Removed wrong `XDG_RUNTIME_DIR=/run/user/%U`** | Let PAM set numeric UID path |
 | **`signage-boot-retry.timer`** | At 90s after boot, restart if cage never started |
