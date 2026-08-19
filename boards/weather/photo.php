@@ -105,22 +105,21 @@ function photo_smoke_assessment(
             $score += 3;
             $reasons[] = 'Elevated PM2.5 ' . round($pm25);
         } elseif ($pm25 >= 12.0) {
-            $score += 2;
-            $reasons[] = 'PM2.5 ' . round($pm25, 1);
-        } elseif ($pm25 >= 8.0) {
             $score += 1;
             $reasons[] = 'PM2.5 ' . round($pm25, 1);
         }
     }
 
+    // AOD is column optical depth (humidity, pollen, dust aloft). Typical
+    // humid-summer Midwest values sit around 0.2–0.3 with no visible smoke.
     if ($aod !== null) {
-        if ($aod >= 0.35) {
+        if ($aod >= 0.60) {
             $score += 3;
             $reasons[] = 'Heavy aerosol / haze (AOD ' . number_format($aod, 2) . ')';
-        } elseif ($aod >= 0.18) {
+        } elseif ($aod >= 0.40) {
             $score += 2;
             $reasons[] = 'Haze layer (AOD ' . number_format($aod, 2) . ')';
-        } elseif ($aod >= 0.10) {
+        } elseif ($aod >= 0.25 && $pm25 !== null && $pm25 >= 12.0) {
             $score += 1;
             $reasons[] = 'Light aerosol (AOD ' . number_format($aod, 2) . ')';
         }

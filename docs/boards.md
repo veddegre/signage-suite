@@ -127,7 +127,7 @@ Full-screen live stills from the [Mackinac Bridge Authority bridge cams](https:/
 **Verdict inputs (not clouds alone):**
 - Cloud cover near sunset (OWM 3-hour slots blended within ±3h of sunset)
 - **Afternoon → sunset trend** — compares current cloud cover to sunset (clearing, steady, clouding up, rain possible)
-- Smoke / haze tint from OWM weather types (smoke, haze, dust), Open-Meteo PM2.5 + AOD, reduced visibility, and NWS Air Quality / Smoke advisories
+- Smoke / haze tint from OWM weather types (smoke, haze, dust), Open-Meteo PM2.5, high AOD only when PM2.5 is also up, reduced visibility, and NWS Air Quality / Smoke advisories
 - Clear deck + smoke tint → **DRAMATIC SKY** (deep orange/red without needing broken clouds)
 - Otherwise: ≤20% clouds = CLEAN LIGHT, 21–70% = DRAMATIC SKY, 71–85% = MARGINAL, else FLAT GRAY
 
@@ -147,7 +147,7 @@ US AQI, per-pollutant AQI (PM2.5, PM10, ozone), pollen bars, and a three-day **O
 | Alerts | NWS (`api.weather.gov`) | Badges + verdict; no API key — **5 min cache** by default |
 | Pollen | Google Pollen API (optional) | Separate key from AirNow |
 
-**Scoring:** overall AQI = highest pollutant sub-index (EPA method). With only Open-Meteo, NWS alert wording can raise the displayed category when monitors are unavailable.
+**Scoring:** overall AQI = highest pollutant sub-index (EPA method). NWS can raise the headline only when the alert names an EPA category (Unhealthy, etc.). Aerosol optical depth is not used as an AQI floor.
 
 **Cache TTL** (admin → Air & Pollen)
 

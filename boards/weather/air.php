@@ -13,6 +13,7 @@
 
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/air_aqi_lib.php';
 
 $SCREEN = signage_request_screen();
 $LOC = rotation_screen_location($SCREEN);
@@ -170,175 +171,6 @@ function air_aqi_band(?int $aqi): array
     }
 
     return ['Hazardous', '#7a001a', 'Emergency conditions — stay indoors'];
-}
-
-/** Convert PM2.5 (µg/m³) to EPA US AQI using standard breakpoints. */
-function air_pm25_to_aqi(?float $pm25): ?int
-{
-    if ($pm25 === null) {
-        return null;
-    }
-    $bps = [
-        [0.0, 12.0, 0, 50],
-        [12.1, 35.4, 51, 100],
-        [35.5, 55.4, 101, 150],
-        [55.5, 150.4, 151, 200],
-        [150.5, 250.4, 201, 300],
-        [250.5, 350.4, 301, 400],
-        [350.5, 500.4, 401, 500],
-    ];
-    foreach ($bps as [$cLow, $cHigh, $iLow, $iHigh]) {
-        if ($pm25 < $cLow) {
-            continue;
-        }
-        if ($pm25 <= $cHigh) {
-            return (int)round(($iHigh - $iLow) / ($cHigh - $cLow) * ($pm25 - $cLow) + $iLow);
-        }
-    }
-
-    return 500;
-}
-
-/**
- * @param list<array{event:string,headline:string,severity:string}> $alerts
- * @return list<array{event:string,headline:string,severity:string}>
- */
-function air_nws_aq_alerts(array $alerts): array
-{
-    $out = [];
-    foreach ($alerts as $a) {
-        if (!is_array($a)) {
-            continue;
-        }
-        $event = trim((string)($a['event'] ?? ''));
-        $headline = trim((string)($a['headline'] ?? ''));
-        if ($event === '') {
-            continue;
-        }
-        $blob = $event . ' ' . $headline;
-        if (
-            preg_match('/air\s+quality|smoke|haze|ozone\s+action|dense\s+fog|particulate|pm2\.?5/i', $blob)
-            || preg_match('/\b(fire\s+weather|red\s+flag)\b/i', $blob)
-        ) {
-            $out[] = [
-                'event' => $event,
-                'headline' => $headline,
-                'severity' => trim((string)($a['severity'] ?? 'Moderate')),
-                'description' => trim((string)($a['description'] ?? '')),
-            ];
-        }
-    }
-
-    return $out;
-}
-
-/** Map EPA category language in NWS alert text to a minimum AQI floor. */
-function air_nws_text_aqi_floor(string $text): ?int
-{
-    $cat = air_nws_text_category($text);
-
-    return $cat['floor'] ?? null;
-}
-
-/**
- * @return array{label:string,floor:int}|null
- */
-function air_nws_text_category(string $text): ?array
-{
-    $t = strtolower($text);
-    if (preg_match('/\bhazardous\b/', $t)) {
-        return ['label' => 'Hazardous', 'floor' => 301];
-    }
-    if (preg_match('/very\s+unhealthy/', $t)) {
-        return ['label' => 'Very Unhealthy', 'floor' => 201];
-    }
-    if (preg_match('/unhealthy\s+for\s+sensitive|sensitive\s+groups/', $t)) {
-        return ['label' => 'Unhealthy for Sensitive Groups', 'floor' => 101];
-    }
-    if (preg_match('/\bunhealthy\b/', $t)) {
-        return ['label' => 'Unhealthy', 'floor' => 151];
-    }
-
-    return null;
-}
-
-/**
- * Highest EPA category mentioned across active NWS air-quality alerts.
- *
- * @param list<array{event:string,headline:string,severity:string,description?:string}> $alerts
- * @return array{label:string,floor:int}|null
- */
-function air_nws_alert_category(array $alerts): ?array
-{
-    $best = null;
-    foreach ($alerts as $a) {
-        $blob = implode(' ', array_filter([
-            (string)($a['event'] ?? ''),
-            (string)($a['headline'] ?? ''),
-            (string)($a['description'] ?? ''),
-        ]));
-        $cat = air_nws_text_category($blob);
-        if ($cat === null) {
-            continue;
-        }
-        if ($best === null || $cat['floor'] > $best['floor']) {
-            $best = $cat;
-        }
-    }
-
-    return $best;
-}
-
-/** @param list<array{event:string,headline:string,severity:string,description?:string}> $alerts */
-function air_nws_alert_floor(array $alerts): ?int
-{
-    if ($alerts === []) {
-        return null;
-    }
-    $floor = null;
-    foreach ($alerts as $a) {
-        $blob = implode(' ', array_filter([
-            (string)($a['event'] ?? ''),
-            (string)($a['headline'] ?? ''),
-            (string)($a['description'] ?? ''),
-        ]));
-        $textFloor = air_nws_text_aqi_floor($blob);
-        if ($textFloor !== null) {
-            $floor = max($floor ?? 0, $textFloor);
-            continue;
-        }
-        $event = strtolower((string)($a['event'] ?? ''));
-        $sev = strtolower((string)($a['severity'] ?? ''));
-        if (str_contains($event, 'warning') || $sev === 'extreme') {
-            $floor = max($floor ?? 0, 201);
-        } elseif ($sev === 'severe') {
-            $floor = max($floor ?? 0, 151);
-        } elseif (preg_match('/air\s+quality|ozone\s+action|smoke|haze|particulate/', $event)) {
-            $floor = max($floor ?? 0, 101);
-        } else {
-            $floor = max($floor ?? 0, 101);
-        }
-    }
-
-    return $floor;
-}
-
-/** Smoke/haze layer can warrant a higher effective AQI than a single PM2.5 snapshot. */
-function air_smoke_floor(?float $aod, ?float $pm25): ?int
-{
-    if ($aod !== null) {
-        if ($aod >= 0.35) {
-            return 151;
-        }
-        if ($aod >= 0.18) {
-            return 101;
-        }
-    }
-    if ($pm25 !== null && $pm25 >= 35.0) {
-        return air_pm25_to_aqi($pm25);
-    }
-
-    return null;
 }
 
 /**
@@ -515,76 +347,6 @@ function air_day_max_combined_aqi(array $hourly, string $dayKey): ?int
     }
 
     return $max;
-}
-
-/**
- * EPA overall AQI = max pollutant sub-index (+ NWS / smoke floors when higher).
- *
- * @param array{pm25:?int,pm10:?int,ozone:?int,no2:?int} $pollutantAqis
- * @param list<array{event:string,headline:string,severity:string,description?:string}> $nwsAlerts
- * @return array{
- *   effective:?int,
- *   pollutant_max:?int,
- *   model:?int,
- *   floor:?int,
- *   nws_floor:?int,
- *   smoke_floor:?int,
- *   driver:string,
- *   nws_category:?array{label:string,floor:int},
- *   note:string
- * }
- */
-function air_effective_aqi(array $pollutantAqis, ?int $modelAqi, ?float $pm25, ?float $aod, array $nwsAlerts): array
-{
-    $filtered = array_filter($pollutantAqis, static fn($v) => $v !== null);
-    $pollutantMax = $filtered !== [] ? max($filtered) : null;
-    if ($pollutantMax === null) {
-        $pollutantMax = $modelAqi ?? air_pm25_to_aqi($pm25);
-    }
-    $nwsCategory = air_nws_alert_category($nwsAlerts);
-    $nwsFloor = air_nws_alert_floor($nwsAlerts);
-    $smokeFloor = air_smoke_floor($aod, $pm25);
-    $candidates = array_filter([$pollutantMax, $nwsFloor, $smokeFloor], static fn($v) => $v !== null);
-    $effective = $candidates !== [] ? max($candidates) : null;
-    $floor = null;
-    foreach ([$nwsFloor, $smokeFloor] as $f) {
-        if ($f !== null) {
-            $floor = max($floor ?? 0, $f);
-        }
-    }
-
-    $driver = 'pollutants';
-    if ($effective !== null && $nwsFloor !== null && $effective === $nwsFloor && $nwsFloor > ($pollutantMax ?? 0)) {
-        $driver = 'nws';
-    } elseif ($effective !== null && $smokeFloor !== null && $effective === $smokeFloor && $smokeFloor > ($pollutantMax ?? 0)) {
-        $driver = 'smoke';
-    }
-
-    $note = '';
-    if ($driver === 'nws' && $nwsCategory !== null) {
-        $note = 'NWS alert: ' . $nwsCategory['label'] . ' — model readings below are not current ground conditions';
-    } elseif ($nwsAlerts !== []) {
-        $note = (string)($nwsAlerts[0]['event'] ?? 'Air quality alert') . ' active';
-        if ($pollutantMax !== null && $effective !== null && $effective > $pollutantMax) {
-            $note .= ' — elevated above model';
-        }
-    } elseif ($modelAqi !== null && $pollutantMax !== null && $pollutantMax > $modelAqi + 20) {
-        $note = 'Per-pollutant AQI above consolidated model reading';
-    } elseif ($smokeFloor !== null && $pollutantMax !== null && $smokeFloor > $pollutantMax) {
-        $note = 'Smoke / haze layer in the forecast';
-    }
-
-    return [
-        'effective' => $effective,
-        'pollutant_max' => $pollutantMax,
-        'model' => $modelAqi,
-        'floor' => $floor,
-        'nws_floor' => $nwsFloor,
-        'smoke_floor' => $smokeFloor,
-        'driver' => $driver,
-        'nws_category' => $nwsCategory,
-        'note' => $note,
-    ];
 }
 
 /** @return list<array{event:string,headline:string,severity:string}> */
@@ -1035,7 +797,7 @@ if ($airnow !== null) {
     $pollutantAqis = $omPollutants;
 }
 
-$aqiInfo = air_effective_aqi($pollutantAqis, $aqiModel, $pm25, $aod, $nwsAlerts);
+$aqiInfo = air_effective_aqi($pollutantAqis, $aqiModel, $pm25, $aod, $nwsAlerts, $aqSource === 'airnow');
 $aqiDriver = (string)($aqiInfo['driver'] ?? 'pollutants');
 $nwsCategory = $aqiInfo['nws_category'] ?? null;
 $pollutantMax = $aqiInfo['pollutant_max'] ?? null;
