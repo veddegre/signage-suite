@@ -451,7 +451,7 @@ function air_google_pollen_response_valid(?array $data): bool
         && $data['dailyInfo'] !== [];
 }
 
-/** Best in-season UPI for a pollen type from plantInfo (GRASS / TREE / WEED). */
+/** Best UPI for a pollen type from plantInfo (GRASS / TREE / WEED). */
 function air_google_plant_type_index(?array $day, string $pollenTypeCode): array
 {
     $bestUpi = null;
@@ -460,22 +460,18 @@ function air_google_plant_type_index(?array $day, string $pollenTypeCode): array
         if (!is_array($plant)) {
             continue;
         }
-        $desc = $plant['plantDescription'] ?? null;
-        if (!is_array($desc)) {
-            continue;
-        }
-        if (strtoupper((string)($desc['type'] ?? '')) !== $pollenTypeCode) {
-            continue;
-        }
-        if (empty($plant['inSeason'])) {
+        $desc = is_array($plant['plantDescription'] ?? null) ? $plant['plantDescription'] : [];
+        $plantType = strtoupper((string)($desc['type'] ?? ''));
+        if ($plantType !== $pollenTypeCode) {
             continue;
         }
         [$upi, $category, $hasIndex] = air_google_pollen_index($plant['indexInfo'] ?? null);
-        if (!$hasIndex || $upi === null) {
+        if (!$hasIndex) {
             continue;
         }
-        if ($bestUpi === null || $upi > $bestUpi) {
-            $bestUpi = $upi;
+        $score = $upi ?? 0;
+        if ($bestUpi === null || $score > $bestUpi) {
+            $bestUpi = $upi ?? 0;
             $bestCategory = $category;
         }
     }
@@ -605,6 +601,9 @@ function air_pollen_rows_google(?array $data, int $dayIndex, string $dayKey = ''
         $upi = null;
         $category = '';
         $hasIndex = false;
+        $typeInSeason = is_array($pt) && array_key_exists('inSeason', $pt)
+            ? !empty($pt['inSeason'])
+            : null;
         if (is_array($pt)) {
             [$upi, $category, $hasIndex] = air_google_pollen_index($pt['indexInfo'] ?? null);
         }
@@ -613,6 +612,30 @@ function air_pollen_rows_google(?array $data, int $dayIndex, string $dayKey = ''
             if ($plantHas) {
                 $upi = $plantUpi;
                 $category = $plantCat;
+                $hasIndex = true;
+            }
+        }
+        // Google often omits indexInfo at the type level while still listing the
+        // type as in season (or a plant still has a Very Low UPI). That is "None",
+        // not off-season — Midwest grass routinely continues into August.
+        if (!$hasIndex && $typeInSeason === true) {
+            $upi = 0;
+            $category = 'None';
+            $hasIndex = true;
+        }
+        // Google's grass inSeason flag often drops in midsummer for the Great
+        // Lakes while residual grass pollen is still a thing. Don't call that
+        // off-season during May–September.
+        if (!$hasIndex && $code === 'GRASS') {
+            $month = 0;
+            if ($dayKey !== '' && preg_match('/^\d{4}-(\d{2})-/', $dayKey, $dm)) {
+                $month = (int)$dm[1];
+            } elseif (is_array($day['date'] ?? null)) {
+                $month = (int)($day['date']['month'] ?? 0);
+            }
+            if ($month >= 5 && $month <= 9) {
+                $upi = 0;
+                $category = 'None';
                 $hasIndex = true;
             }
         }
