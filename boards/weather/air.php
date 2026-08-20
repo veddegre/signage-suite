@@ -6,6 +6,7 @@
  * Data: EPA AirNow observations when an API key is set (ground monitors, per-pollutant AQI).
  *   Fallback: Open-Meteo per-pollutant US AQI (CAMS model — can lag smoke events).
  * Pollen: Google Pollen API for the US (optional key in admin); Open-Meteo pollen is Europe-only.
+ *   Local nudge: NWS hourly weather can nudge Google UPI (rain/humidity/wind) like echoweather.
  *   https://open-meteo.com/en/docs/air-quality-api
  *
  * Configure lat/lon and place name in admin.php → Air & Pollen.
@@ -14,6 +15,7 @@
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/screen_scope_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/air_aqi_lib.php';
+require_once dirname(__DIR__, 2) . '/lib/air_pollen_lib.php';
 
 $SCREEN = signage_request_screen();
 $LOC = rotation_screen_location($SCREEN);
@@ -392,19 +394,6 @@ function air_pollen_band(?float $grains): array
     return ['Very high', '#ff5d5d'];
 }
 
-/** Google Universal Pollen Index (1–5) → label and color. */
-function air_upi_band(?int $upi): array
-{
-    if ($upi === null) return ['—', 'var(--mist)'];
-    return match (max(1, min(5, $upi))) {
-        1       => ['Very low', '#39c46d'],
-        2       => ['Low', '#39c46d'],
-        3       => ['Moderate', 'var(--beacon)'],
-        4       => ['High', '#ff9d4d'],
-        default => ['Very high', '#ff5d5d'],
-    };
-}
-
 /** @return array{0:?int,1:string,2:bool} UPI value, category label, whether index data is present */
 function air_google_pollen_index(?array $indexInfo): array
 {
@@ -477,15 +466,6 @@ function air_google_plant_type_index(?array $day, string $pollenTypeCode): array
     }
 
     return [$bestUpi, $bestCategory, $bestUpi !== null];
-}
-
-function air_google_pollen_row_label(?int $upi, string $category): array
-{
-    [$label, $color] = air_upi_band($upi);
-    if ($category !== '' && !preg_match('/off\s*season/i', $category)) {
-        $label = $category;
-    }
-    return [$label, $color];
 }
 
 function air_pollen_rows_sort(array $rows): array
@@ -676,10 +656,32 @@ function air_fetch_google_pollen(): ?array
     return air_cached_json($url, $cacheKey, 'google_pollen');
 }
 
-function air_pollen_rows_for_day(string $source, array $hourly, ?array $google, int $dayIndex, string $dayKey): array
+/** @return list<array<string,mixed>> NWS hourly forecast periods for pollen weather nudge. */
+function air_fetch_nws_hourly_for_pollen(): array
+{
+    $cacheKey = 'nws_hourly_pollen_' . md5(sprintf('%.4F_%.4F', LAT, LON));
+    $points = air_cached_json(
+        sprintf('https://api.weather.gov/points/%.4F,%.4F', LAT, LON),
+        $cacheKey . '_pts',
+        'nws_hourly',
+        max(NWS_CACHE_TTL, 3600)
+    );
+    $hourlyUrl = is_array($points) ? ($points['properties']['forecastHourly'] ?? null) : null;
+    if (!is_string($hourlyUrl) || $hourlyUrl === '') {
+        return [];
+    }
+    $hourly = air_cached_json($hourlyUrl, $cacheKey, 'nws_hourly', max(NWS_CACHE_TTL, 3600));
+    $periods = is_array($hourly) ? ($hourly['properties']['periods'] ?? null) : null;
+
+    return is_array($periods) ? $periods : [];
+}
+
+function air_pollen_rows_for_day(string $source, array $hourly, ?array $google, int $dayIndex, string $dayKey, float $weatherDelta = 0.0): array
 {
     if ($source === 'google') {
-        return air_pollen_rows_google($google, $dayIndex, $dayKey);
+        $rows = air_pollen_rows_google($google, $dayIndex, $dayKey);
+
+        return air_pollen_apply_weather_delta($rows, $weatherDelta);
     }
     if ($source === 'openmeteo') {
         return air_pollen_rows_openmeteo($hourly, $dayKey);
@@ -884,7 +886,14 @@ if ($googlePollen !== null && air_google_pollen_response_valid($googlePollen)) {
     $pollenSource = 'openmeteo';
 }
 $pollenUnitLabel = $pollenSource === 'google' ? 'UPI index' : ($pollenSource === 'openmeteo' ? 'grains/m³' : 'unavailable');
-$pollenToday = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, 0, $todayKey);
+$nwsHourlyPeriods = $pollenSource === 'google' ? air_fetch_nws_hourly_for_pollen() : [];
+$pollenWeatherDeltaToday = 0.0;
+if ($nwsHourlyPeriods !== []) {
+    $wxToday = air_pollen_nws_day_weather($nwsHourlyPeriods, $todayKey);
+    $pollenWeatherDeltaToday = air_pollen_weather_upi_delta($wxToday);
+}
+$pollenToday = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, 0, $todayKey, $pollenWeatherDeltaToday);
+$pollenWeatherAdjusted = $pollenSource === 'google' && abs($pollenWeatherDeltaToday) >= 0.05;
 $pollenNeedsKey = $pollenSource === 'none';
 
 $forecastDays = air_forecast_days($hourly, 3);
@@ -892,7 +901,12 @@ $forecast = [];
 foreach ($forecastDays as $i => $dayKey) {
     $dayAqi = air_day_max_combined_aqi($hourly, $dayKey);
     $dayPmAqi = air_day_max($hourly, 'us_aqi_pm2_5', $dayKey);
-    $dayPollen = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, $i, $dayKey);
+    $dayWeatherDelta = 0.0;
+    if ($nwsHourlyPeriods !== []) {
+        $wxDay = air_pollen_nws_day_weather($nwsHourlyPeriods, $dayKey);
+        $dayWeatherDelta = air_pollen_weather_upi_delta($wxDay);
+    }
+    $dayPollen = air_pollen_rows_for_day($pollenSource, $hourly, $googlePollen, $i, $dayKey, $dayWeatherDelta);
     $topRow = air_pollen_top_row($dayPollen);
     $topPollen = $topRow['name'] ?? '—';
     $topLabel = $topRow['label'] ?? '—';
@@ -1105,6 +1119,8 @@ $gap = $compact ? 12 : 16;
     <?php endforeach; ?>
     <?php if ($pollenNeedsKey): ?>
     <div class="pollen-note">Open-Meteo pollen is Europe-only. Add a <strong>Google Pollen API key</strong> in admin → Air &amp; Pollen for US forecasts (free tier: 5,000 calls/mo).</div>
+    <?php elseif ($pollenWeatherAdjusted): ?>
+    <div class="pollen-note">Adjusted for today’s weather (NWS rain / humidity / wind).</div>
     <?php endif; ?>
   </section>
 
@@ -1139,6 +1155,7 @@ $gap = $compact ? 12 : 16;
     $aqSource === 'airnow' ? 'EPA AirNow' : 'Open-Meteo Air Quality',
     $nwsAlerts !== [] ? 'NWS alerts' : '',
     $pollenSource === 'google' ? 'Google Pollen' : '',
+    $pollenWeatherAdjusted ? 'NWS weather nudge' : '',
     $GLOBALS['diag'] ? implode('; ', array_map(fn($k, $v) => "$k: $v", array_keys($GLOBALS['diag']), $GLOBALS['diag'])) : '',
   ]))) ?></div>
 </div>
