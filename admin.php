@@ -5871,7 +5871,7 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <input type="text"<?= admin_form_name_attr('PAGES[' . $pk . '][group_ids]', $pageRo) ?>
                        value="<?= h(tdx_ids_string($pg['group_ids'] ?? '')) ?>"
                        placeholder="Help Desk, Network Team — comma-separated IDs" list="tdxGroupIds"<?= admin_form_ro_attr($pageRo) ?>>
-                <div class="help">Tickets owned by / assigned to these groups (<code>ResponsibilityGroupIDs</code>).</div>
+                <div class="help">Tickets with incomplete work for these groups (<code>ResponsibilityGroupIDs</code>). Tickets whose group tasks are already 100% complete are hidden by default.</div>
               </div>
               <div class="field span-2">
                 <label class="mini">Priority IDs</label>
@@ -5884,6 +5884,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <?= !empty($pg['include_closed']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Include closed</label>
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][include_cancelled]', $pageRo) ?>
                   <?= !empty($pg['include_cancelled']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Include cancelled</label>
+                <label class="check" style="margin:0" title="When filtering by group or person, also show tickets whose matching tasks are already 100% complete"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][include_completed_tasks]', $pageRo) ?>
+                  <?= !empty($pg['include_completed_tasks']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Include completed tasks</label>
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
                   <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
               </div>
@@ -12147,6 +12149,7 @@ function addTdxPage() {
       '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][include_closed]"> Include closed</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][include_cancelled]"> Include cancelled</label>' +
+        '<label class="check" style="margin:0" title="When filtering by group or person, also show tickets whose matching tasks are already 100% complete"><input type="checkbox" name="PAGES[' + pageKey + '][include_completed_tasks]"> Include completed tasks</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
       '</div>' +
     '</div>';

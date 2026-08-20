@@ -270,10 +270,11 @@ Same model as **Zabbix Monitoring**:
 | **Status IDs** | `StatusIDs` | Comma-separated — **blank** = open, in-process, and on-hold only |
 | **Responsible users** | `ResponsibilityUids` | Comma-separated **email or username** — tickets where person is **Responsible**; resolved via `GET /people/lookup` |
 | **Responsible user UIDs** | `ResponsibilityUids` | Optional person GUIDs if lookup is ambiguous |
-| **Responsible group IDs** | `ResponsibilityGroupIDs` | Comma-separated group IDs — tickets assigned to those groups |
+| **Responsible group IDs** | `ResponsibilityGroupIDs` | Comma-separated group IDs — tickets with **incomplete** work for those groups |
 | **Priority IDs** | `PriorityIDs` | Optional priority filter |
 | **Include closed** | (status class 3) | When status IDs blank, also include closed statuses |
 | **Include cancelled** | (status class 4) | When status IDs blank, also include cancelled |
+| **Include completed tasks** | `CompletedTaskResponsibilityFilter` | Off by default. When filtering by group/person, hide tickets whose matching tasks are already 100% complete (ticket may still be Open while another team finishes remaining work) |
 | **Max tickets** | `MaxResults` | 1–50 (default 20) |
 | **Off wall** | — | Hidden from kiosk and rotation quick-add |
 
@@ -428,11 +429,12 @@ Official docs: [TDWebApi swagger](https://demotemplate.teamdynamix.com/TDWebApi/
   "TypeIDs": [4],
   "ResponsibilityUids": ["00000000-0000-0000-0000-000000000000"],
   "ResponsibilityGroupIDs": ["7", "12"],
+  "CompletedTaskResponsibilityFilter": false,
   "PriorityIDs": [3, 4]
 }
 ```
 
-Search results omit full descriptions and custom attributes — sufficient for a NOC-style ticket list.
+`CompletedTaskResponsibilityFilter` is set to `false` whenever group or person responsibility filters are present (unless **Include completed tasks** is checked). That keeps tickets off the wall after your team’s tasks hit 100% complete, even if the ticket status is still Open.
 
 ---
 

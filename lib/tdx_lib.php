@@ -162,6 +162,9 @@ function tdx_normalize_page(array $page, string $key): ?array
     if (!empty($page['include_cancelled'])) {
         $out['include_cancelled'] = true;
     }
+    if (!empty($page['include_completed_tasks'])) {
+        $out['include_completed_tasks'] = true;
+    }
     if (!empty($page['off'])) {
         $out['off'] = true;
     }
@@ -951,6 +954,16 @@ function tdx_build_search_body(array $page, ?string &$error = null): array
         $body['ResponsibilityUids'] = $responsibleUids;
     }
 
+    // When filtering by group/person responsibility, only keep tickets that still
+    // have incomplete work for that responsibility. Otherwise TDX returns tickets
+    // whose team tasks are already 100% complete (status may still be Open while
+    // another group finishes remaining tasks).
+    if (($groupIds !== [] || $responsibleUids !== [])
+        && !array_key_exists('CompletedTaskResponsibilityFilter', $body)) {
+        $includeCompletedTasks = !empty($page['include_completed_tasks']);
+        $body['CompletedTaskResponsibilityFilter'] = $includeCompletedTasks ? true : false;
+    }
+
     $priorityIds = tdx_parse_id_list($page['priority_ids'] ?? '');
     if ($priorityIds !== []) {
         $body['PriorityIDs'] = $priorityIds;
@@ -1157,6 +1170,7 @@ function tdx_fetch_wall_data(array $page): array
         $page['max_tickets'] ?? 20,
         !empty($page['include_closed']),
         !empty($page['include_cancelled']),
+        !empty($page['include_completed_tasks']),
     ]));
     $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
     $ttl = tdx_cache_ttl();
