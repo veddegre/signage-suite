@@ -36,6 +36,11 @@ $noise = [
     problem('yum: updates available'),
     problem('apt updates outstanding'),
     problem('Patches are pending'),
+    // GVSU / Zabbix agent OS updates trigger wording
+    problem('WARNING: 7 security and 1 regular updates on SPL-IDX-GR2'),
+    problem('6 security and 1 regular updates on SPL-IDX-AL1'),
+    problem('16 security and 4 regular updates on SPL-HF-GR3.server.gvsu.edu'),
+    problem('10 security and 1 regular updates on SPL-CM.server.gvsu.edu'),
 ];
 
 foreach ($noise as $row) {
@@ -48,6 +53,7 @@ $real = [
     problem('Service update failed on host db01'),
     problem('Zabbix agent is not available'),
     problem('Disk space is low'),
+    problem('Certificate will expire soon on SPL-CM'),
 ];
 
 foreach ($real as $row) {

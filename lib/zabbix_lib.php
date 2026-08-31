@@ -781,6 +781,12 @@ function zabbix_exclude_updates_enabled(array $page): bool
 function zabbix_update_noise_patterns(): array
 {
     return [
+        // Zabbix Linux/agent: "7 security and 1 regular updates on HOST"
+        '/\b\d+\s+security\s+and\s+\d+\s+regular\s+updates?\b/i',
+        '/\bsecurity\s+and\s+\d+\s+regular\s+updates?\b/i',
+        '/\b\d+\s+security\s+updates?\b/i',
+        '/\b\d+\s+regular\s+updates?\b/i',
+        '/\bregular updates?\b/i',
         '/\bsecurity updates?\b/i',
         '/\bsoftware updates?\b/i',
         '/\bpackage updates?\b/i',
@@ -1313,7 +1319,7 @@ function zabbix_fetch_wall_data(array $page): array
     if (!is_dir($cacheDir)) {
         @mkdir($cacheDir, 0775, true);
     }
-    $cacheKey = 'zabbix_wall_' . md5(json_encode([
+    $cacheKey = 'zabbix_wall_v2_' . md5(json_encode([
         $allHosts ? '__all__' : $groupNames,
         $minSeverity,
         $maxProblems,
