@@ -250,5 +250,6 @@ if (empty($data['ok'])) {
 }
 
 echo 'Cached wall problems: ' . count($data['problems'] ?? []) . "\n";
+echo 'Updates hidden: ' . (int)($data['updates_hidden'] ?? 0) . "\n";
 echo 'Hosts: ' . count($data['hosts'] ?? []) . "\n";
 echo "OK\n";

@@ -55,7 +55,6 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | RSS | `rss.php` | `rss.php?feed=<key>` | — |
 | | TV Guide | `tvguide.php` | `tvguide.php?d=<key>` | Schedules Direct (~$35/yr) |
 | Dashboards | Grafana | `grafana.php` | `grafana.php?d=<key>` | JWT secret (SSO) or — |
-| | Splunk panels | `splunk.php` | `splunk.php?d=<key>` | Splunk token |
 | | Splunk published | `splunkdash.php` | `splunkdash.php?d=<key>` | — (iframe) |
 | | Power BI | `powerbi.php` | `powerbi.php?d=<key>` | Azure app (private) or — (publish) |
 | | Websites | `web.php` | `web.php?d=<key>` | — (iframe) |
@@ -84,7 +83,7 @@ Nearshore buoys run in winter (~Nov–Apr); the board notes when they are offlin
 
 ### webcam.php — Live Webcams
 
-Full-screen live feeds — **one camera per rotation slot**, same pattern as `zabbix.php?d=` or `splunk.php?d=`.
+Full-screen live feeds — **one camera per rotation slot**, same pattern as `zabbix.php?d=` or `splunkdash.php?d=`.
 
 **Built-in cameras:**
 
@@ -592,7 +591,7 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 | Off wall | Keep in admin but skip on kiosk |
 | Access | Owner; shared with users and/or roles (e.g. Operators) |
 
-**Wall layout:** severity summary pills (open **problem** counts per tier) and active problem list (host, age). **All-hosts** pages (blank host groups) use a **full-width problem list** — summary shows monitored / open problems / hosts / OK, plus **acknowledged hidden** when ack’d problems are omitted; section headers show **shown of total** when the display cap trims a tier. Group-scoped pages keep a two-column layout with the host grid (up to **Max hosts**). Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
+**Wall layout:** severity summary pills (open **problem** counts per tier) and active problem list (host, age). **All-hosts** pages (blank host groups) use a **full-width problem list** — summary shows monitored / open problems / hosts / OK, plus **acknowledged hidden** when ack’d problems are omitted and **N update alerts hidden** when patch/update filtering is on; section headers show **shown of total** when the display cap trims a tier. Group-scoped pages keep a two-column layout with the host grid (up to **Max hosts**). Cache **`CACHE_TTL`** default 60s. Quick-add under **Monitoring** in Rotation.
 
 ### tdx.php — TeamDynamix tickets (TDWebApi)
 
@@ -729,16 +728,6 @@ Prime-time grid for user-selected channels — one row per channel, one column p
 **Guides:** [grafana.md](grafana.md) (self-hosted) · [grafana-cloud.md](grafana-cloud.md) (Cloud)
 
 **Diagnostics:** `php scripts/diagnose-grafana.php` · `php scripts/diagnose-grafana.php --test` · admin **Test JWT signing**
-
-### splunk.php — Splunk panels (REST API)
-
-Oneshot searches server-side — no Splunk Web iframe.
-
-**Setup:** low-privilege Splunk user, token under Settings → Tokens. `SPLUNK_BASE` = management port **8089** (not Splunk Web), `SPLUNK_TOKEN`.
-
-**Panel types:** `single` (big number), `list` (label + bar + count), `trend` (timechart). Optional `earliest`/`latest`, `unit`, `wide` (2 columns).
-
-Multi-page: `splunk.php?d=<key>` with per-page panel decks and **Access** (owner, users, roles). Cache default 120s per search.
 
 ### splunkdash.php — Splunk published (iframe)
 

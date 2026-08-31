@@ -135,7 +135,7 @@ All boards are configured in **admin.php**. Parameterized URLs plug into rotatio
 ```
 rss.php?feed=krebs              glance.php
 grafana.php?d=homelab           calendar.php
-zabbix.php?d=network            splunk.php?d=soc
+zabbix.php?d=network            splunkdash.php?d=soc
 webcam.php?cam=grpm             webcam.php?cam=grandhaven
 webcam.php?cam=muskegon
 camwall.php                     traffic.php
@@ -400,4 +400,18 @@ php scripts/diagnose-phish.php
 
 # Air & Pollen: AirNow key, EPA monitor AQI, NWS alerts, Open-Meteo model
 php scripts/diagnose-air.php --root=/var/www/html/boards
+
+# MDOT camwall: tile URLs, proxy fetch, per-display slot layout
+php scripts/diagnose-camwall.php main
+php scripts/diagnose-camwall.php --screen=garage
+
+# Webcams: HLS/iframe probe, rotation skip
+php scripts/diagnose-webcam.php grandhaven --refresh
+
+# Grafana / Power BI embed auth
+php scripts/diagnose-grafana.php --test
+php scripts/diagnose-powerbi.php --test
+
+# Rotation screen: eligible pages, weights, seasonal skip
+php scripts/diagnose-rotation-screen.php garage
 ```

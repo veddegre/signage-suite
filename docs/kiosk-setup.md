@@ -219,10 +219,10 @@ sudo /usr/local/bin/signage-kiosk-update
 
 ```bash
 cd ~/signage-suite && git pull
-sudo bash setup-kiosk.sh "https://your-server/boards/board.php?screen=garage"
+sudo bash setup-kiosk.sh "https://your-server/board.php?screen=garage"
 ```
 
-(Pass the same URL, scale, and `--no-cec` you used originally.)
+(Legacy `https://your-server/boards/board.php?…` still works. Pass the same URL, scale, and `--no-cec` you used originally.)
 
 ---
 

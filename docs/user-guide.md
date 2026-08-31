@@ -38,12 +38,14 @@ Most settings save to **`config/settings.json`**. **Playlist rows** (URLs, dwell
 Each TV or monitor points at:
 
 ```
-https://your-server/boards/board.php?screen=garage
+https://your-server/board.php?screen=garage
 ```
 
 Use **`https://`** when the server or reverse proxy serves TLS (required for many iframe embed boards). Kiosks ignore self-signed cert warnings by default — see [kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates).
 
 The **`screen`** key matches a playlist under **Rotation**. One server can serve many displays (`main`, `garage`, `lobby`, …).
+
+**Reverse proxy:** If your public URL includes `/boards/` (proxy → backend), that still works — the app accepts legacy `/boards/board.php` URLs and redirects to the site root.
 
 ### Data flow
 
@@ -81,6 +83,27 @@ Secrets (API tokens, passwords, BEID keys) **never** reach the display browser.
 
 \* Operators see boards they own or that are shared with them. Homelab/Kuma/Tailscale/ntfy admin is super-admin only; Kuma walls can still appear in rotation when shared.  
 \** Operators may edit paths/TTL on slides and rotator only — not API tokens.
+
+### Who configures what
+
+Use this when deciding whether to change something yourself or ask a super admin.
+
+| Area | Super admin only | Operators (own display or shared) |
+|------|------------------|-----------------------------------|
+| **Users, Security, Tools, Audit** | Full access | — |
+| **API credentials** — Zabbix token, TDX BEID/key, Grafana embed auth, AirNow/Google Pollen, TomTom, UniFi, homelab URLs | Board settings on each integration | — |
+| **Zabbix / TeamDynamix pages** | Global URL + token in Board settings | Create **pages**, filters, and rotation slots; share with team |
+| **Splunk published** (`splunkdash.php`) | — | Paste publish URLs; no Splunk token needed |
+| **Grafana / Power BI / Websites** | Embed auth (Grafana token/JWT, Azure app) | Add dashboard/report rows you own or that are shared |
+| **Rotation playlist** | Any display | Assigned displays + shared-editor displays |
+| **Kiosk options** (location, sports teams, camwall slots, ticker, hero strip) | Emergency override, hero strip Kuma/ntfy sources | Per-display under **Rotation → Kiosk settings** |
+| **Weather / traffic / air boards** | API keys, global lat/lon defaults | Use boards in rotation; location override per display |
+| **Webcams** | — | Built-in cams + custom rows; one `?cam=` slot per rotation line |
+| **MDOT camwall** | Global camera catalog under **MDOT Cams** | Per-display **slot picks** under Rotation kiosk settings |
+| **Slides / photos / video / RSS** | — | Upload and manage own content; deploy to assigned displays |
+| **Security awareness walls** (KEV, CVE, phish, …) | Host lists, tokens, global rows | Quick-add to rotation when configured |
+
+**Hero strip:** Operators can wire **Zabbix** and **announcements** on displays they manage. **Uptime Kuma** and **ntfy** strip sources require a super admin to configure the strip (or share pre-built pages you can reference).
 
 ### What “operator” means in practice
 
@@ -124,7 +147,6 @@ Super admin only (**Board settings** collapsed section on each board):
 | TeamDynamix | Base URL, BEID, Web Services Key (or user/password) |
 | Zabbix | URL, API token |
 | Grafana | JWT secret / RS256 key, JWKS URL (Cloud) |
-| Splunk panels | Management URL, token |
 | Power BI | Azure tenant, client ID, client secret |
 | Traffic | TomTom key |
 | Cloudflare Radar | API token |
@@ -261,7 +283,6 @@ Full per-board setup: [boards.md](boards.md).
 | Admin board | Rotation URL | Integration doc |
 |-------------|--------------|-----------------|
 | **Grafana** | `grafana.php?d=KEY` | [grafana.md](grafana.md) / [grafana-cloud.md](grafana-cloud.md) |
-| **Splunk Panels** | `splunk.php?d=KEY` | [boards.md](boards.md) |
 | **Splunk Published** | `splunkdash.php?d=KEY` | iframe publish URLs |
 | **Power BI** | `powerbi.php?d=KEY` | [powerbi.md](powerbi.md) |
 | **Websites** | `web.php?d=KEY` | Any iframe-allowed URL |
@@ -350,7 +371,7 @@ Use these guides for credential setup and troubleshooting — not duplicated her
 | **Grafana (self-hosted SSO)** | Dashboard rows | [grafana.md](grafana.md) |
 | **Grafana Cloud** | Dashboard rows | [grafana-cloud.md](grafana-cloud.md) |
 | **Power BI (private embed)** | Report rows | [powerbi.md](powerbi.md) |
-| **Splunk panels** | Multi-page | [boards.md → Splunk](boards.md) |
+| **Splunk published** | Dashboard rows | [boards.md → Splunk Published](boards.md) |
 | **Uptime Kuma** | Super admin configures; share pages with operators | [boards.md → Kuma](boards.md) |
 
 ---

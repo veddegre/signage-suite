@@ -33,7 +33,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 | **Monitoring** | Homelab, SignalTrace, UniFi Network, Uptime Kuma, Tailscale, ntfy (super admin only), Zabbix, TeamDynamix, cloud outages, … |
 | **Daily** | Word of the day, This day in history, Dad jokes, Announcements, XKCD |
 | **Media** | Slides, Photo Rotator, Video, RSS |
-| **Dashboards** | Grafana, Splunk Panels, Splunk Published, Power BI, Websites |
+| **Dashboards** | Grafana, Splunk Published, Power BI, Websites |
 
 **Users** and **Tools** are super-admin only. Footer: **Status**, **Account**, logout.
 

@@ -6470,8 +6470,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
 
         <?php elseif ($board === 'splunkdash'): ?>
           <?php admin_operator_board_preamble('splunkdash'); ?>
-          <?php admin_super_registry_share_hint('Splunk'); ?>
-          <div class="section-title">Splunk dashboards</div>
+          <?php admin_super_registry_share_hint('Splunk Published'); ?>
+          <div class="section-title">Splunk published dashboards</div>
           <div class="help" style="margin-bottom:4px">Each dashboard is its own 1080p wall — add to rotation as
             <code>splunkdash.php?d=<em>key</em></code>. Set the wall <strong>title</strong> and <strong>subtitle</strong> here (shown over the themed border like Grafana); Splunk&rsquo;s own header is cropped from the iframe.</div>
           <?php if ($splunkdashPages === [] && !admin_is_super()): ?>
@@ -11604,11 +11604,6 @@ function addVideoCard() {
   reindexVideoPlaylist();
 }
 
-function splunkCsrf() {
-  const el = document.querySelector('#boardform input[name=csrf]');
-  return el ? el.value : '';
-}
-
 function boardFormEl() {
   return document.getElementById('boardform');
 }
@@ -11623,111 +11618,6 @@ function mountPageEditor(editor) {
   } else if (form) {
     form.appendChild(editor);
   }
-}
-
-function syncSplunkPanelTypeFields(card) {
-  const type = (card.querySelector('[data-splunk-type]') || {}).value || 'single';
-  card.querySelectorAll('[data-splunk-field]').forEach(function (el) {
-    const types = (el.getAttribute('data-splunk-field') || '').split(',');
-    el.style.display = types.indexOf(type) >= 0 ? '' : 'none';
-  });
-}
-
-function syncSplunkPanelHead(card) {
-  const titleInp = card.querySelector('[data-splunk-title]');
-  const typeSel = card.querySelector('[data-splunk-type]');
-  const strong = card.querySelector('[data-splunk-title-display]');
-  const code = card.querySelector('.video-card-title code');
-  const wide = card.querySelector('[name*="[wide]"]');
-  const off = card.querySelector('[data-splunk-off]');
-  if (strong) strong.textContent = (titleInp && titleInp.value.trim()) || 'New panel';
-  if (code && typeSel) {
-    const labels = { single: 'Single stat', list: 'Bar list', trend: 'Trend chart' };
-    let t = labels[typeSel.value] || typeSel.value;
-    if (wide && wide.checked) t += ' · wide';
-    code.textContent = t;
-  }
-  card.classList.toggle('is-off', !!(off && off.checked));
-  syncSplunkPanelTypeFields(card);
-}
-
-function bindSplunkPanelCard(card) {
-  if (card.dataset.bound) return;
-  card.dataset.bound = '1';
-  ['[data-splunk-title]', '[data-splunk-type]'].forEach(function (sel) {
-    const el = card.querySelector(sel);
-    if (el) el.addEventListener('input', function () { syncSplunkPanelHead(card); });
-    if (el) el.addEventListener('change', function () { syncSplunkPanelHead(card); });
-  });
-  const wide = card.querySelector('[name*="[wide]"]');
-  const off = card.querySelector('[data-splunk-off]');
-  if (wide) wide.addEventListener('change', function () { syncSplunkPanelHead(card); });
-  if (off) off.addEventListener('change', function () { syncSplunkPanelHead(card); });
-  const testBtn = card.querySelector('[data-splunk-test]');
-  if (testBtn) testBtn.addEventListener('click', function () { testSplunkPanel(testBtn); });
-  syncSplunkPanelHead(card);
-}
-
-function reindexSplunkPanels(deck) {
-  if (!deck) return;
-  const pageKey = deck.getAttribute('data-splunk-panels-deck') || 'main';
-  const re = new RegExp('PAGES\\[' + pageKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]\\[panels\\]\\[\\d+\\]');
-  deck.querySelectorAll('[data-splunk-panel-card]').forEach(function (card, i) {
-    card.querySelectorAll('[name*="[panels]"]').forEach(function (inp) {
-      inp.name = inp.name.replace(re, 'PAGES[' + pageKey + '][panels][' + i + ']');
-    });
-  });
-  const empty = deck.querySelector('.rotation-playlist-empty');
-  if (empty) empty.style.display = deck.querySelector('[data-splunk-panel-card]') ? 'none' : '';
-}
-
-function bindSplunkPanelDrag(card, deck) {
-  bindPlaylistCardHandle(card, deck, '.drag-handle', function () { reindexSplunkPanels(deck); });
-}
-
-function showSplunkPage(pageKey) {
-  document.querySelectorAll('[data-splunk-page-editor]').forEach(function (el) {
-    el.style.display = el.getAttribute('data-splunk-page-editor') === pageKey ? '' : 'none';
-  });
-  document.querySelectorAll('[data-splunk-page-tab]').forEach(function (btn) {
-    btn.classList.toggle('active', btn.getAttribute('data-splunk-page-tab') === pageKey);
-  });
-}
-
-function syncSplunkPageTabLabel(titleInp) {
-  const editor = titleInp.closest('[data-splunk-page-editor]');
-  if (!editor) return;
-  const pageKey = editor.getAttribute('data-splunk-page-editor');
-  const tab = document.querySelector('[data-splunk-page-tab="' + pageKey + '"]');
-  if (!tab) return;
-  const title = titleInp.value.trim() || pageKey;
-  const code = tab.querySelector('code');
-  tab.textContent = '';
-  tab.appendChild(document.createTextNode(title + ' '));
-  const codeEl = code || document.createElement('code');
-  codeEl.textContent = pageKey;
-  tab.appendChild(codeEl);
-}
-
-function bindSplunkPageTab(btn) {
-  if (btn.dataset.bound) return;
-  btn.dataset.bound = '1';
-  btn.addEventListener('click', function () {
-    showSplunkPage(btn.getAttribute('data-splunk-page-tab'));
-  });
-}
-
-function bindSplunkPageTabs() {
-  document.querySelectorAll('[data-splunk-page-tab]').forEach(bindSplunkPageTab);
-}
-
-function splunkNormalizePageKey(raw) {
-  raw = (raw || '').toLowerCase().replace(/[^a-z0-9_\-]/g, '');
-  return raw || 'main';
-}
-
-function splunkPreviewHref(pageKey) {
-  return 'splunk.php?d=' + encodeURIComponent(pageKey) + '&' + RSS_PREVIEW_SUFFIX;
 }
 
 function initPresencePanel() {
@@ -11848,88 +11738,6 @@ function initPresencePanel() {
 
   load();
   setInterval(load, 20000);
-}
-
-function initSplunkPanels() {
-  document.querySelectorAll('[data-splunk-panels-deck]').forEach(function (deck) {
-    bindPlaylistDeckDrag(deck, '[data-splunk-panel-card]', '.drag-handle', function () { reindexSplunkPanels(deck); }, function (card, d) {
-      bindSplunkPanelCard(card);
-      bindSplunkPanelDrag(card, d);
-    });
-  });
-  bindSplunkPageTabs();
-  document.querySelectorAll('[data-splunk-page-title]').forEach(function (inp) {
-    inp.addEventListener('input', function () { syncSplunkPageTabLabel(inp); });
-  });
-}
-
-function addSplunkPage() {
-  const key = prompt('Page key (letters, numbers, underscore — used in splunk.php?d=KEY):', 'page2');
-  if (key === null) return;
-  const pageKey = splunkNormalizePageKey(key);
-  if (document.querySelector('[data-splunk-page-editor="' + pageKey + '"]')) {
-    alert('A page with key "' + pageKey + '" already exists.');
-    showSplunkPage(pageKey);
-    return;
-  }
-  const bar = document.getElementById('splunkPagesBar');
-  const tab = document.createElement('button');
-  tab.type = 'button';
-  tab.className = 'splunk-page-tab';
-  tab.setAttribute('data-splunk-page-tab', pageKey);
-  tab.appendChild(document.createTextNode('New page '));
-  const tabCode = document.createElement('code');
-  tabCode.textContent = pageKey;
-  tab.appendChild(tabCode);
-  if (bar) {
-    const addBtn = bar.querySelector('.addrow');
-    if (addBtn) bar.insertBefore(tab, addBtn);
-    else bar.appendChild(tab);
-  }
-  bindSplunkPageTab(tab);
-
-  const editor = document.createElement('div');
-  editor.className = 'splunk-page-editor';
-  editor.setAttribute('data-splunk-page-editor', pageKey);
-  editor.style.display = 'none';
-  editor.innerHTML =
-    '<input type="hidden" name="PAGES[' + pageKey + '][_key]" value="' + pageKey + '" data-splunk-page-key>' +
-    '<div class="splunk-page-head">' +
-      '<div><label class="mini">Page title</label><input type="text" name="PAGES[' + pageKey + '][title]" placeholder="SOC Overview" data-splunk-page-title></div>' +
-      '<div><label class="mini">Subtitle</label><input type="text" name="PAGES[' + pageKey + '][sub]" placeholder="Home network" data-splunk-page-sub></div>' +
-      '<div style="display:flex;gap:10px;align-items:center;padding-bottom:4px">' +
-        '<a class="secondary" style="padding:6px 12px;text-decoration:none;font-size:13px;white-space:nowrap" href="' + splunkPreviewHref(pageKey) + '" target="_blank" rel="noopener" data-splunk-page-preview>Preview ↗</a>' +
-        '<button type="button" class="rowdel" style="width:auto;padding:6px 12px;font-size:13px" onclick="removeSplunkPage(\'' + pageKey + '\')" title="Remove page">Remove page</button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="help" style="margin-bottom:10px">Rotation URL: <code>splunk.php?d=' + pageKey + '</code></div>' +
-    entrySharingHtml('PAGES[' + pageKey + ']', '', [], []) +
-    '<div class="splunk-playlist video-playlist" data-splunk-panels-deck="' + pageKey + '">' +
-      '<div class="rotation-playlist-empty">No panels yet — add one below.</div>' +
-    '</div>' +
-    '<button type="button" class="addrow" style="margin-top:12px" onclick="addSplunkPanelCard(\'' + pageKey + '\')">+ Add panel</button>';
-
-  mountPageEditor(editor);
-
-  const titleInp = editor.querySelector('[data-splunk-page-title]');
-  if (titleInp) titleInp.addEventListener('input', function () { syncSplunkPageTabLabel(titleInp); });
-
-  const deck = editor.querySelector('[data-splunk-panels-deck]');
-  bindPlaylistDeckDrag(deck, '[data-splunk-panel-card]', '.drag-handle', function () { reindexSplunkPanels(deck); }, function (card, d) {
-    bindSplunkPanelCard(card);
-    bindSplunkPanelDrag(card, d);
-  });
-  showSplunkPage(pageKey);
-}
-
-function removeSplunkPage(pageKey) {
-  if (!confirm('Remove page "' + pageKey + '" and all its panels?')) return;
-  const editor = document.querySelector('[data-splunk-page-editor="' + pageKey + '"]');
-  const tab = document.querySelector('[data-splunk-page-tab="' + pageKey + '"]');
-  if (editor) editor.remove();
-  if (tab) tab.remove();
-  const remaining = document.querySelector('[data-splunk-page-tab]');
-  if (remaining) showSplunkPage(remaining.getAttribute('data-splunk-page-tab'));
 }
 
 function zabbixNormalizePageKey(raw) {
@@ -12808,87 +12616,6 @@ function initEmergencyPanel() {
   if (!sel) return;
   sel.addEventListener('change', syncEmergencyModePanels);
   syncEmergencyModePanels();
-}
-
-function addSplunkPanelCard(pageKey) {
-  pageKey = pageKey || 'main';
-  const deck = document.querySelector('[data-splunk-panels-deck="' + pageKey + '"]');
-  if (!deck) return;
-  reindexSplunkPanels(deck);
-  const idx = deck.querySelectorAll('[data-splunk-panel-card]').length;
-  const p = 'PAGES[' + pageKey + '][panels][' + idx + ']';
-  const empty = deck.querySelector('.rotation-playlist-empty');
-  if (empty) empty.style.display = 'none';
-  const card = document.createElement('div');
-  card.className = 'video-card splunk-panel-card';
-  card.setAttribute('data-splunk-panel-card', '');
-  card.innerHTML =
-    '<div class="video-card-head">' +
-      '<span class="drag-handle" title="Drag to reorder" draggable="true">⋮⋮</span>' +
-      '<div class="video-card-title"><strong data-splunk-title-display>New panel</strong><code>Single stat</code></div>' +
-      '<button type="button" class="rowdel" onclick="this.closest(\'[data-splunk-panel-card]\').remove(); reindexSplunkPanels(this.closest(\'[data-splunk-panels-deck]\'));" title="Remove">×</button>' +
-    '</div>' +
-    '<div class="splunk-panel-card-grid">' +
-      '<div><label class="mini">Title</label><input type="text" name="' + p + '[title]" placeholder="Events Today" data-splunk-title></div>' +
-      '<div><label class="mini">Type</label><select name="' + p + '[type]" data-splunk-type>' +
-        '<option value="single">Single stat</option><option value="list">Bar list</option><option value="trend">Trend chart</option>' +
-      '</select></div>' +
-      '<div data-splunk-field="single"><label class="mini">Unit (single)</label><input type="text" name="' + p + '[unit]" placeholder="events"></div>' +
-      '<div class="span-3"><label class="mini">SPL</label><textarea name="' + p + '[spl]" placeholder="index=main | stats count" data-splunk-spl></textarea></div>' +
-      '<div data-splunk-field="single"><label class="mini">Value field (single)</label><input type="text" name="' + p + '[field]" placeholder="count"></div>' +
-      '<div data-splunk-field="list"><label class="mini">Label field (list)</label><input type="text" name="' + p + '[label]" placeholder="country"></div>' +
-      '<div data-splunk-field="list,trend"><label class="mini">Value field (list / trend)</label><input type="text" name="' + p + '[value]" placeholder="count"></div>' +
-      '<div><label class="mini">Earliest</label><input type="text" name="' + p + '[earliest]" placeholder="-24h@h"></div>' +
-      '<div><label class="mini">Latest</label><input type="text" name="' + p + '[latest]" placeholder="now"></div>' +
-      '<div style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
-        '<label class="check" style="margin:0"><input type="checkbox" name="' + p + '[wide]"> Wide (2 cols)</label>' +
-        '<label class="check" style="margin:0"><input type="checkbox" name="' + p + '[off]" data-splunk-off> Off wall</label>' +
-      '</div>' +
-    '</div>' +
-    '<div class="video-card-meta"><div class="splunk-test-result" data-splunk-test-result></div>' +
-      '<div class="video-card-actions"><button type="button" class="secondary" style="padding:6px 12px;font-size:13px" data-splunk-test>Test search</button></div></div>';
-  deck.appendChild(card);
-  bindSplunkPanelCard(card);
-  bindSplunkPanelDrag(card, deck);
-  reindexSplunkPanels(deck);
-}
-
-function testSplunkPanel(btn) {
-  const card = btn.closest('[data-splunk-panel-card]');
-  if (!card) return;
-  const resultEl = card.querySelector('[data-splunk-test-result]');
-  const fd = new FormData();
-  fd.append('action', 'splunk_test_panel');
-  fd.append('csrf', splunkCsrf());
-  fd.append('board', 'splunk');
-  ['title', 'type', 'spl', 'field', 'label', 'value', 'unit', 'earliest', 'latest'].forEach(function (k) {
-    const el = card.querySelector('[name*="[' + k + ']"]');
-    if (el) fd.append(k, el.value);
-  });
-  if (resultEl) {
-    resultEl.className = 'splunk-test-result';
-    resultEl.textContent = 'Testing…';
-  }
-  btn.disabled = true;
-  fetch('?board=splunk', { method: 'POST', body: fd })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (!resultEl) return;
-      if (data.ok) {
-        resultEl.className = 'splunk-test-result ok';
-        resultEl.textContent = (data.rows || 0) + ' rows — ' + (data.preview || 'OK');
-      } else {
-        resultEl.className = 'splunk-test-result err';
-        resultEl.textContent = data.error || 'Search failed';
-      }
-    })
-    .catch(function () {
-      if (resultEl) {
-        resultEl.className = 'splunk-test-result err';
-        resultEl.textContent = 'Request failed';
-      }
-    })
-    .finally(function () { btn.disabled = false; });
 }
 
 

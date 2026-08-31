@@ -840,6 +840,19 @@ function zabbix_filter_update_problems(array $problems, bool $exclude): array
     }));
 }
 
+/** @param list<array<string,mixed>> $problems */
+function zabbix_count_update_noise(array $problems): int
+{
+    $n = 0;
+    foreach ($problems as $problem) {
+        if (is_array($problem) && zabbix_problem_is_update_noise($problem)) {
+            $n++;
+        }
+    }
+
+    return $n;
+}
+
 /** Keep only unresolved problems (matches Zabbix Monitoring → Problems default view). */
 function zabbix_filter_unresolved_problems(array $problems): array
 {
@@ -967,6 +980,7 @@ function zabbix_sort_problems(array $problems): array
  *   counts:array<int,int>,
  *   problems_total:int,
  *   acknowledged_hidden:int,
+ *   updates_hidden:int,
  *   displayed_by_severity:array<int,int>,
  *   problem_host_names:list<string>
  * }
@@ -989,6 +1003,7 @@ function zabbix_fetch_wall_problems(
     }
 
     $criticalMin = 4;
+    $updatesHidden = 0;
 
     for ($sev = 5; $sev >= $minSeverity; $sev--) {
         $params = [
@@ -1019,7 +1034,10 @@ function zabbix_fetch_wall_problems(
         }
         $batch = zabbix_filter_unresolved_problems($batch);
         $batch = zabbix_filter_visible_problems($batch, $error);
-        $batch = zabbix_filter_update_problems($batch, $excludeUpdates);
+        if ($excludeUpdates) {
+            $updatesHidden += zabbix_count_update_noise($batch);
+            $batch = zabbix_filter_update_problems($batch, true);
+        }
         $filteredBySev[$sev] = $batch;
         $counts[$sev] = count($batch);
     }
@@ -1127,6 +1145,7 @@ function zabbix_fetch_wall_problems(
         'counts' => $counts,
         'problems_total' => $problemsTotal,
         'acknowledged_hidden' => $ackHidden,
+        'updates_hidden' => $updatesHidden,
         'displayed_by_severity' => $displayedBySev,
         'problem_host_names' => array_keys($problemHostNames),
     ];
@@ -1360,6 +1379,7 @@ function zabbix_fetch_wall_data(array $page): array
     $counts = $fetched['counts'];
     $problemsTotal = (int)($fetched['problems_total'] ?? 0);
     $ackHidden = (int)($fetched['acknowledged_hidden'] ?? 0);
+    $updatesHidden = (int)($fetched['updates_hidden'] ?? 0);
     $displayedBySev = $fetched['displayed_by_severity'] ?? [];
     $problemHostNames = [];
     foreach ($fetched['problem_host_names'] ?? [] as $hostName) {
@@ -1429,6 +1449,7 @@ function zabbix_fetch_wall_data(array $page): array
         'counts' => $counts,
         'problems_total' => $problemsTotal,
         'acknowledged_hidden' => $ackHidden,
+        'updates_hidden' => $updatesHidden,
         'displayed_by_severity' => $displayedBySev,
         'hide_acknowledged' => $hideAck,
         'exclude_updates' => $excludeUpdates,

@@ -1825,15 +1825,15 @@ function rotation_resolved_playlist_pages(string $screen = 'main'): array
             return rotation_resolved_playlist_pages('main');
         }
 
-        return rotation_strip_retired_webcam_pages(rotation_inherited_playlist_pages('main'));
+        return rotation_strip_retired_pages(rotation_inherited_playlist_pages('main'));
     }
     if (!rotation_playlist_has_board_pages($own)) {
-        return rotation_strip_retired_webcam_pages(
+        return rotation_strip_retired_pages(
             rotation_combine_inherited_boards_with_own_media($screen, $own)
         );
     }
 
-    return rotation_strip_retired_webcam_pages($own);
+    return rotation_strip_retired_pages($own);
 }
 
 /**
@@ -2024,12 +2024,30 @@ function rotation_page_url_is_webcam(string $url): bool
     return preg_match('~(?:^|/)webcam\.php$~i', $path) === 1;
 }
 
+/** Whether a rotation playlist URL targets splunk.php REST panels (retired — use splunkdash.php). */
+function rotation_page_url_is_splunk_panels(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || strcasecmp($url, 'splunk.php') === 0) {
+        return true;
+    }
+    if (preg_match('~^splunk\.php(?:[?#]|$)~i', $url) === 1) {
+        return true;
+    }
+    $path = (string)(parse_url($url, PHP_URL_PATH) ?? '');
+
+    return preg_match('~(?:^|/)splunk\.php$~i', $path) === 1;
+}
+
 /** Whether a playlist URL is omitted from rotation for seasonal/offline auto-skip (lake, sports, webcam). */
 function rotation_page_seasonal_skip(string $url, string $screen = 'main', bool $forceWebcamProbe = true): bool
 {
     $url = trim($url);
     if ($url === '') {
         return false;
+    }
+    if (rotation_page_url_is_splunk_panels($url)) {
+        return true;
     }
     if (rotation_page_url_is_lake($url)) {
         $lib = __DIR__ . '/lake_lib.php';
@@ -2321,6 +2339,27 @@ function rotation_strip_retired_webcam_pages(array $pages): array
     }));
 }
 
+/** Drop rotation rows that target splunk.php REST panel walls (retired). */
+function rotation_strip_retired_splunk_panel_pages(array $pages): array
+{
+    return array_values(array_filter($pages, static function ($page) {
+        if (!is_array($page)) {
+            return false;
+        }
+        $url = trim((string)($page['url'] ?? ''));
+
+        return $url !== '' && !rotation_page_url_is_splunk_panels($url);
+    }));
+}
+
+/** Drop rotation rows for retired boards (webcams, Splunk REST panels, …). */
+function rotation_strip_retired_pages(array $pages): array
+{
+    return rotation_strip_retired_splunk_panel_pages(
+        rotation_strip_retired_webcam_pages($pages)
+    );
+}
+
 /** Parse posted rotation page rows from admin forms. @return list<array<string,mixed>> */
 function rotation_parse_pages_rows(array $rows): array
 {
@@ -2358,7 +2397,7 @@ function rotation_parse_pages_rows(array $rows): array
         $outV[] = $obj;
     }
 
-    return rotation_strip_retired_webcam_pages($outV);
+    return rotation_strip_retired_pages($outV);
 }
 
 /** Dwell seconds for one playlist row — missing/zero defaults to 60. */
@@ -2469,10 +2508,9 @@ function rotation_page_label(string $url): string
     }
 
     if (preg_match('/^splunk\.php(?:\?d=([^&]+))?/', $url, $m)) {
-        require_once __DIR__ . '/splunk_lib.php';
-        $key = isset($m[1]) ? urldecode($m[1]) : (string)(array_key_first(splunk_pages_config()) ?: 'main');
+        $key = isset($m[1]) ? urldecode($m[1]) : 'main';
 
-        return 'Splunk — ' . splunk_page_label($key);
+        return 'Splunk panels (retired)' . ($key !== 'main' ? ' — ' . $key : '');
     }
 
     if (preg_match('/^zabbix\.php(?:\?d=([^&]+))?/', $url, $m)) {

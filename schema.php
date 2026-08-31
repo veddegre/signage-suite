@@ -908,7 +908,7 @@ function admin_schema(): array
             ['key' => 'GRAFANA_THEME', 'label' => 'Theme', 'type' => 'select', 'options' => ['dark', 'light']],
             $tz,
         ]],
-        'splunkdash' => ['title' => 'Splunk', 'file' => 'splunkdash.php', 'fields' => [
+        'splunkdash' => ['title' => 'Splunk Published', 'file' => 'splunkdash.php', 'fields' => [
             ['key' => 'DASHBOARDS', 'label' => 'Published dashboards', 'type' => 'rows', 'keyed' => true,
              'columns' => [
                  ['key' => '_key', 'label' => 'Key', 'help' => 'used in ?d='],

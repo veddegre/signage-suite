@@ -139,7 +139,7 @@ meals.php
 rss.php?feed=krebs
 grafana.php?d=homelab
 zabbix.php?d=network
-splunk.php?d=soc
+splunkdash.php?d=soc
 video.php?v=drone
 slides.php?slide=birthday.png
 webcam.php?cam=grpm
