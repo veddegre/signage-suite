@@ -63,9 +63,9 @@ function webcam_default_cameras(): array
         ],
         'grandhaven' => [
             'name' => 'Grand Haven Beach',
-            'url' => 'https://share.earthcam.net/tJ90CoLmq7TzrY396Yd88KTssi7iV3ZNicDEymFXa2k!',
-            'kind' => 'iframe',
-            'attribution' => 'EarthCam · MACkite · Surf Grand Haven',
+            'url' => 'https://www.earthcam.com/usa/michigan/grandhaven/lakemichigan/?cam=lakemichigan',
+            'kind' => 'stream',
+            'attribution' => 'EarthCam · Surf Grand Haven',
         ],
         'anaheim' => [
             'name' => 'Anaheim · Disneyland Area',
@@ -926,6 +926,34 @@ function webcam_apply_earthcam_iframe_defaults(array $entry, string $key): array
     return $entry;
 }
 
+/**
+ * Upgrade legacy Grand Haven share.earthcam embeds to the public Lake Michigan
+ * earthcam.com page (proxied HLS, same path as Anaheim).
+ */
+function webcam_apply_grandhaven_defaults(array $entry, string $key): array
+{
+    $key = webcam_normalize_key($key);
+    if ($key !== 'grandhaven') {
+        return $entry;
+    }
+    $defaults = webcam_default_cameras()['grandhaven'];
+    $url = trim((string)($entry['url'] ?? ''));
+    $legacyShare = 'https://share.earthcam.net/tJ90CoLmq7TzrY396Yd88KTssi7iV3ZNicDEymFXa2k!';
+    $needsUpgrade = $url === ''
+        || $url === $legacyShare
+        || str_starts_with($url, 'https://share.earthcam.net/tJ90CoLmq7TzrY396Yd88KTssi7iV3ZNicDEymFXa2k');
+    if ($needsUpgrade) {
+        $entry['url'] = $defaults['url'];
+        $entry['kind'] = $defaults['kind'];
+        if (trim((string)($entry['attribution'] ?? '')) === ''
+            || str_contains((string)($entry['attribution'] ?? ''), 'MACkite')) {
+            $entry['attribution'] = $defaults['attribution'];
+        }
+    }
+
+    return $entry;
+}
+
 /** Upgrade legacy GRPM saves to the WMTA live WetMet iframe (browser-side player). */
 function webcam_apply_grpm_defaults(array $entry, string $key): array
 {
@@ -984,6 +1012,7 @@ function webcam_registry(): array
             $entry = webcam_normalize_entry($row, is_array($out[$key] ?? null) ? $out[$key] : null);
             if ($entry !== null) {
                 $entry = webcam_apply_grpm_defaults($entry, $key);
+                $entry = webcam_apply_grandhaven_defaults($entry, $key);
                 $entry = webcam_apply_earthcam_dotcom_defaults($entry, $key);
                 $out[$key] = webcam_apply_earthcam_iframe_defaults($entry, $key);
             }
@@ -1000,6 +1029,7 @@ function webcam_registry(): array
 
     foreach ($out as $key => $entry) {
         if (is_array($entry)) {
+            $entry = webcam_apply_grandhaven_defaults($entry, (string)$key);
             $entry = webcam_apply_earthcam_dotcom_defaults($entry, (string)$key);
             $out[$key] = webcam_apply_earthcam_iframe_defaults($entry, (string)$key);
         }

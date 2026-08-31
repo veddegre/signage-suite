@@ -231,7 +231,7 @@ If you previously saved a token under **Internet Attacks**, it is still read unt
 | Key | Source |
 |-----|--------|
 | `grpm` | [Grand Rapids Public Museum](https://www.wmta.org/live-west-michigan-camera-gallery/grand-rapids-public-museum-west-michigan-live-camera/) live stream (WMTA / WetMet iframe) |
-| `grandhaven` | [Grand Haven beach](https://surfgrandhaven.com) EarthCam embed (iframe) |
+| `grandhaven` | [Grand Haven / Lake Michigan](https://www.earthcam.com/usa/michigan/grandhaven/lakemichigan/?cam=lakemichigan) EarthCam (proxied HLS) |
 | `muskegon` | [Muskegon Surf Cam](https://muskegonsurfcam.com/) Pere Marquette Beach live HLS |
 
 Add each camera you want as its own playlist line — intermix with weather, Zabbix, Splunk, etc.:
