@@ -2336,7 +2336,7 @@ $navGroups = [
 ];
 $slidesBoardKeys = ['SLIDE_DIR', 'DEFAULT_DWELL', 'SHUFFLE', 'FIT', 'SHOW_CLOCK', 'TIMEZONE'];
 $rotatorBoardKeys = ['PHOTO_DIR', 'BRAND', 'DEFAULT_DWELL', 'INTERVAL_SEC', 'DEPLOY_MODE', 'SHUFFLE', 'SHOW_EXIF', 'SHOW_CLOCK', 'TIMEZONE'];
-$zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL'];
+$zabbixBoardKeys = ['ZABBIX_URL', 'ZABBIX_TOKEN', 'ZABBIX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'TIMEZONE', 'CACHE_TTL', 'EXCLUDE_UPDATES'];
 $tdxBoardKeys = ['TDX_BASE_URL', 'TDX_AUTH_MODE', 'TDX_BEID', 'TDX_WEB_SERVICES_KEY', 'TDX_USERNAME', 'TDX_PASSWORD', 'TDX_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'METADATA_CACHE_TTL', 'TIMEZONE', 'CACHE_TTL'];
 $tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRIME_END', 'CHANNEL_LABEL', 'CHANNEL_NUMBERS', 'BOARD_TITLE', 'BOARD_SUB', 'RELOAD_SEC', 'TIMEZONE', 'CACHE_TTL'];
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
@@ -5729,6 +5729,11 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                   <?= zabbix_host_groups_string($pg['host_groups'] ?? '') === '' || $pageRo ? 'disabled' : '' ?>> Hide acknowledged</label>
                 <?php if (zabbix_host_groups_string($pg['host_groups'] ?? '') === ''): ?>
                 <span class="help" style="margin:0">Always on for all-hosts pages.</span>
+                <?php endif; ?>
+                <label class="check" style="margin:0" title="Hide OS software/security update alerts (scheduled patch rotation noise)"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][exclude_updates]', $pageRo) ?>
+                  <?= !empty($pg['exclude_updates']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Exclude software/security updates</label>
+                <?php if (!empty($rawConf['zabbix.EXCLUDE_UPDATES'])): ?>
+                <span class="help" style="margin:0">Also enabled board-wide in Board settings.</span>
                 <?php endif; ?>
                 <label class="check" style="margin:0"><input type="checkbox"<?= admin_form_name_attr('PAGES[' . $pk . '][off]', $pageRo) ?>
                   <?= !empty($pg['off']) ? 'checked' : '' ?><?= admin_form_ro_attr($pageRo) ?>> Off wall</label>
@@ -12041,8 +12046,9 @@ function addZabbixPage() {
         '<input type="number" name="PAGES[' + pageKey + '][max_problems]" min="1" max="50" value="12"></div>' +
       '<div class="field"><label class="mini">Max hosts</label>' +
         '<input type="number" name="PAGES[' + pageKey + '][max_hosts]" min="1" max="100" value="24"></div>' +
-      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px">' +
+      '<div class="field" style="display:flex;align-items:flex-end;gap:16px;padding-bottom:4px;flex-wrap:wrap">' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][hide_acknowledged]"> Hide acknowledged</label>' +
+        '<label class="check" style="margin:0" title="Hide OS software/security update alerts (scheduled patch rotation noise)"><input type="checkbox" name="PAGES[' + pageKey + '][exclude_updates]"> Exclude software/security updates</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" name="PAGES[' + pageKey + '][off]"> Off wall</label>' +
       '</div>' +
     '</div>';

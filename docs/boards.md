@@ -575,6 +575,7 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 1. Create a read-only user with **Problem read** and **Host read** on the host groups you need
 2. **Users → API tokens** — create a token for that user
 3. Admin → **Monitoring → Zabbix Monitoring → Board settings:** `ZABBIX_URL` (base URL only, e.g. `https://zabbix.example.com`), `ZABBIX_TOKEN`, `ZABBIX_VERIFY_TLS` (off for LAN self-signed certs)
+4. Optional: enable **Exclude software/security updates** (board-wide) or per page to hide scheduled patch/update alerts from the wall
 4. If Zabbix is on a private IP → **Security → Allow private URL fetches**
 
 **Multiple pages:** each admin tab is `zabbix.php?d=<key>` (default key `main`). Use separate pages for different host-group scopes — e.g. `network` vs `signage`.
@@ -587,6 +588,7 @@ Zabbix Web in an iframe means a login wall on the kiosk. This board uses **Zabbi
 | Minimum severity | Not classified through Disaster |
 | Max problems / Max hosts | Display cap for Average and below (defaults 12 / 24) — **Disaster and High always shown in full**; lower severities fill remaining slots. **Max hosts** applies only when host groups are set. |
 | Hide acknowledged | Omit acknowledged problems from the wall (always on for all-hosts pages) |
+| Exclude software/security updates | Hide scheduled OS patch/update alerts (board-wide default or per page) |
 | Off wall | Keep in admin but skip on kiosk |
 | Access | Owner; shared with users and/or roles (e.g. Operators) |
 

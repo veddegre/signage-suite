@@ -106,6 +106,9 @@ function zabbix_normalize_page(array $page, string $key): ?array
     if ($hostGroups === '' || !empty($page['hide_acknowledged'])) {
         $out['hide_acknowledged'] = true;
     }
+    if (!empty($page['exclude_updates'])) {
+        $out['exclude_updates'] = true;
+    }
     if (!empty($page['off'])) {
         $out['off'] = true;
     }
@@ -760,6 +763,77 @@ function zabbix_attach_problem_hosts(array $problems, ?string &$error = null): a
     return $out;
 }
 
+/** Whether software/security update problems should be omitted for this page. */
+function zabbix_exclude_updates_enabled(array $page): bool
+{
+    if (!empty($page['exclude_updates'])) {
+        return true;
+    }
+
+    return !empty(cfg('zabbix.EXCLUDE_UPDATES', false));
+}
+
+/**
+ * Regex patterns for scheduled OS patch/update alerts (problem name / opdata).
+ *
+ * @return list<string>
+ */
+function zabbix_update_noise_patterns(): array
+{
+    return [
+        '/\bsecurity updates?\b/i',
+        '/\bsoftware updates?\b/i',
+        '/\bpackage updates?\b/i',
+        '/\bwindows updates?\b/i',
+        '/\b(critical|important) updates?\b/i',
+        '/\b(yum|dnf|apt|zypper) updates?\b/i',
+        '/\b(pending|available|outstanding) updates?\b/i',
+        '/\bupdates? (are )?(pending|available|outstanding)\b/i',
+        '/\bavailable updates?\b/i',
+        '/\bnew updates? (are )?available\b/i',
+        '/\bpatch(es)? (are )?(pending|available)\b/i',
+        '/\b(unapplied|uninstalled) (security )?(patches|updates)\b/i',
+    ];
+}
+
+/** @param array<string,mixed> $problem */
+function zabbix_problem_is_update_noise(array $problem): bool
+{
+    $parts = [];
+    foreach (['name', 'opdata'] as $key) {
+        $text = trim((string)($problem[$key] ?? ''));
+        if ($text !== '') {
+            $parts[] = $text;
+        }
+    }
+    if ($parts === []) {
+        return false;
+    }
+    $haystack = implode(' ', $parts);
+    foreach (zabbix_update_noise_patterns() as $pattern) {
+        if (preg_match($pattern, $haystack) === 1) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @param list<array<string,mixed>> $problems
+ * @return list<array<string,mixed>>
+ */
+function zabbix_filter_update_problems(array $problems, bool $exclude): array
+{
+    if (!$exclude) {
+        return $problems;
+    }
+
+    return array_values(array_filter($problems, static function ($problem): bool {
+        return is_array($problem) && !zabbix_problem_is_update_noise($problem);
+    }));
+}
+
 /** Keep only unresolved problems (matches Zabbix Monitoring → Problems default view). */
 function zabbix_filter_unresolved_problems(array $problems): array
 {
@@ -896,6 +970,7 @@ function zabbix_fetch_wall_problems(
     int $minSeverity,
     int $maxDisplay,
     bool $hideAck,
+    bool $excludeUpdates = false,
     ?string &$error = null
 ): array {
     $minSeverity = max(0, min(5, $minSeverity));
@@ -938,6 +1013,7 @@ function zabbix_fetch_wall_problems(
         }
         $batch = zabbix_filter_unresolved_problems($batch);
         $batch = zabbix_filter_visible_problems($batch, $error);
+        $batch = zabbix_filter_update_problems($batch, $excludeUpdates);
         $filteredBySev[$sev] = $batch;
         $counts[$sev] = count($batch);
     }
@@ -1231,17 +1307,19 @@ function zabbix_fetch_wall_data(array $page): array
     }
     $maxHosts = max(1, min(100, (int)($page['max_hosts'] ?? 24)));
     $hideAck = $allHosts || !empty($page['hide_acknowledged']);
+    $excludeUpdates = zabbix_exclude_updates_enabled($page);
 
     $cacheDir = SIGNAGE_ROOT . '/cache';
     if (!is_dir($cacheDir)) {
         @mkdir($cacheDir, 0775, true);
     }
-    $cacheKey = 'zabbix_visible_' . md5(json_encode([
+    $cacheKey = 'zabbix_wall_' . md5(json_encode([
         $allHosts ? '__all__' : $groupNames,
         $minSeverity,
         $maxProblems,
         $allHosts ? 0 : $maxHosts,
         $hideAck,
+        $excludeUpdates,
     ]));
     $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
     $ttl = zabbix_cache_ttl();
@@ -1264,7 +1342,14 @@ function zabbix_fetch_wall_data(array $page): array
         }
     }
 
-    $fetched = zabbix_fetch_wall_problems($groupIds, $minSeverity, $maxProblems, $hideAck, $error);
+    $fetched = zabbix_fetch_wall_problems(
+        $groupIds,
+        $minSeverity,
+        $maxProblems,
+        $hideAck,
+        $excludeUpdates,
+        $error
+    );
     $problems = $fetched['problems'];
     $counts = $fetched['counts'];
     $problemsTotal = (int)($fetched['problems_total'] ?? 0);
@@ -1340,6 +1425,7 @@ function zabbix_fetch_wall_data(array $page): array
         'acknowledged_hidden' => $ackHidden,
         'displayed_by_severity' => $displayedBySev,
         'hide_acknowledged' => $hideAck,
+        'exclude_updates' => $excludeUpdates,
     ];
 
     @file_put_contents($cacheFile, json_encode($out), LOCK_EX);

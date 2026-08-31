@@ -42,6 +42,7 @@ if ($problemsTotal === 0) {
     $problemsTotal = array_sum(array_map('intval', $data['counts'] ?? []));
 }
 $ackHidden = (int)($data['acknowledged_hidden'] ?? 0);
+$excludeUpdates = !empty($data['exclude_updates']);
 $displayedBySev = is_array($data['displayed_by_severity'] ?? null) ? $data['displayed_by_severity'] : [];
 
 $boardH = signage_frame_height();
@@ -244,12 +245,18 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
       <?php if ($ackHidden > 0): ?>
       <div class="pill muted"><strong><?= (int)$ackHidden ?></strong> acknowledged hidden</div>
       <?php endif; ?>
+      <?php if ($excludeUpdates): ?>
+      <div class="pill muted">Update alerts hidden</div>
+      <?php endif; ?>
       <?php elseif (!$allHostsScope): ?>
       <div class="pill">Scope <strong><?= h($groupLabel !== '' ? $groupLabel : '—') ?></strong></div>
       <div class="pill">Problems <strong><?= (int)$problemsTotal ?></strong></div>
       <div class="pill">Hosts <strong><?= (int)$hostsWithProblems ?> / <?= (int)$hostCount ?></strong> with issues</div>
       <?php if ($ackHidden > 0): ?>
       <div class="pill muted"><strong><?= (int)$ackHidden ?></strong> acknowledged hidden</div>
+      <?php endif; ?>
+      <?php if ($excludeUpdates): ?>
+      <div class="pill muted">Update alerts hidden</div>
       <?php endif; ?>
       <?php endif; ?>
       <?php foreach (array_reverse(zabbix_severity_options(), true) as $sev):

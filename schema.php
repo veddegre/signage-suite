@@ -936,6 +936,8 @@ function admin_schema(): array
             ['key' => 'ZABBIX_VERIFY_TLS', 'label' => 'Verify TLS', 'type' => 'bool', 'default' => false],
             ['key' => 'BOARD_TITLE', 'label' => 'Default page title', 'type' => 'text', 'help' => 'Used for the main page when no per-page title is set'],
             ['key' => 'BOARD_SUB', 'label' => 'Default page subtitle', 'type' => 'text'],
+            ['key' => 'EXCLUDE_UPDATES', 'label' => 'Exclude software/security updates', 'type' => 'bool',
+             'help' => 'Hide OS patch/update problems on every Zabbix page (per-page checkbox can also enable this)'],
             $tz, $ttl('How long problem/host queries are cached'),
         ]],
         'tdx' => ['title' => 'TeamDynamix', 'file' => 'tdx.php', 'fields' => [

@@ -54,10 +54,11 @@ $page = zabbix_resolve_page($pageKey);
 $rawGroups = (string)($page['host_groups'] ?? '');
 $parsed = zabbix_parse_host_groups($rawGroups);
 
-echo "Page key: {$pageKey}\n";
+echo 'Page key: ' . $pageKey . "\n";
 echo 'Title: ' . (string)($page['title'] ?? '') . "\n";
 echo 'Host groups (stored): ' . ($rawGroups !== '' ? $rawGroups : '(all hosts)') . "\n";
-echo 'Parsed: ' . ($parsed !== [] ? implode(' | ', $parsed) : '(none)') . "\n\n";
+echo 'Parsed: ' . ($parsed !== [] ? implode(' | ', $parsed) : '(none)') . "\n";
+echo 'Exclude software/security updates: ' . ($excludeUpdates ? 'yes' : 'no') . "\n\n";
 
 if (!zabbix_configured()) {
     echo "Zabbix URL/token not configured in " . cfg_path() . ".\n";
@@ -94,6 +95,7 @@ if ($parsed === []) {
 
 $minSeverity = max(0, min(5, (int)($page['min_severity'] ?? 2)));
 $hideAck = !empty($page['hide_acknowledged']);
+$excludeUpdates = zabbix_exclude_updates_enabled($page);
 $problemParams = [
     'output' => ['eventid', 'name', 'severity', 'clock', 'acknowledged', 'r_eventid', 'objectid', 'source'],
     'severities' => zabbix_severities_from_min($minSeverity),
@@ -117,12 +119,20 @@ if (!is_array($rawProblems)) {
 
 $unresolved = zabbix_filter_unresolved_problems($rawProblems);
 $visible = zabbix_filter_visible_problems($unresolved, $error);
+$filtered = zabbix_filter_update_problems($visible, $excludeUpdates);
 
 echo 'API problems (unresolved): ' . count($unresolved) . "\n";
 echo 'After UI visibility filter: ' . count($visible) . "\n";
 $hidden = count($unresolved) - count($visible);
 if ($hidden > 0) {
     echo "Hidden by disabled trigger/host/item: {$hidden}\n";
+}
+if ($excludeUpdates) {
+    $updateHidden = count($visible) - count($filtered);
+    echo 'After update filter: ' . count($filtered) . "\n";
+    if ($updateHidden > 0) {
+        echo "Hidden as software/security updates: {$updateHidden}\n";
+    }
 }
 echo "\n";
 
@@ -204,7 +214,7 @@ foreach ($unresolved as $problem) {
     $eid = (string)($problem['eventid'] ?? '');
     $oid = (string)($problem['objectid'] ?? '');
     $shown = false;
-    foreach ($visible as $row) {
+    foreach ($filtered as $row) {
         if (is_array($row) && (string)($row['eventid'] ?? '') === $eid) {
             $shown = true;
             break;
@@ -212,7 +222,9 @@ foreach ($unresolved as $problem) {
     }
     $status = $shown ? 'WALL' : 'HIDDEN';
     $reason = '';
-    if (!$shown && $oid !== '' && isset($triggerMeta[$oid])) {
+    if (!$shown && $excludeUpdates && zabbix_problem_is_update_noise($problem)) {
+        $reason = ' [update noise]';
+    } elseif (!$shown && $oid !== '' && isset($triggerMeta[$oid])) {
         $tr = $triggerMeta[$oid];
         $parts = [];
         if ((string)($tr['status'] ?? '0') === '1') {
