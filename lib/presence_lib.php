@@ -336,6 +336,21 @@ function signage_presence_touch(string $screen, array $payload): void
 
         $pageDwell = max(0, (int)($payload['page_dwell'] ?? 0));
 
+        $rssIdx = (int)($payload['rss_idx'] ?? -1);
+        if ($rssIdx < 0) {
+            $rssIdx = -1;
+        }
+        $rssTotal = max(0, (int)($payload['rss_total'] ?? 0));
+        $prevRssIdx = (int)($prev['rss_idx'] ?? -1);
+        $rssTickAt = (int)($prev['rss_tick_at'] ?? 0);
+        if ($isBlank || $rssIdx < 0) {
+            $rssIdx = -1;
+            $rssTotal = 0;
+            $rssTickAt = 0;
+        } elseif ($rssIdx !== $prevRssIdx || $rssTickAt <= 0) {
+            $rssTickAt = $now;
+        }
+
         $lastContentUrl = (string)($prev['last_content_url'] ?? '');
         $lastContentLabel = (string)($prev['last_content_label'] ?? '');
         if (!$isBlank && $pageUrl !== '') {
@@ -353,6 +368,9 @@ function signage_presence_touch(string $screen, array $payload): void
             'last_content_label' => $lastContentLabel,
             'page_since' => $pageSince,
             'page_dwell' => $pageDwell,
+            'rss_idx' => $rssIdx,
+            'rss_total' => $rssTotal,
+            'rss_tick_at' => $rssTickAt > 0 ? $rssTickAt : null,
             'page_index' => (int)($payload['page_index'] ?? -1),
             'page_total' => (int)($payload['page_total'] ?? 0),
             'status' => $status,
@@ -441,15 +459,25 @@ function signage_presence_dashboard(): array
 
         $pageSince = (int)($entry['page_since'] ?? 0);
         $pageAgeSec = ($online && $pageSince > 0) ? max(0, time() - $pageSince) : 0;
+        $rssIdx = (int)($entry['rss_idx'] ?? -1);
+        $rssTickAt = (int)($entry['rss_tick_at'] ?? 0);
+        $rssTickAge = ($online && $rssIdx >= 0 && $rssTickAt > 0) ? max(0, time() - $rssTickAt) : 0;
         // Multi-page rotation stuck on one URL while still heartbeating (GPU/shell freeze).
         $stuckOnPage = $online
             && !$kioskBlank
             && $pageAgeSec >= 600
             && (int)($entry['page_total'] ?? 0) > 1
             && $nowUrl !== '';
+        $stuckRss = $online
+            && !$kioskBlank
+            && str_contains($nowUrl, 'rss.php')
+            && (
+                ($rssIdx >= 0 && $rssTickAge >= 45)
+                || ($rssIdx < 0 && $pageAgeSec >= 60)
+            );
         // Off hours started but the kiosk is still reporting a board (JS never applied blank).
         $stuckShouldBlank = $online && $scheduleBlank && !$kioskBlank && $nowUrl !== '';
-        $stuck = $stuckOnPage || $stuckShouldBlank;
+        $stuck = $stuckOnPage || $stuckRss || $stuckShouldBlank;
 
         $out[] = [
             'screen' => $key,
@@ -478,6 +506,9 @@ function signage_presence_dashboard(): array
                 'status' => $nowStatus,
                 'index' => (int)($entry['page_index'] ?? -1),
                 'total' => (int)($entry['page_total'] ?? 0),
+                'rss_idx' => $rssIdx,
+                'rss_total' => (int)($entry['rss_total'] ?? 0),
+                'rss_tick_age_sec' => $rssTickAge,
                 'since' => $pageSince > 0 ? $pageSince : null,
                 'age_sec' => $pageAgeSec,
             ],

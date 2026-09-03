@@ -96,7 +96,7 @@ After reboot, Chromium should fill the TV via **cage** (minimal Wayland composit
 | **signage-update.timer** | Daily **03:30** (default) — `apt upgrade` + `git pull` / `setup-kiosk.sh --skip-apt` |
 | **signage-maint.timer** | Daily **04:00** (default) — **`git pull` + setup again**, then reboot if needed else browser restart |
 | **unattended-upgrades** | Security patches between nightly runs |
-| **signage-watchdog.timer** | Every **5 min** — restarts `signage` if `board.php` stops responding, heartbeats stop, the same board stays up too long, or cage has been running 30 min |
+| **signage-watchdog.timer** | Every **1 min** — restarts `signage` if `board.php` stops responding, heartbeats stop, an RSS story stalls (~50s), the same board stays up too long, or cage has been running 10 min |
 | **signage-cec.timer** | Every **1 min** — polls server CEC schedule (unless `--no-cec`) |
 | **signage-cursor-vt.service** | **Pi only** — VT switch to hide cage’s compositor pointer |
 | **Blank cursor theme** | Transparent Xcursor theme (Chromium client cursors only) |
@@ -383,7 +383,7 @@ Common triggers:
 |-------|------|
 | **Chromium crash / OOM** | Random, often on heavy iframe boards (Grafana, Splunk, webcam) |
 | **signage-maint.timer** | Daily ~04:00 — intentional `systemctl restart signage` (memory flush) |
-| **signage-watchdog** | After 2 failed health checks (~10 min if the server was unreachable), when the screen stays on the same board too long while still heartbeating, or when off-hours start and the kiosk never actually blanked |
+| **signage-watchdog** | After 2 failed health checks (~2 min if the server was unreachable), when an RSS story index stops advancing (~50s), when the screen stays on the same board too long while still heartbeating, or when off-hours start and the kiosk never actually blanked |
 | **Package updates** | Reboot when kernel/apt updates require it |
 | **board.php reload** | Every 2h or after admin saves rotation — stays in-browser (usually a dark flash, not the console) |
 
@@ -412,9 +412,9 @@ Recovery is layered (board shell + systemd):
 | **board.php** | Automatic shell reload every 2 hours |
 | **signage-maint.timer** | Daily reboot-if-needed else browser restart |
 | **signage-restart.timer** | Only when `--no-auto-update` (04:00 browser restart) |
-| **signage-watchdog.timer** | Every 5 min — restarts if the server is down, heartbeats stop (~10 min), the same multi-page board stays up too long (RSS/Zabbix/Grafana ~3–8 min, other boards ~12+ min), **cage has been up 30 min** (compositor stall while Status still Online), **or** the schedule says blank but the kiosk is still on a board |
+| **signage-watchdog.timer** | Every 1 min — restarts if the server is down, heartbeats stop (~2 min), an RSS story stalls (~50s), the same multi-page board stays up too long (RSS/Zabbix/Grafana ~3–8 min, other boards ~12+ min), **cage has been up 10 min** (compositor stall while Status still Online), **or** the schedule says blank but the kiosk is still on a board |
 
-Admin **Status** “Online” only means a heartbeat arrived in the last 2 minutes. **Blank (scheduled off)** is what the kiosk *reported*, not a photo of HDMI. After an RSS GPU hang the shell can still post “blank” while the TV shows the last news frame. Status shows **Online · stuck?** when a multi-page display reports the same URL for 10+ minutes, or when off-hours have started and the kiosk is still on a board.
+Admin **Status** “Online” only means a heartbeat arrived in the last 2 minutes. **Blank (scheduled off)** is what the kiosk *reported*, not a photo of HDMI. After an RSS GPU hang the shell can still post “blank” while the TV shows the last news frame. Status shows **story N/M** from in-feed ticks, and **Online · stuck?** when a story index stalls, a multi-page display reports the same URL for 10+ minutes, or off-hours have started while the kiosk is still on a board.
 
 **Quick checks**
 

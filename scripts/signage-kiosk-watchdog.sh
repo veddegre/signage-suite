@@ -26,7 +26,9 @@ STALE_PAGE_SEC="${WATCHDOG_STALE_PAGE_SEC:-720}"
 STALE_LOADING_SEC="${WATCHDOG_STALE_LOADING_SEC:-300}"
 # Recycle Chromium if cage has been up this long even while heartbeats look
 # healthy. Status page_url can keep changing during a compositor stall.
-MAX_BROWSER_SEC="${WATCHDOG_MAX_BROWSER_SEC:-1800}"
+MAX_BROWSER_SEC="${WATCHDOG_MAX_BROWSER_SEC:-600}"
+# RSS story index unchanged this long → compositor/JS stall mid-feed.
+RSS_STALL_SEC="${WATCHDOG_RSS_STALL_SEC:-50}"
 
 STATE_DIR=/run/signage-watchdog
 mkdir -p "$STATE_DIR"
@@ -127,6 +129,8 @@ page_url=""
 status=""
 page_label=""
 last_content_url=""
+rss_idx=-1
+rss_tick_age_sec=0
 if curl "${curl_args[@]}" -o "$tmp" "$health_url"; then
   # Without kiosk-health on the server, curl returns full board.php HTML (~50KB).
   # Treat that as "API unavailable" — not "empty playlist" (pages=0).
@@ -156,6 +160,10 @@ if curl "${curl_args[@]}" -o "$tmp" "$health_url"; then
     status="$(json_field "$tmp" status)"
     page_label="$(json_field "$tmp" page_label)"
     last_content_url="$(json_field "$tmp" last_content_url)"
+    rss_idx="$(json_field "$tmp" rss_idx)"
+    rss_idx="${rss_idx:--1}"
+    rss_tick_age_sec="$(json_field "$tmp" rss_tick_age_sec)"
+    rss_tick_age_sec="${rss_tick_age_sec:-0}"
   fi
 fi
 
@@ -221,14 +229,28 @@ if [[ "$blank" -eq 0 ]]; then
   else
     limit="$STALE_PAGE_SEC"
     check_url="${page_url:-$last_content_url}"
-    if [[ "$check_url" == *rss.php* || "$check_url" == *zabbix.php* || "$check_url" == *grafana.php* ]]; then
+    is_rss=0
+    [[ "$check_url" == *rss.php* ]] && is_rss=1
+    if [[ "$is_rss" -eq 1 || "$check_url" == *zabbix.php* || "$check_url" == *grafana.php* ]]; then
       # GPU-heavy boards often freeze the shared renderer; don't wait 12+ minutes.
       limit=$((page_dwell + 90))
       if [[ "$limit" -lt 180 ]]; then limit=180; fi
       if [[ "$limit" -gt 480 ]]; then limit=480; fi
       stale_need=1
     fi
-    if [[ "$page_total" -gt 1 && "$page_age_sec" -ge "$limit" ]]; then
+    # RSS: story ticks stall even while page_url hops feed=ars → feed=peta.
+    if [[ "$is_rss" -eq 1 ]]; then
+      if [[ "$rss_tick_age_sec" =~ ^[0-9]+$ && "$rss_tick_age_sec" -ge "$RSS_STALL_SEC" ]]; then
+        stale=1
+        stale_need=1
+      elif [[ "$rss_idx" == "-1" && "$page_age_sec" -ge "$RSS_STALL_SEC" ]]; then
+        stale=1
+        stale_need=1
+      elif [[ "$page_age_sec" -ge "$limit" ]]; then
+        stale=1
+        stale_need=1
+      fi
+    elif [[ "$page_total" -gt 1 && "$page_age_sec" -ge "$limit" ]]; then
       stale=1
     fi
   fi
@@ -246,7 +268,7 @@ else
 
   if [[ "$stale_fails" -ge "$stale_need" ]]; then
     rm -f "$STALE_FAIL_FILE"
-    logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} online but stuck on '${page_label:-unknown}' for ${page_age_sec}s (status=${status:-?} pages=${page_total})"
+    logger -t signage-watchdog "restarting signage.service — screen ${SCREEN} online but stuck on '${page_label:-unknown}' for ${page_age_sec}s (status=${status:-?} pages=${page_total} rss_tick_age=${rss_tick_age_sec}s)"
     systemctl restart signage.service
     exit 0
   fi

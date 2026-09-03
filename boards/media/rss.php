@@ -250,12 +250,11 @@ $payload = array_map(fn($i) => [
               color:var(--snow); font-family:'IBM Plex Sans',sans-serif; cursor:none;
               <?= signage_viewport_css() ?> }
 
-  .photo { position:absolute; inset:0; opacity:0; transition:opacity 1.6s ease; --img:none; }
+  .photo { position:absolute; inset:0; opacity:0; transition:opacity .45s ease; --img:none; }
   .photo.show { opacity:1; }
   .photo-blur, .photo-main { position:absolute; background-image:var(--img); background-repeat:no-repeat; }
-  /* Tiny bitmap scaled up — a 56px blur on a full-bleed 4K photo hangs Pi GPU. */
-  .photo-blur { width:64px; height:36px; left:0; top:0; background-size:cover; background-position:center;
-    filter:blur(3px) brightness(0.38) saturate(1.12); transform:scale(32); transform-origin:top left; }
+  /* Solid wash only — blur+scale of a full-bleed photo hangs Intel/Pi GPU. */
+  .photo-blur { display:none; }
   .photo-main { inset:0; z-index:1; }
   .photo.fit-cover .photo-blur { display:none; }
   .photo.fit-cover .photo-main { background-size:cover; background-position:center; }
@@ -421,7 +420,7 @@ $payload = array_map(fn($i) => [
       photos[front].classList.remove('show');
       front = back;
       if (EMBEDDED) {
-        try { window.parent.postMessage({ type: 'signage-rss-tick', idx: idx }, '*'); } catch (e) {}
+        try { window.parent.postMessage({ type: 'signage-rss-tick', idx: idx, total: STORIES.length }, '*'); } catch (e) {}
       }
 
       textEl.classList.remove('show');

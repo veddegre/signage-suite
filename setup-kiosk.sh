@@ -824,7 +824,7 @@ EOF
 fi
 
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-watchdog.sh" ]]; then
-  echo "==> Installing kiosk health watchdog (every 5 min, first check 2 min after boot)"
+  echo "==> Installing kiosk health watchdog (every 1 min, first check 2 min after boot)"
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-watchdog.sh" /usr/local/bin/signage-kiosk-watchdog
   cat > /etc/systemd/system/signage-watchdog.service <<'EOF'
 [Unit]
@@ -836,11 +836,11 @@ ExecStart=/usr/local/bin/signage-kiosk-watchdog
 EOF
   cat > /etc/systemd/system/signage-watchdog.timer <<'EOF'
 [Unit]
-Description=Poll signage kiosk health every 5 minutes
+Description=Poll signage kiosk health every minute
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=1min
 Persistent=true
 
 [Install]

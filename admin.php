@@ -11688,6 +11688,11 @@ function initPresencePanel() {
         if (s.now.index >= 0 && s.now.total > 0) {
           nowHtml += ' <span class="presence-stats">(' + (s.now.index + 1) + '/' + s.now.total + ')</span>';
         }
+        if (s.now.rss_idx >= 0) {
+          const story = (s.now.rss_idx + 1);
+          const stories = s.now.rss_total > 0 ? ('/' + s.now.rss_total) : '';
+          nowHtml += ' <span class="presence-stats">story ' + story + stories + '</span>';
+        }
         if (s.now.status === 'loading') {
           nowHtml += ' <span class="presence-stats">loading…</span>';
         }

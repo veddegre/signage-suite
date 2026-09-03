@@ -141,27 +141,33 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     $pages = is_array($runtime['pages'] ?? null) ? $runtime['pages'] : [];
     $pageSince = (int)($entry['page_since'] ?? 0);
     $pageAge = ($pageSince > 0) ? max(0, time() - $pageSince) : 0;
+    $rssIdx = (int)($entry['rss_idx'] ?? -1);
+    $rssTickAt = (int)($entry['rss_tick_at'] ?? 0);
+    $rssTickAge = ($rssIdx >= 0 && $rssTickAt > 0) ? max(0, time() - $rssTickAt) : 0;
     echo json_encode([
-        'ok' => true,
-        'screen' => $SCREEN,
-        'online' => signage_presence_online($entry),
-        'pages' => count($pages) > 0,
-        'page_total' => (int)($entry['page_total'] ?? count($pages)),
-        'blank' => !empty($entry['blank']),
-        'schedule_blank' => $blankActive,
-        'cec_enabled' => !empty(rotation_screen_settings($SCREEN)['cec']['enabled']),
-        'page_url' => (string)($entry['page_url'] ?? ''),
-        'page_label' => (string)($entry['page_label'] ?? ''),
-        'last_content_url' => (string)($entry['last_content_url'] ?? ''),
-        'last_content_label' => (string)($entry['last_content_label'] ?? ''),
-        'page_since' => $pageSince > 0 ? $pageSince : null,
-        'page_age_sec' => $pageAge,
-        'page_dwell' => (int)($entry['page_dwell'] ?? 0),
-        'status' => (string)($entry['status'] ?? ''),
-        'last_seen' => isset($entry['last_seen']) ? (int)$entry['last_seen'] : null,
-        'local_ip' => (string)($entry['local_ip'] ?? ''),
-        'client_ip' => (string)($entry['client_ip'] ?? ''),
-    ], JSON_UNESCAPED_SLASHES);
+            'ok' => true,
+            'screen' => $SCREEN,
+            'online' => signage_presence_online($entry),
+            'pages' => count($pages) > 0,
+            'page_total' => (int)($entry['page_total'] ?? count($pages)),
+            'blank' => !empty($entry['blank']),
+            'schedule_blank' => $blankActive,
+            'cec_enabled' => !empty(rotation_screen_settings($SCREEN)['cec']['enabled']),
+            'page_url' => (string)($entry['page_url'] ?? ''),
+            'page_label' => (string)($entry['page_label'] ?? ''),
+            'last_content_url' => (string)($entry['last_content_url'] ?? ''),
+            'last_content_label' => (string)($entry['last_content_label'] ?? ''),
+            'page_since' => $pageSince > 0 ? $pageSince : null,
+            'page_age_sec' => $pageAge,
+            'page_dwell' => (int)($entry['page_dwell'] ?? 0),
+            'rss_idx' => $rssIdx,
+            'rss_total' => (int)($entry['rss_total'] ?? 0),
+            'rss_tick_age_sec' => $rssTickAge,
+            'status' => (string)($entry['status'] ?? ''),
+            'last_seen' => isset($entry['last_seen']) ? (int)$entry['last_seen'] : null,
+            'local_ip' => (string)($entry['local_ip'] ?? ''),
+            'client_ip' => (string)($entry['client_ip'] ?? ''),
+        ], JSON_UNESCAPED_SLASHES);
     exit;
 }
 ?>
@@ -301,6 +307,8 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
   let showDebug = SHOW_DEBUG;
   let lastAdvanceAt = Date.now();
   let rssTickAt = 0;
+  let rssIdx = -1;
+  let rssTotal = 0;
   let rssWatchGen = 0;
   let pollFails = 0;
   let watchdogTrips = 0;
@@ -330,6 +338,8 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
       page_total: PAGES.length,
       page_dwell: blankActive ? 0 : (p ? (+p.dwell || 0) : 0),
       status: presenceStatus,
+      rss_idx: (!blankActive && p && isRssUrl(p.url) && rssIdx >= 0) ? rssIdx : -1,
+      rss_total: (!blankActive && p && isRssUrl(p.url) && rssTotal > 0) ? rssTotal : 0,
     };
     if (KIOSK_LOCAL_IP) body.local_ip = KIOSK_LOCAL_IP;
     fetch(presenceQuery(), {
@@ -437,6 +447,11 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     }
     if (ev.data.type === 'signage-rss-tick') {
       rssTickAt = Date.now();
+      rssIdx = parseInt(ev.data.idx, 10);
+      if (isNaN(rssIdx) || rssIdx < 0) rssIdx = 0;
+      rssTotal = parseInt(ev.data.total, 10);
+      if (isNaN(rssTotal) || rssTotal < 0) rssTotal = 0;
+      sendPresence();
       // Do not bump lastAdvanceAt: story ticks can continue in JS while HDMI
       // stays on one frame. The RSS safety timer / leave-RSS reload recover that.
       return;
@@ -872,6 +887,10 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
     const p = PAGES[idx];
     if (!p) return;
     presencePage = p;
+    if (!isRssUrl(p.url)) {
+      rssIdx = -1;
+      rssTotal = 0;
+    }
     const myGen = ++gen;
     const back = 1 - front;
     const f = frames[back];
