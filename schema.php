@@ -50,6 +50,8 @@ function admin_schema(): array
             ['key' => 'PROFILE', 'label' => 'Install profile', 'type' => 'select',
              'options' => ['home', 'work'], 'default' => 'home',
              'help' => 'Work hides Homelab, UniFi, Uptime Kuma, Tailscale, ntfy, Meal Calendar, and TV Guide from admin, rotation quick-add, playlists, and direct board URLs. Save here, then refresh kiosks (~30s).'],
+            ['key' => 'CARTO_API_KEY', 'label' => 'CARTO basemap API key', 'type' => 'password',
+             'help' => 'Required for weather radar, traffic, and world-map boards. Free key at carto.com/basemaps/apikey — without it, tiles show an “API key required” watermark.'],
         ]],
         'security' => ['title' => 'Security', 'fields' => [
             ['key' => 'ALLOW_PRIVATE_FETCH', 'label' => 'Allow private URL fetches', 'type' => 'bool', 'default' => false,

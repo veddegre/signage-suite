@@ -43,6 +43,7 @@ Admin boards are grouped in a **collapsible** sidebar — click a category heade
 | **Users** | Create users, assign roles (super / operator), assign display(s) |
 | **Status** | Kiosk heartbeats, play log, slide/photo deploy sync |
 | **Security** | Idle timeout, outbound URL policy, SSO, multi-display policy, audit settings, **trusted reverse proxies** |
+| **Site** | Install profile and **CARTO basemap API key** (weather radar, traffic, world maps) |
 | **Audit** | Sign-ins, saves, user changes (not cleared with API cache) |
 
 **Login:** local username/password and/or SSO, CSRF-protected sessions, configurable idle logout, lockout after repeated failures.

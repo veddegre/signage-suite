@@ -8,7 +8,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 
 | Group | Board | File | Rotation URL | Keys |
 |-------|-------|------|--------------|------|
-| Weather & home | Weather | `weather.php` | `boards/weather/index.php` | OpenWeatherMap |
+| Weather & home | Weather | `weather.php` | `boards/weather/index.php` | OpenWeatherMap + CARTO |
 | | Lake Michigan | `lake.php` | `lake.php` | — |
 | | Webcam | `webcam.php?cam=grpm` | `webcam.php?cam=KEY` | — |
 | | Mackinac Bridge cam | `bridgecam.php` | `bridgecam.php` | — |
@@ -19,7 +19,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Calendar | `calendar.php` | `calendar.php` | — |
 | | Today at a glance | `glance.php` | `glance.php` | Calendar feeds |
 | | Meal calendar | `meals.php` | `meals.php` | — |
-| | Traffic map | `traffic.php` | `traffic.php` | TomTom |
+| | Traffic map | `traffic.php` | `traffic.php` | TomTom + CARTO |
 | **Daily** | Word of the day | `wotd.php` | `wotd.php` | — |
 | | This day in history | `history.php` | `history.php` | — |
 | | Dad jokes | `joke.php` | `joke.php` | — |
@@ -29,13 +29,13 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
 | | Internet attacks | `attacks.php` | `attacks.php` | — |
-| | DShield heatmap | `dshieldmap.php` | `dshieldmap.php` | — |
-| | Attack origins | `dshieldsrc.php` | `dshieldsrc.php` | — |
+| | DShield heatmap | `dshieldmap.php` | `dshieldmap.php` | CARTO |
+| | Attack origins | `dshieldsrc.php` | `dshieldsrc.php` | CARTO |
 | | Top attack ports | `attackports.php` | `attackports.php` | — |
-| | Outage map | `iodamap.php` | `iodamap.php` | — |
+| | Outage map | `iodamap.php` | `iodamap.php` | CARTO |
 | | Cloudflare Radar | `radar.php` | `radar.php` | Radar API token |
-| | Attack map (L7) | `attackmap.php` | `attackmap.php` | Radar API token (shared) |
-| | L3 attack map | `l3map.php` | `l3map.php` | Radar API token (shared) |
+| | Attack map (L7) | `attackmap.php` | `attackmap.php` | Radar API token + CARTO |
+| | L3 attack map | `l3map.php` | `l3map.php` | Radar API token + CARTO |
 | | Data breaches | `hibp.php` | `hibp.php` | — |
 | | New CVEs | `cve.php` | `cve.php` | NVD key optional |
 | | CISA KEV | `kev.php` | `kev.php` | — |
@@ -67,9 +67,9 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 
 Allendale weather, RainViewer animated radar, sunrise arc. **Latitude / longitude** here are the site default for every location-aware board (weather, air, UV, photo, traffic, **NWS alert ticker**) unless a display overrides them under **Rotation → Kiosk settings**.
 
-**Radar basemap:** each display can pick **Light (Voyager)** or **Dark** under **Rotation → Kiosk settings → Weather radar basemap** (default light).
+**Radar basemap:** each display can pick **Light (Voyager)** or **Dark** under **Rotation → Kiosk settings → Weather radar basemap** (default light). CARTO raster tiles now require a free key — paste it under **Site → CARTO basemap API key** ([carto.com/basemaps/apikey](https://carto.com/basemaps/apikey)). Without it, the map shows an “API key required” watermark.
 
-**Setup:** set `OWM_API_KEY` in admin → **Weather**.
+**Setup:** set `OWM_API_KEY` in admin → **Weather**, and the CARTO key under **Site**.
 
 ### lake.php — Lake Michigan Conditions
 
@@ -232,7 +232,7 @@ Season logic uses calendar windows plus nearby games. Live games show score + pe
 
 TomTom Traffic Flow on dark Carto basemap (Leaflet). Defaults to Allendale ↔ Grand Rapids; center, zoom, and labels editable in admin.
 
-**Setup:** [developer.tomtom.com](https://developer.tomtom.com/) key with **Traffic API** enabled → admin → **Traffic Map**. Tiles served via `traffic_tiles.php` (key never in browser).
+**Setup:** [developer.tomtom.com](https://developer.tomtom.com/) key with **Traffic API** enabled → admin → **Traffic Map**. Tiles served via `traffic_tiles.php` (key never in browser). Also set **Site → CARTO basemap API key** so the dark basemap is not watermarked.
 
 **Troubleshoot** (on server):
 
@@ -346,7 +346,7 @@ Full-screen **world heatmap** of SANS ISC DShield **attack targets by country** 
 
 **Data:** `GET /country` on [SANS ISC DShield API](https://isc.sans.edu/api/) — same free feed as `attacks.php` (no API key).
 
-**Setup:** admin → **DShield Heatmap** — minimum target threshold, sidebar count. Shares cache with **Internet Attacks**.
+**Setup:** admin → **DShield Heatmap** — minimum target threshold, sidebar count. Shares cache with **Internet Attacks**. Basemap uses **Site → CARTO basemap API key**.
 
 **Rotation:** 60s dwell; page reload refreshes from cache TTL (default 300s).
 
@@ -356,7 +356,7 @@ Full-screen **world heatmap** of DShield **attack sources by country** — where
 
 **Data:** Same `GET /country` feed as `attacks.php` — uses the `sources` field (no API key).
 
-**Setup:** admin → **Attack Origins** — minimum source threshold, sidebar count.
+**Setup:** admin → **Attack Origins** — minimum source threshold, sidebar count. Basemap uses the same CARTO key.
 
 ### attackports.php — Top Attack Ports
 
@@ -372,7 +372,7 @@ Full-screen **world map** of **country-level internet outages** from Georgia Tec
 
 **Data:** IODA API v2 `/outages/events` and `/outages/alerts` (no API key).
 
-**Setup:** admin → **Outage Map** — lookback days, minimum score threshold.
+**Setup:** admin → **Outage Map** — lookback days, minimum score threshold. Basemap uses **Site → CARTO basemap API key**.
 
 ### l3map.php — L3 Attack Map (pew-pew)
 
@@ -380,7 +380,7 @@ Same animated arc map as `attackmap.php` but for **Cloudflare Radar L3 volumetri
 
 **Data:** `GET /radar/attacks/layer3/top/attacks` — same Radar token as `radar.php`.
 
-**Setup:** admin → **L3 Attack Map** — arc count, travel speed, time window.
+**Setup:** admin → **L3 Attack Map** — arc count, travel speed, time window. Basemap uses **Site → CARTO basemap API key**.
 
 ### radar.php — Cloudflare Radar (DDoS geography)
 
@@ -398,7 +398,7 @@ Full-screen **animated world map** of Cloudflare Radar **L7 attack flows** — c
 
 **Data:** `GET /radar/attacks/layer7/top/attacks` — same Cloudflare Radar token as `radar.php`.
 
-**Setup:** admin → **Attack Map** — optional token (inherits from **Cloudflare Radar** if blank), arc count (default 18), travel speed, time window.
+**Setup:** admin → **Attack Map** — optional token (inherits from **Cloudflare Radar** if blank), arc count (default 18), travel speed, time window. Basemap uses **Site → CARTO basemap API key**.
 
 **Rotation:** 75s dwell recommended so arcs have time to play; page reload refreshes pair data from cache TTL (default 300s).
 

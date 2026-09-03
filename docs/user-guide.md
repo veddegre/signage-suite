@@ -91,7 +91,7 @@ Use this when deciding whether to change something yourself or ask a super admin
 | Area | Super admin only | Operators (own display or shared) |
 |------|------------------|-----------------------------------|
 | **Users, Security, Tools, Audit** | Full access | — |
-| **API credentials** — Zabbix token, TDX BEID/key, Grafana embed auth, AirNow/Google Pollen, TomTom, UniFi, homelab URLs | Board settings on each integration | — |
+| **API credentials** — Zabbix token, TDX BEID/key, Grafana embed auth, AirNow/Google Pollen, TomTom, CARTO, UniFi, homelab URLs | Board settings on each integration; CARTO key under **Site** | — |
 | **Zabbix / TeamDynamix pages** | Global URL + token in Board settings | Create **pages**, filters, and rotation slots; share with team |
 | **Splunk published** (`splunkdash.php`) | — | Paste publish URLs; no Splunk token needed |
 | **Grafana / Power BI / Websites** | Embed auth (Grafana token/JWT, Azure app) | Add dashboard/report rows you own or that are shared |
@@ -118,12 +118,13 @@ Operators **own** content for their assigned display(s): slides, rotation playli
 1. **Install server** — `sudo bash setup-server.sh` (see README). HTTPS is enabled by default; see [HTTPS and TLS](rotation-and-deployment.md#https-and-tls) for reverse-proxy and `--no-https` setups.
 2. **Create super admin** — open admin.php; use one-time key from `config/setup.key` (SSH only).
 3. **Security** — idle timeout, **Allow private URL fetches** if you use LAN Zabbix/TDX/homelab URLs.
-4. **Weather** — set OpenWeatherMap key and default lat/lon (used by many boards).
-5. **Rotation** — create display keys (`main`, `lobby`, …); build playlists.
-6. **Users** — create operator accounts; assign displays.
-7. **Integrations** — configure API credentials per board (Zabbix, TDX, Grafana, …).
-8. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; prefer **x86 mini PC** or **Pi 5 (8 GB)** for video and iframe-heavy playlists ([kiosk-setup.md → Hardware](kiosk-setup.md#hardware-requirements)). Self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)). If kiosks connect through a reverse proxy, set **Security → Trusted reverse proxies** ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)).
-9. **SSO** (optional) — [admin-and-security.md → SSO](admin-and-security.md#sso-setup-entra-id--authentik).
+4. **Site** — paste a free **CARTO basemap API key** ([carto.com/basemaps/apikey](https://carto.com/basemaps/apikey)) so weather radar, traffic, and world-map boards are not watermarked.
+5. **Weather** — set OpenWeatherMap key and default lat/lon (used by many boards).
+6. **Rotation** — create display keys (`main`, `lobby`, …); build playlists.
+7. **Users** — create operator accounts; assign displays.
+8. **Integrations** — configure API credentials per board (Zabbix, TDX, Grafana, …).
+9. **Kiosk** — `setup-kiosk.sh` with **`https://`** URL; prefer **x86 mini PC** or **Pi 5 (8 GB)** for video and iframe-heavy playlists ([kiosk-setup.md → Hardware](kiosk-setup.md#hardware-requirements)). Self-signed certs are ignored on kiosk by default ([kiosk-setup.md → HTTPS](kiosk-setup.md#https-and-self-signed-certificates)). If kiosks connect through a reverse proxy, set **Security → Trusted reverse proxies** ([admin-and-security.md](admin-and-security.md#trusted-reverse-proxies)).
+10. **SSO** (optional) — [admin-and-security.md → SSO](admin-and-security.md#sso-setup-entra-id--authentik).
 
 ### Day-to-day tasks
 
@@ -149,6 +150,7 @@ Super admin only (**Board settings** collapsed section on each board):
 | Grafana | JWT secret / RS256 key, JWKS URL (Cloud) |
 | Power BI | Azure tenant, client ID, client secret |
 | Traffic | TomTom key |
+| Site | CARTO basemap API key (weather radar, traffic, world maps) |
 | Cloudflare Radar | API token |
 | Homelab / UniFi / Tailscale / ntfy | Per-board tokens |
 
@@ -212,7 +214,7 @@ Grouped as in admin. **Rotation URL** = what you add to a playlist (parameterize
 
 | Admin board | Wall file | Rotation URL | Data source |
 |-------------|-----------|--------------|-------------|
-| **Weather** | `weather.php` | `boards/weather/index.php` | OpenWeatherMap |
+| **Weather** | `weather.php` | `boards/weather/index.php` | OpenWeatherMap + CARTO |
 | **Lake Michigan** | `lake.php` | `lake.php` | NDBC buoy + NWS |
 | **Webcam** | `webcam.php` | `webcam.php?cam=KEY` | External streams / images |
 | **Mackinac Bridge cam** | `bridgecam.php` | `bridgecam.php` | MDOT feed |
@@ -223,7 +225,7 @@ Grouped as in admin. **Rotation URL** = what you add to a playlist (parameterize
 | **Calendar** | `calendar.php` | `calendar.php` | ICS feeds |
 | **Today at a glance** | `glance.php` | `glance.php` | Calendar + RSS columns |
 | **Meal calendar** | `meals.php` | `meals.php` | Admin-entered meal plan |
-| **Traffic map** | `traffic.php` | `traffic.php` | TomTom |
+| **Traffic map** | `traffic.php` | `traffic.php` | TomTom + CARTO |
 | **MDOT Cams** | `camwall.php` | `camwall.php` | MDOT camera grid |
 
 Per-display **location**, **sports teams**, **MDOT cam layout**, and **glance columns** override globals under **Rotation → Kiosk settings**.
@@ -250,13 +252,13 @@ Per-display **location**, **sports teams**, **MDOT cam layout**, and **glance co
 | **Cloud outages** | `outages.php` | Optional M365 Graph |
 | **Internet infrastructure** | `internet.php` | IODA + `dig` |
 | **Internet attacks** | `attacks.php` | DShield — no key |
-| **DShield heatmap** | `dshieldmap.php` | — |
-| **Attack origins** | `dshieldsrc.php` | — |
+| **DShield heatmap** | `dshieldmap.php` | CARTO |
+| **Attack origins** | `dshieldsrc.php` | CARTO |
 | **Top attack ports** | `attackports.php` | — |
-| **Outage map (IODA)** | `iodamap.php` | — |
+| **Outage map (IODA)** | `iodamap.php` | CARTO |
 | **Cloudflare Radar** | `radar.php` | Radar API token |
-| **Attack map L7** | `attackmap.php` | Radar token |
-| **L3 attack map** | `l3map.php` | Radar token |
+| **Attack map L7** | `attackmap.php` | Radar token + CARTO |
+| **L3 attack map** | `l3map.php` | Radar token + CARTO |
 | **HIBP breaches** | `hibp.php` | — |
 | **New CVEs** | `cve.php` | NVD key optional |
 | **CISA KEV** | `kev.php` | — |

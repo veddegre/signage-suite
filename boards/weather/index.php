@@ -871,8 +871,8 @@ $nwsHasMapAlerts = $nwsWarningCount > 0 || $nwsWatchCount > 0;
     }).setView(HOME, 7);
 
     const basemapUrl = RADAR_BASEMAP === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+      ? <?= json_encode(carto_basemap_tile_url('rastertiles/voyager'), JSON_UNESCAPED_SLASHES) ?>
+      : <?= json_encode(carto_basemap_tile_url('dark_all'), JSON_UNESCAPED_SLASHES) ?>;
     L.tileLayer(basemapUrl, {
       subdomains: 'abcd', maxZoom: 10,
       attribution: '&copy; OpenStreetMap &copy; CARTO &middot; radar &copy; RainViewer'

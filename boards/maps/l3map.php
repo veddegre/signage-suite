@@ -177,7 +177,7 @@ function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES,
     attributionControl: true, worldCopyJump: false, zoomSnap: 0,
   });
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  L.tileLayer(<?= json_encode(carto_basemap_tile_url('dark_all'), JSON_UNESCAPED_SLASHES) ?>, {
     subdomains: 'abcd', maxZoom: 6, minZoom: 0, noWrap: true,
     attribution: '&copy; OpenStreetMap &copy; CARTO &middot; L3 attacks &copy; Cloudflare Radar'
   }).addTo(map);

@@ -173,7 +173,7 @@ $markers = traffic_map_markers();
       attributionControl: true
     }).setView(CENTER, ZOOM);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    L.tileLayer(<?= json_encode(carto_basemap_tile_url('dark_nolabels'), JSON_UNESCAPED_SLASHES) ?>, {
       subdomains: 'abcd', maxZoom: 19,
       attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(map);
@@ -196,7 +196,7 @@ $markers = traffic_map_markers();
       map.createPane('trafficLabels');
       map.getPane('trafficLabels').style.zIndex = 650;
       map.getPane('trafficLabels').style.pointerEvents = 'none';
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+      L.tileLayer(<?= json_encode(carto_basemap_tile_url('dark_only_labels'), JSON_UNESCAPED_SLASHES) ?>, {
         subdomains: 'abcd', maxZoom: 19, pane: 'trafficLabels', opacity: 0.95
       }).addTo(map);
     }
