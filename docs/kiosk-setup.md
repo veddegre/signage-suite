@@ -248,18 +248,11 @@ If still choppy: lower **Max flows** on attack maps in admin, or use **scale 1**
 
 ### GRPM / WetMet webcam (`webcam.php?cam=grpm`)
 
-Uses **direct HLS** first (fresh signed URL from your signage server), then falls back to WetMet’s iframe if needed. **Auto-recovery** mimics a manual browser reload:
+Uses WetMet’s **iframe player** — the same `frame.php` embed as the [WMTA gallery page](https://www.wmta.org/live-west-michigan-camera-gallery/grand-rapids-public-museum-west-michigan-live-camera/). The iframe reloads on a timer (admin → Webcam → **Iframe reload** / **Live stream token refresh**) because WetMet’s player also recycles about every **5 minutes**.
 
-- Re-fetches a new signed playlist on a timer (every **5–10 minutes**; tune via admin → Webcam → **Live stream token refresh**)
-- Retries HLS twice on fatal errors or startup stall before iframe fallback
-- Reloads the iframe with a cache-bust query when in fallback mode
-- Detects frozen video (no frame advance for ~45s) and triggers recovery
+When WetMet’s player has no live playlist, **`webcam.php?cam=grpm` is auto-skipped in rotation** (and shows “Webcam not available” if opened directly). The server re-probes on a timer (default **30 minutes**; shorten in admin → **Webcam → Offline re-probe interval** for testing) and adds it back when the stream is live again.
 
-WetMet’s embed also cycles its player about every **5 minutes** — a brief flash can still happen on the iframe path.
-
-When WetMet’s HLS feed is offline, **`webcam.php?cam=grpm` is auto-skipped in rotation** (and shows “Webcam not available” if opened directly). The server re-probes on a timer (default **30 minutes**; shorten in admin → **Webcam** → **Offline re-probe interval** for testing) and adds it back when the stream is live again.
-
-**Debug:** `?mapperf=low` on the webcam URL forces the direct-HLS path on any browser. Server-side: `php scripts/diagnose-webcam.php grpm --refresh`.
+**Debug:** Server-side: `php scripts/diagnose-webcam.php grpm --refresh`.
 
 ### Video & YouTube on the kiosk
 

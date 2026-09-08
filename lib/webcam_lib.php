@@ -1325,7 +1325,16 @@ function webcam_probe_url(string $url, string $kind = 'iframe'): bool
         return $img !== null && webcam_probe_url($img, 'image');
     }
     if (webcam_probe_uses_hls($url, $kind)) {
-        return webcam_probe_hls_playlist_live($url);
+        if (webcam_probe_hls_playlist_live($url)) {
+            return true;
+        }
+        // WetMet’s signed HLS is often unusable from the PHP host (IP/session)
+        // while their iframe player still works — same embed WMTA uses.
+        if (webcam_wetmet_stream_frame_url($url)) {
+            return webcam_stream_playlist_url($url) !== null;
+        }
+
+        return false;
     }
     $ctx = webcam_http_context($url);
     $probeHeaders = [];

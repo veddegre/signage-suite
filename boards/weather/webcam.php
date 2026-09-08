@@ -57,11 +57,8 @@ $camJson['wetmetIframe'] = $wetmetIframe;
 <meta charset="UTF-8">
 <title><?= h($available ? (string)$cam['name'] : TITLE) ?></title>
 <?= signage_theme_fonts_head_html() ?>
-<?php if (($usesStream || $wetmetIframe) && is_file(dirname(__DIR__, 2) . '/' . webcam_hls_js_url())): ?>
+<?php if ($usesStream && is_file(dirname(__DIR__, 2) . '/' . webcam_hls_js_url())): ?>
 <script src="<?= h(webcam_hls_js_url()) ?>"></script>
-<?php endif; ?>
-<?php if ($wetmetIframe): ?>
-<script src="<?= h(signage_map_canvas_js_url()) ?>"></script>
 <?php endif; ?>
 <style>
   <?= signage_theme_css() ?>
@@ -111,7 +108,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
     <iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager"<?php
-      if (!$earthcamIframeWarmup && !$embedded): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
+      if ($wetmetIframe || (!$earthcamIframeWarmup && !$embedded)): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
     <?php endif; ?>
   </div>
   <?php if (SHOW_OVERLAY): ?>
@@ -145,9 +142,8 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   const imageRefreshMs = <?= (int)$imageRefreshSec ?> * 1000;
   const streamRefreshMs = <?= (int)$streamRefreshSec ?> * 1000;
   const EMBEDDED = <?= json_encode($embedded) ?>;
-  /** WetMet / plain iframe embeds only — HLS and still-image cams start immediately. */
-  const DEFER_PLAYBACK = EMBEDDED && (
-    (cam.preferIframe && cam.streamIframe) ||
+  /** WetMet starts immediately (iframe, same as WMTA). Other iframe embeds wait for signage-show. */
+  const DEFER_PLAYBACK = EMBEDDED && !cam.preferIframe && (
     (!cam.streamPlaylist && !cam.imageSrc)
   );
   let armed = !EMBEDDED || window.parent === window || !DEFER_PLAYBACK;
@@ -294,84 +290,22 @@ $camJson['wetmetIframe'] = $wetmetIframe;
   }
 
   function runWetmet() {
-    let wetmetUsingIframe = false;
-    let wetmetHlsRetries = 0;
-    let wetmetLastVideoTime = -1;
-    let wetmetLastVideoAdvanceAt = Date.now();
-    const wetmetMaxHlsRetries = 2;
     const wetmetRefreshMs = streamRefreshMs > 0
       ? Math.max(300000, Math.min(streamRefreshMs, 600000))
       : 600000;
 
     function showWetmetIframe() {
       if (!armed) return;
-      wetmetUsingIframe = true;
       showStreamIframe(iframeBustUrl(cam.streamIframe));
     }
 
-    function wetmetRetryOrIframe() {
-      if (!armed) return;
-      if (wetmetHlsRetries < wetmetMaxHlsRetries) {
-        wetmetHlsRetries++;
-        trackTimeout(function () {
-          if (armed) refreshWetmetDirect();
-        }, 1200 * wetmetHlsRetries);
-        return;
-      }
+    // Same path as WMTA: WetMet’s frame.php player. Signed HLS from this
+    // server often never paints on the kiosk within a short rotation dwell.
+    const existing = document.getElementById('cam-frame');
+    if (!existing || !existing.getAttribute('src')) {
       showWetmetIframe();
     }
-
-    async function refreshWetmetDirect() {
-      if (!armed) return false;
-      try {
-        const res = await fetch(cam.streamApi + '&wetmet=1', { cache: 'no-store' });
-        const data = await res.json();
-        if (!armed) return false;
-        if (data && data.ok && data.playlist) {
-          wetmetUsingIframe = false;
-          wetmetHlsRetries = 0;
-          wetmetLastVideoTime = -1;
-          wetmetLastVideoAdvanceAt = Date.now();
-          loadStream(data.playlist, true, {
-            onFatal: wetmetRetryOrIframe,
-            onStall: wetmetRetryOrIframe,
-            onGiveUp: showWetmetIframe,
-          });
-          return true;
-        }
-      } catch (e) {}
-      return false;
-    }
-
-    function wetmetPeriodicRefresh() {
-      if (!armed) return;
-      if (wetmetUsingIframe) {
-        showWetmetIframe();
-        return;
-      }
-      refreshWetmetDirect().then(function (ok) {
-        if (armed && !ok) showWetmetIframe();
-      });
-    }
-
-    refreshWetmetDirect().then(function (ok) {
-      if (armed && !ok) showWetmetIframe();
-    });
-    trackInterval(wetmetPeriodicRefresh, wetmetRefreshMs);
-    trackInterval(function () {
-      if (!armed || wetmetUsingIframe) return;
-      const video = document.getElementById('cam-video');
-      if (!video || video.readyState < 2) return;
-      if (video.currentTime > wetmetLastVideoTime + 0.05) {
-        wetmetLastVideoTime = video.currentTime;
-        wetmetLastVideoAdvanceAt = Date.now();
-        return;
-      }
-      if (Date.now() - wetmetLastVideoAdvanceAt > 45000) {
-        wetmetLastVideoAdvanceAt = Date.now();
-        wetmetRetryOrIframe();
-      }
-    }, 12000);
+    trackInterval(showWetmetIframe, wetmetRefreshMs);
   }
 
   async function refreshStreamPlaylist() {
