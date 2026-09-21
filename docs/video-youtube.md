@@ -28,8 +28,8 @@ Use this for ongoing broadcasts (news, events, city cams on YouTube) where downl
 - **Kiosk hardware:** live embeds are heavy (YouTube iframe + player). Use **Pi 5 or x86 mini PC** (8 GB+ recommended); Pi 4 often never finishes loading. Downloaded MP4s (`php video.php fetch`) work on any Pi — see [kiosk-setup.md → Hardware requirements](kiosk-setup.md#hardware-requirements).
 - Some streams block embedding — preview the entry before adding to rotation.
 - Leave **Mute all videos** checked unless the kiosk is set up for unmuted autoplay.
-- **Rotation sync:** the embed does not load until the slot is shown (avoids preload lag). Each time the slot returns, the iframe reloads to the live edge; while on screen it re-syncs about every **8 minutes** on long dwells.
-- YouTube’s player still runs **10–30 seconds behind true live** — normal for embeds, not a signage bug.
+- **Rotation sync:** the embed does not load until the slot is shown (avoids preload lag). Each time the slot returns, the iframe reloads; the YouTube IFrame API then **seeks to the live edge** (DVR cams like StreamTime’s Soo Locks often resume many hours behind without this). While on screen it re-checks lag about every **20 seconds** and fully reloads about every **8 minutes** on long dwells.
+- YouTube’s player still runs **10–30 seconds behind true live** after seeking — normal for embeds, not a signage bug.
 
 ## When YouTube blocks the server
 

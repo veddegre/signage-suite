@@ -2491,10 +2491,47 @@ function admin_filter_registry_for_display(array $map, ?callable $normalize = nu
     return admin_filter_map_for_scope($map, admin_display_scope_user_id());
 }
 
-/** @param list<array<string,mixed>> $list */
+/**
+ * Filter a deck/list for the current display or admin preview.
+ * Kiosk / player: ownerless rows stay global (same rule as admin_filter_registry_for_display);
+ * owned rows must be visible to the display assignee. Admin preview still uses strict scope.
+ *
+ * @param list<array<string,mixed>> $list
+ * @return list<array<string,mixed>>
+ */
 function admin_filter_list_for_display(array $list): array
 {
+    if (!admin_preview_session_ready()) {
+        return admin_filter_list_for_kiosk_scope($list, admin_display_scope_user_id());
+    }
+
     return admin_filter_list_for_scope($list, admin_display_scope_user_id());
+}
+
+/**
+ * Kiosk-style list filter for a display assignee: keep ownerless (global) rows;
+ * drop owned rows the assignee cannot see.
+ *
+ * @param list<array<string,mixed>> $list
+ * @return list<array<string,mixed>>
+ */
+function admin_filter_list_for_kiosk_scope(array $list, ?string $scopeUid): array
+{
+    if ($scopeUid === null || $scopeUid === '') {
+        return array_values(array_filter($list, static fn($row) => is_array($row)));
+    }
+
+    return array_values(array_filter($list, static function ($row) use ($scopeUid) {
+        if (!is_array($row)) {
+            return false;
+        }
+        $owner = admin_entry_owner($row);
+        if ($owner === null) {
+            return true;
+        }
+
+        return admin_entry_visible_for_user($row, $scopeUid);
+    }));
 }
 
 /**

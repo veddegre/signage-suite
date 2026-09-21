@@ -682,7 +682,7 @@ Legacy **`hour_from` / `hour_to`** (0–23, inclusive end) still works on saved 
 
 **Calendar slide sets:** under **Rotation → Calendar overrides**, choose **Slide set only** to limit which deck files play during a matching ICS event while the rest of the rotation playlist continues.
 
-**Access:** super admins set owner, individual users, and roles on each slide card (**Access** popover in the deck, or bulk **Share with** / **All operators** in the deck toolbar). Operators see slides they own, that are shared with them, or that are shared with the **Operators** role.
+**Access:** super admins set owner, individual users, and roles on each slide card (**Access** popover in the deck, or bulk **Share with** / **All operators** in the deck toolbar). Operators see slides they own, that are shared with them, or that are shared with the **Operators** role in admin. On the wall, **ownerless** (Super-only) slides stay global — they play on any display they are deployed to, same as ownerless Grafana / TDX pages.
 
 ### rss.php — RSS Story Board
 

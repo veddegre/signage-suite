@@ -2110,8 +2110,12 @@ function rotation_screen_active_pages(string $screen = 'main', bool $applySeason
     if (!is_array($slideDeck)) {
         $slideDeck = [];
     }
+    // Match registry boards: ownerless slides are global on the wall; only owned
+    // slides are scoped to the display assignee (admin_filter_list_for_scope would
+    // incorrectly hide every Super-only / ownerless slide on operator displays).
     if ($scopeUid !== null) {
-        $slideDeck = admin_filter_list_for_scope($slideDeck, $scopeUid);
+        require_once __DIR__ . '/users_lib.php';
+        $slideDeck = admin_filter_list_for_kiosk_scope($slideDeck, $scopeUid);
     }
     $activeSlides = slides_active_entries($slideDeck, null, $screen);
     $activeFiles = [];

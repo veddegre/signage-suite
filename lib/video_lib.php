@@ -122,6 +122,9 @@ function video_youtube_embed_url(string $id, bool $muted = true): string
         'playsinline' => '1',
         'fs' => '0',
         'iv_load_policy' => '3',
+        // Needed so the board can seek to the live edge (DVR streams often
+        // resume hours behind without this).
+        'enablejsapi' => '1',
     ];
     if ($muted) {
         $params['mute'] = '1';
