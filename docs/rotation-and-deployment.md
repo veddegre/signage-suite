@@ -152,6 +152,7 @@ wotd.php
 history.php
 joke.php
 xkcd.php
+clocks.php
 outages.php
 hibp.php
 cve.php

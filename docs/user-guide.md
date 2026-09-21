@@ -239,6 +239,7 @@ Per-display **location**, **sports teams**, **MDOT cam layout**, and **glance co
 | **Dad jokes** | `joke.php` | — |
 | **Announcements** | `announce.php?d=KEY` | Countdowns; hero strip option |
 | **XKCD** | `xkcd.php` | — |
+| **World clocks** | `clocks.php` | IANA timezones; analog + digital; no API |
 
 ### Monitoring (feeds & integrations)
 
