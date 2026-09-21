@@ -32,6 +32,7 @@ BOARD_GROUPS: dict[str, list[str]] = {
     'media': ['slides.php', 'rotator.php', 'video.php', 'rss.php', 'calendar.php'],
     'embed': ['web.php'],
     'fun': ['joke.php', 'xkcd.php', 'wotd.php', 'history.php', 'sports.php'],
+    'daily': ['announce.php', 'emergency.php', 'clocks.php'],
 }
 
 ROOT_SHELL = {

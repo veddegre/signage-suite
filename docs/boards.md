@@ -25,6 +25,7 @@ On operator-editable boards, super admins set **Access** per row: **owner**, **s
 | | Dad jokes | `joke.php` | `joke.php` | — |
 | | Announcements | `announce.php?d=<key>` | `announce.php?d=<key>` | — |
 | | XKCD comic | `xkcd.php` | `xkcd.php` | — |
+| | World clocks | `clocks.php` | `clocks.php` | — |
 | Monitoring | SignalTrace | `signaltrace.php` | `signaltrace.php` | Export token |
 | | Cloud outages | `outages.php` | `outages.php` | Graph optional (M365) |
 | | Internet infrastructure | `internet.php` | `internet.php` | `dig` for DNS roots |
@@ -209,6 +210,16 @@ One random dad joke per visit, large type for the wall.
 **Data:** [icanhazdadjoke.com API](https://icanhazdadjoke.com/api) — free, no key (set a descriptive User-Agent in admin).
 
 **Setup:** admin → **Dad Jokes** — title, User-Agent, cache TTL (default 90s so rotation gets fresh jokes). Default reload 0 — the rotation shell fetches a new joke each time the slide appears.
+
+### clocks.php — World Clocks
+
+Large analog + digital clocks for a configured set of IANA timezones. Live JavaScript tick — no API key.
+
+**Default cities:** Grand Rapids (home, `America/Detroit`), UTC, New York, Chicago, Denver, Los Angeles, London, Tokyo. Empty **Clocks** rows in admin fall back to this set.
+
+**Setup:** admin → **World Clocks** — title/subtitle, city rows (**Key**, **City**, **Timezone**, **Home**, **Off**), analog faces, seconds, date, UTC offset, max clocks (1–12). The board **Timezone** field is the home/reference zone for yesterday/tomorrow pills. 12/24-hour format follows the display clock setting (same as other boards).
+
+**Rotation:** `clocks.php` — quick-add under **Daily**. 60s dwell is enough; clocks keep ticking while on screen.
 
 ### xkcd.php — XKCD Comic of the Day
 

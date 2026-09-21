@@ -134,8 +134,9 @@ All boards are configured in **admin.php**. Parameterized URLs plug into rotatio
 
 ```
 rss.php?feed=krebs              glance.php
-grafana.php?d=homelab           calendar.php
-zabbix.php?d=network            splunkdash.php?d=soc
+clocks.php                      calendar.php
+grafana.php?d=homelab           zabbix.php?d=network
+zabbix.php?d=signage            splunkdash.php?d=soc
 webcam.php?cam=grpm             webcam.php?cam=grandhaven
 webcam.php?cam=muskegon
 camwall.php                     traffic.php
@@ -150,7 +151,7 @@ video.php?v=drone               slides.php?slide=birthday.png
 |-------|------------|------|
 | **Weather & home** | Weather, lake, webcam, **MDOT cams**, Mackinac Bridge cam, photo, air, UV index, sports, calendar, **today at a glance**, meal calendar, traffic | OWM, TomTom, CARTO, Google Pollen (optional) |
 | **Monitoring** | SignalTrace, cloud outages, internet infrastructure (BGP/DNS), internet attacks (DShield), DShield heatmap, attack origins, top ports treemap, IODA outage map, Cloudflare Radar (DDoS), L7/L3 attack maps, HIBP breaches, new CVEs, **CISA KEV**, **TLS cert expiry**, **ransomware tracker**, **phishing & brand threats**, homelab (Proxmox/AdGuard), **UniFi Network**, **Uptime Kuma**, **Tailscale**, **ntfy**, **Zabbix 7.x** (JSON-RPC, multi-page by host group), **TeamDynamix** (TDWebApi tickets, multi-page by app/filters) | Per-service tokens; Graph for M365; Radar token; NVD key optional; URLhaus Auth-Key; `dig` for DNS roots |
-| **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic | — |
+| **Daily** | Word of the day, This day in history, Dad jokes, **Announcements / countdown**, XKCD comic, **world clocks** | — |
 | **Media** | Photo rotator, scheduled slides (upload + **slide creator** with occasion templates — dinner menu, snow day, anniversary, …), RSS feeds (portrait-friendly **image fit**), local video (yt-dlp) | — |
 | **Dashboards** | Grafana, Splunk panels (REST), Splunk published, Power BI, embedded websites | Grafana JWT secret (SSO embed); Splunk token (panels); Azure app (Power BI private) |
 

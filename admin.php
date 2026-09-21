@@ -37,6 +37,7 @@ require_once __DIR__ . '/lib/audit_lib.php';
 require_once __DIR__ . '/lib/backup_lib.php';
 require_once __DIR__ . '/lib/screen_scope_lib.php';
 require_once __DIR__ . '/lib/sports_lib.php';
+require_once __DIR__ . '/lib/clocks_lib.php';
 
 const ADMIN_FILE = __DIR__ . '/config/admin.json'; // legacy; migrated to users.json
 
@@ -2329,7 +2330,7 @@ if ($authed && $board === 'video') {
 $navGroups = [
     'Setup'           => ['site', 'security', 'rotation', 'ticker'],
     'Weather & home'  => ['index', 'lake', 'webcam', 'bridgecam', 'photo', 'air', 'uv', 'sports', 'calendar', 'glance', 'meals', 'traffic', 'camwall'],
-    'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd'],
+    'Daily'           => ['wotd', 'history', 'joke', 'announce', 'xkcd', 'clocks'],
     'Monitoring'      => ['homelab', 'unifi', 'kuma', 'tailscale', 'ntfy', 'outages', 'internet', 'attacks', 'dshieldmap', 'dshieldsrc', 'attackports', 'iodamap', 'radar', 'attackmap', 'l3map', 'hibp', 'cve', 'kev', 'certexp', 'ransomware', 'phish', 'signaltrace', 'zabbix', 'tdx'],
     'Media'           => ['slides', 'rotator', 'video', 'rss', 'tvguide'],
     'Dashboards'      => ['grafana', 'splunkdash', 'powerbi', 'web'],
@@ -7239,6 +7240,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
               $rows = [];
               if ($board === 'webcam' && $f['key'] === 'CAMS') {
                   $rows = webcam_admin_cams_rows();
+              } elseif ($board === 'clocks' && $f['key'] === 'CLOCKS') {
+                  $rows = clocks_admin_rows();
               } elseif (is_array($val)) {
                   if (!empty($f['keyed'])) {
                       if (!admin_is_super()) {
@@ -11041,7 +11044,7 @@ function rotationLabelFromUrl(url) {
   if (/^slides\.php/.test(url) && slideMatch) return 'Slide — ' + decodeURIComponent(slideMatch[1]);
   const boards = {
     'weather.php': 'Weather', 'index.php': 'Weather', 'lake.php': 'Lake Michigan', 'webcam.php': 'Webcam', 'bridgecam.php': 'Mackinac Bridge cam', 'photo.php': 'Photo conditions',
-    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'camwall.php': 'MDOT Cams', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'kev.php': 'CISA KEV', 'certexp.php': 'TLS cert expiry', 'ransomware.php': 'Ransomware tracker', 'phish.php': 'Phishing & brand threats', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
+    'calendar.php': 'Calendar', 'glance.php': 'Today at a glance', 'meals.php': 'Meal calendar', 'family.php': 'Calendar', 'traffic.php': 'Traffic map', 'camwall.php': 'MDOT Cams', 'air.php': 'Air & pollen', 'uv.php': 'UV index', 'wotd.php': 'Word of the day', 'history.php': 'This day in history', 'joke.php': 'Dad jokes', 'xkcd.php': 'XKCD comic', 'clocks.php': 'World clocks', 'outages.php': 'Cloud outages', 'internet.php': 'Internet infrastructure', 'attacks.php': 'Internet attacks', 'dshieldmap.php': 'DShield heatmap', 'dshieldsrc.php': 'Attack origins', 'attackports.php': 'Top attack ports', 'iodamap.php': 'Outage map', 'radar.php': 'Cloudflare Radar', 'attackmap.php': 'Attack map', 'l3map.php': 'L3 attack map', 'hibp.php': 'Data breaches', 'cve.php': 'New CVEs', 'kev.php': 'CISA KEV', 'certexp.php': 'TLS cert expiry', 'ransomware.php': 'Ransomware tracker', 'phish.php': 'Phishing & brand threats', 'sports.php': 'Sports', 'homelab.php': 'Homelab status',
     'signaltrace.php': 'SignalTrace', 'rotator.php': 'Photo rotator', 'slides.php': 'Custom slides',
     'rss.php': 'RSS stories', 'video.php': 'Video board', 'splunkdash.php': 'Splunk', 'powerbi.php': 'Power BI',
     'zabbix.php': 'Zabbix monitoring', 'web.php': 'Website'
