@@ -2843,7 +2843,7 @@ function admin_slides_deploy_picker_checked(array $deck, array $deployStatus): a
     if (slides_deck_untargeted_misconfig($deck)) {
         return admin_filter_deploy_screens(array_keys($deployStatus));
     }
-    $actionable = slides_screens_in_deck($deck);
+    $actionable = slides_screens_needing_deploy($deck);
     $remembered = admin_deploy_screens_remembered('slides');
     if ($remembered === null) {
         return admin_filter_deploy_screens($actionable);

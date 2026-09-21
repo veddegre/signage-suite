@@ -2568,6 +2568,28 @@ function slides_screens_in_deck(?array $deck = null): array
     return $out;
 }
 
+/**
+ * Displays that should appear in the Deploy picker: deck targets plus playlists
+ * that still have slide rows to clear after untargeting.
+ * @return list<string>
+ */
+function slides_screens_needing_deploy(?array $deck = null): array
+{
+    require_once __DIR__ . '/rotation_lib.php';
+    $keys = array_flip(slides_screens_in_deck($deck));
+    foreach (slides_deploy_status($deck) as $screen => $st) {
+        $playlist = (int)($st['playlist_slides'] ?? 0);
+        $targeted = (int)($st['deck_targeted'] ?? 0);
+        if ($playlist > 0 && ($targeted === 0 || !empty($st['stale_on_playlist']) || !empty($st['partial']))) {
+            $keys[(string)$screen] = true;
+        }
+    }
+    $out = array_keys($keys);
+    sort($out);
+
+    return $out;
+}
+
 /** @param list<array<string,mixed>> $deck */
 function slides_persist_deck(array $deck): bool
 {

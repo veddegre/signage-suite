@@ -3782,7 +3782,7 @@ function rotator_deploy_flash_message(array $result): string
     return 'Photo rotator ' . implode('; ', $parts) . '.';
 }
 
-/** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,screen:string} */
+/** @return array{pages:list<array<string,mixed>>,added:int,updated:int,removed_legacy:bool,slide_count:int,cleared:int,screen:string} */
 function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?array $scopeFiles = null, bool $allowRecovery = false): array
 {
     require_once __DIR__ . '/slides_lib.php';
@@ -3800,13 +3800,45 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?arr
         $expectedByUrl[$row['url']] = (int)$row['dwell'];
     }
 
+    // Nothing targeted at this display — strip managed slide rows so Deploy can
+    // clear stale playlist entries after untargeting (previously a no-op).
     if ($expected === []) {
+        $filtered = [];
+        $cleared = 0;
+        $removedLegacy = false;
+        foreach ($pages as $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+            $url = trim((string)($page['url'] ?? ''));
+            if (rotation_is_legacy_slides_url($url)) {
+                if (!$manageAllSlides) {
+                    $filtered[] = $page;
+                    continue;
+                }
+                $removedLegacy = true;
+                $cleared++;
+                continue;
+            }
+            if (rotation_is_slide_url($url)) {
+                $file = slide_rotation_parse_file($url);
+                if (!$manageAllSlides && $file !== null && !isset($scopeSet[$file])) {
+                    $filtered[] = $page;
+                    continue;
+                }
+                $cleared++;
+                continue;
+            }
+            $filtered[] = $page;
+        }
+
         return [
-            'pages' => $pages,
+            'pages' => $filtered,
             'added' => 0,
-            'updated' => 0,
-            'removed_legacy' => false,
+            'updated' => $cleared > 0 ? $cleared : 0,
+            'removed_legacy' => $removedLegacy,
             'slide_count' => 0,
+            'cleared' => $cleared,
             'screen' => $screen,
         ];
     }
@@ -3866,9 +3898,11 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?arr
         }
         $slidePages[] = $row;
     }
+    $cleared = 0;
     foreach (array_keys($oldSlideUrls) as $oldUrl) {
         if (!array_key_exists($oldUrl, $expectedByUrl)) {
             $updated++;
+            $cleared++;
         }
     }
     if ($removedLegacy && $expected !== []) {
@@ -3883,6 +3917,7 @@ function rotation_sync_slides(string $screen = 'main', ?array $deck = null, ?arr
         'updated' => $updated,
         'removed_legacy' => $removedLegacy,
         'slide_count' => count($slidePages),
+        'cleared' => $cleared,
         'screen' => $screen,
     ];
 }
@@ -4052,8 +4087,9 @@ function rotation_remove_url(string $screen, string $url): array
 
 /**
  * Sync one rotation entry per enabled slide onto selected screens.
+ * Screens with no targeted slides still sync so stale playlist rows are cleared.
  * @param list<string> $screens
- * @return array{added:int,updated:int,screens:list<string>,slide_count:int,skipped:list<string>,repaired:bool}
+ * @return array{added:int,updated:int,cleared:int,screens:list<string>,slide_count:int,skipped:list<string>,repaired:bool,empty_target:list<string>}
  */
 function slides_deploy_to_screens(array $screens, ?array $deck = null): array
 {
@@ -4072,8 +4108,10 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     $onDisk = count(slides_rotation_pages($fullDeck, null));
     $added = 0;
     $updated = 0;
+    $clearedTotal = 0;
     $slideCount = 0;
     $skipped = [];
+    $emptyTarget = [];
     $done = [];
     $deployed = [];
     $pageWrites = [];
@@ -4103,9 +4141,11 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
         return [
             'added' => 0,
             'updated' => 0,
+            'cleared' => 0,
             'screens' => [],
             'slide_count' => 0,
             'skipped' => array_values(array_unique($skipped)),
+            'empty_target' => [],
             'repaired' => $deckRepaired,
             'recovery_deploy' => false,
             'on_disk' => $onDisk,
@@ -4124,16 +4164,20 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
             continue;
         }
         $expected = slides_deploy_expected_pages($fullDeck, $screen, $scopeFiles);
-        if ($expected === []) {
-            $skipped[] = $screen;
+        $syncScope = ($recoveryDeploy && $scopeFiles === null) ? null : $scopeFiles;
+        $beforeCount = rotation_playlist_slide_count(rotation_sync_source_pages($screen));
+        $sync = rotation_sync_slides($screen, $fullDeck, $syncScope, $recoveryDeploy);
+        $cleared = (int)($sync['cleared'] ?? 0);
+        if ($expected === [] && $cleared === 0 && $beforeCount === 0) {
+            // Nothing assigned and nothing to clear — not an error, just empty.
+            $emptyTarget[] = $screen;
             continue;
         }
-        $syncScope = ($recoveryDeploy && $scopeFiles === null) ? null : $scopeFiles;
-        $sync = rotation_sync_slides($screen, $fullDeck, $syncScope, $recoveryDeploy);
         $deployed[] = $screen;
         $pageWrites[$sync['screen']] = $sync['pages'];
         $added += (int)$sync['added'];
         $updated += (int)$sync['updated'];
+        $clearedTotal += $cleared;
         $slideCount = max($slideCount, (int)$sync['slide_count']);
     }
     if ($pageWrites !== [] || $deckRepaired) {
@@ -4144,9 +4188,11 @@ function slides_deploy_to_screens(array $screens, ?array $deck = null): array
     return [
         'added' => $added,
         'updated' => $updated,
+        'cleared' => $clearedTotal,
         'screens' => $deployed,
         'slide_count' => $slideCount,
         'skipped' => $skipped,
+        'empty_target' => array_values(array_unique($emptyTarget)),
         'repaired' => $deckRepaired,
         'recovery_deploy' => $recoveryDeploy && $deployed !== [],
         'on_disk' => $onDisk,
@@ -4160,6 +4206,9 @@ function slides_deploy_flash_message(array $result): string
     $screenCount = count($result['screens'] ?? []);
     $skipped = $result['skipped'] ?? [];
     $skippedCount = is_array($skipped) ? count($skipped) : 0;
+    $emptyTarget = $result['empty_target'] ?? [];
+    $emptyCount = is_array($emptyTarget) ? count($emptyTarget) : 0;
+    $cleared = (int)($result['cleared'] ?? 0);
     $onDisk = (int)($result['on_disk'] ?? 0);
     if (!empty($result['no_scope'])) {
         return 'No slides in the deck are yours to deploy. Ask a super admin to share slides with you or deploy as super admin.';
@@ -4172,8 +4221,12 @@ function slides_deploy_flash_message(array $result): string
     if (($result['added'] ?? 0) > 0) {
         $parts[] = (int)$result['added'] . ' new slide entr' . ((int)$result['added'] === 1 ? 'y' : 'ies');
     }
-    if (($result['updated'] ?? 0) > 0) {
+    if (($result['updated'] ?? 0) > 0 && $cleared === 0) {
         $parts[] = (int)$result['updated'] . ' dwell/order update' . ((int)$result['updated'] === 1 ? '' : 's');
+    }
+    if ($cleared > 0) {
+        $parts[] = 'cleared ' . $cleared . ' stale slide entr' . ($cleared === 1 ? 'y' : 'ies')
+            . ' from playlist' . ($screenCount === 1 ? '' : 's');
     }
     if (!empty($result['recovery_deploy'])) {
         $parts[] = 'used recovery deploy (deck slides were not assigned to any display — targeting reset in settings)';
@@ -4190,6 +4243,19 @@ function slides_deploy_flash_message(array $result): string
         } else {
             $parts[] = 'skipped ' . $labelText . ' (no deployable slides for ' . ($skippedCount === 1 ? 'that display' : 'those displays') . ')';
         }
+    }
+    if ($emptyCount > 0 && $parts === [] && $screenCount === 0) {
+        $screenMap = rotation_screens();
+        $labels = [];
+        foreach ($emptyTarget as $sk) {
+            $labels[] = rotation_screen_display_name((string)$sk, $screenMap);
+        }
+        $which = $labels !== [] ? implode(', ', $labels) : 'the selected display(s)';
+        return 'No slides target ' . $which . ' in the deck — assign displays on the Deck tab (or All displays), Save, then Deploy.';
+    }
+    if ($emptyCount > 0) {
+        $parts[] = $emptyCount . ' display' . ($emptyCount === 1 ? '' : 's')
+            . ' had no slides assigned (playlist already empty)';
     }
     if (!empty($result['repaired'])) {
         $parts[] = 'repaired display targeting in the deck';
