@@ -1,0 +1,16 @@
+{
+  "name": "Home Signage Boards",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "php-server",
+      "command": "php -d display_errors=1 -S 0.0.0.0:8080"
+    }
+  ],
+  "ports": [
+    {
+      "name": "signage",
+      "port": 8080
+    }
+  ]
+}
