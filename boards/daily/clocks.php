@@ -34,14 +34,14 @@ $h24 = signage_clock_24h($screen);
 function h(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 $facePx = $boardH < 1080
-    ? ($count <= 2 ? 220 : ($count <= 4 ? 170 : 132))
-    : ($count <= 2 ? 260 : ($count <= 4 ? 200 : 156));
+    ? ($count <= 2 ? 240 : ($count <= 4 ? 188 : 176))
+    : ($count <= 2 ? 280 : ($count <= 4 ? 220 : 208));
 $timePx = $boardH < 1080
-    ? ($count <= 2 ? 72 : ($count <= 4 ? 52 : 40))
-    : ($count <= 2 ? 86 : ($count <= 4 ? 60 : 46));
+    ? ($count <= 2 ? 72 : ($count <= 4 ? 52 : 42))
+    : ($count <= 2 ? 86 : ($count <= 4 ? 60 : 48));
 $cityPx = $boardH < 1080
-    ? ($count <= 2 ? 42 : ($count <= 4 ? 32 : 26))
-    : ($count <= 2 ? 48 : ($count <= 4 ? 36 : 28));
+    ? ($count <= 2 ? 42 : ($count <= 4 ? 32 : 28))
+    : ($count <= 2 ? 48 : ($count <= 4 ? 36 : 30));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -72,9 +72,9 @@ $cityPx = $boardH < 1080
           grid-auto-rows:1fr; gap:<?= $boardH < 1080 ? 14 : 18 ?>px; }
 
   .card { background:var(--harbor); border:1px solid var(--hairline); border-radius:18px;
-          padding:<?= $boardH < 1080 ? '16px 18px' : '20px 22px' ?>;
+          padding:<?= $boardH < 1080 ? '12px 14px' : '14px 16px' ?>;
           display:flex; flex-direction:column; align-items:center; justify-content:center;
-          gap:<?= $boardH < 1080 ? 8 : 10 ?>px; min-height:0; position:relative; overflow:hidden; }
+          gap:<?= $boardH < 1080 ? 6 : 8 ?>px; min-height:0; position:relative; overflow:hidden; }
   .card.home { border-color:color-mix(in srgb, var(--beacon) 70%, var(--hairline));
                box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--beacon) 35%, transparent); }
   .card.night { background:color-mix(in srgb, var(--harbor) 82%, var(--lake-night)); }
@@ -86,10 +86,10 @@ $cityPx = $boardH < 1080
                 color:var(--snow); letter-spacing:0.5px; }
   .card.night .time { color:color-mix(in srgb, var(--snow) 88%, var(--mist)); }
   .card .meta { display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
-                gap:8px 10px; font-size:<?= $boardH < 1080 ? 16 : 18 ?>px; color:var(--mist); }
+                gap:6px 8px; font-size:<?= $boardH < 1080 ? 17 : 19 ?>px; color:var(--mist); }
   .card .meta .date { font-variant-numeric:tabular-nums; }
-  .pill { display:inline-block; padding:3px 10px; border-radius:999px; letter-spacing:1.4px;
-          text-transform:uppercase; font-size:<?= $boardH < 1080 ? 12 : 13 ?>px; font-weight:600;
+  .pill { display:inline-block; padding:4px 11px; border-radius:999px; letter-spacing:1.2px;
+          text-transform:uppercase; font-size:<?= $boardH < 1080 ? 13 : 15 ?>px; font-weight:600;
           border:1px solid var(--hairline); background:var(--tile-bg); }
   .pill.home { color:var(--beacon); border-color:color-mix(in srgb, var(--beacon) 50%, var(--hairline)); }
   .pill.night { color:var(--mist); }
@@ -174,11 +174,7 @@ $cityPx = $boardH < 1080
         <?php endif; ?>
         <?php if (!empty($c['home'])): ?><span class="pill home">Home</span><?php endif; ?>
         <span class="pill <?= !empty($c['night']) ? 'night' : 'day' ?>" data-phase><?= !empty($c['night']) ? 'Night' : 'Day' ?></span>
-        <?php if (($c['day_rel'] ?? 'today') !== 'today'): ?>
-        <span class="pill shift" data-rel><?= h((string)$c['day_rel']) ?></span>
-        <?php else: ?>
-        <span class="pill shift" data-rel hidden>today</span>
-        <?php endif; ?>
+        <span class="pill shift" data-rel<?= (($c['day_rel'] ?? 'today') === 'today') ? ' hidden' : '' ?>><?= ($c['day_rel'] ?? 'today') === 'today' ? '' : h((string)$c['day_rel']) ?></span>
       </div>
     </article>
     <?php endforeach; ?>
@@ -303,8 +299,13 @@ $cityPx = $boardH < 1080
       const rel = cityDay < homeDay ? 'yesterday' : (cityDay > homeDay ? 'tomorrow' : 'today');
       const relEl = card.querySelector('[data-rel]');
       if (relEl) {
-        relEl.textContent = rel;
-        relEl.hidden = rel === 'today';
+        if (rel === 'today') {
+          relEl.textContent = '';
+          relEl.hidden = true;
+        } else {
+          relEl.textContent = rel;
+          relEl.hidden = false;
+        }
       }
       const hourDeg = ((h24v % 12) * 30) + (p.minute * 0.5);
       const minDeg = (p.minute * 6) + (p.second * 0.1);
