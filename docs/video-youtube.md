@@ -30,7 +30,7 @@ Use this for ongoing broadcasts (news, events, city cams on YouTube) where downl
 - Leave **Mute all videos** checked unless the kiosk is set up for unmuted autoplay. Nested rotation iframes (board.php → video.php → YouTube) will not autoplay unless the embed is muted **and** `enablejsapi=1`.
 - The YouTube iframe is created with `referrerpolicy="strict-origin-when-cross-origin"` plus `origin` / `widget_referrer`. Without a Referer, YouTube returns **Error 153** and the player stays black.
 - **Rotation sync:** the embed does not load until the slot is shown (avoids preload lag). Each time the slot returns, the iframe reloads.
-- **DVR vs true live:** streams like Disneyland already start at the live head. StreamTime cams (Soo Locks) keep a multi-hour DVR, so the embed starts at the beginning of that archive and the spinner never finishes. After the player reports a duration, we **seek once** to the live head. We do **not** keep seeking to chase YouTube’s normal 15–40s delay — that rebuffers forever. A later seek only happens if playback falls **minutes** behind again.
+- **DVR vs true live:** streams like Disneyland already start at the live head and are left alone. StreamTime cams (Soo Locks) keep a multi-hour DVR, so the embed often starts at the **rewind-window start** (hours behind — e.g. dark when it is daylight). After the player is actually *playing*, we seek once to a few seconds **before** the live tip. Seeking to `getDuration()` itself overshoots live and YouTube wraps DVR back to t=0. We do **not** keep seeking to chase YouTube’s normal 15–40s delay.
 - YouTube’s player still runs **10–30 seconds behind true live** after seeking — normal for embeds, not a signage bug.
 
 ## When YouTube blocks the server
