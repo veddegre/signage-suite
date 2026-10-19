@@ -275,8 +275,8 @@ if (($_GET['api'] ?? '') === 'kiosk-health') {
 </div>
 <div id="blank"<?= $blankActive ? ' style="display:block"' : '' ?>></div>
 <div id="rotate-debug" aria-live="polite"<?= $showDebug ? '' : ' style="display:none"' ?>></div>
-<iframe id="fA" allow="autoplay; fullscreen"></iframe>
-<iframe id="fB" allow="autoplay; fullscreen"></iframe>
+<iframe id="fA" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe>
+<iframe id="fB" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe>
 <div id="hero-strip" aria-live="polite"><?= !empty($heroStrip['html']) ? $heroStrip['html'] : '' ?></div>
 <script>
   const PAGES   = <?= json_encode($runtime['pages'], JSON_UNESCAPED_SLASHES) ?>;

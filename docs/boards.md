@@ -710,7 +710,7 @@ On-demand videos are downloaded locally with **yt-dlp** (no ads, no embed blocks
 
 **Registry:** `youtube` URL or local `file` per entry → `video.php?v=<key>`. Per-entry **Access** (owner, users, roles).
 
-Muted by default; uncheck **Mute all videos** in admin if needed. Refresh downloads via admin UI or `php video.php fetch`. Live embed dwell defaults to **300 s** (`video.LIVE_DWELL`).
+Muted by default; uncheck **Mute all videos** in admin if needed. Refresh downloads via admin UI or `php video.php fetch`. Live embed dwell defaults to **300 s** (`video.LIVE_DWELL`) — keep live slots at **90 s or more** so the YouTube iframe can attach and seek to the live edge.
 
 See [video-youtube.md](video-youtube.md) for live streams, bot checks, cookies, and cron.
 

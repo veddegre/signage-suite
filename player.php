@@ -83,7 +83,7 @@ if (isset($_GET['debug']) && (string)$_GET['debug'] === '1') {
   </div>
 </div>
 <?php else: ?>
-<div id="stage"><iframe src="<?= htmlspecialchars($src) ?>" allow="autoplay; fullscreen"></iframe></div>
+<div id="stage"><iframe src="<?= htmlspecialchars($src) ?>" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe></div>
 <?php endif; ?>
 <?php signage_kiosk_pointer_shield_html(); ?>
 <div id="hint">Tap to toggle fullscreen</div>

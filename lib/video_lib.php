@@ -112,7 +112,15 @@ function video_youtube_video_id(string $url): ?string
     return null;
 }
 
-function video_youtube_embed_url(string $id, bool $muted = true): string
+/**
+ * YouTube embed URL for kiosk live streams.
+ *
+ * mute + enablejsapi are required for nested-iframe autoplay and live-edge seek.
+ * origin / widget_referrer reduce Error 153 when the iframe has a Referer.
+ *
+ * @param ?string $origin Page origin (https://host) for the IFrame API, or null to omit
+ */
+function video_youtube_embed_url(string $id, bool $muted = true, ?string $origin = null): string
 {
     $params = [
         'autoplay' => '1',
@@ -128,6 +136,11 @@ function video_youtube_embed_url(string $id, bool $muted = true): string
     ];
     if ($muted) {
         $params['mute'] = '1';
+    }
+    $origin = $origin !== null ? rtrim($origin, '/') : '';
+    if ($origin !== '' && preg_match('#^https?://#i', $origin)) {
+        $params['origin'] = $origin;
+        $params['widget_referrer'] = $origin;
     }
 
     return 'https://www.youtube.com/embed/' . rawurlencode($id) . '?' . http_build_query($params);

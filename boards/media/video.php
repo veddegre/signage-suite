@@ -6,7 +6,9 @@
  *
  * YouTube **live** streams can embed directly (no download): set Live stream in admin
  * or paste a youtube.com/live/… URL. Ongoing broadcasts use rotation dwell from
- * video.LIVE_DWELL (default 300s) instead of file duration.
+ * video.LIVE_DWELL (default 300s) instead of file duration. DVR lives (StreamTime
+ * Soo Locks) start at the archive head — the player seeks once to live. True
+ * lives (Disneyland) already start there, so the seek is a no-op.
  *
  * One file is both the player and the downloader:
  *
@@ -35,6 +37,11 @@
 require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/video_lib.php';
 require_once dirname(__DIR__, 2) . '/lib/users_lib.php';
+
+// YouTube Error 153 if the embed request has no Referer (same-origin / no-referrer).
+if (PHP_SAPI !== 'cli') {
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+}
 
 define('VIDEOS', video_registry_for_display());
 define('VIDEO_DIR', video_dir());
@@ -107,7 +114,13 @@ $settleMs = max(0, (int)($_GET['settle'] ?? 0));
 $autoplayMuted = $embedded || MUTED;
 $isLive = video_entry_is_live($video);
 $ytId = $isLive ? video_youtube_video_id(trim((string)($video['youtube'] ?? ''))) : null;
-$embedSrc = ($ytId !== null) ? video_youtube_embed_url($ytId, $autoplayMuted) : null;
+$pageOrigin = null;
+if (!empty($_SERVER['HTTP_HOST'])) {
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    $pageOrigin = ($https ? 'https' : 'http') . '://' . (string)$_SERVER['HTTP_HOST'];
+}
+$embedSrc = ($ytId !== null) ? video_youtube_embed_url($ytId, $autoplayMuted, $pageOrigin) : null;
 $autoplayAttr = ($settleMs <= 0 && !$embedded) ? 'autoplay' : '';
 $loopAttr = $embedded ? '' : 'loop';
 ?>
@@ -138,7 +151,7 @@ $loopAttr = $embedded ? '' : 'loop';
   .empty p { font-size:27px; max-width:1100px; text-align:center; line-height:1.6; }
   .empty code { color:var(--beacon); background:#141f33; padding:2px 12px; border-radius:6px; }
   .yt-wrap { position:absolute; inset:0; background:#000; overflow:hidden; }
-  .yt-wrap iframe { width:1920px; height:100%; border:0; display:block; pointer-events:none; }
+  .yt-wrap iframe { width:100%; height:100%; border:0; display:block; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -150,7 +163,9 @@ $loopAttr = $embedded ? '' : 'loop';
   </div>
 <?php elseif ($isLive && $embedSrc !== null): ?>
   <div class="yt-wrap">
-    <iframe id="yt-live"<?= $embedded ? '' : ' src="' . h($embedSrc) . '"' ?> allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
+    <iframe id="yt-live"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
   </div>
   <div class="chrome">
     <div class="title"><?= h($title) ?></div>
@@ -159,6 +174,7 @@ $loopAttr = $embedded ? '' : 'loop';
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const EMBED_SRC = <?= json_encode($embedSrc) ?>;
+    const WANT_MUTE = <?= json_encode($autoplayMuted) ?>;
     <?php if (SHOW_CLOCK): ?>
     <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
@@ -169,9 +185,18 @@ $loopAttr = $embedded ? '' : 'loop';
     let ytApiReady = false;
     let ytApiWaiters = [];
     let attachGen = 0;
+    let embedRetries = 0;
+    let embedLoading = false;
+    let liveHeadSynced = false;
+    let lastSeekAt = 0;
+    const MAX_EMBED_RETRIES = 1;
     const RESYNC_MS = 8 * 60 * 1000;
     const LAG_CHECK_MS = 20 * 1000;
-    const LIVE_LAG_TOLERANCE_SEC = 20;
+    // YouTube live is typically 15–40s behind. StreamTime DVR starts *hours*
+    // behind. Only seek when we are clearly on the archive, not to chase live.
+    const LIVE_SEEK_MIN_LAG_SEC = 90;
+    const LIVE_STUCK_LAG_SEC = 5 * 60;
+    const SEEK_COOLDOWN_MS = 45000;
 
     function notifyReady() {
       if (!EMBEDDED || window.parent === window) return;
@@ -209,29 +234,75 @@ $loopAttr = $embedded ? '' : 'loop';
       el = document.createElement('iframe');
       el.id = 'yt-live';
       el.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen');
+      el.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
       wrap.appendChild(el);
       return el;
     }
 
     function embedUrl() {
-      let src = EMBED_SRC + (EMBED_SRC.indexOf('?') >= 0 ? '&' : '?') + '_rs=' + Date.now();
+      let src = String(EMBED_SRC || '');
       try {
-        src += '&origin=' + encodeURIComponent(window.location.origin);
-      } catch (e) {}
-      return src;
+        const u = new URL(src, window.location.href);
+        u.searchParams.set('_rs', String(Date.now()));
+        u.searchParams.set('enablejsapi', '1');
+        if (WANT_MUTE) u.searchParams.set('mute', '1');
+        u.searchParams.set('origin', window.location.origin);
+        u.searchParams.set('widget_referrer', window.location.origin);
+        return u.toString();
+      } catch (e) {
+        const join = src.indexOf('?') >= 0 ? '&' : '?';
+        src += join + '_rs=' + Date.now() + '&enablejsapi=1';
+        if (WANT_MUTE) src += '&mute=1';
+        try {
+          src += '&origin=' + encodeURIComponent(window.location.origin);
+          src += '&widget_referrer=' + encodeURIComponent(window.location.origin);
+        } catch (e2) {}
+        return src;
+      }
     }
 
-    /** Jump DVR embeds to the live head (StreamTime etc. keep multi-hour buffers). */
+    function playerState(player) {
+      try {
+        if (player && typeof player.getPlayerState === 'function') return player.getPlayerState();
+      } catch (e) {}
+      return -1;
+    }
+
+    /**
+     * StreamTime DVR (Soo Locks) starts at t=0 of a multi-hour archive — the
+     * spinner never finishes. Disneyland-style lives already start at the head,
+     * so this is a no-op there. Seeking again while 15–40s behind live just
+     * rebuffers forever, so only jump when we are clearly on the archive.
+     */
     function seekLiveEdge(player) {
       if (!player || typeof player.getDuration !== 'function') return;
+      if (Date.now() - lastSeekAt < SEEK_COOLDOWN_MS) return;
+      const state = playerState(player);
+      if (state === 3) return;
       try {
         const duration = player.getDuration();
         if (typeof duration !== 'number' || !isFinite(duration) || duration < 30) return;
         const cur = typeof player.getCurrentTime === 'function' ? player.getCurrentTime() : 0;
-        if (!isFinite(cur) || (duration - cur) > LIVE_LAG_TOLERANCE_SEC) {
-          player.seekTo(duration, true);
+        const lag = duration - (isFinite(cur) ? cur : 0);
+        if (lag <= LIVE_SEEK_MIN_LAG_SEC) {
+          liveHeadSynced = true;
+          return;
         }
+        if (liveHeadSynced && lag < LIVE_STUCK_LAG_SEC) return;
+        lastSeekAt = Date.now();
+        player.seekTo(duration, true);
       } catch (e) {}
+    }
+
+    function waitForDurationAndSeek(player, gen) {
+      let tries = 0;
+      function tick() {
+        if (gen !== attachGen || !armed || !player) return;
+        seekLiveEdge(player);
+        if (liveHeadSynced) return;
+        if (++tries < 24) setTimeout(tick, 500);
+      }
+      tick();
     }
 
     function clearPlayerHandle() {
@@ -244,28 +315,49 @@ $loopAttr = $embedded ? '' : 'loop';
 
     function showEmbed() {
       const gen = ++attachGen;
+      liveHeadSynced = false;
+      lastSeekAt = 0;
+      embedLoading = true;
       clearPlayerHandle();
       const frame = ensureIframe();
-      if (!frame) return;
+      if (!frame) {
+        embedLoading = false;
+        return;
+      }
       frame.src = embedUrl();
       loadYtApi(function () {
         if (!armed || gen !== attachGen) return;
         const host = document.getElementById('yt-live');
-        if (!host || !host.src || host.src.indexOf('youtube.com/embed/') < 0) return;
+        if (!host || !host.src || host.src.indexOf('youtube.com/embed/') < 0) {
+          embedLoading = false;
+          return;
+        }
         ytPlayer = new YT.Player('yt-live', {
           events: {
             onReady: function (ev) {
               if (gen !== attachGen) return;
+              embedRetries = 0;
+              embedLoading = false;
               try { ev.target.mute(); } catch (e) {}
               try { ev.target.playVideo(); } catch (e) {}
-              seekLiveEdge(ev.target);
-              setTimeout(function () { if (gen === attachGen) seekLiveEdge(ev.target); }, 1500);
-              setTimeout(function () { if (gen === attachGen) seekLiveEdge(ev.target); }, 4000);
+              waitForDurationAndSeek(ev.target, gen);
             },
             onStateChange: function (ev) {
               if (gen !== attachGen) return;
               if (ev.data === YT.PlayerState.PLAYING) {
                 seekLiveEdge(ev.target);
+              }
+            },
+            onError: function (ev) {
+              if (gen !== attachGen) return;
+              embedLoading = false;
+              // 153 = missing Referer. Do not remount on HTML5 error 5 —
+              // StreamTime DVR fires that while seeking and a retry loops.
+              if (ev && ev.data === 153 && embedRetries < MAX_EMBED_RETRIES) {
+                embedRetries++;
+                setTimeout(function () {
+                  if (armed && gen === attachGen) showEmbed();
+                }, 1500);
               }
             }
           }
@@ -275,6 +367,8 @@ $loopAttr = $embedded ? '' : 'loop';
 
     function hideEmbed() {
       attachGen++;
+      embedLoading = false;
+      liveHeadSynced = false;
       clearPlayerHandle();
       const frame = ensureIframe();
       if (frame) frame.src = 'about:blank';
@@ -296,12 +390,25 @@ $loopAttr = $embedded ? '' : 'loop';
       if (!armed) return;
       resyncTimer = setInterval(function () {
         if (!armed) return;
+        if (ytPlayer && liveHeadSynced && playerState(ytPlayer) === 1) return;
         showEmbed();
       }, RESYNC_MS);
       lagTimer = setInterval(function () {
         if (!armed || !ytPlayer) return;
         seekLiveEdge(ytPlayer);
       }, LAG_CHECK_MS);
+    }
+
+    function armEmbed() {
+      armed = true;
+      if (ytPlayer) {
+        try { ytPlayer.mute(); } catch (e) {}
+        try { ytPlayer.playVideo(); } catch (e) {}
+        seekLiveEdge(ytPlayer);
+      } else if (!embedLoading) {
+        showEmbed();
+      }
+      startResync();
     }
 
     if (EMBEDDED) {
@@ -314,23 +421,17 @@ $loopAttr = $embedded ? '' : 'loop';
           return;
         }
         if (ev.data.type === 'signage-show') {
-          armed = true;
-          showEmbed();
-          startResync();
+          armEmbed();
         }
       });
       notifyReady();
       if (document.readyState === 'complete') notifyReady();
       else window.addEventListener('load', notifyReady, { once: true });
       if (window.parent === window) {
-        armed = true;
-        showEmbed();
-        startResync();
+        armEmbed();
       }
     } else {
-      armed = true;
-      showEmbed();
-      startResync();
+      armEmbed();
       setInterval(function () { location.reload(); }, 60 * 60 * 1000);
     }
   </script>
