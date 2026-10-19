@@ -7,9 +7,10 @@
  * YouTube **live** streams can embed directly (no download): set Live stream in admin
  * or paste a youtube.com/live/… URL. Ongoing broadcasts use rotation dwell from
  * video.LIVE_DWELL (default 300s) instead of file duration. DVR lives (StreamTime
- * Soo Locks) start at the rewind-window start — the player seeks once to a few
- * seconds before live (seekTo(duration) wraps DVR to t=0). True lives
- * (Disneyland) already start there, so the seek is a no-op.
+ * Soo Locks) start at the rewind-window start — the player seeks to
+ * duration-3600-15s (YouTube reports duration ~1h past live; seeking there
+ * wraps DVR to t=0). True lives (Disneyland) already start at live, so the
+ * seek is a no-op.
  *
  * One file is both the player and the downloader:
  *
@@ -193,16 +194,12 @@ $loopAttr = $embedded ? '' : 'loop';
     const MAX_EMBED_RETRIES = 1;
     const RESYNC_MS = 8 * 60 * 1000;
     const LAG_CHECK_MS = 20 * 1000;
-    // YouTube live is typically 15–40s behind. StreamTime DVR starts *hours*
-    // behind (or at the rewind-window start). Only jump when we are clearly
-    // on that archive — never to chase live, and never onto the live tip
-    // (seekTo(duration) wraps DVR embeds back to t=0).
-    const LIVE_SEEK_MIN_LAG_SEC = 90;
-    const LIVE_STUCK_LAG_SEC = 5 * 60;
-    const SEEK_COOLDOWN_MS = 20000;
+    // YouTube getDuration() on live is often elapsed+3600. Seeking onto that
+    // tip is past live; DVR wraps to the rewind start (Soo Locks 3:18 AM).
+    const YT_LIVE_DURATION_PAD_SEC = 3600;
     const LIVE_HEAD_PAD_SEC = 15;
-    const DVR_START_CUR_SEC = 90;
-    const DVR_MIN_DURATION_SEC = 180;
+    const LIVE_SEEK_MIN_LAG_SEC = 90;
+    const SEEK_COOLDOWN_MS = 20000;
 
     function notifyReady() {
       if (!EMBEDDED || window.parent === window) return;
@@ -286,37 +283,39 @@ $loopAttr = $embedded ? '' : 'loop';
       }
     }
 
+    /** Match lib/video_lib.php video_youtube_live_head_seconds(). */
+    function liveHeadSeconds(duration) {
+      if (!(duration >= 30)) return null;
+      if (duration >= 3900) return duration - YT_LIVE_DURATION_PAD_SEC - LIVE_HEAD_PAD_SEC;
+      return Math.max(0, duration - LIVE_HEAD_PAD_SEC);
+    }
+
     /**
-     * StreamTime DVR (Soo Locks) often starts at the rewind-window start
-     * (hours behind / last night). Disneyland-style lives already sit on the
-     * live head — leave those alone. seekTo(duration) overshoots live and
-     * YouTube wraps DVR back to t=0, so aim a few seconds behind the tip.
+     * StreamTime DVR starts at the rewind-window start (3:18 AM on Soo Locks).
+     * Disneyland is already on the live head — including when getDuration()
+     * is ~1h ahead of getCurrentTime() — so do not seek in that case.
      */
     function seekLiveEdge(player) {
       if (!player || typeof player.seekTo !== 'function') return;
       if (Date.now() - lastSeekAt < SEEK_COOLDOWN_MS) return;
-      const state = playerState(player);
-      if (state !== 1) return;
+      if (playerState(player) !== 1) return;
       const t = mediaTimes(player);
       if (!t) return;
+      const target = liveHeadSeconds(t.duration);
+      if (target === null) return;
+      const behind = target - t.cur;
 
-      const sittingOnDvrStart = t.duration >= DVR_MIN_DURATION_SEC && t.cur < DVR_START_CUR_SEC;
-      const nearHead = t.lag <= LIVE_SEEK_MIN_LAG_SEC && t.cur >= DVR_START_CUR_SEC;
-      if (nearHead) {
+      // Already at live: either truly near duration, or ~1h "behind" duration
+      // because YouTube padded getDuration() by 3600.
+      if (t.cur > 30 && (behind <= LIVE_SEEK_MIN_LAG_SEC || (t.lag >= 3300 && t.lag <= 4200))) {
         liveHeadSynced = true;
         return;
       }
-      if (!sittingOnDvrStart && t.lag < LIVE_STUCK_LAG_SEC) {
-        if (t.cur >= DVR_START_CUR_SEC) liveHeadSynced = true;
+      if (behind < 120) {
+        if (t.cur > 30) liveHeadSynced = true;
         return;
       }
-      if (liveHeadSynced && !sittingOnDvrStart && t.lag < LIVE_STUCK_LAG_SEC) return;
 
-      const target = Math.max(0, t.duration - LIVE_HEAD_PAD_SEC);
-      if (target < 30 || Math.abs(t.cur - target) <= LIVE_HEAD_PAD_SEC) {
-        if (!sittingOnDvrStart) liveHeadSynced = true;
-        return;
-      }
       lastSeekAt = Date.now();
       try { player.seekTo(target, true); } catch (e) {}
       const seekGen = attachGen;
@@ -324,10 +323,8 @@ $loopAttr = $embedded ? '' : 'loop';
         if (seekGen !== attachGen || !armed) return;
         const after = mediaTimes(player);
         if (!after) return;
-        if (after.duration >= DVR_MIN_DURATION_SEC && after.cur < DVR_START_CUR_SEC) {
-          lastSeekAt = Date.now();
-          try { player.seekTo(Math.max(30, after.duration - 45), true); } catch (e) {}
-        } else if (after.lag <= LIVE_SEEK_MIN_LAG_SEC && after.cur >= DVR_START_CUR_SEC) {
+        const head = liveHeadSeconds(after.duration);
+        if (head !== null && after.cur > 30 && (head - after.cur) <= LIVE_SEEK_MIN_LAG_SEC) {
           liveHeadSynced = true;
         }
       }, 2500);

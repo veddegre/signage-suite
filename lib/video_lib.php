@@ -146,6 +146,25 @@ function video_youtube_embed_url(string $id, bool $muted = true, ?string $origin
     return 'https://www.youtube.com/embed/' . rawurlencode($id) . '?' . http_build_query($params);
 }
 
+/**
+ * Seconds to seek for the live head of a YouTube DVR embed.
+ *
+ * YouTube's IFrame API often reports getDuration() as elapsed + 3600. Seeking
+ * to duration (or duration - a few seconds) is past live; DVR then wraps to
+ * the rewind-window start (Soo Locks showing 3:18 AM in daylight).
+ */
+function video_youtube_live_head_seconds(float $duration, float $pad = 15.0): ?float
+{
+    if ($duration < 30) {
+        return null;
+    }
+    if ($duration >= 3900) {
+        return $duration - 3600 - $pad;
+    }
+
+    return max(0.0, $duration - $pad);
+}
+
 function video_path(string $key, array $v, ?string $dir = null): ?string
 {
     $dir = $dir ?? video_dir();
