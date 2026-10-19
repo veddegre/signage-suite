@@ -65,11 +65,21 @@ expect(
 );
 
 expect(video_youtube_live_head_seconds(10.0) === null, 'sub-30s duration has no live head');
-expect(video_youtube_live_head_seconds(120.0) === 105.0, 'short stream aims just before duration');
-// 12h reported duration → ~11h elapsed (YouTube +1h pad) minus 15s.
+expect(video_youtube_live_head_seconds(120.0, 0.0) === 90.0, 'short stream from t=0 aims just before duration');
+expect(video_youtube_live_head_seconds(120.0, 100.0) === null, 'already near the short-stream head');
+// 12h DVR parked at the rewind start (t=0) → jump to just before the window end.
 expect(
-    video_youtube_live_head_seconds(43200.0) === 39585.0,
-    'long DVR live head is duration minus 3600 minus pad'
+    video_youtube_live_head_seconds(43200.0, 0.0) === 43170.0,
+    '12h DVR from t=0 seeks to duration minus pad'
+);
+// Absolute timeline: currentTime is already elapsed-12h.
+expect(
+    video_youtube_live_head_seconds(200000.0, 200000.0 - 43200.0) === 199970.0,
+    '12h behind on a long timeline jumps forward one window'
+);
+expect(
+    video_youtube_live_head_seconds(200000.0, 199990.0) === null,
+    'already at live does not seek'
 );
 
 echo $fail === 0 ? "All checks passed.\n" : "$fail check(s) failed.\n";

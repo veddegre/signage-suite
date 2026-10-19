@@ -7,10 +7,9 @@
  * YouTube **live** streams can embed directly (no download): set Live stream in admin
  * or paste a youtube.com/live/… URL. Ongoing broadcasts use rotation dwell from
  * video.LIVE_DWELL (default 300s) instead of file duration. DVR lives (StreamTime
- * Soo Locks) start at the rewind-window start — the player seeks to
- * duration-3600-15s (YouTube reports duration ~1h past live; seeking there
- * wraps DVR to t=0). True lives (Disneyland) already start at live, so the
- * seek is a no-op.
+ * Soo Locks) start 12 hours behind live (same clock, opposite AM/PM). The player
+ * jumps forward one DVR window from currentTime. True lives (Disneyland) already
+ * start at live, so the jump is a no-op.
  *
  * One file is both the player and the downloader:
  *
@@ -176,6 +175,7 @@ $loopAttr = $embedded ? '' : 'loop';
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const EMBED_SRC = <?= json_encode($embedSrc) ?>;
+    const YT_ID = <?= json_encode($ytId) ?>;
     const WANT_MUTE = <?= json_encode($autoplayMuted) ?>;
     <?php if (SHOW_CLOCK): ?>
     <?= signage_clock_tick_script('clock', TIMEZONE) ?>
@@ -191,15 +191,18 @@ $loopAttr = $embedded ? '' : 'loop';
     let embedLoading = false;
     let liveHeadSynced = false;
     let lastSeekAt = 0;
+    let jumpTries = 0;
     const MAX_EMBED_RETRIES = 1;
     const RESYNC_MS = 8 * 60 * 1000;
     const LAG_CHECK_MS = 20 * 1000;
-    // YouTube getDuration() on live is often elapsed+3600. Seeking onto that
-    // tip is past live; DVR wraps to the rewind start (Soo Locks 3:18 AM).
-    const YT_LIVE_DURATION_PAD_SEC = 3600;
-    const LIVE_HEAD_PAD_SEC = 15;
+    // YouTube long-live DVR window is ~12h. The embed starts at the window
+    // start (same clock, opposite AM/PM). Seeking onto getDuration() wraps
+    // back to that start — jump forward one window from currentTime instead.
+    const DVR_WINDOW_SEC = 12 * 3600;
+    const LIVE_HEAD_PAD_SEC = 30;
     const LIVE_SEEK_MIN_LAG_SEC = 90;
-    const SEEK_COOLDOWN_MS = 20000;
+    const SEEK_COOLDOWN_MS = 15000;
+    let liveHeadPad = LIVE_HEAD_PAD_SEC;
 
     function notifyReady() {
       if (!EMBEDDED || window.parent === window) return;
@@ -284,50 +287,78 @@ $loopAttr = $embedded ? '' : 'loop';
     }
 
     /** Match lib/video_lib.php video_youtube_live_head_seconds(). */
-    function liveHeadSeconds(duration) {
+    function liveHeadSeconds(duration, cur, pad) {
       if (!(duration >= 30)) return null;
-      if (duration >= 3900) return duration - YT_LIVE_DURATION_PAD_SEC - LIVE_HEAD_PAD_SEC;
-      return Math.max(0, duration - LIVE_HEAD_PAD_SEC);
+      if (duration - cur < 120) return null;
+      const fromHere = cur + DVR_WINDOW_SEC - pad;
+      const fromEnd = duration - pad;
+      const target = Math.min(fromHere, fromEnd);
+      if (target <= cur + 30) return null;
+      return Math.max(0, target);
+    }
+
+    function looksLikeLive(t) {
+      if (t.lag <= LIVE_SEEK_MIN_LAG_SEC) return true;
+      // YouTube sometimes reports duration ~1h past live.
+      if (t.lag >= 3300 && t.lag <= 4200) return true;
+      return false;
+    }
+
+    function jumpToTime(player, target) {
+      if (YT_ID && typeof player.loadVideoById === 'function') {
+        try {
+          player.loadVideoById({ videoId: YT_ID, startSeconds: target });
+          try { player.mute(); } catch (e) {}
+          return;
+        } catch (e) {}
+      }
+      try { player.seekTo(target, true); } catch (e) {}
     }
 
     /**
-     * StreamTime DVR starts at the rewind-window start (3:18 AM on Soo Locks).
-     * Disneyland is already on the live head — including when getDuration()
-     * is ~1h ahead of getCurrentTime() — so do not seek in that case.
+     * StreamTime DVR starts 12 hours behind live (2:39 AM when it is 2:39 PM).
+     * Jump forward one DVR window. If YouTube wraps to the archive start,
+     * back off the target until the seek sticks.
      */
     function seekLiveEdge(player) {
-      if (!player || typeof player.seekTo !== 'function') return;
+      if (!player) return;
       if (Date.now() - lastSeekAt < SEEK_COOLDOWN_MS) return;
       if (playerState(player) !== 1) return;
       const t = mediaTimes(player);
       if (!t) return;
-      const target = liveHeadSeconds(t.duration);
-      if (target === null) return;
-      const behind = target - t.cur;
-
-      // Already at live: either truly near duration, or ~1h "behind" duration
-      // because YouTube padded getDuration() by 3600.
-      if (t.cur > 30 && (behind <= LIVE_SEEK_MIN_LAG_SEC || (t.lag >= 3300 && t.lag <= 4200))) {
+      if (looksLikeLive(t)) {
         liveHeadSynced = true;
+        liveHeadPad = LIVE_HEAD_PAD_SEC;
         return;
       }
-      if (behind < 120) {
-        if (t.cur > 30) liveHeadSynced = true;
+      const target = liveHeadSeconds(t.duration, t.cur, liveHeadPad);
+      if (target === null) {
+        liveHeadSynced = true;
         return;
       }
 
       lastSeekAt = Date.now();
-      try { player.seekTo(target, true); } catch (e) {}
+      const before = t.cur;
+      jumpToTime(player, target);
       const seekGen = attachGen;
       setTimeout(function () {
         if (seekGen !== attachGen || !armed) return;
         const after = mediaTimes(player);
         if (!after) return;
-        const head = liveHeadSeconds(after.duration);
-        if (head !== null && after.cur > 30 && (head - after.cur) <= LIVE_SEEK_MIN_LAG_SEC) {
+        if (looksLikeLive(after) || after.lag < DVR_WINDOW_SEC - 180) {
           liveHeadSynced = true;
+          liveHeadPad = LIVE_HEAD_PAD_SEC;
+          return;
         }
-      }, 2500);
+        // Wrapped back to the 12h-behind start — aim further from duration.
+        if (after.cur < before + 90) {
+          jumpTries++;
+          if (jumpTries >= 6) return;
+          liveHeadPad = Math.min(liveHeadPad + 120, 1800);
+          lastSeekAt = 0;
+          seekLiveEdge(player);
+        }
+      }, 3000);
     }
 
     function waitForDurationAndSeek(player, gen) {
@@ -353,6 +384,8 @@ $loopAttr = $embedded ? '' : 'loop';
       const gen = ++attachGen;
       liveHeadSynced = false;
       lastSeekAt = 0;
+      liveHeadPad = LIVE_HEAD_PAD_SEC;
+      jumpTries = 0;
       embedLoading = true;
       clearPlayerHandle();
       const frame = ensureIframe();

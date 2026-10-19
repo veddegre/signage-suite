@@ -149,20 +149,31 @@ function video_youtube_embed_url(string $id, bool $muted = true, ?string $origin
 /**
  * Seconds to seek for the live head of a YouTube DVR embed.
  *
- * YouTube's IFrame API often reports getDuration() as elapsed + 3600. Seeking
- * to duration (or duration - a few seconds) is past live; DVR then wraps to
- * the rewind-window start (Soo Locks showing 3:18 AM in daylight).
+ * Long YouTube lives keep a ~12 hour rewind window. The embed starts at the
+ * window start (same clock, opposite AM/PM). Seeking to getDuration() overshoots
+ * live and wraps back to that start. Jump forward one window from currentTime,
+ * capped just before duration.
+ *
+ * @return ?float Null when already near the live head (do not seek)
  */
-function video_youtube_live_head_seconds(float $duration, float $pad = 15.0): ?float
+function video_youtube_live_head_seconds(float $duration, float $current = 0.0, float $pad = 30.0): ?float
 {
     if ($duration < 30) {
         return null;
     }
-    if ($duration >= 3900) {
-        return $duration - 3600 - $pad;
+    $window = 12 * 3600;
+    $current = max(0.0, $current);
+    if ($duration - $current < 120) {
+        return null;
+    }
+    $fromHere = $current + $window - $pad;
+    $fromEnd = $duration - $pad;
+    $target = min($fromHere, $fromEnd);
+    if ($target <= $current + 30) {
+        return null;
     }
 
-    return max(0.0, $duration - $pad);
+    return max(0.0, $target);
 }
 
 function video_path(string $key, array $v, ?string $dir = null): ?string
