@@ -149,21 +149,26 @@ function video_youtube_embed_url(string $id, bool $muted = true, ?string $origin
 /**
  * Seconds to seek for the live head of a YouTube DVR embed.
  *
- * Long YouTube lives keep a ~12 hour rewind window. The embed starts at the
- * window start (same clock, opposite AM/PM). Seeking to getDuration() overshoots
- * live and wraps back to that start. Jump forward one window from currentTime,
- * capped just before duration.
+ * Long YouTube lives keep a ~12 hour rewind window. A fresh embed is usually
+ * already at the live head, but getDuration() still sits ~1 hour ahead of
+ * getCurrentTime(). The DVR start is that same head minus 12 hours (same clock,
+ * opposite AM/PM). Seeking to getDuration() overshoots live and wraps back to
+ * the DVR start. Jump forward one window from currentTime, capped just before
+ * duration. currentTime stays 0 until the manifestless player publishes the
+ * real timeline — seeking from 0 clamps to that DVR start.
  *
- * @return ?float Null when already near the live head (do not seek)
+ * @return ?float Null when already near the live head, or the clock is not ready
  */
 function video_youtube_live_head_seconds(float $duration, float $current = 0.0, float $pad = 30.0): ?float
 {
-    if ($duration < 30) {
+    if ($duration < 30 || $current < 30) {
         return null;
     }
     $window = 12 * 3600;
     $current = max(0.0, $current);
-    if ($duration - $current < 120) {
+    $lag = $duration - $current;
+    // Already at the live head. Manifestless lives report duration ~1h past it.
+    if ($lag < 120 || ($lag >= 3300 && $lag <= 4200)) {
         return null;
     }
     $fromHere = $current + $window - $pad;

@@ -7,9 +7,10 @@
  * YouTube **live** streams can embed directly (no download): set Live stream in admin
  * or paste a youtube.com/live/… URL. Ongoing broadcasts use rotation dwell from
  * video.LIVE_DWELL (default 300s) instead of file duration. DVR lives (StreamTime
- * Soo Locks) start 12 hours behind live (same clock, opposite AM/PM). The player
- * jumps forward one DVR window from currentTime. True lives (Disneyland) already
- * start at live, so the jump is a no-op.
+ * Soo Locks) can start 12 hours behind live (same clock, opposite AM/PM).
+ * Once getCurrentTime() is a real timeline value, the player seeks forward one
+ * DVR window. Seeking before that value exists clamps to the night buffer.
+ * True lives (Disneyland) already start at live, so the seek is a no-op.
  *
  * One file is both the player and the downloader:
  *
@@ -175,7 +176,6 @@ $loopAttr = $embedded ? '' : 'loop';
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const EMBED_SRC = <?= json_encode($embedSrc) ?>;
-    const YT_ID = <?= json_encode($ytId) ?>;
     const WANT_MUTE = <?= json_encode($autoplayMuted) ?>;
     <?php if (SHOW_CLOCK): ?>
     <?= signage_clock_tick_script('clock', TIMEZONE) ?>
@@ -288,8 +288,9 @@ $loopAttr = $embedded ? '' : 'loop';
 
     /** Match lib/video_lib.php video_youtube_live_head_seconds(). */
     function liveHeadSeconds(duration, cur, pad) {
-      if (!(duration >= 30)) return null;
-      if (duration - cur < 120) return null;
+      if (!(duration >= 30) || !(cur >= 30)) return null;
+      const lag = duration - cur;
+      if (lag < 120 || (lag >= 3300 && lag <= 4200)) return null;
       const fromHere = cur + DVR_WINDOW_SEC - pad;
       const fromEnd = duration - pad;
       const target = Math.min(fromHere, fromEnd);
@@ -305,14 +306,10 @@ $loopAttr = $embedded ? '' : 'loop';
     }
 
     function jumpToTime(player, target) {
-      if (YT_ID && typeof player.loadVideoById === 'function') {
-        try {
-          player.loadVideoById({ videoId: YT_ID, startSeconds: target });
-          try { player.mute(); } catch (e) {}
-          return;
-        } catch (e) {}
-      }
+      // loadVideoById reloads the manifestless player and clamps a bad
+      // startSeconds onto the 12h-behind DVR start. seekTo keeps the session.
       try { player.seekTo(target, true); } catch (e) {}
+      try { player.mute(); } catch (e) {}
     }
 
     /**
@@ -326,6 +323,9 @@ $loopAttr = $embedded ? '' : 'loop';
       if (playerState(player) !== 1) return;
       const t = mediaTimes(player);
       if (!t) return;
+      // currentTime is 0 until YouTube publishes the real timeline. A seek
+      // from here clamps to the DVR start (night footage, same clock).
+      if (t.cur < 30) return;
       if (looksLikeLive(t)) {
         liveHeadSynced = true;
         liveHeadPad = LIVE_HEAD_PAD_SEC;
@@ -345,7 +345,7 @@ $loopAttr = $embedded ? '' : 'loop';
         if (seekGen !== attachGen || !armed) return;
         const after = mediaTimes(player);
         if (!after) return;
-        if (looksLikeLive(after) || after.lag < DVR_WINDOW_SEC - 180) {
+        if (looksLikeLive(after)) {
           liveHeadSynced = true;
           liveHeadPad = LIVE_HEAD_PAD_SEC;
           return;

@@ -65,12 +65,21 @@ expect(
 );
 
 expect(video_youtube_live_head_seconds(10.0) === null, 'sub-30s duration has no live head');
-expect(video_youtube_live_head_seconds(120.0, 0.0) === 90.0, 'short stream from t=0 aims just before duration');
+expect(video_youtube_live_head_seconds(120.0, 0.0) === null, 'currentTime 0 is not a seekable clock');
+expect(video_youtube_live_head_seconds(200.0, 40.0) === 170.0, 'short stream aims just before duration');
 expect(video_youtube_live_head_seconds(120.0, 100.0) === null, 'already near the short-stream head');
-// 12h DVR parked at the rewind start (t=0) → jump to just before the window end.
 expect(
-    video_youtube_live_head_seconds(43200.0, 0.0) === 43170.0,
-    '12h DVR from t=0 seeks to duration minus pad'
+    video_youtube_live_head_seconds(43200.0, 0.0) === null,
+    '12h DVR does not seek until the timeline is known'
+);
+expect(
+    video_youtube_live_head_seconds(21037550.0, 21033950.0) === null,
+    'at live, duration sits ~1h ahead and we do not seek'
+);
+// Fresh Soo Locks player, parked at the rewind start: duration = live + ~1h.
+expect(
+    video_youtube_live_head_seconds(21037425.0, 20990653.0) === 21033823.0,
+    '12h behind on a fresh player jumps forward one window'
 );
 // Absolute timeline: currentTime is already elapsed-12h.
 expect(
