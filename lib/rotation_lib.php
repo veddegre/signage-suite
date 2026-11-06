@@ -3140,6 +3140,218 @@ function rotation_screen_display_name(string $screenKey, array $screens): string
     return is_string($scr) ? $scr : $screenKey;
 }
 
+/**
+ * Identity for “is this the same board?” across playlists.
+ * Shell query params (noticker, settle, screen, …) are ignored.
+ */
+function rotation_board_url_identity(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+    $parts = parse_url($url);
+    if (!is_array($parts)) {
+        return strtolower($url);
+    }
+    $query = [];
+    parse_str((string)($parts['query'] ?? ''), $query);
+    foreach (['noticker', 'settle', 'screen', 'theme', 'font', 'frameh', 'clock', 'clockfmt', 'r', '_rs'] as $drop) {
+        unset($query[$drop]);
+    }
+    ksort($query);
+    $q = http_build_query($query);
+    $scheme = strtolower((string)($parts['scheme'] ?? ''));
+    if ($scheme === 'http' || $scheme === 'https') {
+        $host = strtolower((string)($parts['host'] ?? ''));
+        $path = (string)($parts['path'] ?? '/');
+        if ($path === '') {
+            $path = '/';
+        }
+
+        return $scheme . '://' . $host . $path . ($q !== '' ? '?' . $q : '');
+    }
+    $path = (string)($parts['path'] ?? $url);
+    $base = strtolower(basename($path));
+    if ($base === '' || $base === '.' || $base === '/') {
+        $base = strtolower(ltrim($path, '/'));
+    }
+
+    return $q !== '' ? $base . '?' . $q : $base;
+}
+
+/** @param array<string,string> $screenNames */
+function rotation_board_export_screen_header(string $key, string $name, array $screenNames): string
+{
+    $name = trim($name) !== '' ? trim($name) : $key;
+    $same = 0;
+    foreach ($screenNames as $otherKey => $otherName) {
+        $other = trim((string)$otherName) !== '' ? trim((string)$otherName) : (string)$otherKey;
+        if ($other === $name) {
+            $same++;
+        }
+    }
+
+    return $same > 1 ? $name . ' (' . $key . ')' : $name;
+}
+
+/**
+ * One row per available board, plus playlist URLs that are not in the catalog.
+ * A screen cell is "yes", "skipped", or empty. Screen count is how many displays include it.
+ *
+ * @param list<array<string,mixed>> $catalog
+ * @param array<string,list<array<string,mixed>>> $screenPages
+ * @param array<string,string> $screenNames
+ * @return array{headers:list<string>,rows:list<list<string>>}
+ */
+function rotation_board_assignment_table(array $catalog, array $screenPages, array $screenNames): array
+{
+    $screenKeys = array_keys($screenNames);
+    /** @var array<string,array{group:string,label:string,url:string}> $index */
+    $index = [];
+    foreach ($catalog as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $url = trim((string)($item['url'] ?? ''));
+        $id = rotation_board_url_identity($url);
+        if ($id === '' || isset($index[$id])) {
+            continue;
+        }
+        $group = trim((string)($item['group'] ?? ''));
+        $label = trim((string)($item['label'] ?? ''));
+        $index[$id] = [
+            'group' => $group !== '' ? $group : 'Boards',
+            'label' => $label !== '' ? $label : $url,
+            'url' => $url,
+        ];
+    }
+
+    /** @var array<string,array<string,string>> $assigned */
+    $assigned = [];
+    foreach ($screenKeys as $sk) {
+        foreach ($screenPages[$sk] ?? [] as $page) {
+            if (!is_array($page)) {
+                continue;
+            }
+            $url = trim((string)($page['url'] ?? ''));
+            $id = rotation_board_url_identity($url);
+            if ($id === '') {
+                continue;
+            }
+            if (!isset($index[$id])) {
+                $index[$id] = [
+                    'group' => 'Playlist only',
+                    'label' => rotation_page_label($url),
+                    'url' => $url,
+                ];
+            }
+            $state = !empty($page['off']) ? 'skipped' : 'yes';
+            if (($assigned[$id][$sk] ?? '') !== 'yes') {
+                $assigned[$id][$sk] = $state;
+            }
+        }
+    }
+
+    $headers = ['Group', 'Board', 'URL', 'On screens', 'Screen count'];
+    foreach ($screenKeys as $sk) {
+        $headers[] = rotation_board_export_screen_header((string)$sk, (string)$screenNames[$sk], $screenNames);
+    }
+
+    $built = [];
+    foreach ($index as $id => $meta) {
+        $on = [];
+        $cells = [];
+        $count = 0;
+        foreach ($screenKeys as $sk) {
+            $state = $assigned[$id][$sk] ?? '';
+            $cells[] = $state;
+            if ($state === '') {
+                continue;
+            }
+            $count++;
+            $name = trim((string)$screenNames[$sk]);
+            if ($name === '') {
+                $name = (string)$sk;
+            }
+            $on[] = $name . ($state === 'skipped' ? ' (skipped)' : '');
+        }
+        $built[] = [
+            'count' => $count,
+            'group' => $meta['group'],
+            'label' => $meta['label'],
+            'cells' => array_merge([
+                $meta['group'],
+                $meta['label'],
+                $meta['url'],
+                implode('; ', $on),
+                (string)$count,
+            ], $cells),
+        ];
+    }
+    usort($built, static function (array $a, array $b): int {
+        if ($a['count'] !== $b['count']) {
+            return $b['count'] <=> $a['count'];
+        }
+        $group = strcasecmp($a['group'], $b['group']);
+        if ($group !== 0) {
+            return $group;
+        }
+
+        return strcasecmp($a['label'], $b['label']);
+    });
+
+    return [
+        'headers' => $headers,
+        'rows' => array_map(static fn(array $row): array => $row['cells'], $built),
+    ];
+}
+
+function rotation_csv_cell(string $value): string
+{
+    if ($value !== '' && in_array($value[0], ['=', '+', '-', '@'], true)) {
+        return "'" . $value;
+    }
+
+    return $value;
+}
+
+/**
+ * CSV of every quick-add board and where it already sits on the given displays.
+ *
+ * @param array<string,mixed> $screens
+ */
+function rotation_board_assignment_csv(array $screens): string
+{
+    $names = [];
+    foreach ($screens as $key => $meta) {
+        $key = rotation_normalize_screen_key((string)$key);
+        if ($key === '') {
+            continue;
+        }
+        $names[$key] = trim(rotation_screen_display_name($key, $screens));
+    }
+    $pages = [];
+    foreach ($names as $key => $_) {
+        $pages[$key] = rotation_resolved_playlist_pages($key);
+    }
+    $table = rotation_board_assignment_table(rotation_quick_add_items(), $pages, $names);
+    $fh = fopen('php://temp', 'w+');
+    if ($fh === false) {
+        return '';
+    }
+    fwrite($fh, "\xEF\xBB\xBF");
+    fputcsv($fh, array_map('rotation_csv_cell', $table['headers']), ',', '"', '\\');
+    foreach ($table['rows'] as $row) {
+        fputcsv($fh, array_map(static fn($cell): string => rotation_csv_cell((string)$cell), $row), ',', '"', '\\');
+    }
+    rewind($fh);
+    $csv = stream_get_contents($fh);
+    fclose($fh);
+
+    return is_string($csv) ? $csv : '';
+}
+
 function rotation_pages_write(string $screen, array $pages): bool
 {
     require_once __DIR__ . '/rotation_pages_store_lib.php';

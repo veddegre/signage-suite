@@ -2256,6 +2256,22 @@ if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'kiosk_panel
     exit;
 }
 
+if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'export_boards') {
+    if (!admin_can_board('rotation')) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Forbidden';
+        exit;
+    }
+    $exportScreens = admin_filter_screens(rotation_screens());
+    $csv = rotation_board_assignment_csv($exportScreens);
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="boards-by-screen.csv"');
+    header('Cache-Control: no-store');
+    echo $csv;
+    exit;
+}
+
 if ($authed && $board === 'rotation' && ($_GET['action'] ?? '') === 'playlist_panel') {
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -5211,7 +5227,8 @@ window.OPERATOR_MULTI_SCREEN = <?= json_encode(users_operator_multi_screen_enabl
                 <button type="button" class="rotation-setup-tab" data-rotation-tab="calendar" role="tab" aria-selected="false">Calendar overrides</button>
               </div>
               <div class="rotation-setup-panel is-active" data-rotation-tab-panel="boards" role="tabpanel">
-                <p class="help" style="margin:0 0 8px">Adds boards to the playlist for the display selected above. Select <strong>one or more</strong> rows (Ctrl/Cmd+click, Shift+click for a range). Rows already on the playlist are dimmed.</p>
+                <p class="help" style="margin:0 0 8px">Adds boards to the playlist for the display selected above. Select <strong>one or more</strong> rows (Ctrl/Cmd+click, Shift+click for a range). Rows already on the playlist are dimmed. <strong>Download board list</strong> is every board plus which of your displays already include it — a screen count above 1 is a duplicate.</p>
+                <p style="margin:0 0 10px"><a class="secondary" href="?board=rotation&amp;action=export_boards">Download board list (.csv)</a></p>
                 <input type="search" class="deploy-filter" id="rotationBoardSearch" placeholder="Search boards, RSS feeds, monitoring…" autocomplete="off" style="max-width:none;margin:0 0 10px">
                 <div class="rotation-board-picker-row">
                   <select id="rotationBoardSelect" size="10" multiple aria-label="Boards to add to playlist">

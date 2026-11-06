@@ -28,7 +28,7 @@ The **Playlists** section uses a **Which display** picker at the top. Three tabs
 
 | Tab | Purpose |
 |-----|---------|
-| **Add boards** | Searchable board list — adds to the selected display’s playlist (rows already on that playlist are dimmed) |
+| **Add boards** | Searchable board list — adds to the selected display’s playlist (rows already on that playlist are dimmed). **Download board list (.csv)** lists every board and which of your displays already include it (screen count above 1 is a duplicate) |
 | **Kiosk settings** | Whole-TV options: rotation mode, weather ticker + RSS fallback, hero status bar, location, sports teams, blank hours |
 | **Templates** | Load built-in presets (**Kitchen weeknight**, **Weekly planner**, **Security wall**) or save/load your own (`rotation.PLAYLIST_TEMPLATES` in settings) |
 
