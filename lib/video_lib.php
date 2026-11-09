@@ -117,6 +117,8 @@ function video_youtube_video_id(string $url): ?string
  *
  * mute + enablejsapi are required for nested-iframe autoplay and live-edge seek.
  * origin / widget_referrer reduce Error 153 when the iframe has a Referer.
+ * A far-future start clamps to the live head. A small start (or none, on some
+ * kiosk players) opens on the 12 hour DVR rewind — same clock, opposite AM/PM.
  *
  * @param ?string $origin Page origin (https://host) for the IFrame API, or null to omit
  */
@@ -133,6 +135,10 @@ function video_youtube_embed_url(string $id, bool $muted = true, ?string $origin
         // Needed so the board can seek to the live edge (DVR streams often
         // resume hours behind without this).
         'enablejsapi' => '1',
+        // Past the live head. YouTube clamps this to the live edge. A short
+        // start lands on the oldest DVR frame (12 hours behind on Soo Locks).
+        // Stay under 2^31-1 so a 32-bit player does not wrap it negative.
+        'start' => '2000000000',
     ];
     if ($muted) {
         $params['mute'] = '1';

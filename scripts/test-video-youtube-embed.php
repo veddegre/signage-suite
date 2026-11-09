@@ -40,6 +40,7 @@ expect(
 $muted = video_youtube_embed_url('TkY4BzCikQ4', true, 'https://s.vdrs.fyi');
 expect(str_contains($muted, 'https://www.youtube.com/embed/TkY4BzCikQ4?'), 'embed path uses the video id');
 expect(str_contains($muted, 'enablejsapi=1'), 'embed includes enablejsapi for live-edge seek');
+expect(str_contains($muted, 'start=2000000000'), 'embed start is past the live head so YouTube clamps to live');
 expect(str_contains($muted, 'mute=1'), 'muted embed includes mute=1 for nested autoplay');
 expect(str_contains($muted, 'autoplay=1'), 'embed autoplays');
 expect(str_contains($muted, 'origin='), 'embed includes origin when given');
@@ -49,6 +50,7 @@ expect(str_contains($muted, 's.vdrs.fyi'), 'origin host is present in the query'
 $loud = video_youtube_embed_url('TkY4BzCikQ4', false);
 expect(!str_contains($loud, 'mute='), 'unmuted embed omits mute');
 expect(str_contains($loud, 'enablejsapi=1'), 'unmuted embed still has enablejsapi');
+expect(str_contains($loud, 'start=2000000000'), 'unmuted embed also requests the live head');
 expect(!str_contains($loud, 'origin='), 'origin omitted when not provided');
 
 expect(

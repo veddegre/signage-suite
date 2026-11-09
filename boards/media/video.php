@@ -8,9 +8,11 @@
  * or paste a youtube.com/live/… URL. Ongoing broadcasts use rotation dwell from
  * video.LIVE_DWELL (default 300s) instead of file duration. DVR lives (StreamTime
  * Soo Locks) can start 12 hours behind live (same clock, opposite AM/PM).
- * Once getCurrentTime() is a real timeline value, the player seeks forward one
- * DVR window. Seeking before that value exists clamps to the night buffer.
- * True lives (Disneyland) already start at live, so the seek is a no-op.
+ * The embed URL asks for a far-future start so YouTube opens on the live head.
+ * If the player still reports the rewind-window start, seek forward one DVR
+ * window once getCurrentTime() is a real timeline value. Seeking before that
+ * value exists clamps to the night buffer. True lives already start at live,
+ * so that seek is a no-op.
  *
  * One file is both the player and the downloader:
  *
@@ -313,14 +315,17 @@ $loopAttr = $embedded ? '' : 'loop';
     }
 
     /**
-     * StreamTime DVR starts 12 hours behind live (2:39 AM when it is 2:39 PM).
+     * StreamTime DVR starts 12 hours behind live (8:50 PM when it is 8:50 AM).
      * Jump forward one DVR window. If YouTube wraps to the archive start,
      * back off the target until the seek sticks.
      */
     function seekLiveEdge(player) {
       if (!player) return;
       if (Date.now() - lastSeekAt < SEEK_COOLDOWN_MS) return;
-      if (playerState(player) !== 1) return;
+      // 1 = playing, 3 = buffering. Kiosks often sit in buffering on the
+      // 12h-behind frame with a real timeline already available.
+      const st = playerState(player);
+      if (st !== 1 && st !== 3) return;
       const t = mediaTimes(player);
       if (!t) return;
       // currentTime is 0 until YouTube publishes the real timeline. A seek
