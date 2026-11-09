@@ -79,12 +79,6 @@ function webcam_default_cameras(): array
             'kind' => 'stream',
             'attribution' => 'Muskegon Surf Cam · Pere Marquette Beach',
         ],
-        'bluedot' => [
-            'name' => 'Blue Dot Time Lapse Camera',
-            'url' => 'https://www.youtube.com/watch?v=gyrTEEpDPD8',
-            'kind' => 'iframe',
-            'attribution' => 'iBEAM Construction Cameras Live',
-        ],
     ];
 }
 
