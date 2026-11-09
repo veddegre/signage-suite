@@ -140,18 +140,20 @@ $loopAttr = $embedded ? '' : 'loop';
 
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
-              font-family:'IBM Plex Sans',sans-serif; cursor:none; }
+              font-family:var(--font-sans); cursor:none; }
+  .board { position:relative; width:1920px; height:100%; overflow:hidden; }
   video { position:relative; z-index:1; width:1920px; height:100%; object-fit:<?= FIT ?>; background:#000; }
-  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:20;
-            display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
-            pointer-events:none; transform:translateZ(0); }
-  .title { font-family:'Big Shoulders Display'; font-weight:700; font-size:48px;
-           letter-spacing:.5px; color:var(--snow);
-           padding:12px 18px; border-radius:12px; <?= signage_glass_panel_css() ?> }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px;
-           color:var(--snow); font-variant-numeric:tabular-nums;
-           padding:6px 18px; border-radius:10px; <?= signage_glass_panel_css() ?>
-           box-shadow:0 2px 24px color-mix(in srgb, var(--lake-night) 45%, transparent); }
+  .overlay { position:absolute; top:36px; left:48px; z-index:20; pointer-events:none;
+             padding:12px 18px; border-radius:12px; transform:translateZ(0);
+             <?= signage_glass_panel_css() ?> }
+  .overlay h1 { font-family:var(--font-display); font-weight:700; font-size:<?= (int)signage_font_scaled_px(48) ?>px;
+               letter-spacing:.5px; color:var(--snow); }
+  .clock-chip { position:absolute; top:36px; right:48px; z-index:20; pointer-events:none;
+                padding:6px 18px; border-radius:10px; transform:translateZ(0);
+                <?= signage_glass_panel_css() ?>
+                box-shadow:0 2px 24px color-mix(in srgb, var(--lake-night) 45%, transparent); }
+  #clock { font-family:var(--font-display); font-weight:600; font-size:<?= (int)signage_font_scaled_px(48) ?>px;
+           color:var(--snow); font-variant-numeric:tabular-nums; }
   .empty { position:absolute; inset:0; display:flex; flex-direction:column; gap:16px;
            align-items:center; justify-content:center; background:var(--tile-bg);
            color:var(--mist); }
@@ -163,6 +165,7 @@ $loopAttr = $embedded ? '' : 'loop';
 </style>
 </head>
 <body>
+<div class="board">
 <?php if ($isLive && $embedSrc === null): ?>
   <div class="empty">
     <h2>Invalid YouTube live URL for &ldquo;<?= h($key) ?>&rdquo;</h2>
@@ -175,11 +178,11 @@ $loopAttr = $embedded ? '' : 'loop';
       referrerpolicy="strict-origin-when-cross-origin"
       allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
   </div>
-  <?php if (SHOW_OVERLAY && ($title !== '' || SHOW_CLOCK)): ?>
-  <div class="chrome">
-    <?php if ($title !== ''): ?><div class="title"><?= h($title) ?></div><?php else: ?><span></span><?php endif; ?>
-    <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
-  </div>
+  <?php if (SHOW_OVERLAY && $title !== ''): ?>
+  <div class="overlay"><h1><?= h($title) ?></h1></div>
+  <?php endif; ?>
+  <?php if (SHOW_OVERLAY && SHOW_CLOCK): ?>
+  <div class="clock-chip"><div id="clock">--:--</div></div>
   <?php endif; ?>
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
@@ -527,11 +530,11 @@ $loopAttr = $embedded ? '' : 'loop';
   </div>
 <?php else: ?>
   <video id="player" src="<?= h($src) ?>" <?= $autoplayAttr ?> <?= $autoplayMuted ? 'muted' : '' ?> <?= $loopAttr ?> playsinline></video>
-  <?php if (SHOW_OVERLAY && ($title !== '' || SHOW_CLOCK)): ?>
-  <div class="chrome">
-    <?php if ($title !== ''): ?><div class="title"><?= h($title) ?></div><?php else: ?><span></span><?php endif; ?>
-    <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
-  </div>
+  <?php if (SHOW_OVERLAY && $title !== ''): ?>
+  <div class="overlay"><h1><?= h($title) ?></h1></div>
+  <?php endif; ?>
+  <?php if (SHOW_OVERLAY && SHOW_CLOCK): ?>
+  <div class="clock-chip"><div id="clock">--:--</div></div>
   <?php endif; ?>
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
@@ -615,6 +618,7 @@ $loopAttr = $embedded ? '' : 'loop';
     }
   </script>
 <?php endif; ?>
+</div>
 <?php include dirname(__DIR__, 2) . '/ticker.php'; ?>
 </body>
 </html>
