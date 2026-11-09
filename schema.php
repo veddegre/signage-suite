@@ -892,6 +892,8 @@ function admin_schema(): array
             ['key' => 'MUTED', 'label' => 'Mute all videos', 'type' => 'bool', 'default' => true,
              'help' => 'Uncheck to play sound. Kiosks need setup-kiosk.sh (includes autoplay-policy for unmuted video).'],
             ['key' => 'FIT', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain']],
+            ['key' => 'SHOW_OVERLAY', 'label' => 'Show title + clock overlay', 'type' => 'bool', 'default' => true,
+             'help' => 'Name and clock sit on top of the picture, including YouTube live. Leave a video title blank to hide just that name.'],
             ['key' => 'SHOW_CLOCK', 'label' => 'Show clock', 'type' => 'bool', 'default' => true],
             ['key' => 'MAX_HEIGHT', 'label' => 'Max download height', 'type' => 'number'],
             ['key' => 'YTDLP_COOKIES_FILE', 'label' => 'YouTube cookies file', 'type' => 'text',

@@ -51,6 +51,7 @@ define('VIDEOS', video_registry_for_display());
 define('VIDEO_DIR', video_dir());
 define('MUTED', cfg('video.MUTED', true));
 define('FIT', cfg('video.FIT', 'cover'));
+define('SHOW_OVERLAY', (bool)cfg('video.SHOW_OVERLAY', true));
 define('SHOW_CLOCK', signage_show_clock((bool)cfg('video.SHOW_CLOCK', true)));
 define('MAX_HEIGHT', video_max_height());
 define('TIMEZONE', cfg('video.TIMEZONE', 'America/Detroit'));
@@ -140,21 +141,24 @@ $loopAttr = $embedded ? '' : 'loop';
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { width:1920px; <?= signage_viewport_css() ?> overflow:hidden; background:#000;
               font-family:'IBM Plex Sans',sans-serif; cursor:none; }
-  video { width:1920px; height:100%; object-fit:<?= FIT ?>; background:#000; }
-  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:5;
-            display:flex; justify-content:space-between; align-items:baseline;
-            text-shadow:0 1px 14px rgba(0,0,0,.8); }
+  video { position:relative; z-index:1; width:1920px; height:100%; object-fit:<?= FIT ?>; background:#000; }
+  .chrome { position:absolute; top:36px; left:48px; right:48px; z-index:20;
+            display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
+            pointer-events:none; transform:translateZ(0); }
   .title { font-family:'Big Shoulders Display'; font-weight:700; font-size:48px;
-           color:var(--snow); letter-spacing:1px; }
-  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:44px;
-           color:var(--mist); font-variant-numeric:tabular-nums; }
+           letter-spacing:.5px; color:var(--snow);
+           padding:12px 18px; border-radius:12px; <?= signage_glass_panel_css() ?> }
+  #clock { font-family:'Big Shoulders Display'; font-weight:600; font-size:48px;
+           color:var(--snow); font-variant-numeric:tabular-nums;
+           padding:6px 18px; border-radius:10px; <?= signage_glass_panel_css() ?>
+           box-shadow:0 2px 24px color-mix(in srgb, var(--lake-night) 45%, transparent); }
   .empty { position:absolute; inset:0; display:flex; flex-direction:column; gap:16px;
            align-items:center; justify-content:center; background:var(--tile-bg);
            color:var(--mist); }
   .empty h2 { font-family:'Big Shoulders Display'; font-size:58px; color:var(--snow); }
   .empty p { font-size:27px; max-width:1100px; text-align:center; line-height:1.6; }
   .empty code { color:var(--beacon); background:#141f33; padding:2px 12px; border-radius:6px; }
-  .yt-wrap { position:absolute; inset:0; background:#000; overflow:hidden; }
+  .yt-wrap { position:absolute; inset:0; z-index:1; background:#000; overflow:hidden; }
   .yt-wrap iframe { width:100%; height:100%; border:0; display:block; pointer-events:none; }
 </style>
 </head>
@@ -171,15 +175,17 @@ $loopAttr = $embedded ? '' : 'loop';
       referrerpolicy="strict-origin-when-cross-origin"
       allow="autoplay; encrypted-media; picture-in-picture; fullscreen"></iframe>
   </div>
+  <?php if (SHOW_OVERLAY && ($title !== '' || SHOW_CLOCK)): ?>
   <div class="chrome">
-    <div class="title"><?= h($title) ?></div>
+    <?php if ($title !== ''): ?><div class="title"><?= h($title) ?></div><?php else: ?><span></span><?php endif; ?>
     <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
+  <?php endif; ?>
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const EMBED_SRC = <?= json_encode($embedSrc) ?>;
     const WANT_MUTE = <?= json_encode($autoplayMuted) ?>;
-    <?php if (SHOW_CLOCK): ?>
+    <?php if (SHOW_OVERLAY && SHOW_CLOCK): ?>
     <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
     let armed = false;
@@ -521,15 +527,17 @@ $loopAttr = $embedded ? '' : 'loop';
   </div>
 <?php else: ?>
   <video id="player" src="<?= h($src) ?>" <?= $autoplayAttr ?> <?= $autoplayMuted ? 'muted' : '' ?> <?= $loopAttr ?> playsinline></video>
+  <?php if (SHOW_OVERLAY && ($title !== '' || SHOW_CLOCK)): ?>
   <div class="chrome">
-    <div class="title"><?= h($title) ?></div>
+    <?php if ($title !== ''): ?><div class="title"><?= h($title) ?></div><?php else: ?><span></span><?php endif; ?>
     <?php if (SHOW_CLOCK): ?><div id="clock">--:--</div><?php endif; ?>
   </div>
+  <?php endif; ?>
   <script>
     const EMBEDDED = <?= json_encode($embedded) ?>;
     const SETTLE = <?= (int)$settleMs ?>;
     const WANT_SOUND = <?= json_encode(!MUTED) ?>;
-    <?php if (SHOW_CLOCK): ?>
+    <?php if (SHOW_OVERLAY && SHOW_CLOCK): ?>
     <?= signage_clock_tick_script('clock', TIMEZONE) ?>
     <?php endif; ?>
     const v = document.getElementById('player');

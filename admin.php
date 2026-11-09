@@ -2359,7 +2359,7 @@ $tvguideBoardKeys = ['SD_USERNAME', 'SD_PASSWORD', 'LINEUP', 'PRIME_START', 'PRI
 $kumaBoardKeys = ['KUMA_URL', 'KUMA_API_KEY', 'KUMA_VERIFY_TLS', 'BOARD_TITLE', 'BOARD_SUB', 'MAX_MONITORS', 'TIMEZONE', 'CACHE_TTL'];
 $grafanaBoardKeys = ['AUTH_TOKEN', 'JWT_ENABLED', 'JWT_ALG', 'JWT_SECRET', 'JWT_PRIVATE_KEY', 'JWKS_PUBLIC_URL', 'JWT_KID', 'JWT_LOGIN_EMAIL', 'JWT_TTL', 'JWT_ISSUER', 'GRAFANA_THEME', 'TIMEZONE'];
 $splunkdashBoardKeys = ['HIDE_CHROME', 'HIDE_SCROLLBARS', 'DEFAULT_CROP_TOP', 'DEFAULT_RELOAD', 'TIMEZONE'];
-$videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
+$videoBoardKeys = ['VIDEO_DIR', 'FIT', 'SHOW_OVERLAY', 'SHOW_CLOCK', 'MAX_HEIGHT', 'YTDLP_COOKIES_FILE', 'YTDLP_JS_RUNTIME', 'TIMEZONE'];
 $rotationBoardKeys = ['TIMEZONE', 'CLOCK_24H', 'FADE_MS', 'SETTLE_MS', 'HANG_MS'];
 $rotationQuickAdd = ($authed && $board === 'rotation') ? rotation_quick_add_items() : [];
 $heroStripKeyOptions = [];
