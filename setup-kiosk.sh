@@ -468,6 +468,22 @@ remove_pi_cursor_vt_fix() {
   remove_cursor_vt_fix
 }
 
+# The unit file is written long before the rest of setup finishes. Enable it
+# immediately, and again at the end: a later error used to leave the file on
+# disk with the service disabled, so boot stayed on the Ubuntu text console.
+enable_signage_service() {
+  systemctl daemon-reload
+  if ! systemctl enable signage.service; then
+    echo "==> ERROR: could not enable signage.service — Chromium will not start on boot." >&2
+    exit 1
+  fi
+  if ! systemctl is-enabled --quiet signage.service; then
+    echo "==> ERROR: signage.service is still disabled. Chromium will not start on boot." >&2
+    systemctl is-enabled signage.service >&2 || true
+    exit 1
+  fi
+}
+
 install_x86_cursor_hide() {
   if is_raspberry_pi; then
     rm -f /usr/local/bin/signage-hide-cursor /usr/local/bin/signage-hide-cursor.disabled 2>/dev/null || true
@@ -748,6 +764,8 @@ RestartSec=2
 WantedBy=multi-user.target
 EOF
 
+enable_signage_service
+
 echo "==> Nightly maintenance timers"
 if [[ -f "$SCRIPT_DIR/scripts/signage-kiosk-update.sh" ]]; then
   install -m 755 "$SCRIPT_DIR/scripts/signage-kiosk-update.sh" /usr/local/bin/signage-kiosk-update
@@ -908,14 +926,12 @@ if command -v loginctl >/dev/null 2>&1; then
 fi
 systemctl start "user@${KIOSK_UID}.service" 2>/dev/null || true
 
-systemctl daemon-reload
-systemctl enable signage.service
 if [[ $FROM_UPDATE -eq 0 ]]; then
   systemctl restart signage.service || true
 fi
 systemctl disable --now signage-ydotoold.service 2>/dev/null || true
 rm -f /etc/systemd/system/signage-ydotoold.service 2>/dev/null || true
-systemctl daemon-reload 2>/dev/null || true
+enable_signage_service
 if [[ $AUTO_UPDATE -eq 1 ]] && [[ -x /usr/local/bin/signage-kiosk-update ]] && [[ -x /usr/local/bin/signage-kiosk-maint ]]; then
   systemctl enable signage-update.timer signage-maint.timer
   systemctl start signage-update.timer signage-maint.timer
