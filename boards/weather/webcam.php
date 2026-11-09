@@ -8,6 +8,9 @@ require_once dirname(__DIR__, 2) . '/config.php';
 require_once dirname(__DIR__, 2) . '/lib/webcam_lib.php';
 
 $cam = webcam_resolve_camera((string)($_GET['cam'] ?? ''));
+if (PHP_SAPI !== 'cli' && str_contains((string)($cam['url'] ?? ''), 'youtube.com/embed/')) {
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+}
 if (isset($_GET['api']) && (string)$_GET['api'] === '1') {
     webcam_stream_api_response($cam);
 }
@@ -107,7 +110,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     <?php elseif ($usesImage): ?>
     <img id="cam-img" alt="<?= h((string)$cam['name']) ?>" src="">
     <?php else: ?>
-    <iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager"<?php
+    <iframe id="cam-frame" scrolling="no" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; encrypted-media" loading="eager"<?php
       if ($wetmetIframe || (!$earthcamIframeWarmup && !$embedded)): ?> src="<?= h((string)$cam['url']) ?>"<?php endif; ?>></iframe>
     <?php endif; ?>
   </div>
@@ -213,7 +216,7 @@ $camJson['wetmetIframe'] = $wetmetIframe;
     const frame = document.getElementById('frame');
     if (!frame) return;
     frame.classList.add('iframe-embed');
-    frame.innerHTML = '<iframe id="cam-frame" scrolling="no" allow="autoplay; fullscreen; encrypted-media" loading="eager" src="' + url + '"></iframe>';
+    frame.innerHTML = '<iframe id="cam-frame" scrolling="no" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; encrypted-media" loading="eager" src="' + url + '"></iframe>';
   }
 
   function ensureVideoFrame() {

@@ -79,6 +79,12 @@ function webcam_default_cameras(): array
             'kind' => 'stream',
             'attribution' => 'Muskegon Surf Cam · Pere Marquette Beach',
         ],
+        'bluedot' => [
+            'name' => 'Blue Dot Time Lapse Camera',
+            'url' => 'https://www.youtube.com/watch?v=gyrTEEpDPD8',
+            'kind' => 'iframe',
+            'attribution' => 'iBEAM Construction Cameras Live',
+        ],
     ];
 }
 
@@ -304,6 +310,27 @@ function webcam_earthcam_iframe_warmup(array $cam): bool
 
     return webcam_is_earthcam_share_url((string)($cam['url'] ?? ''))
         && webcam_request_is_safari_webkit();
+}
+
+/**
+ * YouTube watch pages refuse to be framed. Play the embed (muted, live edge)
+ * instead. Other webcam URLs are unchanged.
+ */
+function webcam_playback_url(string $url): string
+{
+    require_once __DIR__ . '/video_lib.php';
+    $id = video_youtube_video_id($url);
+    if ($id === null) {
+        return $url;
+    }
+    $origin = null;
+    if (PHP_SAPI !== 'cli' && !empty($_SERVER['HTTP_HOST'])) {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        $origin = ($https ? 'https' : 'http') . '://' . (string)$_SERVER['HTTP_HOST'];
+    }
+
+    return video_youtube_embed_url($id, true, $origin);
 }
 
 function webcam_detect_kind(string $url): string
@@ -1146,7 +1173,7 @@ function webcam_resolve_camera(?string $camKey = null): array
     return [
         'key' => (string)$resolved,
         'name' => (string)($entry['name'] ?? $resolved),
-        'url' => (string)$entry['url'],
+        'url' => webcam_playback_url((string)$entry['url']),
         'kind' => (string)($entry['kind'] ?? 'iframe'),
         'attribution' => (string)($entry['attribution'] ?? ''),
         'off' => false,
