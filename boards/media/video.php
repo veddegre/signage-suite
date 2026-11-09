@@ -193,7 +193,6 @@ $loopAttr = $embedded ? '' : 'loop';
     let embedLoading = false;
     let liveHeadSynced = false;
     let lastSeekAt = 0;
-    let jumpTries = 0;
     const MAX_EMBED_RETRIES = 1;
     const RESYNC_MS = 8 * 60 * 1000;
     const LAG_CHECK_MS = 20 * 1000;
@@ -292,19 +291,19 @@ $loopAttr = $embedded ? '' : 'loop';
     function liveHeadSeconds(duration, cur, pad) {
       if (!(duration >= 30) || !(cur >= 30)) return null;
       const lag = duration - cur;
-      if (lag < 120 || (lag >= 3300 && lag <= 4200)) return null;
-      const fromHere = cur + DVR_WINDOW_SEC - pad;
-      const fromEnd = duration - pad;
-      const target = Math.min(fromHere, fromEnd);
-      if (target <= cur + 30) return null;
-      return Math.max(0, target);
-    }
-
-    function looksLikeLive(t) {
-      if (t.lag <= LIVE_SEEK_MIN_LAG_SEC) return true;
-      // YouTube sometimes reports duration ~1h past live.
-      if (t.lag >= 3300 && t.lag <= 4200) return true;
-      return false;
+      if (lag <= LIVE_SEEK_MIN_LAG_SEC) return null;
+      // A ~1h gap is not "already live" — the rewind start can report it too.
+      // Aim one window ahead of currentTime. duration - pad is past the live
+      // head and YouTube wraps that seek back to the night frame.
+      if (duration >= DVR_WINDOW_SEC) {
+        const target = cur + DVR_WINDOW_SEC - pad;
+        if (target <= cur + 30) return null;
+        return target;
+      }
+      if (lag < 120) return null;
+      const shortTarget = duration - pad;
+      if (shortTarget <= cur + 30) return null;
+      return Math.max(0, shortTarget);
     }
 
     function jumpToTime(player, target) {
@@ -331,14 +330,10 @@ $loopAttr = $embedded ? '' : 'loop';
       // currentTime is 0 until YouTube publishes the real timeline. A seek
       // from here clamps to the DVR start (night footage, same clock).
       if (t.cur < 30) return;
-      if (looksLikeLive(t)) {
-        liveHeadSynced = true;
-        liveHeadPad = LIVE_HEAD_PAD_SEC;
-        return;
-      }
       const target = liveHeadSeconds(t.duration, t.cur, liveHeadPad);
       if (target === null) {
         liveHeadSynced = true;
+        liveHeadPad = LIVE_HEAD_PAD_SEC;
         return;
       }
 
@@ -350,20 +345,18 @@ $loopAttr = $embedded ? '' : 'loop';
         if (seekGen !== attachGen || !armed) return;
         const after = mediaTimes(player);
         if (!after) return;
-        if (looksLikeLive(after)) {
+        // Past the live head: YouTube wraps to the rewind start. Step back.
+        if (after.cur < before - 120) {
+          jumpToTime(player, before);
           liveHeadSynced = true;
           liveHeadPad = LIVE_HEAD_PAD_SEC;
           return;
         }
-        // Wrapped back to the 12h-behind start — aim further from duration.
-        if (after.cur < before + 90) {
-          jumpTries++;
-          if (jumpTries >= 6) return;
-          liveHeadPad = Math.min(liveHeadPad + 120, 1800);
-          lastSeekAt = 0;
-          seekLiveEdge(player);
+        if (after.lag <= LIVE_SEEK_MIN_LAG_SEC || after.cur > before + 90) {
+          liveHeadSynced = true;
+          liveHeadPad = LIVE_HEAD_PAD_SEC;
         }
-      }, 3000);
+      }, 2000);
     }
 
     function waitForDurationAndSeek(player, gen) {
@@ -390,7 +383,6 @@ $loopAttr = $embedded ? '' : 'loop';
       liveHeadSynced = false;
       lastSeekAt = 0;
       liveHeadPad = LIVE_HEAD_PAD_SEC;
-      jumpTries = 0;
       embedLoading = true;
       clearPlayerHandle();
       const frame = ensureIframe();

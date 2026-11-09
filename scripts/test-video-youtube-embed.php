@@ -75,8 +75,8 @@ expect(
     '12h DVR does not seek until the timeline is known'
 );
 expect(
-    video_youtube_live_head_seconds(21037550.0, 21033950.0) === null,
-    'at live, duration sits ~1h ahead and we do not seek'
+    video_youtube_live_head_seconds(21037550.0, 21033950.0) === 21077120.0,
+    'at live, the +1h duration gap still seeks one window ahead (player clamps to the head)'
 );
 // Fresh Soo Locks player, parked at the rewind start: duration = live + ~1h.
 expect(
